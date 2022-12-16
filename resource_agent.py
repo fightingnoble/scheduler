@@ -15,6 +15,11 @@ class RscMapInt(OrderedDict[int, Tuple[int, ...]]):
             _str += f"\t{k}\t->\t{v}\n"
         return _str
 
+    def print_simple(self,) -> str:
+        _str = ""
+        for k, v in self.items():
+            _str += f"\t{k}\t->\t{v}\n"
+        return _str
 
 class Resource_model_int(object): 
     # rsc record the usage of the resource
@@ -45,12 +50,14 @@ class Resource_model_int(object):
         if not num: 
             _str = f"release {self.rsc_map[task_id]}(all) rsc from task {task_id}"
             self.available_rsc += self.rsc_map[task_id]
-            self.rsc_map[task_id] = 0
+            self.rsc_map.pop(task_id)
         # release the num of rsc
         else:
             _str = f"release {num} rsc from task {task_id}" 
             self.available_rsc += num
             self.rsc_map[task_id] -= num
+            if self.rsc_map[task_id] == 0: 
+                self.rsc_map.pop(task_id)
         if verbose:
             if self.id: 
                 _str += "on node {}\n".format(self.id) 

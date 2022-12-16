@@ -5,32 +5,64 @@ from queue import Queue, PriorityQueue
 from typing import Dict, List, Tuple, Union, Any, OrderedDict
 
 
-class RunableQueue(Queue):
+class TaskQueue(Queue):
     '''Variant of Queue that retrieves open entries in priority order (lowest first).
 
     Entries are typically tuples of the form:  (priority number, data).
     '''
-    def __init__(self, init_list:List=[], maxsize: int = -1) -> None:
+    def __init__(self, init_list:List=[], maxsize: int = -1, decending=True, sort_f=None) -> None:
         super().__init__(maxsize)
-        self.queue:List = init_list
-        self.queue.sort(reverse=True)
+        self.queue:List = []
+        if init_list: 
+            self.queue.extend(init_list)
+        self.reverse = decending
+        self.sort_f = sort_f
+        self._sort()
 
+    def _sort(self):
+        if self.sort_f:
+            self.queue.sort(key=self.sort_f, reverse=self.reverse)
+        else:
+            self.queue.sort(reverse=self.reverse)
+        
     def _qsize(self):
         return len(self.queue)
 
     def _put(self, item):
-        heap = self.queue
-        heap.append(item)
-        heap.sort(reverse=True)
+        self.queue.append(item)
+        self._sort()
 
     def _get(self):
         return self.queue.pop(0)
+
+    def remove(self, item):
+        self.queue.remove(item)
+        self._sort()
+    
+    def __len__(self):
+        return len(self.queue)
+    
+    def __iter__(self):
+        return iter(self.queue)
+
+    def __getitem__(self, index):
+        return self.queue[index]
+    
+    def __setitem__(self, index, value):
+        self.queue[index] = value
+        self._sort()
+    
+    def __delitem__(self, index):
+        del self.queue[index]
+        self._sort()
+
+        
 
 
 
 
 if __name__ == "__main__": 
-    hp = RunableQueue([11, 2, 14, 1, 7, 15, 5, 8, 4])
+    hp = TaskQueue([11, 2, 14, 1, 7, 15, 5, 8, 4])
     print(hp.queue)
     hp.put(3)
     print(hp.queue)
