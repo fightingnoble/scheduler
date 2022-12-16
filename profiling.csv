@@ -1,0 +1,14 @@
+﻿,ID,Task (chain) names,Flops on path,Expected Latency (ms),T release,Freq.,DDL,Cores/Req.,Throuput factor (S),Thread factor (S),Min required cores,Timing_flag,Max required Cores,RDA./Req.,Resource Type,Pre-assigned,Priority
+Traffic_light_detection,1,Traffic light detection,233.24,100,0,30,100,5,3,1,15,DDL,18,1,S,Y,192
+ImageBB,2,Image backbones,2391.886,79.80642369,0,30,79.80642369,60,3,1,180,DDL,216,12,S,Y,8
+MultiCameraFusion,3,Multi-camera fusion,329.614,10.99772921,79.80642369,30,90.8041529,60,3,1,180,DDL,216,12,S,N,16
+Pure_camera_path_head,4,Visual object detection,21.024,7.008,90.8041529,30,97.8121529,6,3,1,18,DDL,24,2,M,N,32
+Prediction,5,Trajectory prediction,15.36923412,1.536923412,97.8121529,30,99.34907631,20,3,1,60,DDL,216,52,M,N,64
+Planning,6,Path planing,1.70769268,0.170769268,99.34907631,30,99.51984558,20,3,1,60,DDL,216,52,M,N,128
+Steering_speed,7,Steering and speed,0.24007721,0.48015442,99.51984558,240,100,1,1,1,1,DDL,2,1,M,Y,192
+Stereo_feature_enc,8,Stereo-feature encoder,178.674,66.00056877,0,20,66.00056877,6,2,1,12,DDL,16,2,S,N,8
+Semantic_segm,9,Semantic segmentation ,65.111,24.05141785,66.00056877,20,90.05198663,6,1,1,6,DDL,8,2,S,Y,16
+Lidar_based_3dDet,10,Lidar-based-detection,21.008,7.760166274,90.05198663,10,97.8121529,6,1,1,6,DDL,8,2,M,N,32
+Lane_drivable_area_det,11+12,Lane/drivable area(Aux),128.5636,33.99943123,66.00056877,20,100,8,2,1,16,RT,16,0,M,N,0
+Optical_Flow,13,Optical Flow(Aux),79.514,33.99943123,66.00056877,20,100,5,2,1,10,RT,10,0,M,N,0
+Depth_estimation,14,Depth estimation(Aux),64.2818,33.99943123,66.00056877,20,100,4,2,1,8,RT,8,0,M,N,0
