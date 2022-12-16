@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Dict, List, Tuple, Union, Any, OrderedDict
 # from collections import OrderedDict
 import pprint
@@ -21,6 +22,11 @@ class RscMapInt(OrderedDict[int, Tuple[int, ...]]):
             _str += f"\t{k}\t->\t{v}\n"
         return _str
 
+    def __eq__(self, __o: object) -> bool:
+        if isinstance(__o, RscMapInt):
+            return dict(self) == dict(__o)
+        
+        
 class Resource_model_int(object): 
     # rsc record the usage of the resource
     def __init__(self, size:int, id:int=None, name:str=None):
@@ -38,7 +44,7 @@ class Resource_model_int(object):
         self.rsc_map[task_id] = num
         self.available_rsc -= num
         if verbose:
-            _str = f"allocate {num} rsc to task {task_id}"
+            _str = f"allocate {num} rsc to task {task_id} "
             if self.id: 
                 _str += "on node {}\n".format(self.id)
             else:
@@ -67,6 +73,10 @@ class Resource_model_int(object):
 
     def __str__(self) -> str: 
         return f"available_rsc: {self.available_rsc},\nrsc_map:\n {self.rsc_map}" 
+
+    def __eq__(self, __o: object) -> bool:
+        if isinstance(__o, Resource_model_int):
+            return self.available_rsc == __o.available_rsc and self.rsc_map == __o.rsc_map
 
 
 class DDL_reservation(object):

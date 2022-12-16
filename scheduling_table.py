@@ -17,7 +17,7 @@ class SchedulingTableInt(object):
     def __init__(self, num_resources: int, num_time_slots:int, id: int = None, name: str = None):
         # self.scheduling_table = np.zeros((num_resources, num_time_slots), dtype=int)
         # self.scheduling_table = np.full((num_time_slots), Resource_model_int(num_resources, id, name), dtype=Resource_model_int)
-        self.scheduling_table = np.array([Resource_model_int(num_resources, id, name) for _ in range(num_time_slots)], dtype=Resource_model_int)
+        self.scheduling_table = np.array([Resource_model_int(num_resources, ) for _ in range(num_time_slots)], dtype=Resource_model_int)
         
 
     def index_occupy_by_id(self, time_slot_s, time_slot_e):
@@ -177,24 +177,44 @@ class SchedulingTableInt(object):
                 for rsc_map in self.scheduling_table[time_slot_s[i]:time_slot_s[i]+curr_slot[i]]:
                     rsc_map.release(task.id, curr_alloc[i], verbose)
 
-
     def print_scheduling_table(self):
-        empty = []
+        empty_boader_s = []
+        empty_boader_e = []
         title_line = False
-        for i in range(len(self.scheduling_table)):
-            if len(self.scheduling_table[i].rsc_map):
-                if title_line:
-                    _str = f"slot:{i}\n{self.scheduling_table[i].rsc_map.print_simple()}"
-                else:
-                    _str = f"slot:{i}\n{str(self.scheduling_table[i].rsc_map)}"
-                print(_str)
-                title_line = True
+
+        pre_rsc = self.scheduling_table[0].rsc_map
+        pre_idx = 0
+        empty_flag = len(pre_rsc) == 0
+        if empty_flag:
+            empty_boader_s.append(0)
+        
+        for rsc_map_idx in range(len(self.scheduling_table)):
+            rsc_map = self.scheduling_table[rsc_map_idx].rsc_map
+
+            if rsc_map == pre_rsc:
+                continue
             else:
-                empty.append(i)
-        if len(empty)==len(self.scheduling_table):
-            print("empty scheduling table")
-        elif len(empty):
-            print(f"empty slots: {empty}")
+                if empty_flag:
+                    empty_boader_e.append(rsc_map_idx)
+                else:
+                    if title_line: 
+                        _str = f"slot:[{pre_idx}-{rsc_map_idx})\n{pre_rsc.print_simple()}"
+                    else:
+                        _str = f"slot:[{pre_idx}-{rsc_map_idx})\n{str(pre_rsc)}"
+                        title_line = True
+                    print(_str)
+                pre_idx = rsc_map_idx
+                pre_rsc = rsc_map
+                empty_flag = len(pre_rsc) == 0
+                if empty_flag:
+                    empty_boader_s.append(rsc_map_idx)
+        if empty_flag:
+            empty_boader_e.append(len(self.scheduling_table))
+        else:
+            print(f"slot:[{pre_idx}-{len(self.scheduling_table)})\n{str(pre_rsc)}")
+
+        _str = [f"[{empty_boader_s[i]}-{empty_boader_e[i]})" for i in range(len(empty_boader_s))]
+        print("slot:{} Empty".format(",".join(_str,)))
 
 if __name__ == "__main__": 
     # create a task set
