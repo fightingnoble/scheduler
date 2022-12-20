@@ -27,8 +27,42 @@ task_lifetime = {
     "throttled": 4,
 }
 
+class ProcessBase(object): 
+    def __init__(self, task, release_t, deadline_abs, pid):
+        self.task = task
+        # =============== 2. runtime state ===============
+        self.pid = pid # process id
+        self.state = "terminated" # task state: running, terminated, suspend, runnable, throttled
+        self.prio = task.prio      # priority
 
-class TaskBaseInt(object):
+        self.release_time = release_t     # recored when the process is generated
+        self.deadline = deadline_abs      # recored when the process is generated  
+        self.cpu_time = task.cpu_time     # execution time per I/O burst
+        self.io_time = task.io_time       # I/O time
+        self.totcpu = task.totcpu         # total cpu time, ++ when cpu burst
+        self.exp_comp_t = task.exp_comp_t # total cpu time, ++ when cpu burst
+        self.remburst = task.totcpu       # Record the remaining cpu time for current I/O op, -- when cpu burst, set when moved from waiting to running
+
+        self.start_time = 0   # record at begining
+        self.end_time = 0     # record at endding
+        self.currentburst = 0 # For preemption, clear once context switches or preemption judgment happens, ++ when cpu burst
+        self.burst = 0        # Record the current cpu time for current I/O op, ++ when cpu burst, clear from waiting to running
+        self.totburst = 0     # Sync with clocks, ++ when cpu burst, 
+        self.waitTime = 0     # Time in wait queue, ++ when in wait queue
+        self.cumulative_executed_time = 0 
+
+    def set_state(self, state):
+        assert state in task_lifetime.keys()
+        self.state = state
+
+class ProcessInt(ProcessBase):
+    def __init__(self, task, release_t, deadline_abs, pid):
+        super().__init__(task, release_t, deadline_abs, pid)
+        # task_id -> (main_num, RDA_num)
+        self.allocated_resource:OrderedDict[int, Tuple[int, int]] = OrderedDict()
+        self.required_resource_size:int = task.required_resource_size
+    
+class TaskBase(object):
     def __init__(self, task_name:str, task_id:int, timing_flag:str,
                  ERT:int, ddl:int, period:int, exp_comp_t:int, i_offset:int, jitter_max:int,
                  op_io_time:int=0, op_cpu_time:int=0, seq_cpu_time:int=0, priority:int=0,
@@ -52,28 +86,19 @@ class TaskBaseInt(object):
         self.jitter_max = jitter_max # max jitter
 
         # =============== 2. runtime state ===============
-        self.state = "terminated" # task state: running, terminated, suspend, runnable, throttled
+        self.pid = 0 # process id
         self.prio = priority      # priority
 
-        self.release_time = self.ERT + self.i_offset # recored when the task is released
-        self.deadline = self.release_time + self.ddl # recored when the task is released  
+        self.release_time = self.ERT + self.i_offset # recored when the process is generated
+        self.deadline = self.release_time + self.ddl # recored when the process is generated  
         self.cpu_time = op_cpu_time                  # execution time per I/O burst
         self.io_time = op_io_time                    # I/O time
         self.totcpu = seq_cpu_time                   # total cpu time, ++ when cpu burst
-
-        self.start_time = 0   # record at begining
-        self.end_time = 0     # record at endding
-        self.currentburst = 0 # For preemption, clear once context switches or preemption judgment happens, ++ when cpu burst
-        self.burst = 0        # Record the current cpu time for current I/O op, ++ when cpu burst, clear from waiting to running
-        self.totburst = 0     # Sync with clocks, ++ when cpu burst, 
-        self.waitTime = 0     # Time in wait queue, ++ when in wait queue
-
 
         # =============== 3. statistical properties ===============
         self.missed_deadline_count = 0 # used 
 
         # every time the task is scheduled
-        self.cumulative_executed_time = 0 # used
         self.cumulative_response_time = 0 # used
         self.completion_count = 0 # used
 
@@ -97,6 +122,12 @@ class TaskBaseInt(object):
         # self.turnaround_time = 0
         # self.jitter = 0
 
+    def make_process(self, release_t, deadline_abs, pid):
+        """
+        make a process for the task
+        """
+        return ProcessBase(self, release_t, deadline_abs, pid)
+
     def __str__(self) -> str:
         _str = f"Task {self.id}: {self.name}\n"
         _str += f"\ttiming_flag: {self.timing_flag}, prio: {self.prio}\n"
@@ -111,7 +142,7 @@ class TaskBaseInt(object):
         return _str
 
 
-class TaskInt(TaskBaseInt): 
+class TaskInt(TaskBase): 
     def __init__(
                     self, task_name:str, task_id:int, timing_flag:str,
                     ERT:Union[int, float], ddl:Union[int, float], period:Union[int, float], 
@@ -161,9 +192,6 @@ class TaskInt(TaskBaseInt):
         self.id = task_id
     
     # ======== non-trival properties setter and getter ========
-    def set_state(self, state):
-        assert state in task_lifetime.keys()
-        self.state = state
 
     def get_release_time(self, period_n=0, jitter=0):
         return self.ERT + self.i_offset + period_n * self.period + jitter
@@ -172,10 +200,12 @@ class TaskInt(TaskBaseInt):
         return self.ERT + self.ddl + self.i_offset + period_n * self.period + jitter
 
     def get_release_event(self, time_interval, period_n=0, i_offset=0):
+        # TODO: miss the event at the remaining time
         for i in range(int(time_interval//self.period)):
             yield self.ERT + self.i_offset + (i+period_n) * self.period + i_offset
 
     def get_deadline_event(self, time_interval, period_n=0, i_offset=0):
+        # TODO: miss the event at the remaining time
         for i in range(int(time_interval//self.period)):
             yield self.ERT + self.ddl + self.i_offset + (i+period_n) * self.period + i_offset
     
@@ -187,40 +217,40 @@ class TaskInt(TaskBaseInt):
         assert self.pre_assigned_resource_flag
         return self.pre_assigned_resource.get_available_rsc()
 
-    def release(self, task_id:int=0, main_num:int=0, RDA_num:int=0, verbose:bool=False):
-        if not task_id:
-            task_id = self.id
-        if self.pre_assigned_resource_flag: 
-            self.pre_assigned_resource.release(task_id, main_num, RDA_num, verbose)
-            return {"id":self.id, "resource":self.allocated_resource, "released": True}
-        else:
-            return {"id":self.id, "resource":self.allocated_resource, "released": False}
+    # def release(self, task_id:int=0, main_num:int=0, RDA_num:int=0, verbose:bool=False):
+    #     if not task_id:
+    #         task_id = self.id
+    #     if self.pre_assigned_resource_flag: 
+    #         self.pre_assigned_resource.release(task_id, main_num, RDA_num, verbose)
+    #         return {"id":self.id, "resource":self.allocated_resource, "released": True}
+    #     else:
+    #         return {"id":self.id, "resource":self.allocated_resource, "released": False}
     
-    def allocate(self, task_id:int=0, main_num:int=0, RDA_num:int=0, verbose:bool=False):
-        if self.pre_assigned_resource_flag: 
-            self.pre_assigned_resource.allocate(task_id, main_num, RDA_num, verbose)
-            return {"id":self.id, "resource":self.allocated_resource, "allocated": True}
-        else:
-            return {"id":self.id, "resource":self.allocated_resource, "allocated": False}
-    
-    def can_execute(self, task:TaskInt, verbose:bool=False) -> bool:
-        """
-        A task is executable if it has enough resource to execute the task before the deadline
-        if the task is pre-assigned, it will always return true
-        if the task is not pre-assigned, it will play a insert-based scheduling 
-        """
-        # check if the task can be scheduled
-        if task.pre_assigned_resource_flag:
-            return True
-        else:
-            # check if the task can be scheduled
-            if self.pre_assigned_resource.can_execute(task, verbose):
-                # allocate the resource
-                self.allocated_resource[task.id] = (task.main_size, task.RDA_size)
-                self.required_resource_size += task.main_size + task.RDA_size
-                return True
-            else:
-                return False
+    # def allocate(self, task_id:int=0, main_num:int=0, RDA_num:int=0, verbose:bool=False):
+    #     if self.pre_assigned_resource_flag: 
+    #         self.pre_assigned_resource.allocate(task_id, main_num, RDA_num, verbose)
+    #         return {"id":self.id, "resource":self.allocated_resource, "allocated": True}
+    #     else:
+    #         return {"id":self.id, "resource":self.allocated_resource, "allocated": False}
+
+    # def can_execute(self, task:TaskInt, verbose:bool=False) -> bool:
+    #     """
+    #     A task is executable if it has enough resource to execute the task before the deadline
+    #     if the task is pre-assigned, it will always return true
+    #     if the task is not pre-assigned, it will play a insert-based scheduling 
+    #     """
+    #     # check if the task can be scheduled
+    #     if task.pre_assigned_resource_flag:
+    #         return True
+    #     else:
+    #         # check if the task can be scheduled
+    #         if self.pre_assigned_resource.can_execute(task, verbose):
+    #             # allocate the resource
+    #             self.allocated_resource[task.id] = (task.main_size, task.RDA_size)
+    #             self.required_resource_size += task.main_size + task.RDA_size
+    #             return True
+    #         else:
+    #             return False
 
     def query_rsc(self, task_id:int=0, verbose:bool=False): 
         # query the rsc allocated by task (id) 
@@ -236,6 +266,12 @@ class TaskInt(TaskBaseInt):
         _str = super().__str__()
         _str += f"\tflops: {self.flops:.2e}, main_size: {self.pre_assigned_resource.main_size}, RDA_size: {self.pre_assigned_resource.RDA_size}, pre_assigned: {self.pre_assigned_resource_flag}" 
         return _str
+
+    def make_process(self, release_t, deadline_abs, pid):
+        """
+        make a process for the task
+        """
+        return ProcessInt(self, release_t, deadline_abs, pid)
 
 def load_task_from_cfg(verbose:bool=False):
     """

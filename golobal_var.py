@@ -1,0 +1,1 @@
+FLOPS_PER_CORE = 0.5

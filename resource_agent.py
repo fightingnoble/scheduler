@@ -70,6 +70,10 @@ class Resource_model_int(object):
             else: 
                 _str += "\n"
             print(_str)
+    
+    def clear(self):
+        self.rsc_map.clear()
+        self.available_rsc = self.size
 
     def __str__(self) -> str: 
         return f"available_rsc: {self.available_rsc},\nrsc_map:\n {self.rsc_map}" 
