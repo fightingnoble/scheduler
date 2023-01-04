@@ -81,6 +81,14 @@ class Resource_model_int(object):
     def __eq__(self, __o: object) -> bool:
         if isinstance(__o, Resource_model_int):
             return self.available_rsc == __o.available_rsc and self.rsc_map == __o.rsc_map
+    
+    def get_plot_col(self): 
+        col = []
+        for k, v in self.rsc_map.items():
+            for i in range(v): 
+                col.append(k)
+        col += [0] * (self.size - len(col))
+        return col
 
 
 class DDL_reservation(object):
@@ -112,8 +120,9 @@ class DDL_reservation(object):
         if verbose: 
             print("main_rsc: ")
         self.RDA_rsc.release(task_id, RDA_num, verbose)
-        if self.main_rsc.rsc_map[task_id] or self.RDA_rsc.rsc_map[task_id]: 
-            self.rsc_map[task_id] = (self.main_rsc.rsc_map[task_id], self.RDA_rsc.rsc_map[task_id])
+        if task_id in self.main_rsc.rsc_map or task_id in self.RDA_rsc.rsc_map:
+            if self.main_rsc.rsc_map[task_id] or self.RDA_rsc.rsc_map[task_id]: 
+                self.rsc_map[task_id] = (self.main_rsc.rsc_map[task_id], self.RDA_rsc.rsc_map[task_id])
         else:
             self.rsc_map.pop(task_id)
         self.available_rsc = (self.main_rsc.get_available_rsc() + self.RDA_rsc.get_available_rsc())
