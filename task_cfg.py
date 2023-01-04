@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-from typing import Union, List, Dict, Tuple, Any, Optional
+from typing import Union, List, Dict, Iterator
 from scheduling_table import SchedulingTableInt
 from resource_agent import Resource_model_int
 from task_agent import TaskInt
-import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
 from golobal_var import *
+
+from task_queue_agent import TaskQueue 
+from task_agent import ProcessInt
+import copy
+from lru import LRUCache
 
 'ID', 'Task (chain) names', 'Flops on path', 'Expected Latency (ms)', 'T release', 'Freq.', 'DDL', 'Cores/Req.', 
 'Throuput factor (S)', 'Thread factor (S)', 'Min required cores', 'Timing_flag', 'Max required Cores', 'RDA./Req.', 'Resource Type', 'Pre-assigned', 'Priority'
@@ -32,6 +36,9 @@ from golobal_var import *
 #     : []
 # }
 
+__all__ = ['task_graph', 'affinity']
+
+
 task_graph = {   
     "Traffic_light_detection": [],
     "ImageBB": ["MultiCameraFusion"],
@@ -40,7 +47,7 @@ task_graph = {
     "Prediction": ["Planning"],
     "Planning": ["Steering_speed"],
     "Steering_speed": [],
-    "Stereo_feature_enc": ["Semantic_segm, Lane_drivable_area_det, Optical_Flow, Depth_estimation"],
+    "Stereo_feature_enc": ["Semantic_segm", "Lane_drivable_area_det", "Optical_Flow", "Depth_estimation"],
     "Semantic_segm": ["LiDAR_based_3dDet"],
     "Lidar_based_3dDet": ["Prediction"],
     "Lane_drivable_area_det": [],
@@ -57,7 +64,7 @@ affinity = {
     "Prediction": ["Pure_camera_path_head", "Lidar_based_3dDet", "Planning"],
     "Planning": ["Prediction", "Steering_speed"],
     "Steering_speed": ["Planning"],
-    "Stereo_feature_enc": ["Semantic_segm, Lane_drivable_area_det, Optical_Flow, Depth_estimation"],
+    "Stereo_feature_enc": ["Semantic_segm", "Lane_drivable_area_det", "Optical_Flow", "Depth_estimation"],
     "Semantic_segm": ["Stereo_feature_enc", "LiDAR_based_3dDet"],
     "Lidar_based_3dDet": ["Semantic_segm", "Prediction"],
     "Lane_drivable_area_det": ["Optical_Flow", "Depth_estimation"],
@@ -395,23 +402,28 @@ def push_task_into_scheduling_table(tasks: Union[List[TaskInt], Dict[str, TaskIn
             _p.currentburst += _p.required_resource_size
             _p.cumulative_executed_time += timestep
 
-def push_task_into_scheduling_table_cyclic_preemption_disable(tasks: Union[List[TaskInt], Dict[str, TaskInt]], SchedTab: SchedulingTableInt, 
-                                    quantumSize,
-                                    timestep, event_range, sim_range,  verbose=False):
+
+def push_task_into_scheduling_table_cyclic_preemption_disable(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedTab: SchedulingTableInt, 
+                                    total_cores:int, quantumSize, 
+                                    timestep, hyper_p, n_p=1, verbose=False, *, animation=False, warmup=False, drain=False,):
     """
     1. generate all the task instances stasticly
     2. push the ready task into the ready queue
     3. push the ready task into the idle slot in the order of the deadline
     4. update the running task
     """
+
+    event_range = hyper_p * (n_p+warmup)
+    sim_range = hyper_p * (n_p+warmup+drain)
+    tab_temp_size = int(sim_range/sim_step)
+    tab_spatial_size = total_cores
+
+    SchedTab = SchedulingTableInt(total_cores, int(sim_range/sim_step),)
+
     if isinstance(tasks, list):
         task_list = tasks
     elif isinstance(tasks, dict):
         task_list = list(tasks.values())
-
-    from task_queue_agent import TaskQueue 
-    from task_agent import ProcessInt
-    import copy
 
     task_define_bk = copy.deepcopy(task_list) # used for detect the task changes
 
@@ -427,9 +439,10 @@ def push_task_into_scheduling_table_cyclic_preemption_disable(tasks: Union[List[
         p = task.make_process(r, d, pid)
         pid += 1
         init_p_list.append(p)
-        print("TASK {:d}:{:s}({:d}), is expected to finish {}T OPs in {:f}-{:f} !!".format(
-            p.task.id, p.task.name, p.pid, p.totcpu, p.release_time, p.deadline))
-
+        if verbose:
+            print("TASK {:d}:{:s}({:d}), is expected to finish {}T OPs in {:f}-{:f} !!".format(
+                p.task.id, p.task.name, p.pid, p.totcpu, p.release_time, p.deadline))
+    pid_max = pid
     
     # monitor the wake up time: (accending)
     # activate by the new period or the arrival of the blocked io data
@@ -445,15 +458,29 @@ def push_task_into_scheduling_table_cyclic_preemption_disable(tasks: Union[List[
     completed_list:List[ProcessInt] = []
     miss_list:List[ProcessInt] = []
     rsc_recoder = {}
-    curr_cfg:Resource_model_int = None
+    curr_cfg:Resource_model_int
+    
+    if animation:
+        # for animation generation
+        frame_list = []
+        import matplotlib.animation as animation
+        fig, ax = plt.subplots()
+        plot_window = tab_spatial_size
 
-    for n_slot in range(SchedTab.scheduling_table.shape[0]):
+    for n_slot in range(tab_temp_size):
         curr_t = n_slot * timestep
 
+        if (n_slot - 1) * timestep < event_range and n_slot * timestep >= event_range: 
+            print("="*20, "DRAIN", "="*20, "\n")
+        elif n_slot == 0 and warmup:
+            print("="*20, "WARMUP", "="*20, "\n")
+        elif (n_slot * timestep)//hyper_p > (n_slot-1)*timestep//hyper_p:
+            print("="*20, "PERIOD {:d}".format(int((n_slot * timestep)//hyper_p)), "="*20, "\n")
+        
         # enqueue the process that is released in this slot
         lt = []
         for _p in wait_queue:
-            if _p.release_time <= n_slot * timestep:
+            if _p.release_time <= n_slot * timestep and _p.release_time < event_range:
                 lt.append(_p)
         for _p in lt:
             print("TASK {:d}:{:s}({:d}) RELEASEED AT {}!!".format(_p.task.id, _p.task.name, _p.pid, curr_t))
@@ -474,7 +501,7 @@ def push_task_into_scheduling_table_cyclic_preemption_disable(tasks: Union[List[
         if completed_list:
             for _p in completed_list:
                 # release the resource and move to the wait list
-                sche_tab.release(_p, *rsc_recoder[_p.pid], verbose)
+                SchedTab.release(_p, *rsc_recoder[_p.pid], verbose=False)
                 print("TASK {:d}:{:s}({:d}) COMPLETED!!".format(_p.task.id, _p.task.name, _p.pid))
                 # update statistics
                 # TODO: add lock 
@@ -515,7 +542,7 @@ def push_task_into_scheduling_table_cyclic_preemption_disable(tasks: Union[List[
                 if _p in ready_queue.queue:
                     ready_queue.remove(_p)
                 elif _p in running_queue.queue:
-                    sche_tab.release(_p, *rsc_recoder[_p.pid], verbose)
+                    SchedTab.release(_p, *rsc_recoder[_p.pid], verbose)
                     rsc_recoder.pop(_p.pid)
                     running_queue.remove(_p)
                 print("TASK {:d}:{:s}({:d}) MISSED DEADLINE!!".format(_p.task.id, _p.task.name, _p.pid));
@@ -583,23 +610,27 @@ def push_task_into_scheduling_table_cyclic_preemption_disable(tasks: Union[List[
             expected_slot_num = int(np.ceil(_p.exp_comp_t/timestep))
             # TODO: Add the logic to ensure the task have allocated enough resource, otherwise, 
             #         we should not issue the task or compensate the resource latter. 
-            state, alloc_slot_s, alloc_size, allo_slot = SchedTab.insert_task(_p, req_rsc_size, time_slot_s, time_slot_e, expected_slot_num, verbose) 
-            total_FLOPS_alloc = np.sum(np.array(alloc_size) * np.array(allo_slot))
-            if total_FLOPS_alloc * FLOPS_PER_CORE < _p.task.flops:
+            state, alloc_slot_s, alloc_size, allo_slot = SchedTab.insert_task(_p, req_rsc_size, time_slot_s, time_slot_e, expected_slot_num, verbose=False) 
+            total_alloc_unit = np.sum(np.array(alloc_size) * np.array(allo_slot))
+            total_FLOPS_alloc = total_alloc_unit * timestep * FLOPS_PER_CORE
+            if total_FLOPS_alloc < _p.remburst:
                 Warning("The allocated FLOPS is not enough for the task {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
 
             print(f"TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) tries to allocate\n")
             print(f"\t{req_rsc_size * expected_slot_num:d} ({req_rsc_size:d} cores x {expected_slot_num:d} slots) from {time_slot_s:d} to {time_slot_e:d}")
             if state:
                 if not (isinstance(alloc_slot_s, list) and isinstance(alloc_size, list) and isinstance(allo_slot, list)):
-                    print(f"\tgot {total_FLOPS_alloc:d} ({alloc_size:d} cores x {allo_slot:d} slots @ {alloc_slot_s:d})\n")
+                    print(f"\tgot {total_alloc_unit:d} ({alloc_size:d} cores x {allo_slot:d} slots @ {alloc_slot_s:d})\n")
                 elif len(alloc_slot_s) == len(alloc_size) == len(allo_slot) == 1:
-                    print(f"\tgot {total_FLOPS_alloc:d} ({alloc_size[0]:d} cores x {allo_slot[0]:d} slots @ {alloc_slot_s[0]:d})\n")
+                    print(f"\tgot {total_alloc_unit:d} ({alloc_size[0]:d} cores x {allo_slot[0]:d} slots @ {alloc_slot_s[0]:d})\n")
                 else:
-                    print("\tgot {:d} ({} cores x {} slots @ {})\n".format(total_FLOPS_alloc, ",".join(alloc_size), ",".join(allo_slot), ",".join(alloc_slot_s)))
+                    alloc_slot_s_str = (r"{},"*len(alloc_slot_s)).format(*alloc_slot_s)
+                    alloc_size_str = (r"{},"*len(alloc_size)).format(*alloc_size)
+                    allo_slot_str = (r"{},"*len(allo_slot)).format(*allo_slot)
+                    print(f"\tgot {total_alloc_unit:d} ({alloc_size_str:s} cores x {allo_slot_str:s} slots @ {alloc_slot_s_str:s})\n")
             else:
-                print(f"\t[{state:d}]\n")
-            
+                print("\t[{:s}]\n".format("FAILED" if not state else "SUCCESS"))
+
             if state:
                 issue_list.append(_p)
                 rsc_recoder[_p.pid] = [alloc_slot_s, alloc_size, allo_slot]
@@ -638,6 +669,17 @@ def push_task_into_scheduling_table_cyclic_preemption_disable(tasks: Union[List[
                 _p.cumulative_executed_time += timestep
 
         # SchedTab.step()
+        if animation: 
+            if n_slot % 8 == 0 and n_slot+plot_window < tab_temp_size:
+                frm = ax.imshow(SchedTab.get_plot_frame(n_slot, n_slot+plot_window), animated=True, vmax=pid_max)
+                frame_list.append([frm])
+    if animation:
+        ani = animation.ArtistAnimation(fig, frame_list, interval=20, blit=False,
+                                    repeat_delay=1000)
+        writer = animation.FFMpegWriter(fps=50, metadata=dict(artist='Me'), bitrate=1800)
+        ani.save("movie.mp4", writer=writer)
+
+    SchedTab.print_scheduling_table()
 
 
 if __name__ == "__main__": 
@@ -653,9 +695,6 @@ if __name__ == "__main__":
     import numpy as np 
     f_gcd = np.gcd.reduce([task_dict[task].freq for task in task_dict])
     f_max = max([task_dict[task].freq for task in task_dict])
-    event_range = 1/f_gcd
-    sim_range = 1/f_gcd * 2
+    hyper_p = 1/f_gcd
     sim_step = min([task_dict[task].exp_comp_t for task in task_dict])/32
-    sche_tab = SchedulingTableInt(256, int(sim_range/sim_step),)
-    push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, sche_tab, sim_step*10, sim_step, event_range, sim_range, args.verbose)
-    
+    push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, 256, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
