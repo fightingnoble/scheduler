@@ -3,7 +3,7 @@ from typing import List, Dict, Tuple, Union, Optional, Iterable
 from collections import OrderedDict
 from resource_agent import Resource_model_int
 from functools import reduce
-from task_agent import TaskInt
+from task_agent import ProcessInt, TaskInt
 
 class SchedulingTableInt(object): 
     """
@@ -18,9 +18,8 @@ class SchedulingTableInt(object):
         # self.scheduling_table = np.zeros((num_resources, num_time_slots), dtype=int)
         # self.scheduling_table = np.full((num_time_slots), Resource_model_int(num_resources, id, name), dtype=Resource_model_int)
         self.scheduling_table = np.array([Resource_model_int(num_resources, ) for _ in range(num_time_slots)], dtype=Resource_model_int)
-        
 
-    def index_occupy_by_id(self, time_slot_s, time_slot_e):
+    def index_occupy_by_id(self, time_slot_s:int=None, time_slot_e:int=None) -> Dict[int, List[int]]:
         """
         get the task id that occupies the resource
         """
@@ -32,12 +31,22 @@ class SchedulingTableInt(object):
         
         # get task_id set
         task_id_set = set()
-        rsc_agents_arr = self.scheduling_table[time_slot_s:time_slot_e]
+        assert (time_slot_s is not None and time_slot_e is not None) or (time_slot_s is None and time_slot_e is None)
+        if time_slot_s is None:
+            rsc_agents_arr = self.scheduling_table
+        else:
+            rsc_agents_arr = self.scheduling_table[time_slot_s:time_slot_e]
+        
+        # get task_id set
         for rsc_agent in rsc_agents_arr:
+            # print(rsc_agent.rsc_map.keys())
             task_id_set.update(rsc_agent.rsc_map.keys())
+        # return list(task_id_set)
+        
         Scheduling_table_index_by_task_id = OrderedDict()
         for task_id in task_id_set: 
             Scheduling_table_index_by_task_id[task_id] = []
+        
         for rsc_agent in rsc_agents_arr:
             for task_id in task_id_set:
                 Scheduling_table_index_by_task_id[task_id].append(rsc_agent.rsc_map.get(task_id, 0))
@@ -51,10 +60,10 @@ class SchedulingTableInt(object):
         rsc_maps_arr = self.scheduling_table[time_slot_s:time_slot_e]
         rsc_avl = []
         for rsc_map in rsc_maps_arr:
-            rsc_avl.append(rsc_map.get_available_rsc())
+                rsc_avl.append(rsc_map.get_available_rsc())
         return rsc_avl
     
-    def insert_task(self, task:TaskInt, req_rsc_size:int, time_slot_s:int, time_slot_e:int, expected_slot_num:int, 
+    def insert_task(self, task:ProcessInt, req_rsc_size:int, time_slot_s:int, time_slot_e:int, expected_slot_num:int, 
                     verbose=False)->Tuple[bool, Union[int,List[int]], Union[int,List[int]], Union[int,List[int]]]: 
         """
         play a insert-based scheduling: 
@@ -63,11 +72,12 @@ class SchedulingTableInt(object):
             return success or not, the start time slot, the allocated resources, the allocated time slots
         3. release the resources given the list of allocated resources and the list of allocated time slots
         """ 
-        rsc_avl = self.idx_free_by_slot(time_slot_s, time_slot_e)
+        rsc_avl = self.idx_free_by_slot(time_slot_s, time_slot_e, key=task.pid)
         rsc_avl = np.array(rsc_avl)
         # check if the task can be scheduled with expected resources
         # the task can be scheduled at any time slot
-        if np.all(rsc_avl > req_rsc_size):
+        # bug
+        if np.all(rsc_avl >= req_rsc_size) and (time_slot_e - time_slot_s) >= expected_slot_num:
             # allocate resources 
             for rsc_map in self.scheduling_table[time_slot_s:time_slot_s+expected_slot_num]:
                 rsc_map.allocate(task.pid, req_rsc_size, verbose)
@@ -81,9 +91,10 @@ class SchedulingTableInt(object):
             for i in range(len(s)):
                 if (e[i] - s[i]) >= expected_slot_num and np.all(rsc_avl[s[i]:e[i]] > req_rsc_size):
                     # allocate resources 
-                    for rsc_map in self.scheduling_table[s[i]:s[i]+expected_slot_num]:
+                    alloc_slot_s = time_slot_s+s[i]
+                    for rsc_map in self.scheduling_table[alloc_slot_s:alloc_slot_s+expected_slot_num]:
                         rsc_map.allocate(task.pid, req_rsc_size, verbose)
-                    return True, s[i], req_rsc_size, expected_slot_num
+                    return True, alloc_slot_s, req_rsc_size, expected_slot_num
 
             # redistribute the resources to the intervals
             # based on the priciple of as soon as possible
@@ -100,6 +111,7 @@ class SchedulingTableInt(object):
             cum_rsc_alloc = 0
             cum_slot_length = 0
 
+            # warning: expected_slot_num may be larger than the available slots
             if rsc_avl[:expected_slot_num].sum() < expected_req_rsc_size: 
                 # as soon as possible
                 for i in range(len(s)): 
@@ -162,12 +174,13 @@ class SchedulingTableInt(object):
             # allocate resources
             idx = curr_alloc.nonzero()[0]
             for i in range(len(idx)):
-                for rsc_map in self.scheduling_table[s[idx[i]]:s[idx[i]]+int(curr_slot[idx[i]])]:
+                alloc_slot_s = time_slot_s+s[idx[i]]
+                for rsc_map in self.scheduling_table[alloc_slot_s:alloc_slot_s+int(curr_slot[idx[i]])]:
                     rsc_map.allocate(task.pid, curr_alloc[idx[i]], verbose)
             
-        return True, np.array(s)[idx].tolist(), curr_alloc[idx].tolist(), curr_slot[idx].tolist()
+        return True, (time_slot_s+np.array(s)[idx]).tolist(), curr_alloc[idx].tolist(), curr_slot[idx].tolist()
 
-    def release(self, task: TaskInt, time_slot_s:Union[int,List[int]], curr_alloc:Union[int,List[int]], curr_slot:Union[int,List[int]], verbose: bool = False):
+    def release(self, task: ProcessInt, time_slot_s:Union[int,List[int]], curr_alloc:Union[int,List[int]], curr_slot:Union[int,List[int]], verbose: bool = False):
         if isinstance(curr_alloc, int) and isinstance(curr_slot, int) and isinstance(time_slot_s, int):
             for rsc_map in self.scheduling_table[time_slot_s:time_slot_s+curr_slot]:
                 rsc_map.release(task.pid, curr_alloc, verbose)
@@ -225,6 +238,19 @@ class SchedulingTableInt(object):
         _str = [f"[{empty_boader_s[i]}-{empty_boader_e[i]})" for i in range(len(empty_boader_s))]
         print("slot:{} Empty".format(",".join(_str,)))
         
+    def get_plot_frame(self, start:int=0, end:int=-1):
+        frame = []
+        for rsc_map in self.scheduling_table[start:end]:
+            frame.append(rsc_map.get_plot_col())
+        frame = np.array(frame).T
+        return frame
+
+    def __eq__(self, __o: object) -> bool:
+        for i in range(len(self.scheduling_table)):
+            if self.scheduling_table[i] != __o.scheduling_table[i]:
+                return False
+        return True
+    
 
 if __name__ == "__main__": 
     # create a task set
@@ -282,18 +308,32 @@ if __name__ == "__main__":
     # # print the scheduling table
     # scheduling_table.print_scheduling_table()
 
+    init_p_list = []
+    pid = 0
+    for task in task_list[0:5]: 
+        # for r, d in zip(task.get_release_event(event_range), task.get_deadline_event(event_range)):
+        r = task.get_release_time()
+        d = task.get_deadline_time()
+        p = task.make_process(r, d, pid)
+        pid += 1
+        init_p_list.append(p)
+
     for i in range(5):
         print(f"task {i} allocation\n")
-        alloc_info[i] = scheduling_table.insert_task(task_list[i], require_rsc_size[i], 
-                                                     task_list[i].ERT, task_list[i].ddl, 
-                                                     task_list[i].exp_comp_t, verbose=True)
+        alloc_info[i] = scheduling_table.insert_task(init_p_list[i], require_rsc_size[i], 
+                                                     init_p_list[i].release_time, init_p_list[i].deadline, 
+                                                     init_p_list[i].exp_comp_t, verbose=True)
         scheduling_table.print_scheduling_table()
+    
+    print("occupy by id:", scheduling_table.index_occupy_by_id())
     
     # release resources
     for i in range(5):
+        print("before release")
+        scheduling_table.print_scheduling_table()
         if alloc_info[i] is not None:
-            print(f"task {i} release\n")
-            print([task_list[i].pid, *alloc_info[i]])
-            scheduling_table.release(task_list[i], *alloc_info[i][1:], verbose=True)
-    print("after release")
-    scheduling_table.print_scheduling_table()
+            print(f"task {init_p_list[i].pid}({i}) release:")
+            print([*alloc_info[i]])
+            scheduling_table.release(init_p_list[i], *alloc_info[i][1:], verbose=True)
+        print("after release")
+        scheduling_table.print_scheduling_table()
