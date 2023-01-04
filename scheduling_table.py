@@ -18,6 +18,10 @@ class SchedulingTableInt(object):
         # self.scheduling_table = np.zeros((num_resources, num_time_slots), dtype=int)
         # self.scheduling_table = np.full((num_time_slots), Resource_model_int(num_resources, id, name), dtype=Resource_model_int)
         self.scheduling_table = np.array([Resource_model_int(num_resources, ) for _ in range(num_time_slots)], dtype=Resource_model_int)
+        self.id = id
+        self.name = name
+        self.locker = None
+        self.lock_mask = np.ones((num_time_slots), dtype=bool)
 
     def index_occupy_by_id(self, time_slot_s:int=None, time_slot_e:int=None) -> Dict[int, List[int]]:
         """
@@ -52,15 +56,24 @@ class SchedulingTableInt(object):
                 Scheduling_table_index_by_task_id[task_id].append(rsc_agent.rsc_map.get(task_id, 0))
         return Scheduling_table_index_by_task_id
 
-    def idx_free_by_slot(self, time_slot_s, time_slot_e):
+    def idx_free_by_slot(self, time_slot_s, time_slot_e, key=None):
         """
         get the available resources in the time slot
         """
         # culculate available resources at each time slot
         rsc_maps_arr = self.scheduling_table[time_slot_s:time_slot_e]
         rsc_avl = []
-        for rsc_map in rsc_maps_arr:
+        # check lock: 
+        #   if the lock is free in the target interval or the query is from the locker, return all available resources 
+        if np.all(self.lock_mask[time_slot_s:time_slot_e]) or key == self.locker:
+            for idx, rsc_map in enumerate(rsc_maps_arr):
                 rsc_avl.append(rsc_map.get_available_rsc())
+        else: 
+            for rsc_map, lock in zip(rsc_maps_arr, self.lock_mask[time_slot_s:time_slot_e]):
+                if lock:
+                    rsc_avl.append(rsc_map.get_available_rsc())
+                else:
+                    rsc_avl.append(0)
         return rsc_avl
     
     def insert_task(self, task:ProcessInt, req_rsc_size:int, time_slot_s:int, time_slot_e:int, expected_slot_num:int, 
@@ -251,6 +264,24 @@ class SchedulingTableInt(object):
                 return False
         return True
     
+    def add_lock(self, task:ProcessInt, time_slot_s, time_slot_e):
+        # check if the lock is valid
+        if self.locker is not None:
+            return False
+        # set lock mask
+        self.lock_mask[time_slot_s:time_slot_e] = False
+        self.locker = task.pid
+        return True
+
+    def release_lock(self, task:ProcessInt, time_slot_s, time_slot_e):
+        if self.locker == task.pid:
+            self.lock_mask[time_slot_s:time_slot_e] = True
+            self.locker = None
+            return True
+        else:
+            return False
+    
+
 
 if __name__ == "__main__": 
     # create a task set
