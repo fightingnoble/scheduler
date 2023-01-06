@@ -819,8 +819,21 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedT
         if completed_list:
             for _p in completed_list:
                 # release the resource and move to the wait list
-                _SchedTab = bin_list[rsc_recoder[_p.pid][-1]]
-                _SchedTab.release(_p, *rsc_recoder[_p.pid][0:-1], verbose=False)
+                alloc_slot_s_t, alloc_size_t, allo_slot_t, bin_id_t = rsc_recoder[_p.pid]
+                if isinstance(alloc_slot_s_t, list):
+                    alloc_slot_s, alloc_size, allo_slot = [], [], []
+                    for i in range(len(alloc_slot_s_t)):
+                        if alloc_slot_s_t[i]+allo_slot_t[i] > n_slot: 
+                            alloc_slot_s.append(alloc_slot_s_t[i] if alloc_slot_s_t[i] > n_slot else n_slot )
+                            alloc_size.append(alloc_size_t[i] )
+                            allo_slot.append(allo_slot_t[i] if alloc_slot_s_t[i] > n_slot else allo_slot_t[i]-(n_slot - alloc_slot_s_t[i]) )
+                else:
+                    alloc_slot_s = alloc_slot_s_t if alloc_slot_s_t > n_slot else n_slot
+                    alloc_size = alloc_size_t
+                    allo_slot = allo_slot_t if alloc_slot_s_t > n_slot else allo_slot_t-(n_slot - alloc_slot_s_t)
+                
+                _SchedTab = bin_list[bin_id_t]
+                _SchedTab.release(_p, alloc_slot_s, alloc_size, allo_slot, verbose=False)
                 print("TASK {:d}:{:s}({:d}) COMPLETED!!".format(_p.task.id, _p.task.name, _p.pid))
                 # update statistics
                 # TODO: add lock 
@@ -861,8 +874,22 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedT
                 if _p in ready_queue.queue:
                     ready_queue.remove(_p)
                 elif _p in running_queue.queue:
-                    _SchedTab = bin_list[rsc_recoder[_p.pid][-1]]
-                    _SchedTab.release(_p, *rsc_recoder[_p.pid][0:-1], verbose=False)
+
+                    alloc_slot_s_t, alloc_size_t, allo_slot_t, bin_id_t = rsc_recoder[_p.pid]
+                    if isinstance(alloc_slot_s_t, list):
+                        alloc_slot_s, alloc_size, allo_slot = [], [], []
+                        for i in range(len(alloc_slot_s_t)):
+                            if alloc_slot_s_t[i]+allo_slot_t[i] > n_slot: 
+                                alloc_slot_s.append(alloc_slot_s_t[i] if alloc_slot_s_t[i] > n_slot else n_slot )
+                                alloc_size.append(alloc_size_t[i] )
+                                allo_slot.append(allo_slot_t[i] if alloc_slot_s_t[i] > n_slot else allo_slot_t[i]-(n_slot - alloc_slot_s_t[i]) )
+                    else:
+                        alloc_slot_s = alloc_slot_s_t if alloc_slot_s_t > n_slot else n_slot
+                        alloc_size = alloc_size_t
+                        allo_slot = allo_slot_t if alloc_slot_s_t > n_slot else allo_slot_t-(n_slot - alloc_slot_s_t)
+                    
+                    _SchedTab = bin_list[bin_id_t]
+                    _SchedTab.release(_p, alloc_slot_s, alloc_size, allo_slot, verbose=False)
                     rsc_recoder.pop(_p.pid)
                     running_queue.remove(_p)
                 print("TASK {:d}:{:s}({:d}) MISSED DEADLINE!!".format(_p.task.id, _p.task.name, _p.pid));
@@ -993,10 +1020,32 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedT
         writer = animation.FFMpegWriter(fps=50, metadata=dict(artist='Me'), bitrate=1800)
         ani.save("movie.mp4", writer=writer)
 
-    for _SchedTab in bin_list:
-        _SchedTab.print_scheduling_table()
+    print("=====================================\n")
     print("bin_pack_result:")
-    name_idx = {_p.pid:_p.task.name for _p in init_p_list}
+    print("=====================================\n")
+    for _SchedTab in bin_list:
+        bin_pack_result = _SchedTab.index_occupy_by_id()
+
+        # sort the result by the start time
+        # item[1] is alloc_slot_s_t, alloc_size_t, allo_slot_t
+        # item[1][0] is alloc_slot_s_t
+        sorted_task_pid = [k for k, v in sorted(bin_pack_result.items(), key=lambda item: item[1][0])]
+
+        # replace the pid with the task name
+        # and print the result
+        print(f"bin: {_SchedTab.name}({_SchedTab.id})")
+        for pid in list(sorted_task_pid):
+            _result = bin_pack_result.pop(pid)
+            bin_pack_result[init_p_list[pid].task.name] = _result
+            print("task: {:s}({:d})".format(init_p_list[pid].task.name, pid))
+            print("\tstart time: {:s}".format(", ".join([f"{x*timestep:.6f}" for x in _result[0]])))
+            print("\talloc cores: {:s}".format(", ".join([f"{x:d}" for x in _result[1]])))
+            print("\tused time: {:s}".format(", ".join([f"{x*timestep:.6f}" for x in _result[2]])))
+        print("=====================================\n")
+    
+    from scheduling_table import get_task_layout_compact
+    get_task_layout_compact(bin_list, init_p_list) 
+    
 
 def issue_process(_p:ProcessInt, n_slot:int, 
                 affinity:Dict[str, List[str]], pid_idx:dict, init_p_list:List[ProcessInt], 
@@ -1071,7 +1120,8 @@ def issue_process(_p:ProcessInt, n_slot:int,
                 # [time_slot_s, time_slot_e]
                 # [alloc_slot_s_t, alloc_slot_s_t + len(alloc_size_t)]
                 # total_alloc_unit_t = np.sum(np.array(alloc_size_t) * np.array(allo_slot_t))
-                total_alloc_unit_t = sum(occupation_candi_dict[pid])
+                alloc_slot_s_t, alloc_size_t, allo_slot_t = occupation_candi_dict[pid]
+                total_alloc_unit_t = np.sum(np.array(alloc_size_t) * np.array(allo_slot_t))
                 total_FLOPS_alloc_t = total_alloc_unit_t * timestep * FLOPS_PER_CORE
                 flops_2b_preempt -= total_FLOPS_alloc_t
 
@@ -1148,6 +1198,8 @@ def issue_process(_p:ProcessInt, n_slot:int,
         # find the target bin of the affinity target
         affinity_tgt_bin_id_list = [rsc_recoder_his[n].get_mru() for n in affinity_tgt_id_list if n in rsc_recoder_his] 
         affinity_search_bin_id_list = [n for n in range(len(bin_list)) if n not in affinity_tgt_bin_id_list] 
+        # arrange the search targets in the order of the fitness of the size
+        affinity_search_bin_id_list.sort(key=lambda x: abs(bin_list[x].scheduling_table[0].size - req_rsc_size))
 
         # search the bin in the affinity target bin list
         for bin_id in affinity_tgt_bin_id_list: 

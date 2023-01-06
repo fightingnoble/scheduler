@@ -1,9 +1,10 @@
 import numpy as np
-from typing import List, Dict, Tuple, Union, Optional, Iterable
+from typing import List, Dict, Tuple, Union, Optional, Iterable, Iterator
 from collections import OrderedDict
 from resource_agent import Resource_model_int
 from functools import reduce
 from task_agent import ProcessInt, TaskInt
+from matplotlib import pyplot as plt
 
 class SchedulingTableInt(object): 
     """
@@ -35,9 +36,12 @@ class SchedulingTableInt(object):
         
         # get task_id set
         task_id_set = set()
-        assert (time_slot_s is not None and time_slot_e is not None) or (time_slot_s is None and time_slot_e is None)
+        assert not (time_slot_s is None and time_slot_e is not None)
         if time_slot_s is None:
-            rsc_agents_arr = self.scheduling_table
+            time_slot_s = 0
+
+        if time_slot_e is None:
+            rsc_agents_arr = self.scheduling_table[time_slot_s:]
         else:
             rsc_agents_arr = self.scheduling_table[time_slot_s:time_slot_e]
         
@@ -54,6 +58,23 @@ class SchedulingTableInt(object):
         for rsc_agent in rsc_agents_arr:
             for task_id in task_id_set:
                 Scheduling_table_index_by_task_id[task_id].append(rsc_agent.rsc_map.get(task_id, 0))
+
+        # divide the time slot into intervals
+        # get the size and the start and length of each interval
+        for task_id, rsc_occ in Scheduling_table_index_by_task_id.items():
+            rsc_occ = np.array(rsc_occ)
+            boader = (rsc_occ[0:-1] != rsc_occ[1:]).nonzero()[0] + 1
+            s = [0] + boader.tolist() 
+            e = boader.tolist() + [len(rsc_occ)] 
+            l = [e[i] - s[i] for i in range(len(s))]
+            size = [rsc_occ[s[i]] for i in range(len(s))]
+            # get non zero intervals
+            s = [s[i]+time_slot_s for i in range(len(s)) if size[i] != 0]
+            l = [l[i] for i in range(len(l)) if size[i] != 0]
+            size = [size[i] for i in range(len(size)) if size[i] != 0]            
+            Scheduling_table_index_by_task_id[task_id] = (s, size, l)
+
+
         return Scheduling_table_index_by_task_id
 
     def idx_free_by_slot(self, time_slot_s, time_slot_e, key=None):
@@ -250,7 +271,7 @@ class SchedulingTableInt(object):
 
         _str = [f"[{empty_boader_s[i]}-{empty_boader_e[i]})" for i in range(len(empty_boader_s))]
         print("slot:{} Empty".format(",".join(_str,)))
-        
+
     def get_plot_frame(self, start:int=0, end:int=-1):
         frame = []
         for rsc_map in self.scheduling_table[start:end]:
@@ -280,7 +301,260 @@ class SchedulingTableInt(object):
             return True
         else:
             return False
+
+
+    @staticmethod
+    def get_core_size(_p, timestep, FLOPS_PER_CORE):
+        # release time round up: task should not be released earlier than the release time
+        time_slot_s = int(np.ceil(_p.release_time/timestep))
+        # deadline round down: task should not be finised later than the deadline
+        time_slot_e = int(_p.deadline//timestep)
+        req_rsc_size = int(np.ceil(_p.remburst/(time_slot_e-time_slot_s)/timestep/FLOPS_PER_CORE))
+        return req_rsc_size
+
+
+
+def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[ProcessInt],
+                    show=False, save=False, save_path="task_layout_compact.pdf", **kwargs):
+    import matplotlib.colors as mcolors
+    import matplotlib as mpl
+    colors=list(mcolors.XKCD_COLORS.keys())
     
+    base_vertical_offset = 0.5
+
+    # plot timeline and task name bin by bin
+    # and select color for the task automatically
+    fig = plt.figure(figsize=(50, 20))
+    vertical_grid_size = 1
+    for bin_idx, _SchedTab in enumerate(bin_list): 
+        bin_temp_size = len(_SchedTab.scheduling_table)
+        bin_spatial_size = _SchedTab.scheduling_table[0].size
+        bin_vertical_offset = bin_spatial_size* vertical_grid_size* bin_idx + base_vertical_offset
+        ax = fig.add_subplot(len(bin_list), 1, len(bin_list)-_SchedTab.id)
+
+        empty_boader_s = []
+        empty_boader_e = []
+        title_line = False
+
+        pre_rsc = _SchedTab.scheduling_table[0].rsc_map
+        # build a position dict
+        position_dict = {}
+        cum_pos = 0
+        for k,v in pre_rsc.items():
+            position_dict[k] = [[cum_pos], [v], True] 
+            cum_pos += v
+
+        pre_idx = 0
+        empty_flag = len(pre_rsc) == 0
+
+        if empty_flag:
+            empty_boader_s.append(0)
+        
+        for rsc_map_idx in range(bin_temp_size):
+            rsc_map = _SchedTab.scheduling_table[rsc_map_idx].rsc_map
+
+            if rsc_map == pre_rsc:
+                continue
+            else:
+                if empty_flag:
+                    empty_boader_e.append(rsc_map_idx)
+                else:
+                    # plot the task layout
+                    for pid, size in pre_rsc.items():
+                        _p = init_p_list[pid]
+                        _p_name = _p.task.name
+                        _p_color = mcolors.XKCD_COLORS[colors[pid]]
+                        is_new = position_dict[pid][-1]
+
+                        for vertical_s, vertical_size in zip(*position_dict[pid][:-1]):
+                            # culculate the position of the bar
+                            bar_vertical_offset = bin_vertical_offset + vertical_s*vertical_grid_size
+                            text_vertical_offset = bar_vertical_offset + 0.5*vertical_size*vertical_grid_size
+                            # plot the bar
+                            ax.broken_barh([(pre_idx, rsc_map_idx-pre_idx)], (bar_vertical_offset, vertical_size*vertical_grid_size), facecolors=_p_color)
+                            # plot the text
+                            if is_new:
+                                ax.text((pre_idx+rsc_map_idx)/2, text_vertical_offset, _p_name, ha='center', va='center', color='black', fontsize=10)
+
+                # the vertical grid at the end of the bar
+                ax.axvline(rsc_map_idx, color='black', linestyle='-', linewidth=0.5)
+
+                # update the position dict
+                new_pid = set(rsc_map.keys()) - set(pre_rsc.keys())
+                expired_pid = set(pre_rsc.keys()) - set(rsc_map.keys())
+                old_pid = set(pre_rsc.keys()) - expired_pid
+
+                # remove the item that is not in the new rsc_map
+                used_position = []
+                for pid in old_pid:
+                    p_size = rsc_map[pid]
+                    # set the is_new flag to False
+                    position_dict[pid][-1] = False
+                    for s, size in zip(*position_dict[pid][:-1]):
+                        e = s + size
+                        used_position += [i for i in range(s, e)]
+
+                for pid in expired_pid:
+                    position_dict.pop(pid)
+                
+                aval_pos = [i for i in range(bin_spatial_size) if i not in used_position]
+                # pick a proper position for the new task in the available position
+                for pid in new_pid:
+                    p_size = rsc_map[pid]
+                    # select the leftmost position
+                    interval_picked = aval_pos[:p_size]
+                    # check if the position is continuous
+                    interval_picked.sort()
+                    # remove selected position from aval_pos
+                    aval_pos = [i for i in aval_pos if i not in interval_picked]
+                    start = [interval_picked[0]]
+                    size = []
+                    for i in range(p_size-1):
+                        if interval_picked[i] != interval_picked[i+1]-1:
+                            size.append(interval_picked[i]-start[-1]+1)
+                            start.append(interval_picked[i+1])
+                    size.append(interval_picked[-1]-start[-1]+1)
+                    position_dict[pid] = [start, size, True]
+                
+                # update the pre_rsc                                                
+                pre_idx = rsc_map_idx
+                pre_rsc = rsc_map
+                empty_flag = len(pre_rsc) == 0
+                if empty_flag:
+                    empty_boader_s.append(rsc_map_idx)
+        if empty_flag:
+            empty_boader_e.append(bin_temp_size)
+        else:
+            # plot the task layout
+            for pid, size in pre_rsc.items():
+                _p = init_p_list[pid]
+                _p_name = _p.task.name
+                _p_color = mcolors.XKCD_COLORS[colors[pid]]
+                is_new = position_dict[pid][-1]
+
+                for vertical_s, vertical_size in zip(*position_dict[pid][:-1]):
+                    # culculate the position of the bar
+                    bar_vertical_offset = bin_vertical_offset + vertical_s*vertical_grid_size
+                    text_vertical_offset = bar_vertical_offset + 0.5*vertical_size*vertical_grid_size
+                    # plot the bar
+                    ax.broken_barh([(pre_idx, rsc_map_idx-pre_idx)], (bar_vertical_offset, vertical_size*vertical_grid_size), facecolors=_p_color)
+                    # plot the text
+                    if is_new:
+                        ax.text((pre_idx+rsc_map_idx)/2, text_vertical_offset, _p_name, ha='center', va='center', color='black', fontsize=10)
+
+
+                # the vertical grid at the end of the bar
+                ax.axvline(bin_temp_size, color='black', linestyle='-', linewidth=0.5)
+
+        # set the axis and title
+        ax.set_xlim(0, bin_temp_size)
+        # ax.set_ylim(bin_vertical_offset, bin_vertical_offset+bin_spatial_size*vertical_grid_size+0.5)
+        ax.set_xlabel('Time')
+        # add bin name
+        ax.set_title(f"bin: {_SchedTab.name}({_SchedTab.id})")
+
+    # sub-figures shares the same x-axis
+    # fig.subplots_adjust(hspace=0)
+    plt.setp([a.get_xticklabels() for a in fig.axes[:-1]], visible=False)
+
+    # plot the result
+    if show:
+        plt.show()
+    # save the figure
+    if "format" not in kwargs and save_path.split(".")[-1] == "pdf" and save:
+        kwargs["format"] = "pdf"
+    plt.savefig(save_path, **kwargs)
+
+    
+def get_task_layout(bin_list:List[SchedulingTableInt], init_p_list:List[ProcessInt]
+                        , show:bool=False, save:bool=False, save_path:str="task_layout.pdf", **kwargs):
+
+    import matplotlib.colors as mcolors
+    import matplotlib as mpl
+    cmap = mpl.colormaps['viridis']
+    colors=list(mcolors.XKCD_COLORS.keys())
+    
+    # plot timeline and task name bin by bin
+    # and select color for the task automatically
+    fig = plt.figure(figsize=(50, 20))
+    vertical_grid_size = 1
+    
+    for _SchedTab in bin_list:
+        tab_temp_size = _SchedTab.scheduling_table[0].size
+        ax = fig.add_subplot(len(bin_list), 1, len(bin_list)-_SchedTab.id)
+        vertical_offset = 0
+        horizen_grid = set()
+        bin_pack_result = _SchedTab.index_occupy_by_id()
+        ordered_k = [k for k, v in sorted(bin_pack_result.items(), key=lambda item: item[1][1])]
+        for pid in ordered_k:
+            alloc_info = bin_pack_result[pid]
+            _p = init_p_list[pid]
+            _p_name = _p.task.name
+            _p_color = mcolors.XKCD_COLORS[colors[pid]]
+            for s, size, l in zip(*alloc_info):
+                ax.broken_barh([(s, l)], (vertical_offset*vertical_grid_size, size*vertical_grid_size), facecolors=_p_color)
+                ax.text(s+l//2, (vertical_offset+size//2)*vertical_grid_size, _p_name, ha='center', va='center', color='black', fontsize=10)
+                horizen_grid.add(s)
+                horizen_grid.add(s+l)
+            vertical_offset += size
+        # ax.set_ylim(0, vertical_offset*vertical_grid_size)
+        ax.set_xlim(0, tab_temp_size)
+        ax.set_xlabel('Time')
+        # add bin name
+        ax.set_title(f"bin: {_SchedTab.name}({_SchedTab.id})")
+        # plot the grid
+        for x in horizen_grid:
+            ax.axvline(x, color='black', linestyle='-', linewidth=0.5)
+    # sub-figures shares the same x-axis
+    # fig.subplots_adjust(hspace=0)
+    plt.setp([a.get_xticklabels() for a in fig.axes[:-1]], visible=False)
+
+    # plot the result
+    if show:
+        plt.show()
+    # save the figure
+    if "format" not in kwargs and save_path.split(".")[-1] == "pdf" and save:
+        kwargs["format"] = "pdf"
+    plt.savefig(save_path, **kwargs)
+
+
+class BinGenSelInt(object):
+    def __init__(self, tab_temp_size:int):
+        self.tab_temp_size = tab_temp_size
+        self.init_bin_list()
+    
+    def _new_bin(self, id, size, name=None): 
+        if name is None:
+            name = "bin"+str(id)
+        print("Create a new bin: ", id, "name:", name, "size:", size)
+        return new_bin(size, self.tab_temp_size, id=id, name=name)
+    
+    def init_bin_list(self, bin_list=[], bin_name_list=[]):
+        self.bin_list = bin_list
+        self.bin_name_list = bin_name_list
+
+    def init_gen(self, gen:Iterator):
+        self.iter_next_bin_obj = gen
+
+class BinSelInt(BinGenSelInt): 
+    """
+    Given a set of bins, select a bin to allocate a task
+    """
+    pass
+    
+class BinGenInt(BinGenSelInt):
+    """
+    Given a generator, find a proper bins to allocate a task, if not found, create a new bin
+    """
+    def pick(self,):
+        bin = next(self.iter_next_bin_obj)
+        self.bin_list.append(bin)
+        self.bin_name_list.append(bin.name)
+        return bin
+
+def new_bin(spatial_size:int, temporal_size:int, id:int = 0, name:str = "bin"):
+    SchedTab = SchedulingTableInt(spatial_size, temporal_size, id=id, name=name)
+    return SchedTab
 
 
 if __name__ == "__main__": 
