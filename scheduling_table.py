@@ -138,7 +138,7 @@ class SchedulingTableInt(object):
             curr_slot = np.zeros(len(s), dtype=int)
 
             # avalable (A)
-            rsc_avl_tmp = np.zeros(len(s)) 
+            rsc_avl_tmp = np.zeros(len(s), dtype=int) 
 
             # required (R)
             expected_req_rsc_size = req_rsc_size * expected_slot_num
