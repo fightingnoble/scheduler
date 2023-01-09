@@ -1069,12 +1069,22 @@ def issue_process(_p:ProcessInt, n_slot:int,
 
     # try to push the task into the bins in the bin_list
     state, alloc_slot_s, alloc_size, allo_slot = False, None, None, None
+    # pre-allocation strategy: 
+    # 1. the resource constraint should be respected
+    # 2. the pre-defined resource preservation should be respected 
+    # 3. the affinity settings of all the tasks should be respected 
+    # 4. all tasks should be allocated with the resource
+    # 5. tasks is epected to migrate as less as possible
+    # 6. the resource should be allocated as compact as possible
+    # 7. the resource should be allocated as balanced as possible
+
     # TODO: arange the bin_list according to the affinity of the class
     # name parse
     thread_n = _p.task.name.split('_')[-1]
     p_name = _p.task.name
 
-    # For the task that is pre-assigned with the resource, the affinity is set to be itself
+    # 2. the pre-defined resource preservation should be respected 
+    #   For the task that is pre-assigned with the resource, the affinity is set to be itself
     if p_name in bin_name_list:
         _p_index_by_pid = {_p.pid: _p for _p in init_p_list}
         bin_id = bin_name_list.index(p_name)
@@ -1091,6 +1101,7 @@ def issue_process(_p:ProcessInt, n_slot:int,
             bin.release(_p, alloc_slot_s, alloc_size, allo_slot)
             # reset the state
             state, alloc_slot_s, alloc_size, allo_slot = False, None, None, None
+            # find out the conflict tasks
             occupation_candi_dict:Dict[int, List[int]] = bin.index_occupy_by_id(time_slot_s, time_slot_e)
             occupation_candi = list(occupation_candi_dict.keys())
             # decide which task to preempt
@@ -1109,8 +1120,8 @@ def issue_process(_p:ProcessInt, n_slot:int,
                 assert bin_id == bin_id_t
                 
                 # task is in the ready queue and issue list
-                # judge if preemption: 
-                #   task is runnning but has executed for an integer multiples of the quantum size (control the pre-emption grain)
+                # judge if preemptable: 
+
                 cum_exec_quantum = _p_2b_preempt.cumulative_executed_time / quantumSize
                 reach_preempt_grain = np.allclose(cum_exec_quantum, round(cum_exec_quantum), atol=1e-2)
                 if _p_2b_preempt.currentburst > 0 and not reach_preempt_grain: 
@@ -1157,7 +1168,6 @@ def issue_process(_p:ProcessInt, n_slot:int,
                 
                 # mark for reallocation in current time slot
                 p_2b_realloc.append(_p_2b_preempt)
-                p_2b_preempt.append(pid)
                 if flops_2b_preempt <= 1e-2*timestep*FLOPS_PER_CORE:
                     break
 
@@ -1197,11 +1207,14 @@ def issue_process(_p:ProcessInt, n_slot:int,
         affinity_tgt_id_list = [pid_idx[n] for n in affinity_tgt_n_list if n in pid_idx]
         # find the target bin of the affinity target
         affinity_tgt_bin_id_list = [rsc_recoder_his[n].get_mru() for n in affinity_tgt_id_list if n in rsc_recoder_his] 
+
+        # mark other bins as the targets of the search
         affinity_search_bin_id_list = [n for n in range(len(bin_list)) if n not in affinity_tgt_bin_id_list] 
-        # arrange the search targets in the order of the fitness of the size
+        # arrange the targets of the search in the order of the fitness of the size
         affinity_search_bin_id_list.sort(key=lambda x: abs(bin_list[x].scheduling_table[0].size - req_rsc_size))
 
-        # search the bin in the affinity target bin list
+        # 3. the affinity settings of all the tasks should be respected 
+        # search the bin in the affinity target bin list to find bin with best affinity
         for bin_id in affinity_tgt_bin_id_list: 
             bin = bin_list[bin_id]
             state, alloc_slot_s, alloc_size, allo_slot = bin.insert_task(_p, req_rsc_size, time_slot_s, time_slot_e, expected_slot_num, verbose=False)
@@ -1210,7 +1223,7 @@ def issue_process(_p:ProcessInt, n_slot:int,
             if state and (total_FLOPS_alloc >= _p.remburst):
                 break
             else:
-                # release the resources if the task cannot be pushed into the bin
+                # release the resource
                 # TODO: merge this function into the scheduling table class
                 # TODO: distinguish the state of risking the lack of resources and the state of the task cannot be pushed into the bin
                 bin.release(_p, alloc_slot_s, alloc_size, allo_slot, verbose=False)
@@ -1246,6 +1259,7 @@ def issue_process(_p:ProcessInt, n_slot:int,
     if state and total_FLOPS_alloc < _p.remburst:
         Warning("The allocated FLOPS is not enough for the task {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
         
+    # print the allocation result
     print(f"TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) tries to allocate\n")
     print(f"\t{req_rsc_size * expected_slot_num:d} ({req_rsc_size:d} cores x {expected_slot_num:d} slots) from {time_slot_s:d} to {time_slot_e:d}")
     if state:
@@ -1261,6 +1275,7 @@ def issue_process(_p:ProcessInt, n_slot:int,
     else:
         print("\t[{:s}]\n".format("FAILED" if not state else "SUCCESS"))
 
+    # record the allocation result and prepare the issue list
     if state:
         issue_list.append(_p)
         rsc_recoder[_p.pid] = [alloc_slot_s, alloc_size, allo_slot, bin_id]
