@@ -736,13 +736,21 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedT
     # monitor the deadline for pre-emption: (decending)
     running_queue:TaskQueue = TaskQueue(sort_f=lambda x: x.deadline)
     
+    rsc_recoder = {}
+    rsc_recoder_his = {}
+
     expired_list:List[ProcessInt] = []
-    issue_list:List[ProcessInt] = []
+    def issue_sort_fn(x:ProcessInt):
+        alloc_slot_s, alloc_size, allo_slot, bin_id = rsc_recoder[x.pid]
+        if isinstance(alloc_slot_s, int):
+            return alloc_slot_s
+        else:
+            return alloc_slot_s[0]
+    # monitor the issue time: (accending)
+    issue_list:TaskQueue = TaskQueue(sort_f=issue_sort_fn, decending=False)
     completed_list:List[ProcessInt] = []
     miss_list:List[ProcessInt] = []
     preempt_list:List[ProcessInt] = []
-    rsc_recoder = {}
-    rsc_recoder_his = {}
     curr_cfg:Resource_model_int
  
     # try to push the task into the bins in the bin_list
@@ -992,16 +1000,24 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedT
                     running_queue.remove(_p)
                     ready_queue.put(_p)
             preempt_list.clear()
-        # TODO:bug here we should not use tuple to store the task
+        
+        # issue the task
+        # if the task of the queue equals to the current slot, then issue the task
         if len(issue_list):
             for _p in issue_list:
-                print("TASK {:d}:{:s}({:d}) IS ISSUED @ {}!!".format(_p.task.id, _p.task.name, _p.pid, n_slot*timestep))
-                running_queue.put(_p)
+                if _p in ready_queue:
                 ready_queue.remove(_p)
+            while len(issue_list):
+                _p = issue_list[0]
+                if issue_sort_fn(_p) == n_slot: 
+                    running_queue.put(_p)
                 if _p.totburst == 0:
                     _p.start_time = n_slot*timestep
                 _p.waitTime = 0
-            issue_list.clear()
+                    issue_list.get()
+                else:
+                    break
+            # issue_list.clear()
             # print("Scheduling Table:")
             # print(SchedTab.print_scheduling_table())
             # if animation:
@@ -1092,7 +1108,7 @@ def allocate_rsc_4_process(_p:ProcessInt, n_slot:int,
                 timestep, FLOPS_PER_CORE, quantumSize, 
                 rsc_recoder:dict, rsc_recoder_his:Dict[int, LRUCache], 
                 ready_queue:TaskQueue, running_queue:TaskQueue, 
-                issue_list:List[ProcessInt], preempt_list:List[ProcessInt],
+                issue_list:TaskQueue, preempt_list:List[ProcessInt], 
                 iter_next_bin_obj:Iterator, bin_list:List[SchedulingTableInt], bin_name_list:List[str], ):
     # initialize the resource request parameters
     p_name = _p.task.name
@@ -1352,8 +1368,8 @@ def allocate_rsc_4_process(_p:ProcessInt, n_slot:int,
 
     # record the allocation result and prepare the issue list
     if state:
-        issue_list.append(_p)
         rsc_recoder[_p.pid] = [alloc_slot_s, alloc_size, allo_slot, bin_id]
+        issue_list.put(_p)
         if _p.pid in rsc_recoder_his:
             rsc_recoder_his[_p.pid].put(bin_id)
         else:
