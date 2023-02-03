@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Union, List, Dict, Iterator
+from typing import Union, List, Dict, Iterator, Callable
 from scheduling_table import SchedulingTableInt
 from resource_agent import Resource_model_int
 from task_agent import TaskInt
@@ -131,7 +131,7 @@ def vis_task_static_timeline(task_list, show=False, save=False, save_path="task_
     if show:
         plt.show()
     if "format" not in kwargs and save_path.split(".")[-1] == "pdf" and save:
-        kwargs["format"] = "pdf"
+            kwargs["format"] = "pdf"
     plt.savefig(save_path, **kwargs)
 
 def load_taskint(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]:
@@ -177,6 +177,12 @@ def load_taskint(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]
                 RDA_size=task_attr['RDA./Req.'], main_size=task_attr['Cores/Req.'], seq_cpu_time=task_attr["Flops on path"]/1e3
             )
             task.freq = task_attr["Freq."]
+            # initialize task affinity list
+            thread_n = int(i)
+            affinity_tgt_n_list = affinity[task_n]        
+            affinity_tgt_n_list = [n+'_'+str(thread_n) for n in affinity_tgt_n_list]
+            task.affinity_n = affinity_tgt_n_list
+
             if plot:
                 s = task.get_release_time()
                 e = task.get_deadline_time()
@@ -203,6 +209,12 @@ def load_taskint(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]
             ax.set(xlim=(0, t_max), xticks=np.arange(0, t_max, time_grid_size),)
             ax.plot(X, Y, 'k', lw=0.5, alpha=0.5)
             plt.savefig(save_path, format="pdf")
+
+    for task_n, task in task_dict.items(): 
+        # get affinity target id
+        # TODO: bug here， key error when the affinity target is not in the pid_idx
+        affinity_tgt_id_list = [task_dict[n].id for n in task.affinity_n if n in task_dict]
+        task.affinity = affinity_tgt_id_list
 
     return task_dict
 
@@ -762,9 +774,6 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedT
         print("Create a new bin: ", id, "name:", name, "size:", size)
         return new_bin(size, tab_temp_size, id=id, name=name)
 
-    def _next_bin_obj():
-        # release time round up: task should not be released earlier than the release time
-        # deadline round down: task should not be finised later than the deadline
     # aa = lambda _p: int(np.ceil(_p.task.flops/(int(np.ceil(_p.release_time/timestep))-int(_p.deadline//timestep))/timestep/FLOPS_PER_CORE))
     def get_core_size(_p):
         # release time round up: task should not be released earlier than the release time
@@ -774,18 +783,73 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedT
         req_rsc_size = int(np.ceil(_p.remburst/(time_slot_e-time_slot_s)/timestep/FLOPS_PER_CORE))
         return req_rsc_size
 
+    def _next_bin_obj_0():
+        """
+        generate the bin list in the descending order of the core size
+        """        
         p_list = [(get_core_size(_p), _p) for _p in init_p_list]
         print("&*(&*(^(*^(*&^*(^*(&")
         p_list.sort(key=lambda x: x[0], reverse=True)
         # TODO: bug here, name confilit
         yield from (_new_bin(bin_id,x[0],x[1].task.name) for bin_id, x in enumerate(p_list))
 
-    init_bin_id = 0
-    bin_id = init_bin_id
-    iter_next_bin_obj = _next_bin_obj()
-    bin_list:List[SchedulingTableInt] = [next(iter_next_bin_obj)]
-    bin_name_list = [bin_list[0].name]
-   
+    # iter_next_bin_obj = _next_bin_obj_0()
+    # bin_list:List[SchedulingTableInt] = [next(iter_next_bin_obj)]
+    # bin_name_list = [bin_list[0].name]
+
+    def _next_bin_obj_1(max_core_size:int, size_list:List[int], name_list:List[str]): 
+        """
+        genrate the bin list according to the size_list until the max_core_size is reached
+        """ 
+        cum_size = 0
+        bin_id = 0
+        for size, name in zip(size_list, name_list): 
+            # if cum_size + size > max_core_size:
+            #     yield _new_bin(bin_id, max_core_size - cum_size, name)
+            #     break
+            yield _new_bin(bin_id, size, name)
+            bin_id += 1
+            cum_size += size
+
+    def _next_bin_obj_2(max_core_size:int, p_list:List[ProcessInt], RDA_ratio:float=1.2): 
+        """
+        genrate the bin list according to the size_list until the max_core_size is reached
+        """ 
+        cum_size = 0
+        bin_list = []
+        for _p in p_list:
+            size_main = get_core_size(_p)
+            task_type = _p.task.timing_flag
+            # get RDA size
+            if task_type == "deadline": 
+                size_RDA = int(np.ceil(size_main * RDA_ratio))
+            else:
+                size_RDA = 0
+            size = size_main + size_RDA
+            # get bin
+            if cum_size + size > max_core_size: 
+                yield _new_bin(bin_id, max_core_size - cum_size, _p.task.name)
+                break
+            yield _new_bin(bin_id, size, _p.task.name)
+            bin_id += 1
+            cum_size += size
+
+    # iter_next_bin_obj = _next_bin_obj_0()
+    # bin_list:List[SchedulingTableInt] = [next(iter_next_bin_obj)]
+    # bin_name_list = [bin_list[0].name]
+
+    size_l = []
+    name_l = []
+    for _p in init_p_list:
+        if _p.task.pre_assigned_resource_flag:
+            size_l.append(_p.task.pre_assigned_resource.main_size + _p.task.pre_assigned_resource.RDA_size)
+            name_l.append(_p.task.name)
+    iter_next_bin_obj = _next_bin_obj_1(max_core_size=256, size_list=size_l, name_list=name_l)
+    bin_list:List[SchedulingTableInt] = list(iter_next_bin_obj)
+    bin_name_list = [bin.name for bin in bin_list]
+    # bin_list:List[SchedulingTableInt] = [next(iter_next_bin_obj)]
+    # bin_name_list = [bin_list[0].name]
+
     if animation:
         # for animation generation
         frame_list = []
@@ -1006,14 +1070,14 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedT
         if len(issue_list):
             for _p in issue_list:
                 if _p in ready_queue:
-                ready_queue.remove(_p)
+                    ready_queue.remove(_p)
             while len(issue_list):
                 _p = issue_list[0]
                 if issue_sort_fn(_p) == n_slot: 
                     running_queue.put(_p)
-                if _p.totburst == 0:
-                    _p.start_time = n_slot*timestep
-                _p.waitTime = 0
+                    if _p.totburst == 0:
+                        _p.start_time = n_slot*timestep
+                    _p.waitTime = 0
                     issue_list.get()
                 else:
                     break
@@ -1086,7 +1150,7 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedT
     
     from scheduling_table import get_task_layout_compact
     get_task_layout_compact(bin_list, init_p_list) 
-    
+
 def get_rsc_2b_released(rsc_recoder, n_slot, _p):
     alloc_slot_s_t, alloc_size_t, allo_slot_t, bin_id_t = rsc_recoder[_p.pid]
     if isinstance(alloc_slot_s_t, list):
@@ -1151,153 +1215,55 @@ def allocate_rsc_4_process(_p:ProcessInt, n_slot:int,
         # if fail collect the tasks in the target bin and preempt the tasks
         if state and (total_FLOPS_alloc >= _p.remburst):
             pass
+            print("Task {} is allocated successfully".format(_p.pid))
         else: 
             # release the resource
             bin.release(_p, alloc_slot_s, alloc_size, allo_slot)
             # reset the state
             state, alloc_slot_s, alloc_size, allo_slot = False, None, None, None
             p_2b_realloc = []
-            state, alloc_slot_s, alloc_size, allo_slot, \
-                total_alloc_unit, total_FLOPS_alloc = preempt_the_conflicts(_p, bin, 
+            state, alloc_slot_s, alloc_size, allo_slot, total_alloc_unit, total_FLOPS_alloc = preempt_the_conflicts(_p, bin, 
                 req_rsc_size, expected_slot_num, 
                 time_slot_s, time_slot_e, n_slot, 
                 timestep, FLOPS_PER_CORE, quantumSize, 
                 rsc_recoder, rsc_recoder_his, 
                 running_queue, 
                 issue_list, preempt_list, p_2b_realloc, 
-                _p_index_by_pid, quantum_check_en=True) 
-                
-            # # find out the conflict tasks
-            # occupation_candi_dict:Dict[int, List[int]] = bin.index_occupy_by_id(time_slot_s, time_slot_e)
-            # # filter the confict tasks that have lower affinity with the current bin compared with the current task
-            # # if key is not None:
-            # #     occupation_candi_dict = {k:v for k,v in occupation_candi_dict.items() if key(_p) > key(v)}
-            # occupation_candi = list(occupation_candi_dict.keys())
+                _p_index_by_pid, quantum_check_en=False) 
 
-            # # # note that here is an assumption that current bin is designed for the task, all the candidate tasks are preempted
-            # # aval_flops = sum(bin.idx_free_by_slot(time_slot_s, time_slot_e, _p.pid)) * timestep * FLOPS_PER_CORE
-            # # flops_2b_preempt = (time_slot_e - time_slot_s) * bin.scheduling_table[0].size * timestep * FLOPS_PER_CORE - aval_flops
-                
-            # # check if the conflict tasks can provide enough resources
-            # # if key is not None:
-            # #     total_FLOPS_occupied = 0
-            # #     for pid in occupation_candi:
-            # #         alloc_slot_s_t, alloc_size_t, allo_slot_t = occupation_candi_dict[pid]
-            # #         total_alloc_unit_t = np.sum(np.array(alloc_size_t) * np.array(allo_slot_t))
-            # #         total_FLOPS_alloc_t = total_alloc_unit_t * timestep * FLOPS_PER_CORE
-            # #         total_FLOPS_occupied += total_FLOPS_alloc_t
-            # #     if flops_2b_preempt-total_FLOPS_occupied > 1e-2*timestep*FLOPS_PER_CORE: 
-            # #         state, alloc_slot_s, alloc_size, allo_slot = False, None, None, None
-            # #         return state, alloc_slot_s, alloc_size, allo_slot
-
-            # # decide which task to preempt
-            # # select the task with the latest deadline
-            # # TODO: evaluate more strategies
-            # occupation_candi.sort(key=lambda x: _p_index_by_pid[x].deadline, reverse=True)
-            # # note that here is an assumption that current bin is designed for the task, all the candidate tasks are preempted
-            # aval_flops = sum(bin.idx_free_by_slot(time_slot_s, time_slot_e, _p.pid)) * timestep * FLOPS_PER_CORE
-            # flops_2b_preempt = (time_slot_e - time_slot_s) * bin.scheduling_table[0].size * timestep * FLOPS_PER_CORE - aval_flops
-            
-            # p_2b_realloc = []
-            # for pid in occupation_candi:
-            #     # load allocation history
-            #     _p_2b_preempt = _p_index_by_pid[pid]
-            #     alloc_slot_s_t, alloc_size_t, allo_slot_t, bin_id_t = rsc_recoder[pid]
-            #     assert bin_id == bin_id_t
-                
-            #     # task is in the ready queue and issue list
-            #     # judge if preemptable: 
-
-            #     # task is runnning but has executed for an integer multiples of the quantum size (control the pre-emption grain)
-            #     if True:
-            #         cum_exec_quantum = _p_2b_preempt.cumulative_executed_time / quantumSize
-            #         reach_preempt_grain = np.allclose(cum_exec_quantum, round(cum_exec_quantum), atol=1e-2)
-            #         if _p_2b_preempt.currentburst > 0 and not reach_preempt_grain: 
-            #             continue
-                
-            #     # evaluate the preemption possibility
-            #     # if the preemptable task can provide enough FLOPS to the current task
-
-
-            #     # calculate the interval intersection of the two tasks
-            #     # [time_slot_s, time_slot_e]
-            #     # [alloc_slot_s_t, alloc_slot_s_t + len(alloc_size_t)]
-            #     # total_alloc_unit_t = np.sum(np.array(alloc_size_t) * np.array(allo_slot_t))
-            #     alloc_slot_s_t, alloc_size_t, allo_slot_t = occupation_candi_dict[pid]
-            #     total_alloc_unit_t = np.sum(np.array(alloc_size_t) * np.array(allo_slot_t))
-            #     total_FLOPS_alloc_t = total_alloc_unit_t * timestep * FLOPS_PER_CORE
-            #     flops_2b_preempt -= total_FLOPS_alloc_t
-
-            #     # pop the task from the bin
-            #     print(f"pop the task {_p_2b_preempt.task.id}:{_p_2b_preempt.task.name}({pid})from the bin {bin_id}")
-            #     # release all the tasks in the p_2b_preempt
-            #     bin.release(_p_2b_preempt, alloc_slot_s_t, alloc_size_t, allo_slot_t, verbose=False)
-            #     # update the rsc_recoder
-            #     rsc_recoder.pop(_p_2b_preempt.pid)
-            
-            #     if _p_2b_preempt.currentburst == 0: 
-            #         # task is in the ready queue and issue list
-            #         issue_list.remove(_p_2b_preempt)
-            #         # update the rsc_recoder_his
-            #         rsc_recoder_his[pid].withdraw()
-            #         # update the running_queue
-            #         if _p_2b_preempt in running_queue:
-            #             raise ValueError("A unexpected situation happens, task is not executed but in the running queue")
-            #             # maybe blocked by the I/O
-            #             # TODO: add the logic to handle the blocked task
-            #             # put into waiting list
-
-
-            #     elif _p_2b_preempt.currentburst != 0 and reach_preempt_grain:
-            #         # task is in the running queue
-            #         # update the task status
-            #         _p_2b_preempt.task.preemption_count += 1
-            #         _p_2b_preempt.currentburst = 0 
-
-            #         # update the running_queue
-            #         preempt_list.append(_p_2b_preempt)
-            #         print(f"task {_p_2b_preempt.task.id}:{_p_2b_preempt.task.name}({pid}) is preempted and put into the ready queue")
-                
-            #     # mark for reallocation in current time slot
-            #     p_2b_realloc.append(_p_2b_preempt)
-            #     if flops_2b_preempt <= 1e-2*timestep*FLOPS_PER_CORE:
-            #         break
-
-            # # reallocate the current task
-            # state, alloc_slot_s, alloc_size, allo_slot = bin.insert_task(_p, req_rsc_size, time_slot_s, time_slot_e, expected_slot_num, verbose=False)
-            # total_alloc_unit = np.sum(np.array(alloc_size) * np.array(allo_slot))
-            # total_FLOPS_alloc = total_alloc_unit * timestep * FLOPS_PER_CORE
-            # # check if the task is allocated successfully
-            # # if fail collect the tasks in the target bin and preempt the tasks
-            # if state and (total_FLOPS_alloc >= _p.remburst):
-            #     if bin.locker == _p.pid:
-            #         bin.release_lock(_p, time_slot_s, time_slot_e)
-            # else: 
-            #     # In this condition, some tasks are not preempted successfully, and the current task is blocked by these tasks, 
-            #     # the current task will be delayed to issue
-            #     # release the resource
-            #     bin.release(_p, alloc_slot_s, alloc_size, allo_slot)
-            #     # reset the state
-            #     state, alloc_slot_s, alloc_size, allo_slot = False, None, None, None
-            #     bin.add_lock(_p, time_slot_s, time_slot_e)
-            #     Warning(f"A unexpected situation happens, task {_p.task.id}:{_p.task.name}({_p.task.pid}) is not allocated successfully after preemption in its expected bin")
-            #     # raise ValueError(f"A unexpected situation happens, task {_p.task.id}:{_p.task.name}({_p.task.pid}) is not allocated successfully after preemption in its own bin")
-            
             # reallocate the tasks in the P_2b_realloc
             for _p_2b_realloc in p_2b_realloc:
                 allocate_rsc_4_process(_p_2b_realloc, n_slot, affinity, pid_idx, init_p_list, timestep, FLOPS_PER_CORE, quantumSize,  
                     rsc_recoder, rsc_recoder_his, ready_queue, running_queue, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list)
-    else:
-        # remove the thread number at the end of the name
-        task_base_name = p_name.replace("_"+thread_n, "")
-        thread_n = int(thread_n)
-        affinity_tgt_n_list = affinity[task_base_name]        
-        affinity_tgt_n_list = [n+'_'+str(thread_n) for n in affinity_tgt_n_list]
-        # get affinity target id
-        # TODO: bug here， key error when the affinity target is not in the pid_idx
-        affinity_tgt_id_list = [pid_idx[n] for n in affinity_tgt_n_list if n in pid_idx]
+    else: 
         # find the target bin of the affinity target
-        affinity_tgt_bin_id_list = [rsc_recoder_his[n].get_mru() for n in affinity_tgt_id_list if n in rsc_recoder_his] 
+        def get_target_bin_id(_p=_p, bin_name_list=bin_name_list, rsc_recoder_his=rsc_recoder_his):
+            affinity_tgt_bin_id_list = []
+            for task_n in _p.task.affinity_n:
+                # suppose the target is pre-assigned with the resource but is not allocated
+                if task_n in bin_name_list:
+                    affinity_tgt_bin_id_list.append(bin_name_list.index(task_n))
+            # suppose the target was allocated with the resource
+            for _pid in _p.task.affinity:
+                if _pid in rsc_recoder_his:
+                    affinity_tgt_bin_id_list.append(rsc_recoder_his[_pid].get_mru())
+            return affinity_tgt_bin_id_list
+
+        affinity_tgt_bin_id_list = get_target_bin_id(_p, bin_name_list, rsc_recoder_his)
+
+        # # remove the thread number at the end of the name
+        # # name parse
+        # thread_n = _p.task.name.split('_')[-1]
+        # p_name = _p.task.name
+        # task_base_name = p_name.replace("_"+thread_n, "")
+        # thread_n = int(thread_n)
+        # affinity_tgt_n_list = affinity[task_base_name]        
+        # affinity_tgt_n_list = [n+'_'+str(thread_n) for n in affinity_tgt_n_list]
+        # # get affinity target id
+        # # TODO: bug here， key error when the affinity target is not in the pid_idx
+        # affinity_tgt_id_list = [pid_idx[n] for n in affinity_tgt_n_list if n in pid_idx]
+        # # find the target bin of the affinity target
+        # affinity_tgt_bin_id_list = [rsc_recoder_his[n].get_mru() for n in affinity_tgt_id_list if n in rsc_recoder_his] 
 
         # mark other bins as the targets of the search
         affinity_search_bin_id_list = [n for n in range(len(bin_list)) if n not in affinity_tgt_bin_id_list] 
@@ -1311,15 +1277,34 @@ def allocate_rsc_4_process(_p:ProcessInt, n_slot:int,
             state, alloc_slot_s, alloc_size, allo_slot = bin.insert_task(_p, req_rsc_size, time_slot_s, time_slot_e, expected_slot_num, verbose=False)
             total_alloc_unit = np.sum(np.array(alloc_size) * np.array(allo_slot))
             total_FLOPS_alloc = total_alloc_unit * timestep * FLOPS_PER_CORE
+            # check if the task is allocated successfully
+            # if fail collect the tasks in the target bin and preempt the tasks
             if state and (total_FLOPS_alloc >= _p.remburst):
+                print("Task {} is allocated successfully".format(_p.pid))
                 break
             else:
                 # release the resource
                 # TODO: merge this function into the scheduling table class
                 # TODO: distinguish the state of risking the lack of resources and the state of the task cannot be pushed into the bin
-                bin.release(_p, alloc_slot_s, alloc_size, allo_slot, verbose=False)
-                state = False
-        
+                bin.release(_p, alloc_slot_s, alloc_size, allo_slot)
+                # reset the state
+                state, alloc_slot_s, alloc_size, allo_slot = False, None, None, None
+                # p_2b_realloc = []
+                # state, alloc_slot_s, alloc_size, allo_slot, \
+                #     total_alloc_unit, total_FLOPS_alloc = preempt_the_conflicts(_p, bin, 
+                #     req_rsc_size, expected_slot_num, 
+                #     time_slot_s, time_slot_e, n_slot, 
+                #     timestep, FLOPS_PER_CORE, quantumSize, 
+                #     rsc_recoder, rsc_recoder_his, 
+                #     running_queue, 
+                #     issue_list, preempt_list, p_2b_realloc, 
+                #     _p_index_by_pid, key=lambda x: affinity_fn(x, bin, rsc_recoder_his)) 
+                # # reallocate the tasks in the P_2b_realloc
+                # for _p_2b_realloc in p_2b_realloc:
+                #     allocate_rsc_4_process(_p_2b_realloc, n_slot, affinity, pid_idx, init_p_list, timestep, FLOPS_PER_CORE, quantumSize,  
+                #         rsc_recoder, rsc_recoder_his, ready_queue, running_queue, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list)
+
+
         if not state:
             # search the bin in the affinity search bin list
             for bin_id in affinity_search_bin_id_list: 
@@ -1328,6 +1313,7 @@ def allocate_rsc_4_process(_p:ProcessInt, n_slot:int,
                 total_alloc_unit = np.sum(np.array(alloc_size) * np.array(allo_slot))
                 total_FLOPS_alloc = total_alloc_unit * timestep * FLOPS_PER_CORE
                 if state and (total_FLOPS_alloc >= _p.remburst):
+                    print("Task {} is allocated successfully".format(_p.pid))
                     break
                 else:
                     # release the resources if the task cannot be pushed into the bin
@@ -1381,6 +1367,20 @@ def allocate_rsc_4_process(_p:ProcessInt, n_slot:int,
 def build_task_graph_and_packing(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]:
     pass
 
+def get_process_affinity_idx(_p:ProcessInt, affinity:Dict[str, List[str]], pid_idx:Dict[str, int]) -> List[int]:
+    # name parse
+    p_name = _p.task.name
+    # remove the thread number at the end of the name
+    thread_n = _p.task.name.split('_')[-1]
+    task_base_name = p_name.replace("_"+thread_n, "")
+    thread_n = int(thread_n)
+    affinity_tgt_n_list = affinity[task_base_name]        
+    affinity_tgt_n_list = [n+'_'+str(thread_n) for n in affinity_tgt_n_list]
+    # get affinity target id
+    # TODO: bug here， key error when the affinity target is not in the pid_idx
+    affinity_tgt_id_list = [pid_idx[n] for n in affinity_tgt_n_list if n in pid_idx]
+    return affinity_tgt_id_list
+
 def preempt_the_conflicts(_p:ProcessInt, bin:SchedulingTableInt, 
         req_rsc_size:int, expected_slot_num:int, 
         time_slot_s:int, time_slot_e:int, n_slot:int,
@@ -1418,7 +1418,8 @@ def preempt_the_conflicts(_p:ProcessInt, bin:SchedulingTableInt,
         total_FLOPS_occupied += total_FLOPS_alloc_t
     if flops_2b_preempt-total_FLOPS_occupied > 1e-2*timestep*FLOPS_PER_CORE: 
         state, alloc_slot_s, alloc_size, allo_slot = False, None, None, None
-        return state, alloc_slot_s, alloc_size, allo_slot
+        total_alloc_unit, total_FLOPS_alloc = 0, 0
+        return state, alloc_slot_s, alloc_size, allo_slot, total_alloc_unit, total_FLOPS_alloc
 
     # decide which task to preempt
     # select the task with the latest deadline
@@ -1494,7 +1495,8 @@ def preempt_the_conflicts(_p:ProcessInt, bin:SchedulingTableInt,
     total_FLOPS_alloc = total_alloc_unit * timestep * FLOPS_PER_CORE
     # check if the task is allocated successfully
     # if fail collect the tasks in the target bin and preempt the tasks
-    if state and (total_FLOPS_alloc >= _p.remburst):
+    if state and (total_FLOPS_alloc >= _p.remburst): 
+        print(f"task {_p.task.id}:{_p.task.name}({_p.pid}) is allocated successfully in the bin {bin_id}")
         if bin.locker == _p.pid:
             bin.release_lock(_p, time_slot_s, time_slot_e)
     else: 
@@ -1505,9 +1507,21 @@ def preempt_the_conflicts(_p:ProcessInt, bin:SchedulingTableInt,
         # reset the state
         state, alloc_slot_s, alloc_size, allo_slot = False, None, None, None
         bin.add_lock(_p, time_slot_s, time_slot_e)
-        Warning(f"A unexpected situation happens, task {_p.task.id}:{_p.task.name}({_p.task.pid}) is not allocated successfully after preemption in its expected bin")
-        # raise ValueError(f"A unexpected situation happens, task {_p.task.id}:{_p.task.name}({_p.task.pid}) is not allocated successfully after preemption in its own bin")
+        Warning(f"A unexpected situation happens, task {_p.task.id}:{_p.task.name}({_p.pid}) is not allocated successfully after preemption in its expected bin")
+        # raise ValueError(f"A unexpected situation happens, task {_p.task.id}:{_p.task.name}({_p.pid}) is not allocated successfully after preemption in its own bin")
     return state, alloc_slot_s, alloc_size, allo_slot, total_alloc_unit, total_FLOPS_alloc
+
+
+def affinity_fn(_p, bin, rsc_recoder_his): 
+    affinity_tgt_id_list = _p.task.affinity
+    if len(affinity_tgt_id_list) == 0:
+        return 0
+    # find the target bin of the affinity target
+    affinity_tgt_bin_id_list = [rsc_recoder_his[n].get_mru() for n in affinity_tgt_id_list if n in rsc_recoder_his] 
+    if bin.id in affinity_tgt_bin_id_list:
+        return 1 - affinity_tgt_bin_id_list.index(bin.id)/len(affinity_tgt_bin_id_list)
+    else:
+        return 0
 
 
 if __name__ == "__main__": 
@@ -1525,5 +1539,5 @@ if __name__ == "__main__":
     f_max = max([task_dict[task].freq for task in task_dict])
     hyper_p = 1/f_gcd
     sim_step = min([task_dict[task].exp_comp_t for task in task_dict])/32
-    # push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, 256, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
+        # push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, 256, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
     push_task_into_bins(task_dict, 256, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)

@@ -18,6 +18,7 @@ class LRUCache:
         
 
     def put(self, key: int, value: int=None) -> None:
+        self.bk = deepcopy(self.dict)
         if key in self.dict:
             self.dict.pop(key)
         else:

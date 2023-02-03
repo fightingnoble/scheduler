@@ -86,7 +86,7 @@ class TaskBase(object):
         self.jitter_max = jitter_max # max jitter
 
         # =============== 2. runtime state ===============
-        self.pid = 0 # process id
+        # self.pid = 0 # process id
         self.prio = priority      # priority
 
         self.release_time = self.ERT + self.i_offset # recored when the process is generated
@@ -162,6 +162,7 @@ class TaskInt(TaskBase):
         self.flops = flops
         # designed scheduling attribute
         self.affinity = []
+        self.affinity_n = []
         self.task_flag_num = scheduling_attr[task_flag]
         self.task_flag = task_flag 
         
