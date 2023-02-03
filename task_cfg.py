@@ -74,8 +74,85 @@ affinity = {
 # post-processing
 # For the task that is pre-assigned with the resource, the affinity is set to be itself
 
-def vis_task_static_timeline(task_list, show=False, save=False, save_path="task_static_timeline.pdf", **kwargs):
-    sim_time = 0.2
+pre_assign_priority = {
+    "ImageBB", 
+    "Semantic_segm",
+    "Traffic_light_detection",
+    "Lane_drivable_area_det",
+}
+
+# def vis_task_static_timeline(task_list, show=False, save=False, save_path="task_static_timeline.pdf", **kwargs):
+#     sim_time = 0.2
+#     vertical_grid_size = 0.4
+#     time_grid_size = 0.004
+
+#     # build event list
+#     req_list = []
+#     ddl_list = []
+#     finish_list = []
+
+#     for task in task_list:
+#         req_list.append(task.get_release_event(sim_time))
+#         ddl_list.append(task.get_deadline_event(sim_time))
+#         finish_list.append(task.get_finish_event(sim_time))
+
+#     # print(req_list, ddl_list)
+
+
+#     import matplotlib.colors as mcolors
+#     import matplotlib as mpl
+#     cmap = mpl.colormaps['viridis']
+#     colors=list(mcolors.XKCD_COLORS.keys())
+    
+#     # plot timeline and task name 
+#     # and select color for the task automatically
+#     horizen_grid = set()
+#     fig, ax = plt.subplots(figsize=(50, 10))
+#     vertical_offset = 0
+#     for i in range(len(task_list)):
+#         for s, e in zip(req_list[i], finish_list[i]):
+#             if e > sim_time:
+#                 continue
+#             print("{}:{}-{}".format(task_list[i].name, s, e))
+#             horizen_grid.add(s)
+#             horizen_grid.add(e)
+#             ax.hlines(y=vertical_offset*vertical_grid_size, xmin=s,
+#                       xmax=e, lw=2, color=mcolors.XKCD_COLORS[colors[i]]
+#                       )  # label=task_list[i].name)
+#             ax.text(# sim_time, vertical_offset*vertical_grid_size,
+#                     s, vertical_offset*vertical_grid_size+0.001,
+#                     task_list[i].name, fontsize=7)
+#         vertical_offset += 1
+#         # s = next(req_list[i])
+#         # e = next(ddl_list[i])
+#         # print("{}:{}-{}".format(task_list[i].name, s, e))
+#         # ax.hlines(y=vertical_offset*vertical_grid_size, xmin=s, xmax=e, lw=2,)# label=task_list[i].name)
+#         # ax.text(sim_time, vertical_offset*vertical_grid_size, task_list[i].name, fontsize=7)
+#         # vertical_offset += 1
+
+#     # np.arange(0, sim_time+time_grid_size, time_grid_size)
+#     X, Y = np.meshgrid(np.array(list(horizen_grid)), np.arange(
+#         0, (vertical_offset+1)*vertical_grid_size, vertical_grid_size))
+#     ax.set(xlim=(0, 0.208), xticks=np.arange(0, 0.203, time_grid_size),)
+#     ax.plot(X, Y, 'k', lw=0.5, alpha=0.5)
+#     if show:
+#         plt.show()
+#     if "format" not in kwargs and save_path.split(".")[-1] == "pdf" and save:
+#         kwargs["format"] = "pdf"
+#     plt.savefig(save_path, **kwargs)
+
+def vis_task_static_timeline(task_list, show=False, save=False, save_path="task_static_timeline_cyclic.pdf", 
+                            hyper_p=0.1, n_p=1, warmup=False, drain=False, plot_legend=False,
+                            plot_start=None, plot_end=None, 
+                            tick_dens = 1, txt_size = 30,
+                            **kwargs):
+    event_range = hyper_p * (n_p+warmup)
+    sim_range = hyper_p * (n_p+warmup+drain)
+    if plot_start is None:
+        plot_start = 0
+    if plot_end is None:
+        plot_end = hyper_p * (n_p+warmup+drain)
+
     vertical_grid_size = 0.4
     time_grid_size = 0.004
 
@@ -85,12 +162,11 @@ def vis_task_static_timeline(task_list, show=False, save=False, save_path="task_
     finish_list = []
 
     for task in task_list:
-        req_list.append(task.get_release_event(sim_time))
-        ddl_list.append(task.get_deadline_event(sim_time))
-        finish_list.append(task.get_finish_event(sim_time))
+        req_list.append(task.get_release_event(event_range))
+        ddl_list.append(task.get_deadline_event(event_range))
+        finish_list.append(task.get_finish_event(event_range))
 
     # print(req_list, ddl_list)
-
 
     import matplotlib.colors as mcolors
     import matplotlib as mpl
@@ -100,39 +176,81 @@ def vis_task_static_timeline(task_list, show=False, save=False, save_path="task_
     # plot timeline and task name 
     # and select color for the task automatically
     horizen_grid = set()
-    fig, ax = plt.subplots(figsize=(50, 10))
+    fig, ax = plt.subplots(figsize=(50, 15))
     vertical_offset = 0
     for i in range(len(task_list)):
         for s, e in zip(req_list[i], finish_list[i]):
-            if e > sim_time:
+            # set start and end time for each task: 
+            #   if part of the task is in the warmup cycle or drain cycle, 
+                # set the start and end time to the start and end time of the plot
+            if s < plot_start and e > plot_start:
+                s = plot_start
+            if e > plot_end and s < plot_end:
+                e = plot_end
+            if s > plot_end or e < plot_start: 
                 continue
             print("{}:{}-{}".format(task_list[i].name, s, e))
             horizen_grid.add(s)
             horizen_grid.add(e)
-            ax.hlines(y=vertical_offset*vertical_grid_size, xmin=s,
-                      xmax=e, lw=2, color=mcolors.XKCD_COLORS[colors[i]]
-                      )  # label=task_list[i].name)
-            ax.text(# sim_time, vertical_offset*vertical_grid_size,
-                    s, vertical_offset*vertical_grid_size+0.001,
-                    task_list[i].name, fontsize=7)
+            # plot task
+            ax.broken_barh([(s, e-s)], (vertical_offset*vertical_grid_size, vertical_grid_size), facecolors=mcolors.XKCD_COLORS[colors[i]])
+            # add task name
+            if not plot_legend:
+                ax.text(s, vertical_offset*vertical_grid_size+0.001, task_list[i].name, ha='center', va='center', fontsize=7)
         vertical_offset += 1
-        # s = next(req_list[i])
-        # e = next(ddl_list[i])
-        # print("{}:{}-{}".format(task_list[i].name, s, e))
-        # ax.hlines(y=vertical_offset*vertical_grid_size, xmin=s, xmax=e, lw=2,)# label=task_list[i].name)
-        # ax.text(sim_time, vertical_offset*vertical_grid_size, task_list[i].name, fontsize=7)
-        # vertical_offset += 1
 
     # np.arange(0, sim_time+time_grid_size, time_grid_size)
     X, Y = np.meshgrid(np.array(list(horizen_grid)), np.arange(
         0, (vertical_offset+1)*vertical_grid_size, vertical_grid_size))
-    ax.set(xlim=(0, 0.208), xticks=np.arange(0, 0.203, time_grid_size),)
+    # set x range
+    ax.set(xlim=(plot_start, plot_end), xticks=np.arange(plot_start, plot_end+time_grid_size, time_grid_size*tick_dens),)
     ax.plot(X, Y, 'k', lw=0.5, alpha=0.5)
+    # add legend at the top as wide as the plot, text size 30
+    if plot_legend:
+        from matplotlib.lines import Line2D
+        legend_elements = []
+        for i in range(len(task_list)): 
+            legend_elements.append(Line2D([0], [0], color=mcolors.XKCD_COLORS[colors[i]], lw=4, label=task_list[i].name))
+        ax.legend(handles=legend_elements, loc='lower center', bbox_to_anchor=(0.5, 1.0),
+          ncol=4, fancybox=True, shadow=True, fontsize=txt_size)
+        # remove y axis
+        ax.get_yaxis().set_visible(False)
+        # reset x ticks: text size 30, rotation 45, distance time_grid_size * 2
+        # ticks format: .3f
+        ax.set_xticks(np.arange(plot_start, plot_end+time_grid_size, time_grid_size*tick_dens))
+        ticks = [str(round(t, 3)) for t in np.arange(plot_start, plot_end+time_grid_size, time_grid_size*tick_dens)]
+        ax.set_xticklabels(ticks, fontsize=txt_size, rotation=45)
+        ax.tick_params(axis='x', which='major', pad=time_grid_size * tick_dens)
+        # remove frame
+        # ax.spines['top'].set_visible(False)
+        # ax.spines['right'].set_visible(False)
+        # ax.spines['bottom'].set_visible(False)
+        # ax.spines['left'].set_visible(False)
+        # set x axis label as Time (s), text size 30
+        ax.set_xlabel("Time (s)", fontsize=txt_size) 
+
+
     if show:
         plt.show()
-    if "format" not in kwargs and save_path.split(".")[-1] == "pdf" and save:
+    if save: 
+        # if format is given in file name, use it
+        # by default, use pdf
+        path_parse = save_path.split(".")
+        if "format" in kwargs and isinstance(kwargs["format"], list):
+            fmt_list = kwargs.pop("format")
+            if path_parse[-1] not in fmt_list:
+                kwargs["format"].append(path_parse[-1])
+            for f in fmt_list:
+                save_path = ".".join(path_parse[:-1]) + "." + f
+                plt.savefig(save_path, bbox_inches='tight', format=f,**kwargs)
+        elif "format" not in kwargs and len(path_parse) > 1: 
+            kwargs["format"] = path_parse[-1]
+        else:
             kwargs["format"] = "pdf"
-    plt.savefig(save_path, **kwargs)
+            save_path = save_path + ".pdf"        
+            plt.savefig(save_path, bbox_inches='tight', **kwargs)
+
+
 
 def load_taskint(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]:
     import pandas as pd
@@ -1125,6 +1243,12 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedT
         writer = animation.FFMpegWriter(fps=50, metadata=dict(artist='Me'), bitrate=1800)
         ani.save("movie.mp4", writer=writer)
 
+    for _SchedTab in bin_list:
+        print("=====================================\n")
+        print(f"Scheduling Table of {_SchedTab.name}({_SchedTab.id}):")
+        _SchedTab.print_scheduling_table()
+        print("=====================================\n")
+    
     print("=====================================\n")
     print("bin_pack_result:")
     print("=====================================\n")
@@ -1148,8 +1272,7 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedT
             print("\tused time: {:s}".format(", ".join([f"{x*timestep:.6f}" for x in _result[2]])))
         print("=====================================\n")
     
-    from scheduling_table import get_task_layout_compact
-    get_task_layout_compact(bin_list, init_p_list) 
+    return bin_list, init_p_list
 
 def get_rsc_2b_released(rsc_recoder, n_slot, _p):
     alloc_slot_s_t, alloc_size_t, allo_slot_t, bin_id_t = rsc_recoder[_p.pid]
@@ -1526,18 +1649,33 @@ def affinity_fn(_p, bin, rsc_recoder_his):
 
 if __name__ == "__main__": 
     import argparse
+    import numpy as np 
     parser = argparse.ArgumentParser()
     parser.add_argument("--verbose", action="store_true", help="verbose")
-    parser.add_argument("--test_case", type=str, default="task1", help="task name")
+    parser.add_argument("--test_case", type=str, default="all", help="task name")
     parser.add_argument("--plot", action="store_true", help="plot the task timeline")
+    parser.add_argument("--bin_pack", action="store_true", help="plot the task timeline")
+    parser.add_argument("--test_all", default=False, help="test all the task")
     args = parser.parse_args() 
     task_dict = load_taskint(args.verbose)
-    if args.plot:
-        vis_task_static_timeline(list(task_dict.values()), save=True, save_path="task_static_timeline_cyclic.pdf")
-    import numpy as np 
+
+    if args.test_case == "all":
+        args.test_all = True
     f_gcd = np.gcd.reduce([task_dict[task].freq for task in task_dict])
     f_max = max([task_dict[task].freq for task in task_dict])
     hyper_p = 1/f_gcd
     sim_step = min([task_dict[task].exp_comp_t for task in task_dict])/32
+
+    if args.test_case == "timeline" or args.test_all:
+        vis_task_static_timeline(list(task_dict.values()), save=True, save_path="task_static_timeline_cyclic.pdf", hyper_p=hyper_p, n_p=1, warmup=False, drain=True, )
+    elif args.test_case == "liveness" or args.test_all:
+        vis_task_static_timeline(list(task_dict.values()), save=True, save_path="task_liveness_timeline_cyclic.svg", 
+        hyper_p=hyper_p, n_p=1, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
+        txt_size=40, tick_dens=4)
+    elif args.test_case == "bin_pack" or args.test_all:
         # push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, 256, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
-    push_task_into_bins(task_dict, 256, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
+        bin_list, init_p_list = push_task_into_bins(task_dict, 256, sim_step*2, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
+        from scheduling_table import get_task_layout_compact
+        get_task_layout_compact(bin_list, init_p_list, save= True, time_step= sim_step,
+        hyper_p=hyper_p, n_p=1, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
+        txt_size=40, tick_dens=2) 

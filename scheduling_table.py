@@ -148,6 +148,7 @@ class SchedulingTableInt(object):
             # warning: expected_slot_num may be larger than the available slots
             if rsc_avl[:expected_slot_num].sum() < expected_req_rsc_size: 
                 # as soon as possible
+                print("Not enough resources: as soon as possible")
                 for i in range(len(s)): 
                     if rsc_avl[s[i]] > 0:
                         cond2 = rsc_avl[:e[i]].sum() >= expected_req_rsc_size
@@ -163,7 +164,7 @@ class SchedulingTableInt(object):
                 # there is enough rsc in 
                 # [0, expected_slot_num] + time_slot_s
                 # try to distribute the rsc_lack to the intervals as evenly as possible
-                
+                print("Enough resources: as evenly as possible")
                 # calculate the lacked resources in the interval: 
                 for i in range(len(s)): 
                     if rsc_avl[s[i]] > 0:
@@ -314,22 +315,41 @@ class SchedulingTableInt(object):
 
 
 
-def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[ProcessInt],
-                    show=False, save=False, save_path="task_layout_compact.pdf", **kwargs):
+def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[ProcessInt], time_step:float = 1e-6,
+                    show=False, save=False, save_path="task_layout_compact.pdf", 
+                    hyper_p=0.1, n_p=1, warmup=False, drain=False,
+                    plot_legend=False,
+                    plot_start=None, plot_end=None, 
+                    tick_dens = 1, txt_size = 30,
+                    **kwargs):
+
+    event_range = hyper_p * (n_p+warmup)
+    sim_range = hyper_p * (n_p+warmup+drain)
+    if plot_start is None:
+        plot_start = hyper_p * (warmup)
+    if plot_end is None:
+        plot_end = hyper_p * (n_p+warmup+drain)
+
     import matplotlib.colors as mcolors
     import matplotlib as mpl
     colors=list(mcolors.XKCD_COLORS.keys())
     
-    base_vertical_offset = 0.5
+    base_vertical_offset = 0
+    y_margin = 0.5 
+    time_grid_size = 0.004
+    x_margin = time_grid_size
 
     # plot timeline and task name bin by bin
     # and select color for the task automatically
-    fig = plt.figure(figsize=(50, 20))
+    fig = plt.figure(figsize=(50, 40))
+    # fig, ax = plt.subplots(figsize=(50, 15))
     vertical_grid_size = 1
+    bin_vertical_offset = base_vertical_offset
+
     for bin_idx, _SchedTab in enumerate(bin_list): 
         bin_temp_size = len(_SchedTab.scheduling_table)
         bin_spatial_size = _SchedTab.scheduling_table[0].size
-        bin_vertical_offset = bin_spatial_size* vertical_grid_size* bin_idx + base_vertical_offset
+
         ax = fig.add_subplot(len(bin_list), 1, len(bin_list)-_SchedTab.id)
 
         empty_boader_s = []
@@ -361,6 +381,17 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[
                 else:
                     # plot the task layout
                     for pid, size in pre_rsc.items():
+                        # set start and end time for each task: 
+                        #   if part of the task is in the warmup cycle or drain cycle, 
+                            # set the start and end time to the start and end time of the plot
+                        s, e = pre_idx*time_step, rsc_map_idx*time_step
+                        if s < plot_start:
+                            s = plot_start
+                        if e > plot_end:
+                            e = plot_end
+                        if s >= plot_end or e <= plot_start: 
+                            continue
+                        
                         _p = init_p_list[pid]
                         _p_name = _p.task.name
                         _p_color = mcolors.XKCD_COLORS[colors[pid]]
@@ -371,10 +402,11 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[
                             bar_vertical_offset = bin_vertical_offset + vertical_s*vertical_grid_size
                             text_vertical_offset = bar_vertical_offset + 0.5*vertical_size*vertical_grid_size
                             # plot the bar
-                            ax.broken_barh([(pre_idx, rsc_map_idx-pre_idx)], (bar_vertical_offset, vertical_size*vertical_grid_size), facecolors=_p_color)
+                            ax.broken_barh([(s, e-s)], (bar_vertical_offset, vertical_size*vertical_grid_size), facecolors=_p_color)
                             # plot the text
-                            if is_new:
-                                ax.text((pre_idx+rsc_map_idx)/2, text_vertical_offset, _p_name, ha='center', va='center', color='black', fontsize=10)
+                            if not plot_legend:
+                                if is_new:
+                                    ax.text((s+e)/2, text_vertical_offset, _p_name, ha='center', va='center', color='black', fontsize=10)
 
                 # the vertical grid at the end of the bar
                 ax.axvline(rsc_map_idx, color='black', linestyle='-', linewidth=0.5)
@@ -384,7 +416,6 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[
                 expired_pid = set(pre_rsc.keys()) - set(rsc_map.keys())
                 old_pid = set(pre_rsc.keys()) - expired_pid
 
-                # remove the item that is not in the new rsc_map
                 used_position = []
                 for pid in old_pid:
                     p_size = rsc_map[pid]
@@ -394,10 +425,44 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[
                         e = s + size
                         used_position += [i for i in range(s, e)]
 
+                # remove the expired task from the position dict
                 for pid in expired_pid:
                     position_dict.pop(pid)
                 
                 aval_pos = [i for i in range(bin_spatial_size) if i not in used_position]
+                # check if the old task's allocation is changed
+                for pid in old_pid:
+                    old_size = pre_rsc[pid]
+                    new_size = rsc_map[pid]
+                    if old_size != new_size: 
+                        # release the old position
+                        for s, size in zip(*position_dict[pid][:-1]):
+                            e = s + size
+                            aval_pos += [i for i in range(s, e)]
+                        aval_pos.sort()
+                        # get the start position of the old task
+                        cum_pos = position_dict[pid][0][0]
+                        # divide the avaliable position into two parts
+                        left_pos = aval_pos[:aval_pos.index(cum_pos)]
+                        right_pos = aval_pos[aval_pos.index(cum_pos):]
+                        # select the leftmost position from cum_pos
+                        interval_picked = aval_pos[aval_pos.index(cum_pos):aval_pos.index(cum_pos)+new_size]
+                        if len(interval_picked) < new_size:
+                            # select the leftmost position from left_pos
+                            interval_picked = left_pos[-(new_size-len(interval_picked)):] + interval_picked
+                        # check if the position is continuous
+                        interval_picked.sort()
+                        # remove selected position from aval_pos
+                        aval_pos = [i for i in aval_pos if i not in interval_picked]
+                        start = [interval_picked[0]]
+                        size = []
+                        for i in range(new_size-1):
+                            if interval_picked[i] != interval_picked[i+1]-1:
+                                size.append(interval_picked[i]-start[-1]+1)
+                                start.append(interval_picked[i+1])
+                        size.append(interval_picked[-1]-start[-1]+1)
+                        position_dict[pid] = [start, size, True]
+
                 # pick a proper position for the new task in the available position
                 for pid in new_pid:
                     p_size = rsc_map[pid]
@@ -447,23 +512,71 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[
                 ax.axvline(bin_temp_size, color='black', linestyle='-', linewidth=0.5)
 
         # set the axis and title
-        ax.set_xlim(0, bin_temp_size)
-        # ax.set_ylim(bin_vertical_offset, bin_vertical_offset+bin_spatial_size*vertical_grid_size+0.5)
-        ax.set_xlabel('Time')
-        # add bin name
-        ax.set_title(f"bin: {_SchedTab.name}({_SchedTab.id})")
+        ax.set_xlim(plot_start-x_margin, plot_end+x_margin)
+        ax.set_ylim(bin_vertical_offset-y_margin, bin_vertical_offset+bin_spatial_size*vertical_grid_size+y_margin)
+        vs = int((bin_vertical_offset-base_vertical_offset)//vertical_grid_size)
+        ticks = np.linspace(vs, vs+bin_spatial_size-1, 4, dtype=int)
+        ax.set_yticks(ticks)
+        ax.set_yticklabels(ticks, fontsize=txt_size)
 
+        # set yticks
+        # add bin name
+        # ax.set_title(f"bin: {_SchedTab.name}({_SchedTab.id})", fontsize=txt_size)
+        bin_vertical_offset += bin_spatial_size* vertical_grid_size 
+        ax.text(plot_start, bin_vertical_offset, f"bin: {_SchedTab.name}({_SchedTab.id})", ha='left', va='top', fontsize=txt_size)
+        
+    
     # sub-figures shares the same x-axis
     # fig.subplots_adjust(hspace=0)
-    plt.setp([a.get_xticklabels() for a in fig.axes[:-1]], visible=False)
+    plt.setp([a.get_xticklabels() for a in fig.axes[1:]], visible=False)
+
+    # remove y axis
+    # ax.get_yaxis().set_visible(False)
+
+    if plot_legend:
+        ax = fig.axes[-1]
+        from matplotlib.lines import Line2D
+        legend_elements = []
+        for i in range(len(init_p_list)): 
+            legend_elements.append(Line2D([0], [0], color=mcolors.XKCD_COLORS[colors[i]], lw=4, label=init_p_list[i].task.name))
+        ax.legend(handles=legend_elements, loc='lower center', bbox_to_anchor=(0.5, 1.2),
+          ncol=4, fancybox=True, shadow=True, fontsize=txt_size)
+        # reset x ticks: text size 30, rotation 45, distance time_grid_size * 2
+        # ticks format: .3f
+        ax = fig.axes[0]
+        ticks = [str(round(t, 3)) for t in np.arange(plot_start, plot_end, time_grid_size*tick_dens)] + [plot_end]
+        ax.set_xticks(np.arange(plot_start, plot_end, time_grid_size*tick_dens).tolist()+[plot_end])
+        ax.set_xticklabels(ticks, fontsize=txt_size, rotation=45)
+        ax.tick_params(axis='x', which='major', pad=time_grid_size * tick_dens)
+        # remove frame
+        # ax.spines['top'].set_visible(False)
+        # ax.spines['right'].set_visible(False)
+        # ax.spines['bottom'].set_visible(False)
+        # ax.spines['left'].set_visible(False)
+        # set x axis label as Time (s), text size 30
+        ax.set_xlabel("Time (s)", fontsize=txt_size) 
 
     # plot the result
     if show:
         plt.show()
     # save the figure
-    if "format" not in kwargs and save_path.split(".")[-1] == "pdf" and save:
-        kwargs["format"] = "pdf"
-    plt.savefig(save_path, **kwargs)
+    if save: 
+        # if format is given in file name, use it
+        # by default, use pdf
+        path_parse = save_path.split(".")
+        if "format" in kwargs and isinstance(kwargs["format"], list):
+            fmt_list = kwargs.pop("format")
+            if path_parse[-1] not in fmt_list:
+                kwargs["format"].append(path_parse[-1])
+            for f in fmt_list:
+                save_path = ".".join(path_parse[:-1]) + "." + f
+                plt.savefig(save_path, bbox_inches='tight', format=f,**kwargs)
+        elif "format" not in kwargs and len(path_parse) > 1: 
+            kwargs["format"] = path_parse[-1]
+        else:
+            kwargs["format"] = "pdf"
+            save_path = save_path + ".pdf"        
+            plt.savefig(save_path, bbox_inches='tight', **kwargs)
 
     
 def get_task_layout(bin_list:List[SchedulingTableInt], init_p_list:List[ProcessInt]
@@ -628,6 +741,7 @@ if __name__ == "__main__":
         alloc_info[i] = scheduling_table.insert_task(init_p_list[i], require_rsc_size[i], 
                                                      init_p_list[i].release_time, init_p_list[i].deadline, 
                                                      init_p_list[i].exp_comp_t, verbose=True)
+        print("="*20)
         scheduling_table.print_scheduling_table()
     
     print("occupy by id:", scheduling_table.index_occupy_by_id())
