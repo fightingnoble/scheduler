@@ -17,27 +17,28 @@ from task_agent import TaskInt
 from task_queue_agent import TaskQueue 
 from task_agent import ProcessInt
 
-'ID', 'Task (chain) names', 'Flops on path', 'Expected Latency (ms)', 'T release', 'Freq.', 'DDL', 'Cores/Req.', 
-'Throuput factor (S)', 'Thread factor (S)', 'Min required cores', 'Timing_flag', 'Max required Cores', 'RDA./Req.', 'Resource Type', 'Pre-assigned', 'Priority'
+# 'ID', 'Task (chain) names', 'Flops on path', 'Expected Latency (ms)', 'T release', 'Freq.', 'DDL', 'Cores/Req.', 
+# 'Throuput factor (S)', 'Thread factor (S)', 'Min required cores', 'Timing_flag', 'Max required Cores', 'RDA./Req.', 'Resource Type', 'Pre-assigned', 'Priority'
 
 # task_graph = {   
-#     "Entry": ["Camera_pub", "LiDAR_pub"],
-#     "Camera_pub": ["Pure_camera_path", "Stereo_feature_enc", "Traffic_light_detection"],
+#     "Entry": ["surr_view_camera_pub", "streo_camera_pub", "LiDAR_pub"],
+#     "surr_view_camera_pub": ["ImageBB"],
+#     "streo_camera_pub": ["Stereo_feature_enc", "Traffic_light_detection"],
 #     "LiDAR_pub": ["Lidar_based_3dDet"],
-#     "Traffic_light_detection": [],
+#     "Traffic_light_detection": ["Exit"],
 #     "ImageBB": ["MultiCameraFusion"],
 #     "MultiCameraFusion": ["Pure_camera_path_head"],
 #     "Pure_camera_path_head": ["Prediction"],
 #     "Prediction": ["Planning"],
 #     "Planning": ["Steering_speed"],
-#     "Steering_speed": [],
-#     "Stereo_feature_enc": ["Semantic_segm, Lane_drivable_area_det, Optical_Flow, Depth_estimation"],
-#     "Semantic_segm": ["LiDAR_based_3dDet"],
+#     "Steering_speed": ["Exit"],
+#     "Stereo_feature_enc": ["Semantic_segm", "Lane_drivable_area_det", "Optical_Flow", "Depth_estimation"],
+#     "Semantic_segm": ["Lidar_based_3dDet"],
 #     "Lidar_based_3dDet": ["Prediction"],
-#     "Lane_drivable_area_det": [],
-#     "Optical_Flow": [],
-#     "Depth_estimation": [],
-#     : []
+#     "Lane_drivable_area_det": ["Exit"],
+#     "Optical_Flow": ["Exit"],
+#     "Depth_estimation": ["Exit"],
+#     "Exit": []
 # }
 
 __all__ = ['task_graph', 'affinity']
@@ -52,7 +53,7 @@ task_graph = {
     "Planning": ["Steering_speed"],
     "Steering_speed": [],
     "Stereo_feature_enc": ["Semantic_segm", "Lane_drivable_area_det", "Optical_Flow", "Depth_estimation"],
-    "Semantic_segm": ["LiDAR_based_3dDet"],
+    "Semantic_segm": ["Lidar_based_3dDet"],
     "Lidar_based_3dDet": ["Prediction"],
     "Lane_drivable_area_det": [],
     "Optical_Flow": [],
@@ -84,6 +85,7 @@ pre_assign_priority = {
     "Traffic_light_detection",
     "Lane_drivable_area_det",
 }
+
 
 # def vis_task_static_timeline(task_list, show=False, save=False, save_path="task_static_timeline.pdf", **kwargs):
 #     sim_time = 0.2
@@ -254,14 +256,90 @@ def vis_task_static_timeline(task_list, show=False, save=False, save_path="task_
             save_path = save_path + ".pdf"        
             plt.savefig(save_path, bbox_inches='tight', **kwargs)
 
+def creat_jobTask_graph(task_graph:Dict[str, List[str]], plot:bool=False):
+    # create task graph from task_graph
+    task_graph_nx = nx.DiGraph(task_graph)
 
+    job_graph_nx = nx.DiGraph()
+    df = pd.read_csv("profiling.csv", sep=",", index_col=0) 
+
+    for task_n in task_graph: 
+        if task_n in df.index:
+            task_attr = df.loc[task_n].to_dict()
+            factor = task_attr["Throuput factor (S)"]
+            for i in range(factor):
+                task_name = task_n+"_"+str(i)
+                job_graph_nx.add_node(task_name)
+                # add control dependency
+                if i < factor-1:
+                    # job_graph_nx.add_edge(task_name, task_n+"_"+str(i+1), type="control")
+                    pass
+
+                # add dependency
+                for succ_n in task_graph[task_n]:
+                    # select instance of succ 
+                    # 1. in the same sub-period; 
+                    # 2. or the nearest period before the current time. 
+                    # get the factor of succ
+                    if succ_n == "Exit":
+                        job_graph_nx.add_edge(task_name, "Exit", type="control")
+                        continue
+                    succ_factor = df.loc[succ_n]["Throuput factor (S)"]
+                    if succ_factor == factor:
+                        succ_name = succ_n+"_"+str(i)
+                    else:
+                        # just like quantization
+                        curr_t = i/factor
+                        succ_t = int(curr_t*succ_factor)
+                        succ_name = succ_n+"_"+str(succ_t)
+                    job_graph_nx.add_edge(task_name, succ_name, type="data")
+        else:
+            job_graph_nx.add_node(task_n)
+            edge_type = "control" if task_n == "Entry" else "data"
+            for succ_n in task_graph[task_n]:
+                if succ_n in df.index:
+                    task_attr = df.loc[succ_n].to_dict()
+                    factor = task_attr["Throuput factor (S)"]
+                    for i in range(factor):
+                        succ_name = succ_n+"_"+str(i)
+                        job_graph_nx.add_edge(task_n, succ_name, type=edge_type)
+                else:
+                    job_graph_nx.add_edge(task_n, succ_n, type=edge_type)
+
+    # plot the job graph and the task graph, then save to pdf
+    if plot: 
+        color_map = {"control": "r", "data": "b"}
+        edge_colors = [color_map[d] for u,v,d in job_graph_nx.edges(data="type")]
+        fig = plt.figure(figsize=(20, 10))
+        ax1 = fig.add_subplot(121)
+        ax2 = fig.add_subplot(122)
+        for layer, nodes in enumerate(nx.topological_generations(job_graph_nx)):
+            # `multipartite_layout` expects the layer as a node attribute, so add the
+            # numeric layer value as a node attribute
+            for node in nodes:
+                job_graph_nx.nodes[node]["layer"] = layer
+        pos = nx.multipartite_layout(job_graph_nx, subset_key="layer") 
+        nx.draw(job_graph_nx, pos, with_labels=True, node_size=100, node_color='r', edge_color=edge_colors, font_size=10, ax=ax1)
+        fig.tight_layout()
+        # plt.savefig("job_graph.pdf", format="pdf")
+        
+        for layer, nodes in enumerate(nx.topological_generations(task_graph_nx)):
+            # `multipartite_layout` expects the layer as a node attribute, so add the
+            # numeric layer value as a node attribute
+            for node in nodes:
+                task_graph_nx.nodes[node]["layer"] = layer
+        pos = nx.multipartite_layout(task_graph_nx, subset_key="layer")
+        nx.draw(task_graph_nx, pos, with_labels=True, node_size=100, node_color='r', font_size=10, ax=ax2)
+        fig.tight_layout()
+        plt.savefig("jobTask_graph.pdf", format="pdf")
+
+    return task_graph_nx, job_graph_nx
 
 def load_taskint(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]:
-    import pandas as pd
+
     df = pd.read_csv("profiling.csv", sep=",", index_col=0) 
     if verbose:
         print(df)
-    from task_agent import TaskInt
     task_dict = {}
     task_id = 0
     # print(task_attr_dict)
@@ -271,14 +349,15 @@ def load_taskint(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]
     cmap = mpl.colormaps['viridis']
     colors=list(mcolors.XKCD_COLORS.keys())
     
-    # plot timeline and task name 
-    # and select color for the task automatically
-    horizen_grid = set()
-    fig, ax = plt.subplots(figsize=(50, 10))
-    vertical_offset = 0
-    sim_time = 0.2
-    vertical_grid_size = 0.4
-    time_grid_size = 0.004
+    if plot:
+        # plot timeline and task name 
+        # and select color for the task automatically
+        horizen_grid = set()
+        fig, ax = plt.subplots(figsize=(50, 10))
+        vertical_offset = 0
+        sim_time = 0.2
+        vertical_grid_size = 0.4
+        time_grid_size = 0.004
 
     for task_n in df.T:
         # print(task_n)
@@ -296,7 +375,8 @@ def load_taskint(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]
                 exp_comp_t=task_attr['Expected Latency (ms)']/1000, i_offset=phase, jitter_max=0,
                 flops=task_attr["Flops on path"]/1e3, task_flag=task_attr["Resource Type"], 
                 pre_assigned_resource_flag=task_attr["Pre-assigned"]>0, 
-                RDA_size=task_attr['RDA./Req.'], main_size=task_attr['Cores/Req.'], seq_cpu_time=task_attr["Flops on path"]/1e3
+                RDA_size=task_attr['RDA./Req.'], main_size=task_attr['Cores/Req.'], seq_cpu_time=task_attr["Flops on path"]/1e3,
+                op_cpu_time=task_attr["Flops on path"]/1e3, op_io_time=1e-6,
             )
             task.freq = task_attr["Freq."]
             # initialize task affinity list
@@ -304,6 +384,8 @@ def load_taskint(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]
             affinity_tgt_n_list = affinity[task_n]        
             affinity_tgt_n_list = [n+'_'+str(thread_n) for n in affinity_tgt_n_list]
             task.affinity_n = affinity_tgt_n_list
+            # initialize dependency list
+
 
             if plot:
                 s = task.get_release_time()
@@ -339,6 +421,36 @@ def load_taskint(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]
         task.affinity = affinity_tgt_id_list
 
     return task_dict
+
+def init_depen(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[TaskInt,ProcessInt]]], job_graph_nx:nx.DiGraph, verbose=False):
+    # if taskJobs is a list, convert it to a dict
+    if isinstance(taskJobs, list):
+        if taskJobs[0].__class__.__name__ == "ProcessInt":
+            taskJobs = {i.task.name:i for i in taskJobs}
+        elif taskJobs[0].__class__.__name__ == "TaskInt":
+            taskJobs = {i.name:i for i in taskJobs}
+    
+    for task_n, task in taskJobs.items():
+        for pre_n, datadict in job_graph_nx.pred[task_n].items():
+            dep_t = datadict["type"]
+            if dep_t == "data":
+                task.pred_data.update({pre_n:False})
+            elif dep_t == "control":
+                task.pred_ctrl.update({pre_n:False})
+            else:
+                raise Exception("Unknown dependency type")
+        for succ_n, datadict in job_graph_nx.succ[task_n].items():
+            dep_t = datadict["type"]
+            if dep_t == "data":
+                task.succ_data.update({succ_n:False})
+            elif dep_t == "control":
+                task.succ_ctrl.update({succ_n:False})
+            else:
+                raise Exception("Unknown dependency type")
+        
+        if verbose:
+            print(task_n, task.pred_data, task.pred_ctrl, task.succ_data, task.succ_ctrl)
+
 
 def push_task_into_scheduling_table(tasks: Union[List[TaskInt], Dict[str, TaskInt]], SchedTab: SchedulingTableInt, 
                                     quantumSize,
@@ -414,7 +526,7 @@ def push_task_into_scheduling_table(tasks: Union[List[TaskInt], Dict[str, TaskIn
         # scan the task list: check finish
         if len(running_queue):
             for _p in running_queue:
-                # judge if task complete: completion_count += 1, cumulative_response_time += (time + 1.0 - a_time), 
+                # judge if task complete: completion_count += 1, cum_trunAroundTime += (time + 1.0 - a_time), 
                 # update arrival time, deadline, clear current execution unit
                 if (_p.cumulative_executed_time >= _p.exp_comp_t):
                     completed_list.append(_p)
@@ -431,7 +543,7 @@ def push_task_into_scheduling_table(tasks: Union[List[TaskInt], Dict[str, TaskIn
                 # update statistics
                 # TODO: add lock 
                 _p.task.completion_count += 1
-                _p.task.cumulative_response_time += (curr_t - _p.release_time)
+                _p.task.cum_trunAroundTime += (curr_t - _p.release_time)
                 # _p.task.release_time += _p.period
                 # _p.task.deadline += _p.period
                 _p.task.cumulative_executed_time = 0.0    
@@ -548,10 +660,10 @@ def push_task_into_scheduling_table_cyclic_preemption_disable(tasks: Union[List[
 
     event_range = hyper_p * (n_p+warmup)
     sim_range = hyper_p * (n_p+warmup+drain)
-    tab_temp_size = int(sim_range/sim_step)
+    tab_temp_size = int(sim_range/timestep)
     tab_spatial_size = total_cores
 
-    SchedTab = SchedulingTableInt(total_cores, int(sim_range/sim_step),)
+    SchedTab = SchedulingTableInt(total_cores, int(sim_range/timestep),)
 
     if isinstance(tasks, list):
         task_list = tasks
@@ -625,7 +737,7 @@ def push_task_into_scheduling_table_cyclic_preemption_disable(tasks: Union[List[
         # scan the task list: check finish
         if len(running_queue):
             for _p in running_queue:
-                # judge if task complete: completion_count += 1, cumulative_response_time += (time + 1.0 - a_time), 
+                # judge if task complete: completion_count += 1, cum_trunAroundTime += (time + 1.0 - a_time), 
                 # update arrival time, deadline, clear current execution unit
                 if (_p.totburst >= _p.totcpu):
                     completed_list.append(_p)
@@ -639,7 +751,7 @@ def push_task_into_scheduling_table_cyclic_preemption_disable(tasks: Union[List[
                 # update statistics
                 # TODO: add lock 
                 _p.task.completion_count += 1
-                _p.task.cumulative_response_time += (curr_t - _p.release_time)
+                _p.task.cum_trunAroundTime += (curr_t - _p.release_time)
                 
                 _p.release_time += _p.task.period
                 _p.deadline += _p.task.period
@@ -774,11 +886,11 @@ def push_task_into_scheduling_table_cyclic_preemption_disable(tasks: Union[List[
         # TODO:bug here we should not use tuple to store the task
         if len(issue_list):
             for _p in issue_list:
-                print("TASK {:d}:{:s}({:d}) IS ISSUED @ {}!!".format(_p.task.id, _p.task.name, _p.pid, n_slot*timestep))
+                print("TASK {:d}:{:s}({:d}) IS ISSUED @ {}!!".format(_p.task.id, _p.task.name, _p.pid, curr_t))
                 running_queue.put(_p)
                 ready_queue.remove(_p)
                 if _p.totburst == 0:
-                    _p.start_time = n_slot*timestep
+                    _p.start_time = curr_t
                 _p.waitTime = 0
             issue_list.clear()
             # print("Scheduling Table:")
@@ -822,7 +934,7 @@ def new_bin(spatial_size:int, temporal_size:int, id:int = 0, name:str = "bin"):
 def traverse_task_graph(task_list):
     pass
 
-def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedTab: SchedulingTableInt, 
+def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], affinity, #SchedTab: SchedulingTableInt, 
                                     total_cores:int, quantumSize, 
                                     timestep, hyper_p, n_p=1, verbose=False, *, animation=False, warmup=False, drain=False,):
 
@@ -833,7 +945,7 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedT
     """
     event_range = hyper_p * (n_p+warmup)
     sim_range = hyper_p * (n_p+warmup+drain)
-    tab_temp_size = int(sim_range/sim_step)
+    tab_temp_size = int(sim_range/timestep)
     tab_spatial_size = total_cores
 
     if isinstance(tasks, list):
@@ -889,7 +1001,7 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedT
  
     # try to push the task into the bins in the bin_list
     # if the task cannot be pushed into any bin, create a new bin
-    # _new_bins = lambda id: new_bins(total_cores, int(sim_range/sim_step), id=id, name="bin"+str(id))
+    # _new_bins = lambda id: new_bins(total_cores, int(sim_range/timestep), id=id, name="bin"+str(id))
     def _new_bin(id, size=tab_spatial_size, name=None): 
         if name is None:
             name = "bin"+str(id)
@@ -1004,7 +1116,7 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedT
         # scan the task list: check finish
         if len(running_queue):
             for _p in running_queue:
-                # judge if task complete: completion_count += 1, cumulative_response_time += (time + 1.0 - a_time), 
+                # judge if task complete: completion_count += 1, cum_trunAroundTime += (time + 1.0 - a_time), 
                 # update arrival time, deadline, clear current execution unit
                 if (_p.totburst >= _p.totcpu):
                     completed_list.append(_p)
@@ -1021,7 +1133,7 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedT
                 # update statistics
                 # TODO: add lock 
                 _p.task.completion_count += 1
-                _p.task.cumulative_response_time += (curr_t - _p.release_time)
+                _p.task.cum_trunAroundTime += (curr_t - _p.release_time)
                 
                 _p.release_time += _p.task.period
                 _p.deadline += _p.task.period
@@ -1049,9 +1161,6 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedT
                 _p.set_state("suspend")
         
         if miss_list:
-            print("\n".join(["task {}({}) released @ {} start @ {}:\n".format(p.task.name, p.pid, p.release_time, p.start_time) +\
-                   "is expected to finish {}T OPs before {} is expired, ".format(p.totcpu, p.deadline) +\
-                     "but only executed {}T OPs in {}s time !!".format(p.totburst, p.cumulative_executed_time) for p in miss_list]))
             for _p in miss_list:
                 # release the resource and move to the wait list
                 if _p in ready_queue.queue:
@@ -1063,7 +1172,11 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedT
                     _SchedTab.release(_p, alloc_slot_s, alloc_size, allo_slot, verbose=False)
                     rsc_recoder.pop(_p.pid)
                     running_queue.remove(_p)
-                print("TASK {:d}:{:s}({:d}) MISSED DEADLINE!!".format(_p.task.id, _p.task.name, _p.pid));
+                # print("TASK {:d}:{:s}({:d}) MISSED DEADLINE!!".format(_p.task.id, _p.task.name, _p.pid));
+                print("TASK {:d}:{:s}({:d}) MISSED DEADLINE!!".format(_p.task.id, _p.task.name, _p.pid)+\
+                        "released @ {} start @ {}:\n".format(_p.release_time, _p.start_time) +\
+                        "is expected to finish {}T OPs before {} is expired, ".format(_p.totcpu, _p.deadline) +\
+                        "but only executed {}T OPs in {}s time !!".format(_p.totburst, _p.cumulative_executed_time))
                 _p.task.missed_deadline_count += 1
                 _p.release_time += _p.task.period
                 _p.deadline += _p.task.period
@@ -1134,44 +1247,9 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedT
         # B. calculate the affinity preference core
         # C. priorize the task that has firm affinity with the existing bins
 
-        # how does task affinity match with the existing bins
-        def get_target_bin_score(_p=_p, bin_name_list=bin_name_list, rsc_recoder_his=rsc_recoder_his, reverse=True): 
-            """
-            match the affinity targets list with the existing bins list
-            """
-            affinity_tgt_bin_id_list = []
-            # case 1: task is pre-assigned with the resource
-            p_name = _p.task.name
-            if p_name in bin_name_list: 
-                affinity_tgt_bin_id_list.append(bin_name_list.index(p_name))
-            else:
-                affinity_tgt_bin_id_list.append(-1)
-            
-            for task_n, task_id in zip(_p.task.affinity_n, _p.task.affinity): 
-                # case 2: suppose the target is pre-assigned with the resource but is not allocated
-                if task_n in bin_name_list:
-                    affinity_tgt_bin_id_list.append(bin_name_list.index(task_n))
-                # case 3: suppose the target was allocated with the resource
-                elif task_id in rsc_recoder_his:
-                    affinity_tgt_bin_id_list.append(rsc_recoder_his[task_id].get_mru())
-                else:
-                    affinity_tgt_bin_id_list.append(-1)
-
-            # score function
-            # if p_name in bin_name_list, score = 1
-            # else set weight of each affinity target as the reciprocal of the 2^i, i is the index of the affinity target
-            if affinity_tgt_bin_id_list[0] != -1:
-                score = 1.0
-            else:
-                weight = 1/2**np.arange(len(_p.task.affinity))
-                score = np.sum(weight*(np.array(affinity_tgt_bin_id_list)!=-1)[1:][::-1])
-            if reverse:
-                return 1 - score
-            return score
-
         # rearange the task in the ready queue
-        cond_fn1 = lambda x: (x.task.deadline - n_slot*timestep)/x.exp_comp_t
-        cond_fn2 = lambda x: get_target_bin_score(x)
+        cond_fn1 = lambda x: (x.task.deadline - curr_t)/x.exp_comp_t
+        cond_fn2 = lambda x: get_target_bin_score(x, bin_name_list=bin_name_list, rsc_recoder_his=rsc_recoder_his, reverse=True)
         sorted_ready_queue = sorted(ready_queue.queue, key=lambda x: (cond_fn1(x), cond_fn2(x)))
         
         for _p in sorted_ready_queue: 
@@ -1198,7 +1276,7 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedT
                 if issue_sort_fn(_p) == n_slot: 
                     running_queue.put(_p)
                     if _p.totburst == 0:
-                        _p.start_time = n_slot*timestep
+                        _p.start_time = curr_t
                     _p.waitTime = 0
                     issue_list.get()
                 else:
@@ -1215,11 +1293,11 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], #SchedT
             #     frame_list.append([frm])
 
         # =================================================
+        _p_dict = {p.pid:p for p in running_queue}
         for _SchedTab in bin_list:
             curr_cfg = _SchedTab.scheduling_table[n_slot]
             if curr_cfg.rsc_map:
                 # update the running task
-                _p_dict = {p.pid:p for p in running_queue}
                 # _p_dict_n = {p.task.name:p for p in running_queue}
                 # if "MultiCameraFusion_0" in _p_dict_n.keys():
                 #     if not _p_dict_n["MultiCameraFusion_0"].pid in curr_cfg.rsc_map.keys():
@@ -1303,13 +1381,7 @@ def allocate_rsc_4_process(_p:ProcessInt, n_slot:int,
                 iter_next_bin_obj:Iterator, bin_list:List[SchedulingTableInt], bin_name_list:List[str], ):
     # initialize the resource request parameters
     p_name = _p.task.name
-    # release time round up: task should not be released earlier than the release time
-    time_slot_s = int(np.ceil(_p.release_time/timestep))
-    if time_slot_s < n_slot:
-        time_slot_s = n_slot
-    # deadline round down: task should not be finised later than the deadline
-    time_slot_e = int(_p.deadline//timestep)
-    req_rsc_size = int(np.ceil(_p.remburst/(time_slot_e-time_slot_s)/timestep/FLOPS_PER_CORE))
+    time_slot_s, time_slot_e, req_rsc_size = rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE)
 
     # expected slot number
     expected_slot_num = time_slot_e-time_slot_s # int(np.ceil(_p.exp_comp_t/timestep))
@@ -1490,6 +1562,16 @@ def allocate_rsc_4_process(_p:ProcessInt, n_slot:int,
             rsc_recoder_his[_p.pid].put(bin_id)
     else:
         Warning("TASK {:d}:{:s}({:d}) IS DELAY ISSUED!!".format(_p.task.id, _p.task.name, _p.pid))
+
+def rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE):
+    # release time round up: task should not be released earlier than the release time
+    time_slot_s = int(np.ceil(_p.release_time/timestep))
+    if time_slot_s < n_slot:
+        time_slot_s = n_slot
+    # deadline round down: task should not be finised later than the deadline
+    time_slot_e = int(_p.deadline//timestep)
+    req_rsc_size = int(np.ceil(_p.remburst/(time_slot_e-time_slot_s)/timestep/FLOPS_PER_CORE))
+    return time_slot_s,time_slot_e,req_rsc_size
         
 def build_task_graph_and_packing(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]:
     pass
@@ -1637,6 +1719,41 @@ def preempt_the_conflicts(_p:ProcessInt, bin:SchedulingTableInt,
         Warning(f"A unexpected situation happens, task {_p.task.id}:{_p.task.name}({_p.pid}) is not allocated successfully after preemption in its expected bin")
         # raise ValueError(f"A unexpected situation happens, task {_p.task.id}:{_p.task.name}({_p.pid}) is not allocated successfully after preemption in its own bin")
     return state, alloc_slot_s, alloc_size, allo_slot, total_alloc_unit, total_FLOPS_alloc
+
+# how does task affinity match with the existing bins
+def get_target_bin_score(_p:ProcessInt, bin_name_list:List[str], rsc_recoder_his:Dict[int, LRUCache], reverse=True): 
+    """
+    match the affinity targets list with the existing bins list
+    """
+    affinity_tgt_bin_id_list = []
+    # case 1: task is pre-assigned with the resource
+    p_name = _p.task.name
+    if p_name in bin_name_list: 
+        affinity_tgt_bin_id_list.append(bin_name_list.index(p_name))
+    else:
+        affinity_tgt_bin_id_list.append(-1)
+    
+    for task_n, task_id in zip(_p.task.affinity_n, _p.task.affinity): 
+        # case 2: suppose the target is pre-assigned with the resource but is not allocated
+        if task_n in bin_name_list:
+            affinity_tgt_bin_id_list.append(bin_name_list.index(task_n))
+        # case 3: suppose the target was allocated with the resource
+        elif task_id in rsc_recoder_his:
+            affinity_tgt_bin_id_list.append(rsc_recoder_his[task_id].get_mru())
+        else:
+            affinity_tgt_bin_id_list.append(-1)
+
+    # score function
+    # if p_name in bin_name_list, score = 1
+    # else set weight of each affinity target as the reciprocal of the 2^i, i is the index of the affinity target
+    if affinity_tgt_bin_id_list[0] != -1:
+        score = 1.0
+    else:
+        weight = 1/2**np.arange(len(_p.task.affinity))
+        score = np.sum(weight*(np.array(affinity_tgt_bin_id_list)!=-1)[1:][::-1])
+    if reverse:
+        return 1 - score
+    return score
 
 
 def affinity_fn(_p, bin, rsc_recoder_his): 

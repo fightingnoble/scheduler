@@ -99,7 +99,7 @@ class TaskBase(object):
         self.missed_deadline_count = 0 # used 
 
         # every time the task is scheduled
-        self.cumulative_response_time = 0 # used
+        self.cum_trunAroundTime = 0 # used
         self.completion_count = 0 # used
 
         # for interrupt
