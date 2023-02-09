@@ -1,17 +1,21 @@
 from __future__ import annotations
 
-from typing import Union, List, Dict, Iterator, Callable
+from typing import Union, List, Dict, Iterator, Callable, Union
+import copy
+import pickle
+
+import numpy as np
+import matplotlib.pyplot as plt
+import networkx as nx
+import pandas as pd
+
+from global_var import *
+from lru import LRUCache
 from scheduling_table import SchedulingTableInt
 from resource_agent import Resource_model_int
 from task_agent import TaskInt
-import numpy as np
-import matplotlib.pyplot as plt
-from golobal_var import *
-
 from task_queue_agent import TaskQueue 
 from task_agent import ProcessInt
-import copy
-from lru import LRUCache
 
 'ID', 'Task (chain) names', 'Flops on path', 'Expected Latency (ms)', 'T release', 'Freq.', 'DDL', 'Cores/Req.', 
 'Throuput factor (S)', 'Thread factor (S)', 'Min required cores', 'Timing_flag', 'Max required Cores', 'RDA./Req.', 'Resource Type', 'Pre-assigned', 'Priority'
