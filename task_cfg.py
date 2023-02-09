@@ -1805,3 +1805,54 @@ if __name__ == "__main__":
         hyper_p=hyper_p, n_p=1, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
         txt_size=40, tick_dens=4, plot_start=0, save_path="task_bin_pack_full.pdf")
 
+        # save the bin_list and the init_p_list
+        with open("bin_list.pkl", "wb") as f:
+            pickle.dump(bin_list, f)
+        with open("init_p_list.pkl", "wb") as f:
+            pickle.dump(init_p_list, f)
+        try:
+            # load the bin_list and the init_p_list
+            with open("bin_list.pkl", "rb") as f:
+                bin_list = pickle.load(f)
+            with open("init_p_list.pkl", "rb") as f:
+                init_p_list = pickle.load(f)
+            print("bin_list.pkl and init_p_list.pkl saved and loaded successfully")
+        except:
+            print("bin_list.pkl or init_p_list.pkl not found")
+            exit()
+
+    elif args.test_case == "graph" or args.test_all:
+        task_graph_nx, job_graph_nx = creat_jobTask_graph(task_graph, plot=True)
+        init_depen(task_dict, job_graph_nx, verbose=args.verbose)
+    elif args.test_case == "dynamic" or args.test_all:
+        try:
+            # load the bin_list and the init_p_list
+            with open("bin_list.pkl", "rb") as f:
+                bin_list = pickle.load(f)
+            with open("init_p_list.pkl", "rb") as f:
+                init_p_list = pickle.load(f)
+        except:
+            print("bin_list.pkl or init_p_list.pkl not found")
+            bin_list, init_p_list = push_task_into_bins(task_dict, affinity, 256, sim_step*2, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
+
+        task_graph_nx, job_graph_nx = creat_jobTask_graph(task_graph, plot=False)
+        init_depen(init_p_list, job_graph_nx)
+        from allocator_agent import cyclic_sched
+        from scheduler_agent import Scheduler 
+        from monitor_agent import Monitor
+        from spec import Spec
+        rsc_recoder = {}
+        rsc_recoder_his = {}
+        scheduler_list = [Scheduler() for _ in range(len(bin_list))]
+        monitor_list = [Monitor() for _ in range(len(bin_list))]
+        task_spec = Spec(0.1, [1 for _ in init_p_list]) 
+        rsc_list = [Resource_model_int(size=sched_tab.scheduling_table[0].size) for sched_tab in bin_list]
+
+        print("sim_step: ", sim_step)
+        cyclic_sched(task_spec, affinity, 
+                bin_list, scheduler_list, monitor_list,
+                rsc_list,
+                rsc_recoder, rsc_recoder_his,
+                256, sim_step*2, init_p_list,
+                sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
+        

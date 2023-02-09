@@ -20,29 +20,42 @@ task_timing_type = {
     }
 # lifetime of the task
 task_lifetime = {
-    "running": 0,
-    "terminated": 3,
-    "suspend": 2,
-    "runnable": 1,
-    "throttled": 4,
+    "terminated": 0, # terminated
+    "suspend": 1, # inactive, wait for activation
+    "runnable": 2, # ready to be executed
+    "running": 3,
+    "throttled": 4, # ready by has no budget
+    "wait": 5, # waiting for I/O
+    "preempted": 6, # preempted by other tasks
+    "ready": 7, # ready to be executed
+    
 }
 
 class ProcessBase(object): 
     def __init__(self, task, release_t, deadline_abs, pid):
         self.task = task
+        self.pred_ctrl = task.pred_ctrl # used
+        self.succ_data = task.succ_data # used
+        self.pred_data = task.pred_data # used
+        self.succ_ctrl = task.succ_ctrl # used
         # =============== 2. runtime state ===============
         self.pid = pid # process id
         self.state = "terminated" # task state: running, terminated, suspend, runnable, throttled
         self.prio = task.prio      # priority
 
-        self.release_time = release_t     # recored when the process is generated
-        self.deadline = deadline_abs      # recored when the process is generated  
         self.cpu_time = task.cpu_time     # execution time per I/O burst
         self.io_time = task.io_time       # I/O time
         self.totcpu = task.totcpu         # total cpu time, ++ when cpu burst
+
+        self.release_time = release_t     # recored when the process is released
+        self.deadline = deadline_abs      # recored when the process is generated  
         self.exp_comp_t = task.exp_comp_t # total cpu time, ++ when cpu burst
         self.remburst = task.totcpu       # Record the remaining cpu time for current I/O op, -- when cpu burst, set when moved from waiting to running
+        self.cbs_en = task.cbs_en         # whether the task has a constant bandwidth, i.e., applys resource reservation algorithm
+        self.rem_exec_time = task.exp_comp_t # the predefined budget of execution time, -- when cpu burst excceds the budget, moved from running to throttled, set when process is activated
 
+        self.ready_time = -1 
+        self.ready = False
         self.start_time = 0   # record at begining
         self.end_time = 0     # record at endding
         self.currentburst = 0 # For preemption, clear once context switches or preemption judgment happens, ++ when cpu burst
@@ -54,7 +67,13 @@ class ProcessBase(object):
     def set_state(self, state):
         assert state in task_lifetime.keys()
         self.state = state
-
+    
+    def check_depends(self):
+        """
+        if all the predecessor tasks are completed, return True
+        """
+        return np.array(list(self.pred_ctrl.values())+ list(self.pred_data.values())).all()
+           
 class ProcessInt(ProcessBase):
     def __init__(self, task, release_t, deadline_abs, pid):
         super().__init__(task, release_t, deadline_abs, pid)
@@ -85,6 +104,11 @@ class TaskBase(object):
         self.period = period
         self.jitter_max = jitter_max # max jitter
 
+        self.pred_ctrl = {} # used
+        self.succ_data = {} # used
+        self.pred_data = {} # used
+        self.succ_ctrl = {} # used
+
         # =============== 2. runtime state ===============
         # self.pid = 0 # process id
         self.prio = priority      # priority
@@ -94,6 +118,7 @@ class TaskBase(object):
         self.cpu_time = op_cpu_time                  # execution time per I/O burst
         self.io_time = op_io_time                    # I/O time
         self.totcpu = seq_cpu_time                   # total cpu time, ++ when cpu burst
+        self.cbs_en = False
 
         # =============== 3. statistical properties ===============
         self.missed_deadline_count = 0 # used 
@@ -106,6 +131,7 @@ class TaskBase(object):
         self.context_switch_count = 0
         self.preemption_count = 0
         self.migration_count = 0
+        self.throttle_count = 0
 
         # unused properties
         # # L1 resource allocation
@@ -137,7 +163,7 @@ class TaskBase(object):
         # _str += f"state: {self.state}, "
         # _str += f"start_time: {self.start_time}, end_time: {self.end_time}, currentburst: {self.currentburst}, burst: {self.burst}, totburst: {self.totburst}, waitTime: {self.waitTime}\n"
         # _str += f"missed_deadline_count: {self.missed_deadline_count}\n"
-        # _str += f"cumulative_executed_time: {self.cumulative_executed_time}, cumulative_response_time: {self.cumulative_response_time}, completion_count: {self.completion_count}\n"
+        # _str += f"cumulative_executed_time: {self.cumulative_executed_time}, cum_trunAroundTime: {self.cum_trunAroundTime}, completion_count: {self.completion_count}\n"
         # _str += f"context_switch_count: {self.context_switch_count}, preemption_count: {self.preemption_count}, migration_count: {self.migration_count}\n"
         return _str
 
@@ -166,7 +192,6 @@ class TaskInt(TaskBase):
         self.task_flag_num = scheduling_attr[task_flag]
         self.task_flag = task_flag 
         
-
         # =============== 2. Node attribution ===============
         self.pre_assigned_resource_flag = pre_assigned_resource_flag
 
@@ -273,6 +298,7 @@ class TaskInt(TaskBase):
         make a process for the task
         """
         return ProcessInt(self, release_t, deadline_abs, pid)
+
 
 def load_task_from_cfg(verbose:bool=False):
     """
