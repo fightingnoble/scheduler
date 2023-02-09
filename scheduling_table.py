@@ -341,7 +341,10 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[
 
     # plot timeline and task name bin by bin
     # and select color for the task automatically
-    fig = plt.figure(figsize=(50, 40))
+    if plot_legend:
+        fig = plt.figure(figsize=(40, 50))
+    else:
+        fig = plt.figure(figsize=(60, 30))
     # fig, ax = plt.subplots(figsize=(50, 15))
     vertical_grid_size = 1
     bin_vertical_offset = base_vertical_offset
@@ -409,7 +412,7 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[
                                     ax.text((s+e)/2, text_vertical_offset, _p_name, ha='center', va='center', color='black', fontsize=10)
 
                 # the vertical grid at the end of the bar
-                ax.axvline(rsc_map_idx, color='black', linestyle='-', linewidth=0.5)
+                ax.axvline(e, color='black', linestyle='-', linewidth=0.5)
 
                 # update the position dict
                 new_pid = set(rsc_map.keys()) - set(pre_rsc.keys())
@@ -487,11 +490,23 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[
                 empty_flag = len(pre_rsc) == 0
                 if empty_flag:
                     empty_boader_s.append(rsc_map_idx)
+
         if empty_flag:
             empty_boader_e.append(bin_temp_size)
         else:
             # plot the task layout
             for pid, size in pre_rsc.items():
+                # set start and end time for each task: 
+                #   if part of the task is in the warmup cycle or drain cycle, 
+                    # set the start and end time to the start and end time of the plot
+                s, e = pre_idx*time_step, bin_temp_size*time_step
+                if s < plot_start:
+                    s = plot_start
+                if e > plot_end:
+                    e = plot_end
+                if s >= plot_end or e <= plot_start: 
+                    continue
+                
                 _p = init_p_list[pid]
                 _p_name = _p.task.name
                 _p_color = mcolors.XKCD_COLORS[colors[pid]]
@@ -502,14 +517,15 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[
                     bar_vertical_offset = bin_vertical_offset + vertical_s*vertical_grid_size
                     text_vertical_offset = bar_vertical_offset + 0.5*vertical_size*vertical_grid_size
                     # plot the bar
-                    ax.broken_barh([(pre_idx, rsc_map_idx-pre_idx)], (bar_vertical_offset, vertical_size*vertical_grid_size), facecolors=_p_color)
+                    ax.broken_barh([(s, e-s)], (bar_vertical_offset, vertical_size*vertical_grid_size), facecolors=_p_color)
                     # plot the text
-                    if is_new:
-                        ax.text((pre_idx+rsc_map_idx)/2, text_vertical_offset, _p_name, ha='center', va='center', color='black', fontsize=10)
+                    if not plot_legend:
+                        if is_new:
+                            ax.text((s+e)/2, text_vertical_offset, _p_name, ha='center', va='center', color='black', fontsize=10)
 
+        # the vertical grid at the end of the bar
+        ax.axvline(e, color='black', linestyle='-', linewidth=0.5)
 
-                # the vertical grid at the end of the bar
-                ax.axvline(bin_temp_size, color='black', linestyle='-', linewidth=0.5)
 
         # set the axis and title
         ax.set_xlim(plot_start-x_margin, plot_end+x_margin)
@@ -544,7 +560,7 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[
         # reset x ticks: text size 30, rotation 45, distance time_grid_size * 2
         # ticks format: .3f
         ax = fig.axes[0]
-        ticks = [str(round(t, 3)) for t in np.arange(plot_start, plot_end, time_grid_size*tick_dens)] + [plot_end]
+        ticks = [str(round(t, 3)) for t in np.arange(plot_start, plot_end, time_grid_size*tick_dens)] + [str(round(plot_end, 3))]
         ax.set_xticks(np.arange(plot_start, plot_end, time_grid_size*tick_dens).tolist()+[plot_end])
         ax.set_xticklabels(ticks, fontsize=txt_size, rotation=45)
         ax.tick_params(axis='x', which='major', pad=time_grid_size * tick_dens)
@@ -593,7 +609,7 @@ def get_task_layout(bin_list:List[SchedulingTableInt], init_p_list:List[ProcessI
     vertical_grid_size = 1
     
     for _SchedTab in bin_list:
-        tab_temp_size = _SchedTab.scheduling_table[0].size
+        tab_temp_size = len(_SchedTab.scheduling_table)
         ax = fig.add_subplot(len(bin_list), 1, len(bin_list)-_SchedTab.id)
         vertical_offset = 0
         horizen_grid = set()

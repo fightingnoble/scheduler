@@ -1678,8 +1678,13 @@ if __name__ == "__main__":
         txt_size=40, tick_dens=4)
     elif args.test_case == "bin_pack" or args.test_all:
         # push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, 256, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
-        bin_list, init_p_list = push_task_into_bins(task_dict, 256, sim_step*2, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
+        bin_list, init_p_list = push_task_into_bins(task_dict, affinity, 256, sim_step*2, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
         from scheduling_table import get_task_layout_compact
         get_task_layout_compact(bin_list, init_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=1, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
-        txt_size=40, tick_dens=2) 
+        txt_size=40, tick_dens=2, save_path="task_bin_pack_cyclic.pdf") 
+
+        get_task_layout_compact(bin_list, init_p_list, save= True, time_step= sim_step,
+        hyper_p=hyper_p, n_p=1, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
+        txt_size=40, tick_dens=4, plot_start=0, save_path="task_bin_pack_full.pdf")
+
