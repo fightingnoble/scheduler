@@ -256,7 +256,7 @@ def vis_task_static_timeline(task_list, show=False, save=False, save_path="task_
             save_path = save_path + ".pdf"        
             plt.savefig(save_path, bbox_inches='tight', **kwargs)
 
-def creat_jobTask_graph(task_graph:Dict[str, List[str]], plot:bool=False):
+def creat_jobTask_graph(task_graph:Dict[str, List[str]], f_gcd, plot:bool=False):
     # create task graph from task_graph
     task_graph_nx = nx.DiGraph(task_graph)
 
@@ -267,6 +267,8 @@ def creat_jobTask_graph(task_graph:Dict[str, List[str]], plot:bool=False):
         if task_n in df.index:
             task_attr = df.loc[task_n].to_dict()
             factor = task_attr["Throuput factor (S)"]
+            freq  = task_attr["Freq."]/f_gcd
+            num_per_group = int(np.ceil(freq / factor))
             for i in range(factor):
                 task_name = task_n+"_"+str(i)
                 job_graph_nx.add_node(task_name)
@@ -285,14 +287,19 @@ def creat_jobTask_graph(task_graph:Dict[str, List[str]], plot:bool=False):
                         job_graph_nx.add_edge(task_name, "Exit", type="control")
                         continue
                     succ_factor = df.loc[succ_n]["Throuput factor (S)"]
-                    if succ_factor == factor:
-                        succ_name = succ_n+"_"+str(i)
-                    else:
+                    succ_freq  = int(df.loc[succ_n]["Freq."]/f_gcd)
+                    succ_num_per_group = int(np.ceil(succ_freq/succ_factor))
+                    for i_s in range(succ_freq):
+                        no_succ = int(i_s // succ_num_per_group)
+                        succ_name = succ_n+"_"+str(no_succ)
+                        
                         # just like quantization
-                        curr_t = i/factor
-                        succ_t = int(curr_t*succ_factor)
-                        succ_name = succ_n+"_"+str(succ_t)
-                    job_graph_nx.add_edge(task_name, succ_name, type="data")
+                        succ_t = i_s/succ_freq
+                        pred_t = int(succ_t*freq)
+
+                        no_ = int(pred_t // num_per_group)
+                        if no_ == i:
+                            job_graph_nx.add_edge(task_name, succ_name, type="data")
         else:
             job_graph_nx.add_node(task_n)
             edge_type = "control" if task_n == "Entry" else "data"
@@ -377,6 +384,8 @@ def load_taskint(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]
                 pre_assigned_resource_flag=task_attr["Pre-assigned"]>0, 
                 RDA_size=task_attr['RDA./Req.'], main_size=task_attr['Cores/Req.'], seq_cpu_time=task_attr["Flops on path"]/1e3,
                 op_cpu_time=task_attr["Flops on path"]/1e3, op_io_time=1e-6,
+                criti_flag="soft" if task_attr["Criti_flag"]=='S' else "hard", 
+                cbs_en=True if task_attr["Cbs_en"]=='Y' else False, 
             )
             task.freq = task_attr["Freq."]
             # initialize task affinity list
@@ -934,7 +943,7 @@ def new_bin(spatial_size:int, temporal_size:int, id:int = 0, name:str = "bin"):
 def traverse_task_graph(task_list):
     pass
 
-def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], affinity, #SchedTab: SchedulingTableInt, 
+def push_task_into_bins(init_p_list: List[TaskInt], affinity, #SchedTab: SchedulingTableInt, 
                                     total_cores:int, quantumSize, 
                                     timestep, hyper_p, n_p=1, verbose=False, *, animation=False, warmup=False, drain=False,):
 
@@ -948,28 +957,6 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], affinit
     tab_temp_size = int(sim_range/timestep)
     tab_spatial_size = total_cores
 
-    if isinstance(tasks, list):
-        task_list = tasks
-    elif isinstance(tasks, dict):
-        task_list = list(tasks.values())
-
-    task_define_bk = copy.deepcopy(task_list) # used for detect the task changes
-
-    # init the wait queue 
-    # add1216: distinguish the task defined by user and the process in the task queue
-    # generate the a serial of ideal task instances
-    init_p_list = []
-    pid = 0
-    for task in task_list: 
-        # for r, d in zip(task.get_release_event(event_range), task.get_deadline_event(event_range)):
-        r = task.get_release_time()
-        d = task.get_deadline_time()
-        p = task.make_process(r, d, pid)
-        pid += 1
-        init_p_list.append(p)
-        if verbose:
-            print("TASK {:d}:{:s}({:d}), is expected to finish {}T OPs in {:f}-{:f} !!".format(
-                p.task.id, p.task.name, p.pid, p.totcpu, p.release_time, p.deadline))
     pid_idx = {_p.task.name:_p.pid for _p in init_p_list}
     pid_max = pid
     
@@ -1355,6 +1342,30 @@ def push_task_into_bins(tasks: Union[List[TaskInt], Dict[str, TaskInt]], affinit
         print("=====================================\n")
     
     return bin_list, init_p_list
+
+def create_init_p_list(tasks: Union[List[TaskInt], Dict[str, TaskInt]], verbose:bool):
+    if isinstance(tasks, list):
+        task_list = tasks
+    elif isinstance(tasks, dict):
+        task_list = list(tasks.values())
+
+    # init the wait queue 
+    # add1216: distinguish the task defined by user and the process in the task queue
+    # generate the a serial of ideal task instances
+    init_p_list = []
+    pid = 0
+    for task in task_list: 
+        # for r, d in zip(task.get_release_event(event_range), task.get_deadline_event(event_range)):
+        r = task.get_release_time()
+        d = task.get_deadline_time()
+        p = task.make_process(r, d, pid)
+        pid += 1
+        init_p_list.append(p)
+        if verbose:
+            print("TASK {:d}:{:s}({:d}), is expected to finish {}T OPs in {:f}-{:f} !!".format(
+                p.task.id, p.task.name, p.pid, p.totcpu, p.release_time, p.deadline))
+                
+    return init_p_list
 
 def get_rsc_2b_released(rsc_recoder, n_slot, _p):
     alloc_slot_s_t, alloc_size_t, allo_slot_t, bin_id_t = rsc_recoder[_p.pid]
@@ -1779,6 +1790,8 @@ if __name__ == "__main__":
     parser.add_argument("--test_all", default=False, help="test all the task")
     args = parser.parse_args() 
     task_dict = load_taskint(args.verbose)
+    init_p_list = create_init_p_list(task_dict, args.verbose)
+
 
     if args.test_case == "all":
         args.test_all = True
@@ -1795,7 +1808,7 @@ if __name__ == "__main__":
         txt_size=40, tick_dens=4)
     elif args.test_case == "bin_pack" or args.test_all:
         # push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, 256, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
-        bin_list, init_p_list = push_task_into_bins(task_dict, affinity, 256, sim_step*2, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
+        bin_list, init_p_list = push_task_into_bins(init_p_list, affinity, 256, sim_step*2, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
         from scheduling_table import get_task_layout_compact
         get_task_layout_compact(bin_list, init_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=1, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
@@ -1822,7 +1835,7 @@ if __name__ == "__main__":
             exit()
 
     elif args.test_case == "graph" or args.test_all:
-        task_graph_nx, job_graph_nx = creat_jobTask_graph(task_graph, plot=True)
+        task_graph_nx, job_graph_nx = creat_jobTask_graph(task_graph, int(f_gcd), plot=True)
         init_depen(task_dict, job_graph_nx, verbose=args.verbose)
     elif args.test_case == "dynamic" or args.test_all:
         try:
@@ -1833,9 +1846,9 @@ if __name__ == "__main__":
                 init_p_list = pickle.load(f)
         except:
             print("bin_list.pkl or init_p_list.pkl not found")
-            bin_list, init_p_list = push_task_into_bins(task_dict, affinity, 256, sim_step*2, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
+            bin_list, init_p_list = push_task_into_bins(init_p_list, affinity, 256, sim_step*2, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
 
-        task_graph_nx, job_graph_nx = creat_jobTask_graph(task_graph, plot=False)
+        task_graph_nx, job_graph_nx = creat_jobTask_graph(task_graph, int(f_gcd), plot=False)
         init_depen(init_p_list, job_graph_nx)
         from allocator_agent import cyclic_sched
         from scheduler_agent import Scheduler 
