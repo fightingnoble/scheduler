@@ -5,6 +5,7 @@ from task_agent import TaskInt
 from task_queue_agent import TaskQueue
 from scheduling_table import SchedulingTableInt
 from task_agent import ProcessInt
+from buffer import Buffer
 
 class Scheduler(object): 
     """
@@ -88,7 +89,12 @@ class Scheduler(object):
         self.blocked_queue: List = []
 
         # wait 
-        self.wait_queue:TaskQueue = TaskQueue(sort_f=lambda x: x.release_time, decending=False)
+        # structure: (wait_time, task)
+        self.weight_wait_queue = TaskQueue(sort_f=lambda x: x.io_time-x.waitTime, decending=False)
+        self.input_wait_queue: List = []
+
+        # buffer
+        self.buffer:Buffer = Buffer()
         # monitor the deadline: (accending)
         self.ready_queue:TaskQueue = TaskQueue(sort_f=lambda x: x.deadline, decending=False)
         
@@ -112,11 +118,12 @@ class Scheduler(object):
     
     def get_queues(self):
         # wait_queue, ready_queue, running_queue, miss_list, preempt_list, issue_list, completed_list
-        return self.wait_queue, self.ready_queue, self.running_queue, \
+        return self.weight_wait_queue, self.ready_queue, self.running_queue, \
             self.miss_list, self.preempt_list, self.issue_list, self.completed_list, self.throttle_list,\
             self.inactive_list, self.active_list
     
-    
+    def get_buffer(self):
+        return self.buffer
 
 if __name__ == "__main__":
     pass

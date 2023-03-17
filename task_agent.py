@@ -18,6 +18,10 @@ task_timing_type = {
     "realtime": 0,
     "deadline": 1,
     }
+criticality = {
+    "soft": 0,
+    "hard": 1,
+}
 # lifetime of the task
 task_lifetime = {
     "terminated": 0, # terminated
@@ -47,12 +51,13 @@ class ProcessBase(object):
         self.io_time = task.io_time       # I/O time
         self.totcpu = task.totcpu         # total cpu time, ++ when cpu burst
 
+        self.released = False
         self.release_time = release_t     # recored when the process is released
         self.deadline = deadline_abs      # recored when the process is generated  
         self.exp_comp_t = task.exp_comp_t # total cpu time, ++ when cpu burst
         self.remburst = task.totcpu       # Record the remaining cpu time for current I/O op, -- when cpu burst, set when moved from waiting to running
         self.cbs_en = task.cbs_en         # whether the task has a constant bandwidth, i.e., applys resource reservation algorithm
-        self.rem_exec_time = task.exp_comp_t # the predefined budget of execution time, -- when cpu burst excceds the budget, moved from running to throttled, set when process is activated
+        self.rem_flop_budget = 0            # the predefined budget of execution time, -- when cpu burst excceds the budget, moved from running to throttled, set when process is activated
 
         self.ready_time = -1 
         self.ready = False
@@ -63,17 +68,31 @@ class ProcessBase(object):
         self.totburst = 0     # Sync with clocks, ++ when cpu burst, 
         self.waitTime = 0     # Time in wait queue, ++ when in wait queue
         self.cumulative_executed_time = 0 
+        
+        self.req_queue = []   # cache the arrival requests
 
     def set_state(self, state):
         assert state in task_lifetime.keys()
         self.state = state
     
-    def check_depends(self):
+    def check_depends(self, time=None, time_step=1e-6):
         """
         if all the predecessor tasks are completed, return True
         """
-        return np.array(list(self.pred_ctrl.values())+ list(self.pred_data.values())).all()
-           
+        if not len(self.pred_data):
+            return np.allclose(time%self.task.period, self.task.ERT+self.task.i_offset, atol=time_step)
+        else:
+            return np.array(list(self.pred_ctrl.values())+ list(self.pred_data.values())).all()
+
+    def reset_depends(self):
+        """
+        reset the values of the predecessors to False
+        """
+        for key in self.pred_ctrl.keys():
+            self.pred_ctrl[key] = False
+        for key in self.pred_data.keys():
+            self.pred_data[key] = False
+
 class ProcessInt(ProcessBase):
     def __init__(self, task, release_t, deadline_abs, pid):
         super().__init__(task, release_t, deadline_abs, pid)
@@ -84,7 +103,8 @@ class ProcessInt(ProcessBase):
 class TaskBase(object):
     def __init__(self, task_name:str, task_id:int, timing_flag:str,
                  ERT:int, ddl:int, period:int, exp_comp_t:int, i_offset:int, jitter_max:int,
-                 op_io_time:int=0, op_cpu_time:int=0, seq_cpu_time:int=0, priority:int=0,
+                 op_io_time:int=0, op_cpu_time:int=0, seq_cpu_time:int=0, priority:int=0, 
+                 criti_flag:str="soft", cbs_en:bool=False, 
                  ):
         self.id = task_id
         self.name = task_name
@@ -93,6 +113,9 @@ class TaskBase(object):
         # timing spec 
         self.timing_flag = timing_flag
         self.timing_flag_num = task_timing_type[timing_flag]
+        self.criticality = criti_flag # soft or hard
+        assert self.criticality in criticality.keys()
+        assert self.timing_flag in task_timing_type.keys()
 
         # deadline in each hyper-period (task that have multiple sub-periods in a hyper-period)
         # e.g. the task with 30hz but be divided into 3 tasks with 10hz and 1/30s offset
@@ -118,7 +141,7 @@ class TaskBase(object):
         self.cpu_time = op_cpu_time                  # execution time per I/O burst
         self.io_time = op_io_time                    # I/O time
         self.totcpu = seq_cpu_time                   # total cpu time, ++ when cpu burst
-        self.cbs_en = False
+        self.cbs_en = cbs_en
 
         # =============== 3. statistical properties ===============
         self.missed_deadline_count = 0 # used 
@@ -175,13 +198,15 @@ class TaskInt(TaskBase):
                     exp_comp_t:Union[int, float], i_offset:Union[int, float], jitter_max:Union[int, float]=0,
                     flops:Union[int, float]=0, task_flag:str="moveable",
                     pre_assigned_resource_flag:bool=False, 
-                    op_io_time:int=0, op_cpu_time:int=0, seq_cpu_time:int=0, priority:int=0,
+                    op_io_time:int=0, op_cpu_time:int=0, seq_cpu_time:int=0, priority:int=0, 
+                    criti_flag:str="soft", cbs_en:bool=False, 
                     **kwargs
                 ) -> None:
         super().__init__(
                             task_name=task_name, task_id=task_id, timing_flag=timing_flag,
                             ERT=ERT, ddl=ddl, period=period, exp_comp_t=exp_comp_t, i_offset=i_offset, jitter_max=jitter_max, 
-                            op_cpu_time=op_cpu_time, op_io_time=op_io_time, seq_cpu_time=seq_cpu_time, priority=priority
+                            op_cpu_time=op_cpu_time, op_io_time=op_io_time, seq_cpu_time=seq_cpu_time, priority=priority, 
+                            criti_flag=criti_flag, cbs_en=cbs_en,
                         )
         
         # =============== 1. task properties ===============

@@ -36,6 +36,20 @@ class Resource_model_int(object):
         self.rsc_map:OrderedDict[int, Tuple[int, int]] = RscMapInt()
         self.available_rsc = size
         self.size = size
+        self.slot_e = None
+        self.slot_s = None
+        self.slot_num = None
+    
+    def update(self, other:RscMapInt):
+        # update the rsc map
+        self.rsc_map.clear()
+        for k, v in other.items():
+            self.rsc_map[k] = v
+        # update the available rsc
+        self.available_rsc = self.size
+        for k, v in self.rsc_map.items():
+            self.available_rsc -= v
+        
     
     def get_available_rsc(self):
         return self.available_rsc

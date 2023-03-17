@@ -20,26 +20,32 @@ from task_agent import ProcessInt
 # 'ID', 'Task (chain) names', 'Flops on path', 'Expected Latency (ms)', 'T release', 'Freq.', 'DDL', 'Cores/Req.', 
 # 'Throuput factor (S)', 'Thread factor (S)', 'Min required cores', 'Timing_flag', 'Max required Cores', 'RDA./Req.', 'Resource Type', 'Pre-assigned', 'Priority'
 
-# task_graph = {   
-#     "Entry": ["surr_view_camera_pub", "streo_camera_pub", "LiDAR_pub"],
-#     "surr_view_camera_pub": ["ImageBB"],
-#     "streo_camera_pub": ["Stereo_feature_enc", "Traffic_light_detection"],
-#     "LiDAR_pub": ["Lidar_based_3dDet"],
-#     "Traffic_light_detection": ["Exit"],
-#     "ImageBB": ["MultiCameraFusion"],
-#     "MultiCameraFusion": ["Pure_camera_path_head"],
-#     "Pure_camera_path_head": ["Prediction"],
-#     "Prediction": ["Planning"],
-#     "Planning": ["Steering_speed"],
-#     "Steering_speed": ["Exit"],
-#     "Stereo_feature_enc": ["Semantic_segm", "Lane_drivable_area_det", "Optical_Flow", "Depth_estimation"],
-#     "Semantic_segm": ["Lidar_based_3dDet"],
-#     "Lidar_based_3dDet": ["Prediction"],
-#     "Lane_drivable_area_det": ["Exit"],
-#     "Optical_Flow": ["Exit"],
-#     "Depth_estimation": ["Exit"],
-#     "Exit": []
-# }
+task_graph_srcs = {
+    "Entry": ["surr_view_camera_pub", "streo_camera_pub", "LiDAR_pub"],
+    "surr_view_camera_pub": ["ImageBB"],
+    "streo_camera_pub": ["Stereo_feature_enc", "Traffic_light_detection"],
+    "LiDAR_pub": ["Lidar_based_3dDet"],
+    "IMU_pub": ["Steering_speed"],
+}
+task_graph_sinks = {
+    "Sink_control": [],
+    "Sink_screen": [],
+}
+task_graph_ops = {   
+    "Traffic_light_detection": ["Sink_control"],
+    "ImageBB": ["MultiCameraFusion"],
+    "MultiCameraFusion": ["Pure_camera_path_head"],
+    "Pure_camera_path_head": ["Prediction"],
+    "Prediction": ["Planning"],
+    "Planning": ["Steering_speed"],
+    "Steering_speed": ["Sink_control"],
+    "Stereo_feature_enc": ["Semantic_segm", "Lane_drivable_area_det", "Optical_Flow", "Depth_estimation"],
+    "Semantic_segm": ["Lidar_based_3dDet"],
+    "Lidar_based_3dDet": ["Prediction"],
+    "Lane_drivable_area_det": ["Sink_screen"],
+    "Optical_Flow": ["Sink_screen"],
+    "Depth_estimation": ["Sink_screen"],
+}
 
 __all__ = ['task_graph', 'affinity']
 
@@ -277,29 +283,40 @@ def creat_jobTask_graph(task_graph:Dict[str, List[str]], f_gcd, plot:bool=False)
                     # job_graph_nx.add_edge(task_name, task_n+"_"+str(i+1), type="control")
                     pass
 
-                # add dependency
-                for succ_n in task_graph[task_n]:
-                    # select instance of succ 
-                    # 1. in the same sub-period; 
-                    # 2. or the nearest period before the current time. 
-                    # get the factor of succ
-                    if succ_n == "Exit":
-                        job_graph_nx.add_edge(task_name, "Exit", type="control")
-                        continue
-                    succ_factor = df.loc[succ_n]["Throuput factor (S)"]
-                    succ_freq  = int(df.loc[succ_n]["Freq."]/f_gcd)
-                    succ_num_per_group = int(np.ceil(succ_freq/succ_factor))
-                    for i_s in range(succ_freq):
-                        no_succ = int(i_s // succ_num_per_group)
-                        succ_name = succ_n+"_"+str(no_succ)
-                        
-                        # just like quantization
-                        succ_t = i_s/succ_freq
-                        pred_t = int(succ_t*freq)
+            # add dependency
+            for succ_n in task_graph[task_n]:
+                # select instance of succ 
+                # 1. in the same sub-period; 
+                # 2. or the nearest period before the current time. 
+                # get the factor of succ
+                if succ_n == "Exit":
+                    job_graph_nx.add_edge(task_name, "Exit", type="control")
+                    continue
+                succ_factor = df.loc[succ_n]["Throuput factor (S)"]
+                succ_freq  = int(df.loc[succ_n]["Freq."]/f_gcd)
+                succ_num_per_group = int(np.ceil(succ_freq/succ_factor))
+                for i_s in range(succ_freq):
+                    no_succ = int(i_s // succ_num_per_group)
+                    succ_job_name = succ_n+"_"+str(no_succ)
+                    
+                    # just like quantization
+                    succ_t = i_s/succ_freq
+                    pred_t = int(succ_t*freq)
 
-                        no_ = int(pred_t // num_per_group)
-                        if no_ == i:
-                            job_graph_nx.add_edge(task_name, succ_name, type="data")
+                    no_ = int(pred_t // num_per_group)
+                    pre_job_name = task_n+"_"+str(no_)
+                    job_graph_nx.add_edge(pre_job_name, succ_job_name, type="data")
+                    # add attribute "reDistPattn", to classify the redistributing pattern
+                    # downstream <- upstream
+                    if succ_factor < factor:
+                        # set reDistPattn as "downscaling"
+                        job_graph_nx[pre_job_name][succ_job_name]["reDistPattn"] = "downscaling"
+                    elif succ_factor > factor:
+                        # set reDistPattn as "upscalling"
+                        job_graph_nx[pre_job_name][succ_job_name]["reDistPattn"] = "upscaling"
+                    else:
+                        # set reDistPattn as "one2one" 
+                        job_graph_nx[pre_job_name][succ_job_name]["reDistPattn"] = "one2one"
         else:
             job_graph_nx.add_node(task_n)
             edge_type = "control" if task_n == "Entry" else "data"
@@ -308,8 +325,8 @@ def creat_jobTask_graph(task_graph:Dict[str, List[str]], f_gcd, plot:bool=False)
                     task_attr = df.loc[succ_n].to_dict()
                     factor = task_attr["Throuput factor (S)"]
                     for i in range(factor):
-                        succ_name = succ_n+"_"+str(i)
-                        job_graph_nx.add_edge(task_n, succ_name, type=edge_type)
+                        succ_job_name = succ_n+"_"+str(i)
+                        job_graph_nx.add_edge(task_n, succ_job_name, type=edge_type)
                 else:
                     job_graph_nx.add_edge(task_n, succ_n, type=edge_type)
 
@@ -385,7 +402,7 @@ def load_taskint(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]
                 RDA_size=task_attr['RDA./Req.'], main_size=task_attr['Cores/Req.'], seq_cpu_time=task_attr["Flops on path"]/1e3,
                 op_cpu_time=task_attr["Flops on path"]/1e3, op_io_time=1e-6,
                 criti_flag="soft" if task_attr["Criti_flag"]=='S' else "hard", 
-                cbs_en=True if task_attr["Cbs_en"]=='Y' else False, 
+                cbs_en=True # if task_attr["Cbs_en"]=='Y' else False, 
             )
             task.freq = task_attr["Freq."]
             # initialize task affinity list
@@ -439,26 +456,35 @@ def init_depen(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[T
         elif taskJobs[0].__class__.__name__ == "TaskInt":
             taskJobs = {i.name:i for i in taskJobs}
     
-    for task_n, task in taskJobs.items():
-        for pre_n, datadict in job_graph_nx.pred[task_n].items():
+    for job_n, job in taskJobs.items():
+
+        # name parse
+        thread_n = job_n.split('_')[-1]
+        task_base_name = job_n.replace("_"+thread_n, "")
+        thread_n = int(thread_n)
+
+        # group the edge with attribution "reDistPattn" eq "downscaling"
+        for pre_n, datadict in job_graph_nx.pred[job_n].items():
             dep_t = datadict["type"]
+            attr = copy.deepcopy(datadict).update({"valid":False})
             if dep_t == "data":
-                task.pred_data.update({pre_n:False})
+                job.pred_data.update({pre_n:False})
             elif dep_t == "control":
-                task.pred_ctrl.update({pre_n:False})
+                job.pred_ctrl.update({pre_n:False})
             else:
                 raise Exception("Unknown dependency type")
-        for succ_n, datadict in job_graph_nx.succ[task_n].items():
+        for succ_n, datadict in job_graph_nx.succ[job_n].items():
             dep_t = datadict["type"]
+            attr = copy.deepcopy(datadict).update({"valid":False})
             if dep_t == "data":
-                task.succ_data.update({succ_n:False})
+                job.succ_data.update({succ_n:False})
             elif dep_t == "control":
-                task.succ_ctrl.update({succ_n:False})
+                job.succ_ctrl.update({succ_n:False})
             else:
                 raise Exception("Unknown dependency type")
         
         if verbose:
-            print(task_n, task.pred_data, task.pred_ctrl, task.succ_data, task.succ_ctrl)
+            print(job_n, job.pred_data, job.pred_ctrl, job.succ_data, job.succ_ctrl)
 
 
 def push_task_into_scheduling_table(tasks: Union[List[TaskInt], Dict[str, TaskInt]], SchedTab: SchedulingTableInt, 
@@ -958,7 +984,7 @@ def push_task_into_bins(init_p_list: List[TaskInt], affinity, #SchedTab: Schedul
     tab_spatial_size = total_cores
 
     pid_idx = {_p.task.name:_p.pid for _p in init_p_list}
-    pid_max = pid
+    pid_max = max(pid_idx.values())
     
     # monitor the wake up time: (accending)
     # activate by the new period or the arrival of the blocked io data
@@ -1552,13 +1578,16 @@ def allocate_rsc_4_process(_p:ProcessInt, n_slot:int,
     if state:
         if not (isinstance(alloc_slot_s, list) and isinstance(alloc_size, list) and isinstance(allo_slot, list)):
             print(f"\tgot {total_alloc_unit:d} ({alloc_size:d} cores x {allo_slot:d} slots @ {alloc_slot_s:d}, Bin({bin_id}):{bin_name_list[bin_id]})\n")
+            _p.exp_comp_t = allo_slot * timestep
         elif len(alloc_slot_s) == len(alloc_size) == len(allo_slot) == 1:
             print(f"\tgot {total_alloc_unit:d} ({alloc_size[0]:d} cores x {allo_slot[0]:d} slots @ {alloc_slot_s[0]:d}, Bin({bin_id}):{bin_name_list[bin_id]})\n")
+            _p.exp_comp_t = allo_slot[0] * timestep
         else:
             alloc_slot_s_str = (r"{},"*len(alloc_slot_s)).format(*alloc_slot_s)
             alloc_size_str = (r"{},"*len(alloc_size)).format(*alloc_size)
             allo_slot_str = (r"{},"*len(allo_slot)).format(*allo_slot)
             print(f"\tgot {total_alloc_unit:d} ({alloc_size_str:s} cores x {allo_slot_str:s} slots @ {alloc_slot_s_str:s}, Bin({bin_id}):{bin_name_list[bin_id]})\n")
+            _p.exp_comp_t = np.sum(np.array(allo_slot)) * timestep
     else:
         print("\t[{:s}]\n".format("FAILED" if not state else "SUCCESS"))
 
@@ -1790,8 +1819,6 @@ if __name__ == "__main__":
     parser.add_argument("--test_all", default=False, help="test all the task")
     args = parser.parse_args() 
     task_dict = load_taskint(args.verbose)
-    init_p_list = create_init_p_list(task_dict, args.verbose)
-
 
     if args.test_case == "all":
         args.test_all = True
@@ -1808,6 +1835,7 @@ if __name__ == "__main__":
         txt_size=40, tick_dens=4)
     elif args.test_case == "bin_pack" or args.test_all:
         # push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, 256, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
+        init_p_list = create_init_p_list(task_dict, args.verbose)
         bin_list, init_p_list = push_task_into_bins(init_p_list, affinity, 256, sim_step*2, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
         from scheduling_table import get_task_layout_compact
         get_task_layout_compact(bin_list, init_p_list, save= True, time_step= sim_step,
@@ -1821,15 +1849,16 @@ if __name__ == "__main__":
         # save the bin_list and the init_p_list
         with open("bin_list.pkl", "wb") as f:
             pickle.dump(bin_list, f)
-        with open("init_p_list.pkl", "wb") as f:
-            pickle.dump(init_p_list, f)
+        # with open("init_p_list.pkl", "wb") as f:
+        #     pickle.dump(init_p_list, f)
         try:
             # load the bin_list and the init_p_list
             with open("bin_list.pkl", "rb") as f:
                 bin_list = pickle.load(f)
-            with open("init_p_list.pkl", "rb") as f:
-                init_p_list = pickle.load(f)
-            print("bin_list.pkl and init_p_list.pkl saved and loaded successfully")
+            print("bin_list.pkl saved and loaded successfully")
+            # with open("init_p_list.pkl", "rb") as f:
+            #     init_p_list = pickle.load(f)
+            # print("init_p_list.pkl saved and loaded successfully")
         except:
             print("bin_list.pkl or init_p_list.pkl not found")
             exit()
@@ -1838,15 +1867,17 @@ if __name__ == "__main__":
         task_graph_nx, job_graph_nx = creat_jobTask_graph(task_graph, int(f_gcd), plot=True)
         init_depen(task_dict, job_graph_nx, verbose=args.verbose)
     elif args.test_case == "dynamic" or args.test_all:
+        init_p_list = create_init_p_list(task_dict, args.verbose)
         try:
             # load the bin_list and the init_p_list
             with open("bin_list.pkl", "rb") as f:
                 bin_list = pickle.load(f)
-            with open("init_p_list.pkl", "rb") as f:
-                init_p_list = pickle.load(f)
+            # with open("init_p_list.pkl", "rb") as f:
+            #     init_p_list = pickle.load(f)
         except:
-            print("bin_list.pkl or init_p_list.pkl not found")
-            bin_list, init_p_list = push_task_into_bins(init_p_list, affinity, 256, sim_step*2, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
+            print("bin_list.pkl not found")
+            # print("bin_list.pkl or init_p_list.pkl not found")
+            bin_list, _ = push_task_into_bins(init_p_list, affinity, 256, sim_step*2, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
 
         task_graph_nx, job_graph_nx = creat_jobTask_graph(task_graph, int(f_gcd), plot=False)
         init_depen(init_p_list, job_graph_nx)
@@ -1854,18 +1885,20 @@ if __name__ == "__main__":
         from scheduler_agent import Scheduler 
         from monitor_agent import Monitor
         from spec import Spec
-        rsc_recoder = {}
-        rsc_recoder_his = {}
+        rsc_recoder_list = [{} for _ in range(len(bin_list))]
+        rsc_recoder_his_list = [{} for _ in range(len(bin_list))]
         scheduler_list = [Scheduler() for _ in range(len(bin_list))]
         monitor_list = [Monitor() for _ in range(len(bin_list))]
         task_spec = Spec(0.1, [1 for _ in init_p_list]) 
         rsc_list = [Resource_model_int(size=sched_tab.scheduling_table[0].size) for sched_tab in bin_list]
+        curr_cfg_list = [Resource_model_int(size=sched_tab.scheduling_table[0].size) for sched_tab in bin_list]
+
 
         print("sim_step: ", sim_step)
         cyclic_sched(task_spec, affinity, 
                 bin_list, scheduler_list, monitor_list,
-                rsc_list,
-                rsc_recoder, rsc_recoder_his,
+                rsc_list, curr_cfg_list, 
+                rsc_recoder_list, rsc_recoder_his_list,
                 256, sim_step*2, init_p_list,
                 sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
         

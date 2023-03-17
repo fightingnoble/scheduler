@@ -23,6 +23,14 @@ class SchedulingTableInt(object):
         self.name = name
         self.locker = None
         self.lock_mask = np.ones((num_time_slots), dtype=bool)
+        self.sparse_list = OrderedDict()
+        # current index of the sparse list
+        self.sparse_idx = 0
+        # previous index of the sparse list
+        self.sparse_idx_prev = 0
+        # next index of the sparse list
+        self.sparse_idx_next = 0
+        self.sparse_mode = False
 
     def index_occupy_by_id(self, time_slot_s:int=None, time_slot_e:int=None) -> Dict[int, List[int]]:
         """
@@ -213,6 +221,7 @@ class SchedulingTableInt(object):
                 for rsc_map in self.scheduling_table[alloc_slot_s:alloc_slot_s+int(curr_slot[idx[i]])]:
                     rsc_map.allocate(task.pid, curr_alloc[idx[i]], verbose)
             
+        self.sparse_mode = False
         return True, (time_slot_s+np.array(s)[idx]).tolist(), curr_alloc[idx].tolist(), curr_slot[idx].tolist()
 
     def release(self, task: ProcessInt, time_slot_s:Union[int,List[int]], curr_alloc:Union[int,List[int]], curr_slot:Union[int,List[int]], verbose: bool = False):
@@ -224,7 +233,8 @@ class SchedulingTableInt(object):
             for i in range(len(curr_alloc)):
                 for rsc_map in self.scheduling_table[time_slot_s[i]:time_slot_s[i]+curr_slot[i]]:
                     rsc_map.release(task.pid, curr_alloc[i], verbose)
-
+        self.sparse_mode = False
+    
     def step(self, mode:str="cyclic"): 
         assert mode in ["cyclic", "dynamic"]
         running = self.scheduling_table[0]
@@ -232,7 +242,6 @@ class SchedulingTableInt(object):
         if mode == "dynamic": 
             self.scheduling_table[-1].clear()
         return running
-
 
     def print_scheduling_table(self):
         empty_boader_s = []
@@ -272,6 +281,78 @@ class SchedulingTableInt(object):
 
         _str = [f"[{empty_boader_s[i]}-{empty_boader_e[i]})" for i in range(len(empty_boader_s))]
         print("slot:{} Empty".format(",".join(_str,)))
+
+    def to_sparse_dict(self, init_pos: int = 0, verbose: bool = False):
+        # sparst_dict = {}
+        sparse_list = []
+        empty_boader_s = []
+        empty_boader_e = []
+        title_line = False
+
+        pre_rsc = self.scheduling_table[0].rsc_map
+        pre_idx = 0
+        empty_flag = len(pre_rsc) == 0
+        if empty_flag:
+            empty_boader_s.append(0)
+        
+        for rsc_map_idx in range(len(self.scheduling_table)):
+            rsc_map = self.scheduling_table[rsc_map_idx].rsc_map
+
+            if rsc_map == pre_rsc:
+                continue
+            else:
+                if empty_flag:
+                    empty_boader_e.append(rsc_map_idx)
+                else:
+                    # if title_line: 
+                    #     _str = f"slot:[{pre_idx}-{rsc_map_idx})\n{pre_rsc.print_simple()}"
+                    # else:
+                    #     _str = f"slot:[{pre_idx}-{rsc_map_idx})\n{str(pre_rsc)}"
+                    #     title_line = True
+                    # print(_str)
+                    # sparse_dict[pre_idx] = [pre_idx, pre_rsc, rsc_map_idx-pre_idx]
+                    sparse_list.append([pre_idx, pre_rsc, rsc_map_idx-pre_idx])
+                pre_idx = rsc_map_idx
+                pre_rsc = rsc_map
+                empty_flag = len(pre_rsc) == 0
+                if empty_flag:
+                    empty_boader_s.append(rsc_map_idx)
+        if empty_flag:
+            empty_boader_e.append(len(self.scheduling_table))
+        else:
+            print(f"slot:[{pre_idx}-{len(self.scheduling_table)})\n{str(pre_rsc)}")
+            # sparse_dict[pre_idx] = [pre_rsc, len(self.scheduling_table)-pre_idx]
+            sparse_list.append([pre_idx, pre_rsc, len(self.scheduling_table)-pre_idx])
+
+        # _str = [f"[{empty_boader_s[i]}-{empty_boader_e[i]})" for i in range(len(empty_boader_s))]
+        # print("slot:{} Empty".format(",".join(_str,)))
+        self.sparse_list = sparse_list
+        self.sparse_idx = init_pos
+        self.sparse_idx_next = init_pos + 1
+        self.sparse_mode = True
+
+    # add spase inded by 1
+    def idx_plus_1(self,):
+        assert self.sparse_mode
+        self.sparse_idx_prev = self.sparse_idx
+        self.sparse_idx = self.sparse_idx_next
+        self.sparse_idx_next += 1
+        if self.sparse_idx_next == len(self.sparse_list):
+            self.sparse_idx_next = 0
+
+    def idx_minus_1(self,):
+        assert self.sparse_mode
+        self.sparse_idx_next = self.sparse_idx
+        self.sparse_idx = self.sparse_idx_prev
+        self.sparse_idx_prev -= 1
+        if self.sparse_idx_prev == -1:
+            self.sparse_idx_prev = len(self.sparse_list) - 1
+    
+    def next_item(self,):
+        self.idx_plus_1()
+        # return self.sparse_list[list(self.sparse_dict.keys())[self.sparse_dict_idx]]
+        return self.sparse_list[self.sparse_idx]
+
 
     def get_plot_frame(self, start:int=0, end:int=-1):
         frame = []
