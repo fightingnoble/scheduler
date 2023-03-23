@@ -1,0 +1,1072 @@
+
+                TASK 8:MultiCameraFusion_2(8)
+                TASK 11:Pure_camera_path_head_2(11)
+                TASK 14:Prediction_2(14)
+                TASK 17:Planning_2(17)
+
+Bin 6 initial queue:
+        ready tasks:
+                TASK 19:Stereo_feature_enc_0(19)
+
+        prefetched done:
+
+        inactivated tasks:
+                TASK 21:Semantic_segm_0(21)
+                TASK 23:Lidar_based_3dDet_0(23)
+
+Bin 7 initial queue:
+        ready tasks:
+
+        prefetched done:
+                TASK 20:Stereo_feature_enc_1(20)
+
+        inactivated tasks:
+                TASK 20:Stereo_feature_enc_1(20)
+                TASK 22:Semantic_segm_1(22)
+
+Bin 8 initial queue:
+        ready tasks:
+
+        prefetched done:
+                TASK 24:Lane_drivable_area_det_0(24)
+
+        inactivated tasks:
+                TASK 24:Lane_drivable_area_det_0(24)
+                TASK 27:Optical_Flow_1(27)
+
+Bin 9 initial queue:
+        ready tasks:
+
+        prefetched done:
+                TASK 28:Depth_estimation_0(28)
+
+        inactivated tasks:
+                TASK 25:Lane_drivable_area_det_1(25)
+                TASK 26:Optical_Flow_0(26)
+                TASK 28:Depth_estimation_0(28)
+
+==================== WARMUP ==================== 
+
+(Traffic_light_detection_0)
+                TASK 0:Traffic_light_detection_0(0) issued and start at 0.000000; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) is activated @ 0.000000!!
+                TASK 3:ImageBB_0(3) issued and start at 0.000000; 
+(Semantic_segm_0)
+                TASK 23:Lidar_based_3dDet_0(23) is activated @ 0.000000!!
+                TASK 19:Stereo_feature_enc_0(19) issued and start at 0.000000; 
+(Traffic_light_detection_1)
+                TASK 1:Traffic_light_detection_1(1) is activated @ 0.033332!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Traffic_light_detection_1)
+                TASK 1:Traffic_light_detection_1(1) data ready, but throttled!!
+  warnings.warn(_str)
+(ImageBB_1)
+                TASK 4:ImageBB_1(4) is activated @ 0.033332!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_1)
+                TASK 4:ImageBB_1(4) data ready, but throttled!!
+  warnings.warn(_str)
+(Traffic_light_detection_1)
+                TASK 1:Traffic_light_detection_1(1) THROTTLE -> READY!!
+                TASK 1:Traffic_light_detection_1(1) issued and start at 0.033337; 
+(ImageBB_1)
+                TASK 4:ImageBB_1(4) THROTTLE -> READY!!
+                TASK 4:ImageBB_1(4) issued and start at 0.033337; 
+(Semantic_segm_1)
+                TASK 20:Stereo_feature_enc_1(20) is activated @ 0.049998!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Semantic_segm_1)
+                TASK 20:Stereo_feature_enc_1(20) data ready, but throttled!!
+  warnings.warn(_str)
+(Semantic_segm_1)
+                TASK 20:Stereo_feature_enc_1(20) THROTTLE -> READY!!
+                TASK 20:Stereo_feature_enc_1(20) issued and start at 0.050003; 
+(Semantic_segm_0)
+                TASK 19:Stereo_feature_enc_0(19) COMPLETED @ 0.059561
+                Broadcasting message: Stereo_feature_enc_0_completed
+                Semantic_segm_0 received event Stereo_feature_enc_0 @ 0.059561
+                TASK 21:Semantic_segm_0(21) is activated @ 0.059561!!
+                TASK 19:Stereo_feature_enc_0(19) is activated @ 0.059561!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Semantic_segm_0)
+                TASK 21:Semantic_segm_0(21) data ready, but throttled!!
+  warnings.warn(_str)
+(Lane_drivable_area_det_0)
+                Lane_drivable_area_det_0 received event Stereo_feature_enc_0 @ 0.059561
+                TASK 24:Lane_drivable_area_det_0(24) is activated @ 0.059561!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Lane_drivable_area_det_0)
+                TASK 24:Lane_drivable_area_det_0(24) data ready, but throttled!!
+  warnings.warn(_str)
+(Lane_drivable_area_det_1)
+                Optical_Flow_0 received event Stereo_feature_enc_0 @ 0.059561
+                Depth_estimation_0 received event Stereo_feature_enc_0 @ 0.059561
+                TASK 26:Optical_Flow_0(26) is activated @ 0.059561!!
+                TASK 28:Depth_estimation_0(28) is activated @ 0.059561!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Lane_drivable_area_det_1)
+                TASK 28:Depth_estimation_0(28) data ready, but throttled!!
+  warnings.warn(_str)
+(Traffic_light_detection_2)
+                Optical_Flow_0 received event Stereo_feature_enc_0 @ 0.059566
+                Depth_estimation_0 received event Stereo_feature_enc_0 @ 0.059566
+                TASK 26:Optical_Flow_0(26) is activated @ 0.059566!!
+                TASK 28:Depth_estimation_0(28) is activated @ 0.059566!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Traffic_light_detection_2)
+                TASK 26:Optical_Flow_0(26) data ready, but throttled!!
+  warnings.warn(_str)
+(ImageBB_0)
+                Optical_Flow_0 received event Stereo_feature_enc_0 @ 0.059566
+                TASK 26:Optical_Flow_0(26) is activated @ 0.059566!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_0)
+                TASK 26:Optical_Flow_0(26) data ready, but throttled!!
+  warnings.warn(_str)
+(Traffic_light_detection_2)
+                TASK 26:Optical_Flow_0(26) THROTTLE -> READY!!
+                TASK 26:Optical_Flow_0(26) issued and start at 0.066002; 
+(Semantic_segm_0)
+                TASK 21:Semantic_segm_0(21) THROTTLE -> READY!!
+                TASK 21:Semantic_segm_0(21) issued and start at 0.066002; 
+(Lane_drivable_area_det_0)
+                TASK 24:Lane_drivable_area_det_0(24) THROTTLE -> READY!!
+                TASK 24:Lane_drivable_area_det_0(24) issued and start at 0.066002; 
+(Lane_drivable_area_det_1)
+                TASK 28:Depth_estimation_0(28) THROTTLE -> READY!!
+                TASK 28:Depth_estimation_0(28) issued and start at 0.066002; 
+(Traffic_light_detection_2)
+                TASK 2:Traffic_light_detection_2(2) is activated @ 0.066664!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Traffic_light_detection_2)
+                TASK 2:Traffic_light_detection_2(2) data ready, but throttled!!
+  warnings.warn(_str)
+(ImageBB_2)
+                TASK 5:ImageBB_2(5) is activated @ 0.066664!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_2)
+                TASK 5:ImageBB_2(5) data ready, but throttled!!
+  warnings.warn(_str)
+(Traffic_light_detection_2)
+                TASK 26:Optical_Flow_0(26) is THROTTLED @ 0.066669 !!
+                TASK 2:Traffic_light_detection_2(2) THROTTLE -> READY!!
+                TASK 2:Traffic_light_detection_2(2) issued and start at 0.066669; 
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.066669 !!
+                TASK 26:Optical_Flow_0(26) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) issued and resume at 0.066669; 
+                TASK 26:Optical_Flow_0(26) issued and resume at 0.066669; 
+(ImageBB_2)
+                TASK 5:ImageBB_2(5) THROTTLE -> READY!!
+                TASK 5:ImageBB_2(5) issued and start at 0.066669; 
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Traffic_light_detection_2)
+                TASK 28:Depth_estimation_0(28) data ready, but throttled!!
+  warnings.warn(_str)
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) COMPLETED @ 0.079733
+                Broadcasting message: ImageBB_0_completed
+                TASK 26:Optical_Flow_0(26) is THROTTLED @ 0.079733 !!
+                MultiCameraFusion_0 received event ImageBB_0 @ 0.079733
+                TASK 6:MultiCameraFusion_0(6) is activated @ 0.079733!!
+                TASK 3:ImageBB_0(3) is activated @ 0.079733!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_0)
+                TASK 3:ImageBB_0(3) data ready, but throttled!!
+  warnings.warn(_str)
+                TASK 26:Optical_Flow_0(26) THROTTLE -> READY!!
+                TASK 26:Optical_Flow_0(26) issued and resume at 0.079733; 
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_0)
+                TASK 6:MultiCameraFusion_0(6) data ready, but throttled!!
+  warnings.warn(_str)
+(ImageBB_0)
+                TASK 26:Optical_Flow_0(26) is THROTTLED @ 0.079808 !!
+                TASK 6:MultiCameraFusion_0(6) THROTTLE -> READY!!
+                TASK 26:Optical_Flow_0(26) THROTTLE -> READY!!
+                TASK 6:MultiCameraFusion_0(6) issued and start at 0.079808; 
+                TASK 26:Optical_Flow_0(26) issued and resume at 0.079808; 
+(Semantic_segm_0)
+                TASK 21:Semantic_segm_0(21) COMPLETED @ 0.087706
+                Broadcasting message: Semantic_segm_0_completed
+                Lidar_based_3dDet_0 received event Semantic_segm_0 @ 0.087706
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Semantic_segm_0)
+                TASK 23:Lidar_based_3dDet_0(23) data ready, but throttled!!
+  warnings.warn(_str)
+(Semantic_segm_0)
+                TASK 23:Lidar_based_3dDet_0(23) THROTTLE -> READY!!
+                TASK 23:Lidar_based_3dDet_0(23) issued and start at 0.090054; 
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Semantic_segm_0)
+                TASK 19:Stereo_feature_enc_0(19) data ready, but throttled!!
+  warnings.warn(_str)
+(ImageBB_0)
+                TASK 6:MultiCameraFusion_0(6) COMPLETED @ 0.090796
+                Broadcasting message: MultiCameraFusion_0_completed
+                TASK 26:Optical_Flow_0(26) is THROTTLED @ 0.090796 !!
+                Pure_camera_path_head_0 received event MultiCameraFusion_0 @ 0.090796
+                TASK 9:Pure_camera_path_head_0(9) is activated @ 0.090796!!
+                TASK 26:Optical_Flow_0(26) THROTTLE -> READY!!
+                TASK 26:Optical_Flow_0(26) issued and resume at 0.090796; 
+(ImageBB_0)
+                TASK 26:Optical_Flow_0(26) is THROTTLED @ 0.090807 !!
+(ImageBB_0)
+                TASK 9:Pure_camera_path_head_0(9) READY!!
+                TASK 26:Optical_Flow_0(26) THROTTLE -> READY!!
+                TASK 9:Pure_camera_path_head_0(9) issued and start at 0.090807; 
+                TASK 26:Optical_Flow_0(26) issued and resume at 0.090807; 
+(Traffic_light_detection_0)
+                TASK 0:Traffic_light_detection_0(0) COMPLETED @ 0.093299
+                Broadcasting message: Traffic_light_detection_0_completed
+                TASK 0:Traffic_light_detection_0(0) is activated @ 0.093299!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Traffic_light_detection_0)
+                TASK 0:Traffic_light_detection_0(0) data ready, but throttled!!
+  warnings.warn(_str)
+(ImageBB_0)
+                TASK 9:Pure_camera_path_head_0(9) COMPLETED @ 0.096816
+                Broadcasting message: Pure_camera_path_head_0_completed
+                TASK 26:Optical_Flow_0(26) is THROTTLED @ 0.096816 !!
+                Prediction_0 received event Pure_camera_path_head_0 @ 0.096816
+                TASK 26:Optical_Flow_0(26) THROTTLE -> READY!!
+                TASK 26:Optical_Flow_0(26) issued and resume at 0.096816; 
+(Semantic_segm_0)
+                TASK 23:Lidar_based_3dDet_0(23) COMPLETED @ 0.097061
+                Broadcasting message: Lidar_based_3dDet_0_completed
+                TASK 23:Lidar_based_3dDet_0(23) is activated @ 0.097061!!
+(ImageBB_0)
+                Prediction_0 received event Lidar_based_3dDet_0 @ 0.097066
+                TASK 12:Prediction_0(12) is activated @ 0.097066!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_0)
+                TASK 12:Prediction_0(12) data ready, but throttled!!
+  warnings.warn(_str)
+(ImageBB_1)
+                Prediction_1 received event Lidar_based_3dDet_0 @ 0.097066
+(ImageBB_2)
+                Prediction_2 received event Lidar_based_3dDet_0 @ 0.097066
+(ImageBB_0)
+                TASK 26:Optical_Flow_0(26) COMPLETED @ 0.097808
+                Broadcasting message: Optical_Flow_0_completed
+(ImageBB_0)
+                TASK 12:Prediction_0(12) THROTTLE -> READY!!
+                TASK 12:Prediction_0(12) issued and start at 0.097813; 
+(Lane_drivable_area_det_0)
+                TASK 24:Lane_drivable_area_det_0(24) COMPLETED @ 0.098144
+                Broadcasting message: Lane_drivable_area_det_0_completed
+(Lane_drivable_area_det_1)
+                TASK 28:Depth_estimation_0(28) COMPLETED @ 0.098144
+                Broadcasting message: Depth_estimation_0_completed
+(ImageBB_0)
+                TASK 12:Prediction_0(12) COMPLETED @ 0.099281
+                Broadcasting message: Prediction_0_completed
+                Planning_0 received event Prediction_0 @ 0.099281
+                TASK 15:Planning_0(15) is activated @ 0.099281!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_0)
+                TASK 15:Planning_0(15) data ready, but throttled!!
+  warnings.warn(_str)
+(ImageBB_0)
+                TASK 15:Planning_0(15) THROTTLE -> READY!!
+                TASK 15:Planning_0(15) issued and start at 0.099350; 
+(ImageBB_0)
+                TASK 15:Planning_0(15) COMPLETED @ 0.099516
+                Broadcasting message: Planning_0_completed
+                Steering_speed_0 received event Planning_0 @ 0.099516
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_0)
+                TASK 18:Steering_speed_0(18) data ready, but throttled!!
+  warnings.warn(_str)
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.099521; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.099761
+                Broadcasting message: Steering_speed_0_completed
+                TASK 18:Steering_speed_0(18) is activated @ 0.099761!!
+==================== PERIOD 1 ==================== 
+
+(Traffic_light_detection_0)
+                TASK 0:Traffic_light_detection_0(0) THROTTLE -> READY!!
+                TASK 0:Traffic_light_detection_0(0) issued and start at 0.100001; 
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) issued and start at 0.100001; 
+(Semantic_segm_0)
+                TASK 19:Stereo_feature_enc_0(19) THROTTLE -> READY!!
+                TASK 19:Stereo_feature_enc_0(19) issued and start at 0.100001; 
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.103689 !!
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.103689; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.103689; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.103929
+                Broadcasting message: Steering_speed_0_completed
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.103929 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.103929!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) issued and resume at 0.103929; 
+(ImageBB_0)
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.107857 !!
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.107857; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.107857; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.108097
+                Broadcasting message: Steering_speed_0_completed
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.108097 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.108097!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) issued and resume at 0.108097; 
+(ImageBB_0)
+pop data:  (0,) 19 0.059561118754625 0.05 0.109564495040875
+(Semantic_segm_1)
+                TASK 20:Stereo_feature_enc_1(20) COMPLETED @ 0.109564
+                Broadcasting message: Stereo_feature_enc_1_completed
+                Semantic_segm_1 received event Stereo_feature_enc_1 @ 0.109564
+                TASK 22:Semantic_segm_1(22) is activated @ 0.109564!!
+                TASK 20:Stereo_feature_enc_1(20) is activated @ 0.109564!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Semantic_segm_1)
+                TASK 22:Semantic_segm_1(22) data ready, but throttled!!
+  warnings.warn(_str)
+pop data:  (0,) 19 0.059561118754625 0.05 0.109564495040875
+(Lane_drivable_area_det_0)
+                Optical_Flow_1 received event Stereo_feature_enc_1 @ 0.109564
+                TASK 27:Optical_Flow_1(27) is activated @ 0.109564!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Lane_drivable_area_det_0)
+                TASK 27:Optical_Flow_1(27) data ready, but throttled!!
+  warnings.warn(_str)
+pop data:  (0,) 19 0.059561118754625 0.05 0.109564495040875
+pop data:  (0,) 19 0.059561118754625 0.05 0.109564495040875
+(Lane_drivable_area_det_1)
+                Lane_drivable_area_det_1 received event Stereo_feature_enc_1 @ 0.109564
+                TASK 25:Lane_drivable_area_det_1(25) is activated @ 0.109564!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Lane_drivable_area_det_1)
+                TASK 25:Lane_drivable_area_det_1(25) data ready, but throttled!!
+  warnings.warn(_str)
+pop data:  (0,) 19 0.05956645529425 0.05 0.10956983158049999
+pop data:  (0,) 19 0.05956645529425 0.05 0.10956983158049999
+pop data:  (0,) 19 0.05956645529425 0.05 0.10956983158049999
+(ImageBB_0)
+                Depth_estimation_1 received event Stereo_feature_enc_1 @ 0.109570
+                TASK 29:Depth_estimation_1(29) is activated @ 0.109570!!
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.112025 !!
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.112025; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.112025; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.112265
+                Broadcasting message: Steering_speed_0_completed
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.112265 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.112265!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) issued and resume at 0.112265; 
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_0)
+                TASK 29:Depth_estimation_1(29) data ready, but throttled!!
+  warnings.warn(_str)
+(ImageBB_0)
+pop data:  (0,) 3 0.079733238537125 0.03333333333333333 0.1130706015745
+(ImageBB_1)
+                TASK 4:ImageBB_1(4) COMPLETED @ 0.113071
+                Broadcasting message: ImageBB_1_completed
+                MultiCameraFusion_1 received event ImageBB_1 @ 0.113071
+                TASK 7:MultiCameraFusion_1(7) is activated @ 0.113071!!
+                TASK 4:ImageBB_1(4) is activated @ 0.113071!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_1)
+                TASK 7:MultiCameraFusion_1(7) data ready, but throttled!!
+  warnings.warn(_str)
+(ImageBB_1)
+                TASK 7:MultiCameraFusion_1(7) THROTTLE -> READY!!
+                TASK 7:MultiCameraFusion_1(7) issued and start at 0.113140; 
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.116006 !!
+                TASK 29:Depth_estimation_1(29) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) issued and start at 0.116006; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.116006; 
+(Semantic_segm_1)
+                TASK 22:Semantic_segm_1(22) THROTTLE -> READY!!
+                TASK 22:Semantic_segm_1(22) issued and start at 0.116006; 
+(Lane_drivable_area_det_0)
+                TASK 27:Optical_Flow_1(27) THROTTLE -> READY!!
+                TASK 27:Optical_Flow_1(27) issued and start at 0.116006; 
+(Lane_drivable_area_det_1)
+                TASK 25:Lane_drivable_area_det_1(25) THROTTLE -> READY!!
+                TASK 25:Lane_drivable_area_det_1(25) issued and start at 0.116006; 
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.116187 !!
+                TASK 29:Depth_estimation_1(29) is THROTTLED @ 0.116187 !!
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.116187; 
+                TASK 29:Depth_estimation_1(29) issued and resume at 0.116187; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.116187; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.116427
+                Broadcasting message: Steering_speed_0_completed
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.116427 !!
+                TASK 29:Depth_estimation_1(29) is THROTTLED @ 0.116427 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.116427!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) issued and resume at 0.116427; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.116427; 
+(ImageBB_0)
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.120355 !!
+                TASK 29:Depth_estimation_1(29) is THROTTLED @ 0.120355 !!
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.120355; 
+                TASK 29:Depth_estimation_1(29) issued and resume at 0.120355; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.120355; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.120595
+                Broadcasting message: Steering_speed_0_completed
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.120595 !!
+                TASK 29:Depth_estimation_1(29) is THROTTLED @ 0.120595 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.120595!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) issued and resume at 0.120595; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.120595; 
+(ImageBB_0)
+(ImageBB_1)
+                TASK 7:MultiCameraFusion_1(7) COMPLETED @ 0.124128
+                Broadcasting message: MultiCameraFusion_1_completed
+                Pure_camera_path_head_1 received event MultiCameraFusion_1 @ 0.124128
+                TASK 10:Pure_camera_path_head_1(10) is activated @ 0.124128!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_1)
+                TASK 10:Pure_camera_path_head_1(10) data ready, but throttled!!
+  warnings.warn(_str)
+pop data:  (0,) 6 0.09079588517975 0.03333333333333333 0.12413324821712499
+(ImageBB_1)
+                TASK 10:Pure_camera_path_head_1(10) THROTTLE -> READY!!
+                TASK 10:Pure_camera_path_head_1(10) issued and start at 0.124139; 
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.124523 !!
+                TASK 29:Depth_estimation_1(29) is THROTTLED @ 0.124523 !!
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.124523; 
+                TASK 29:Depth_estimation_1(29) issued and resume at 0.124523; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.124523; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.124763
+                Broadcasting message: Steering_speed_0_completed
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.124763 !!
+                TASK 29:Depth_estimation_1(29) is THROTTLED @ 0.124763 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.124763!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) issued and resume at 0.124763; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.124763; 
+(ImageBB_0)
+(Traffic_light_detection_1)
+                TASK 1:Traffic_light_detection_1(1) COMPLETED @ 0.126636
+                Broadcasting message: Traffic_light_detection_1_completed
+                TASK 1:Traffic_light_detection_1(1) is activated @ 0.126636!!
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.128691 !!
+                TASK 29:Depth_estimation_1(29) is THROTTLED @ 0.128691 !!
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.128691; 
+                TASK 29:Depth_estimation_1(29) issued and resume at 0.128691; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.128691; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.128931
+                Broadcasting message: Steering_speed_0_completed
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.128931 !!
+                TASK 29:Depth_estimation_1(29) is THROTTLED @ 0.128931 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.128931!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) issued and resume at 0.128931; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.128931; 
+(ImageBB_0)
+(ImageBB_1)
+                TASK 10:Pure_camera_path_head_1(10) COMPLETED @ 0.130148
+                Broadcasting message: Pure_camera_path_head_1_completed
+                Prediction_1 received event Pure_camera_path_head_1 @ 0.130148
+                TASK 13:Prediction_1(13) is activated @ 0.130148!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_1)
+                TASK 13:Prediction_1(13) data ready, but throttled!!
+  warnings.warn(_str)
+pop data:  (0,) 9 0.09681550187674999 0.03333333333333333 0.130152864914125
+(ImageBB_1)
+                TASK 13:Prediction_1(13) THROTTLE -> READY!!
+                TASK 13:Prediction_1(13) issued and start at 0.131151; 
+pop data:  (0,) 12 0.0992809831835 0.03333333333333333 0.13261834622087498
+(ImageBB_1)
+                TASK 13:Prediction_1(13) COMPLETED @ 0.132618
+                Broadcasting message: Prediction_1_completed
+                Planning_1 received event Prediction_1 @ 0.132618
+                TASK 16:Planning_1(16) is activated @ 0.132618!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_1)
+                TASK 16:Planning_1(16) data ready, but throttled!!
+  warnings.warn(_str)
+(ImageBB_1)
+                TASK 16:Planning_1(16) THROTTLE -> READY!!
+                TASK 16:Planning_1(16) issued and start at 0.132688; 
+pop data:  (0,) 15 0.099515790927 0.03333333333333333 0.132853153964375
+(ImageBB_1)
+                TASK 16:Planning_1(16) COMPLETED @ 0.132853
+                Broadcasting message: Planning_1_completed
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.132858 !!
+                TASK 29:Depth_estimation_1(29) is THROTTLED @ 0.132858 !!
+                Steering_speed_0 received event Planning_1 @ 0.132858
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.132858; 
+                TASK 29:Depth_estimation_1(29) issued and resume at 0.132858; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.132858; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.133099
+                Broadcasting message: Steering_speed_0_completed
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.133099 !!
+                TASK 29:Depth_estimation_1(29) is THROTTLED @ 0.133099 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.133099!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) issued and resume at 0.133099; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.133099; 
+(Traffic_light_detection_1)
+(ImageBB_1)
+(Traffic_light_detection_1)
+                TASK 1:Traffic_light_detection_1(1) THROTTLE -> READY!!
+                TASK 1:Traffic_light_detection_1(1) issued and start at 0.133333; 
+(ImageBB_0)
+(ImageBB_1)
+                TASK 4:ImageBB_1(4) THROTTLE -> READY!!
+                TASK 4:ImageBB_1(4) issued and start at 0.133333; 
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.137021 !!
+                TASK 29:Depth_estimation_1(29) is THROTTLED @ 0.137021 !!
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.137021; 
+                TASK 29:Depth_estimation_1(29) issued and resume at 0.137021; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.137021; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.137261
+                Broadcasting message: Steering_speed_0_completed
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.137261 !!
+                TASK 29:Depth_estimation_1(29) is THROTTLED @ 0.137261 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.137261!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) issued and resume at 0.137261; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.137261; 
+(ImageBB_0)
+pop data:  (0,) 21 0.087706028736875 0.05 0.13770940502312498
+(Semantic_segm_1)
+                TASK 22:Semantic_segm_1(22) COMPLETED @ 0.137709
+                Broadcasting message: Semantic_segm_1_completed
+(Semantic_segm_0)
+                Lidar_based_3dDet_0 received event Semantic_segm_1 @ 0.137715
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.141189 !!
+                TASK 29:Depth_estimation_1(29) is THROTTLED @ 0.141189 !!
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.141189; 
+                TASK 29:Depth_estimation_1(29) issued and resume at 0.141189; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.141189; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.141429
+                Broadcasting message: Steering_speed_0_completed
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.141429 !!
+                TASK 29:Depth_estimation_1(29) is THROTTLED @ 0.141429 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.141429!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) issued and resume at 0.141429; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.141429; 
+(ImageBB_0)
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.145357 !!
+                TASK 29:Depth_estimation_1(29) is THROTTLED @ 0.145357 !!
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.145357; 
+                TASK 29:Depth_estimation_1(29) issued and resume at 0.145357; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.145357; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.145597
+                Broadcasting message: Steering_speed_0_completed
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.145597 !!
+                TASK 29:Depth_estimation_1(29) is THROTTLED @ 0.145597 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.145597!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) THROTTLE -> READY!!
+                TASK 29:Depth_estimation_1(29) issued and resume at 0.145597; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.145597; 
+(ImageBB_0)
+(ImageBB_2)
+                TASK 5:ImageBB_2(5) COMPLETED @ 0.146403
+                Broadcasting message: ImageBB_2_completed
+                MultiCameraFusion_2 received event ImageBB_2 @ 0.146403
+                TASK 8:MultiCameraFusion_2(8) is activated @ 0.146403!!
+                TASK 5:ImageBB_2(5) is activated @ 0.146403!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_2)
+                TASK 8:MultiCameraFusion_2(8) data ready, but throttled!!
+  warnings.warn(_str)
+pop data:  (0,) 4 0.1130706015745 0.03333333333333333 0.146407964611875
+(ImageBB_2)
+                TASK 8:MultiCameraFusion_2(8) THROTTLE -> READY!!
+                TASK 8:MultiCameraFusion_2(8) issued and start at 0.146477; 
+(Lane_drivable_area_det_0)
+                TASK 27:Optical_Flow_1(27) COMPLETED @ 0.147811
+                Broadcasting message: Optical_Flow_1_completed
+(ImageBB_0)
+                TASK 29:Depth_estimation_1(29) COMPLETED @ 0.148148
+                Broadcasting message: Depth_estimation_1_completed
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.148148 !!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) issued and resume at 0.148148; 
+(Lane_drivable_area_det_1)
+                TASK 25:Lane_drivable_area_det_1(25) COMPLETED @ 0.148148
+                Broadcasting message: Lane_drivable_area_det_1_completed
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.149525 !!
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.149525; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.149525; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.149765
+                Broadcasting message: Steering_speed_0_completed
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.149765 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.149765!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) issued and resume at 0.149765; 
+(Semantic_segm_1)
+(ImageBB_0)
+(Semantic_segm_1)
+                TASK 20:Stereo_feature_enc_1(20) THROTTLE -> READY!!
+                TASK 20:Stereo_feature_enc_1(20) issued and start at 0.150005; 
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.153687 !!
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.153687; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.153687; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.153927
+                Broadcasting message: Steering_speed_0_completed
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.153927 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.153927!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) issued and resume at 0.153927; 
+(ImageBB_0)
+pop data:  (0,) 7 0.1241279116775 0.03333333333333333 0.15746527471487498
+(ImageBB_2)
+                TASK 8:MultiCameraFusion_2(8) COMPLETED @ 0.157465
+                Broadcasting message: MultiCameraFusion_2_completed
+                Pure_camera_path_head_2 received event MultiCameraFusion_2 @ 0.157465
+                TASK 11:Pure_camera_path_head_2(11) is activated @ 0.157465!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_2)
+                TASK 11:Pure_camera_path_head_2(11) data ready, but throttled!!
+  warnings.warn(_str)
+(ImageBB_2)
+                TASK 11:Pure_camera_path_head_2(11) THROTTLE -> READY!!
+                TASK 11:Pure_camera_path_head_2(11) issued and start at 0.157476; 
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.157855 !!
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.157855; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.157855; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.158095
+                Broadcasting message: Steering_speed_0_completed
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.158095 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.158095!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) issued and resume at 0.158095; 
+(ImageBB_0)
+(Semantic_segm_0)
+                TASK 19:Stereo_feature_enc_0(19) COMPLETED @ 0.159563
+                Broadcasting message: Stereo_feature_enc_0_completed
+                Semantic_segm_0 received event Stereo_feature_enc_0 @ 0.159563
+                TASK 21:Semantic_segm_0(21) is activated @ 0.159563!!
+                TASK 19:Stereo_feature_enc_0(19) is activated @ 0.159563!!
+(Lane_drivable_area_det_0)
+                Lane_drivable_area_det_0 received event Stereo_feature_enc_0 @ 0.159563
+                TASK 24:Lane_drivable_area_det_0(24) is activated @ 0.159563!!
+(Lane_drivable_area_det_1)
+                Optical_Flow_0 received event Stereo_feature_enc_0 @ 0.159563
+                Depth_estimation_0 received event Stereo_feature_enc_0 @ 0.159563
+                TASK 28:Depth_estimation_0(28) is activated @ 0.159563!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Lane_drivable_area_det_1)
+                TASK 26:Optical_Flow_0(26) data ready, but throttled!!
+  warnings.warn(_str)
+(Traffic_light_detection_2)
+                Optical_Flow_0 received event Stereo_feature_enc_0 @ 0.159568
+                Depth_estimation_0 received event Stereo_feature_enc_0 @ 0.159568
+(ImageBB_0)
+                Optical_Flow_0 received event Stereo_feature_enc_0 @ 0.159568
+                TASK 26:Optical_Flow_0(26) is activated @ 0.159568!!
+pop data:  (0,) 20 0.109564495040875 0.05 0.159567871327125
+pop data:  (0,) 20 0.109564495040875 0.05 0.159567871327125
+pop data:  (0,) 20 0.109564495040875 0.05 0.159567871327125
+pop data:  (0,) 20 0.10956983158049999 0.05 0.15957320786675
+(Traffic_light_detection_2)
+                TASK 2:Traffic_light_detection_2(2) COMPLETED @ 0.159968
+                Broadcasting message: Traffic_light_detection_2_completed
+                TASK 2:Traffic_light_detection_2(2) is activated @ 0.159968!!
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.162023 !!
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.162023; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.162023; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.162263
+                Broadcasting message: Steering_speed_0_completed
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.162263 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.162263!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) issued and resume at 0.162263; 
+(ImageBB_0)
+pop data:  (0,) 10 0.1301475283745 0.03333333333333333 0.163484891411875
+(ImageBB_2)
+                TASK 11:Pure_camera_path_head_2(11) COMPLETED @ 0.163485
+                Broadcasting message: Pure_camera_path_head_2_completed
+                Prediction_2 received event Pure_camera_path_head_2 @ 0.163485
+                TASK 14:Prediction_2(14) is activated @ 0.163485!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_2)
+                TASK 14:Prediction_2(14) data ready, but throttled!!
+  warnings.warn(_str)
+(ImageBB_2)
+                TASK 14:Prediction_2(14) THROTTLE -> READY!!
+                TASK 14:Prediction_2(14) issued and start at 0.164483; 
+(ImageBB_2)
+                TASK 14:Prediction_2(14) COMPLETED @ 0.165950
+                Broadcasting message: Prediction_2_completed
+                Planning_2 received event Prediction_2 @ 0.165950
+                TASK 17:Planning_2(17) is activated @ 0.165950!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_2)
+                TASK 17:Planning_2(17) data ready, but throttled!!
+  warnings.warn(_str)
+pop data:  (0,) 13 0.13261834622087498 0.03333333333333333 0.16595570925824998
+(Traffic_light_detection_2)
+                TASK 28:Depth_estimation_0(28) THROTTLE -> READY!!
+                TASK 28:Depth_estimation_0(28) issued and start at 0.166004; 
+(Semantic_segm_0)
+                TASK 21:Semantic_segm_0(21) THROTTLE -> READY!!
+                TASK 21:Semantic_segm_0(21) issued and start at 0.166004; 
+(Lane_drivable_area_det_0)
+                TASK 24:Lane_drivable_area_det_0(24) THROTTLE -> READY!!
+                TASK 24:Lane_drivable_area_det_0(24) issued and start at 0.166004; 
+(Lane_drivable_area_det_1)
+                TASK 26:Optical_Flow_0(26) THROTTLE -> READY!!
+                TASK 26:Optical_Flow_0(26) issued and start at 0.166004; 
+(ImageBB_2)
+                TASK 17:Planning_2(17) THROTTLE -> READY!!
+                TASK 17:Planning_2(17) issued and start at 0.166020; 
+(ImageBB_2)
+                TASK 17:Planning_2(17) COMPLETED @ 0.166185
+                Broadcasting message: Planning_2_completed
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.166191 !!
+                Steering_speed_0 received event Planning_2 @ 0.166191
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.166191; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.166191; 
+pop data:  (0,) 16 0.132858490504 0.03333333333333333 0.16619585354137498
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.166431
+                Broadcasting message: Steering_speed_0_completed
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.166431 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.166431!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) issued and resume at 0.166431; 
+(Traffic_light_detection_2)
+(ImageBB_2)
+(Traffic_light_detection_2)
+                TASK 28:Depth_estimation_0(28) is THROTTLED @ 0.166671 !!
+                TASK 2:Traffic_light_detection_2(2) THROTTLE -> READY!!
+                TASK 28:Depth_estimation_0(28) THROTTLE -> READY!!
+                TASK 28:Depth_estimation_0(28) issued and resume at 0.166671; 
+                TASK 2:Traffic_light_detection_2(2) issued and start at 0.166671; 
+(ImageBB_0)
+(ImageBB_2)
+                TASK 5:ImageBB_2(5) THROTTLE -> READY!!
+                TASK 5:ImageBB_2(5) issued and start at 0.166671; 
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.170358 !!
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.170358; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.170358; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.170598
+                Broadcasting message: Steering_speed_0_completed
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.170598 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.170598!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) issued and resume at 0.170598; 
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.174521 !!
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.174521; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.174521; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.174761
+                Broadcasting message: Steering_speed_0_completed
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.174761 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.174761!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) issued and resume at 0.174761; 
+(ImageBB_0)
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.178689 !!
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.178689; 
+                TASK 3:ImageBB_0(3) issued and resume at 0.178689; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.178929
+                Broadcasting message: Steering_speed_0_completed
+                TASK 3:ImageBB_0(3) is THROTTLED @ 0.178929 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.178929!!
+                TASK 3:ImageBB_0(3) THROTTLE -> READY!!
+                TASK 3:ImageBB_0(3) issued and resume at 0.178929; 
+(ImageBB_0)
+(ImageBB_0)
+                TASK 3:ImageBB_0(3) COMPLETED @ 0.179735
+                Broadcasting message: ImageBB_0_completed
+                MultiCameraFusion_0 received event ImageBB_0 @ 0.179735
+                TASK 6:MultiCameraFusion_0(6) is activated @ 0.179735!!
+                TASK 3:ImageBB_0(3) is activated @ 0.179735!!
+pop data:  (0,) 5 0.14640262807225 0.03333333333333333 0.179739991109625
+(ImageBB_0)
+                TASK 6:MultiCameraFusion_0(6) THROTTLE -> READY!!
+                TASK 6:MultiCameraFusion_0(6) issued and start at 0.179809; 
+(ImageBB_0)
+                TASK 6:MultiCameraFusion_0(6) is THROTTLED @ 0.182857 !!
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 6:MultiCameraFusion_0(6) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.182857; 
+                TASK 6:MultiCameraFusion_0(6) issued and resume at 0.182857; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.183097
+                Broadcasting message: Steering_speed_0_completed
+                TASK 6:MultiCameraFusion_0(6) is THROTTLED @ 0.183097 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.183097!!
+                TASK 6:MultiCameraFusion_0(6) THROTTLE -> READY!!
+                TASK 6:MultiCameraFusion_0(6) issued and resume at 0.183097; 
+(ImageBB_0)
+(ImageBB_0)
+                TASK 6:MultiCameraFusion_0(6) is THROTTLED @ 0.187024 !!
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 6:MultiCameraFusion_0(6) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.187024; 
+                TASK 6:MultiCameraFusion_0(6) issued and resume at 0.187024; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.187265
+                Broadcasting message: Steering_speed_0_completed
+                TASK 6:MultiCameraFusion_0(6) is THROTTLED @ 0.187265 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.187265!!
+                TASK 6:MultiCameraFusion_0(6) THROTTLE -> READY!!
+                TASK 6:MultiCameraFusion_0(6) issued and resume at 0.187265; 
+(ImageBB_0)
+(Semantic_segm_0)
+                TASK 21:Semantic_segm_0(21) COMPLETED @ 0.187707
+                Broadcasting message: Semantic_segm_0_completed
+                Lidar_based_3dDet_0 received event Semantic_segm_0 @ 0.187707
+pop data:  (0,) 22 0.13771474156275 0.05 0.187718117849
+(Semantic_segm_0)
+                TASK 23:Lidar_based_3dDet_0(23) THROTTLE -> READY!!
+                TASK 23:Lidar_based_3dDet_0(23) issued and start at 0.190056; 
+(ImageBB_0)
+                TASK 6:MultiCameraFusion_0(6) COMPLETED @ 0.190797
+                Broadcasting message: MultiCameraFusion_0_completed
+                Pure_camera_path_head_0 received event MultiCameraFusion_0 @ 0.190797
+                TASK 9:Pure_camera_path_head_0(9) is activated @ 0.190797!!
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_0)
+                TASK 9:Pure_camera_path_head_0(9) data ready, but throttled!!
+  warnings.warn(_str)
+pop data:  (0,) 8 0.15746527471487498 0.03333333333333333 0.19080263775224998
+(ImageBB_0)
+                TASK 9:Pure_camera_path_head_0(9) THROTTLE -> READY!!
+                TASK 9:Pure_camera_path_head_0(9) issued and start at 0.190808; 
+(ImageBB_0)
+                TASK 9:Pure_camera_path_head_0(9) is THROTTLED @ 0.191187 !!
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 9:Pure_camera_path_head_0(9) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.191187; 
+                TASK 9:Pure_camera_path_head_0(9) issued and resume at 0.191187; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.191427
+                Broadcasting message: Steering_speed_0_completed
+                TASK 9:Pure_camera_path_head_0(9) is THROTTLED @ 0.191427 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.191427!!
+                TASK 9:Pure_camera_path_head_0(9) THROTTLE -> READY!!
+                TASK 9:Pure_camera_path_head_0(9) issued and resume at 0.191427; 
+(ImageBB_0)
+(Traffic_light_detection_0)
+                TASK 0:Traffic_light_detection_0(0) COMPLETED @ 0.193300
+                Broadcasting message: Traffic_light_detection_0_completed
+                TASK 0:Traffic_light_detection_0(0) is activated @ 0.193300!!
+(ImageBB_0)
+                TASK 9:Pure_camera_path_head_0(9) is THROTTLED @ 0.195355 !!
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 9:Pure_camera_path_head_0(9) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.195355; 
+                TASK 9:Pure_camera_path_head_0(9) issued and resume at 0.195355; 
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.195595
+                Broadcasting message: Steering_speed_0_completed
+                TASK 9:Pure_camera_path_head_0(9) is THROTTLED @ 0.195595 !!
+                TASK 18:Steering_speed_0(18) is activated @ 0.195595!!
+                TASK 9:Pure_camera_path_head_0(9) THROTTLE -> READY!!
+                TASK 9:Pure_camera_path_head_0(9) issued and resume at 0.195595; 
+(ImageBB_0)
+(ImageBB_0)
+                TASK 9:Pure_camera_path_head_0(9) COMPLETED @ 0.196817
+                Broadcasting message: Pure_camera_path_head_0_completed
+                Prediction_0 received event Pure_camera_path_head_0 @ 0.196817
+pop data:  (0,) 11 0.163484891411875 0.03333333333333333 0.19682225444925
+(Semantic_segm_0)
+                TASK 23:Lidar_based_3dDet_0(23) COMPLETED @ 0.197062
+                Broadcasting message: Lidar_based_3dDet_0_completed
+                TASK 23:Lidar_based_3dDet_0(23) is activated @ 0.197062!!
+pop data:  (0,) 23 0.097066319239125 0.1 0.197067735272
+(ImageBB_0)
+                Prediction_0 received event Lidar_based_3dDet_0 @ 0.197068
+                TASK 12:Prediction_0(12) is activated @ 0.197068!!
+pop data:  (0,) 23 0.097066319239125 0.1 0.197067735272
+(ImageBB_1)
+                Prediction_1 received event Lidar_based_3dDet_0 @ 0.197068
+pop data:  (0,) 23 0.097066319239125 0.1 0.197067735272
+(ImageBB_2)
+                Prediction_2 received event Lidar_based_3dDet_0 @ 0.197068
+(Lane_drivable_area_det_1)
+                TASK 26:Optical_Flow_0(26) COMPLETED @ 0.197810
+                Broadcasting message: Optical_Flow_0_completed
+(ImageBB_0)
+                TASK 12:Prediction_0(12) THROTTLE -> READY!!
+                TASK 12:Prediction_0(12) issued and start at 0.197815; 
+(Traffic_light_detection_2)
+                TASK 28:Depth_estimation_0(28) COMPLETED @ 0.198146
+                Broadcasting message: Depth_estimation_0_completed
+                TASK 2:Traffic_light_detection_2(2) is THROTTLED @ 0.198146 !!
+                TASK 28:Depth_estimation_0(28) is activated @ 0.198146!!
+                TASK 2:Traffic_light_detection_2(2) THROTTLE -> READY!!
+                TASK 2:Traffic_light_detection_2(2) issued and resume at 0.198146; 
+(Lane_drivable_area_det_0)
+                TASK 24:Lane_drivable_area_det_0(24) COMPLETED @ 0.198146
+                Broadcasting message: Lane_drivable_area_det_0_completed
+(ImageBB_0)
+                TASK 12:Prediction_0(12) COMPLETED @ 0.199282
+                Broadcasting message: Prediction_0_completed
+                Planning_0 received event Prediction_0 @ 0.199282
+                TASK 15:Planning_0(15) is activated @ 0.199282!!
+pop data:  (0,) 14 0.16595037271862498 0.03333333333333333 0.19928773575599998
+(ImageBB_0)
+                TASK 15:Planning_0(15) THROTTLE -> READY!!
+                TASK 15:Planning_0(15) issued and start at 0.199352; 
+(ImageBB_0)
+                TASK 15:Planning_0(15) COMPLETED @ 0.199517
+                Broadcasting message: Planning_0_completed
+                Steering_speed_0 received event Planning_0 @ 0.199517
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) THROTTLE -> READY!!
+                TASK 18:Steering_speed_0(18) issued and start at 0.199523; 
+pop data:  (0,) 17 0.16619051700175 0.03333333333333333 0.199527880039125
+(ImageBB_0)
+                TASK 18:Steering_speed_0(18) COMPLETED @ 0.199763
+                Broadcasting message: Steering_speed_0_completed
+                TASK 18:Steering_speed_0(18) is activated @ 0.199763!!
+(Traffic_light_detection_2)
+                TASK 2:Traffic_light_detection_2(2) is THROTTLED @ 0.199997 !!
+                TASK 2:Traffic_light_detection_2(2) THROTTLE -> READY!!
+                TASK 2:Traffic_light_detection_2(2) issued and resume at 0.199997; 
+==================== DRAIN ==================== 
+
+(Traffic_light_detection_0)
+(ImageBB_0)
+(Semantic_segm_0)
+(ImageBB_0)
+(ImageBB_0)
+pop data:  (0,) 19 0.1595625347875 0.05 0.20956591107375
+(Semantic_segm_1)
+                TASK 20:Stereo_feature_enc_1(20) COMPLETED @ 0.209566
+                Broadcasting message: Stereo_feature_enc_1_completed
+                Semantic_segm_1 received event Stereo_feature_enc_1 @ 0.209566
+pop data:  (0,) 19 0.1595625347875 0.05 0.20956591107375
+(Lane_drivable_area_det_0)
+                Optical_Flow_1 received event Stereo_feature_enc_1 @ 0.209566
+pop data:  (0,) 19 0.1595625347875 0.05 0.20956591107375
+pop data:  (0,) 19 0.1595625347875 0.05 0.20956591107375
+(Lane_drivable_area_det_1)
+                Lane_drivable_area_det_1 received event Stereo_feature_enc_1 @ 0.209566
+pop data:  (0,) 19 0.159567871327125 0.05 0.20957124761337498
+pop data:  (0,) 19 0.159567871327125 0.05 0.20957124761337498
+pop data:  (0,) 19 0.159567871327125 0.05 0.20957124761337498
+(ImageBB_0)
+                Depth_estimation_1 received event Stereo_feature_enc_1 @ 0.209571
+(ImageBB_0)
+(ImageBB_1)
+                TASK 4:ImageBB_1(4) COMPLETED @ 0.213067
+                Broadcasting message: ImageBB_1_completed
+                MultiCameraFusion_1 received event ImageBB_1 @ 0.213067
+pop data:  (0,) 3 0.17973465456999999 0.03333333333333333 0.21307201760737499
+(ImageBB_0)
+(ImageBB_0)
+pop data:  (0,) 6 0.19079730121262498 0.03333333333333333 0.22413466424999998
+(ImageBB_0)
+(Traffic_light_detection_1)
+                TASK 1:Traffic_light_detection_1(1) COMPLETED @ 0.226632
+                Broadcasting message: Traffic_light_detection_1_completed
+(ImageBB_0)
+pop data:  (0,) 9 0.196816917909625 0.03333333333333333 0.230154280947
+pop data:  (0,) 12 0.199282399216375 0.03333333333333333 0.23261976225375
+pop data:  (0,) 15 0.199517206959875 0.03333333333333333 0.23285456999725
+(Traffic_light_detection_1)
+(ImageBB_1)
+(Traffic_light_detection_1)
+(ImageBB_0)
+(ImageBB_1)
+(ImageBB_0)
+pop data:  (0,) 21 0.18770744476975 0.05 0.237710821056
+(ImageBB_0)
+(ImageBB_0)
+pop data:  (0,) 4 0.21306668106774998 0.03333333333333333 0.24640404410512498
+(ImageBB_2)
+                TASK 5:ImageBB_2(5) COMPLETED @ 0.246404
+                Broadcasting message: ImageBB_2_completed
+                MultiCameraFusion_2 received event ImageBB_2 @ 0.246404
+(Semantic_segm_1)
+(ImageBB_0)
+(Semantic_segm_1)
+(ImageBB_0)
+(ImageBB_0)
+pop data:  (0,) 20 0.20956591107375 0.05 0.25956928736
+pop data:  (0,) 20 0.20956591107375 0.05 0.25956928736
+pop data:  (0,) 20 0.20956591107375 0.05 0.25956928736
+pop data:  (0,) 20 0.20957124761337498 0.05 0.259574623899625
+(ImageBB_0)
+(Traffic_light_detection_2)
+                TASK 2:Traffic_light_detection_2(2) COMPLETED @ 0.266640
+                Broadcasting message: Traffic_light_detection_2_completed
+(Traffic_light_detection_2)
+(ImageBB_2)
+(Traffic_light_detection_2)
+(ImageBB_0)
+(ImageBB_2)
+(ImageBB_0)
+(ImageBB_0)
+(ImageBB_0)
+pop data:  (0,) 5 0.24640404410512498 0.03333333333333333 0.2797414071425
+(ImageBB_0)
+(ImageBB_0)
+(ImageBB_0)
+(ImageBB_0)
+pop data:  (0,) 23 0.197067735272 0.1 0.297069151304875
+pop data:  (0,) 23 0.197067735272 0.1 0.297069151304875
+pop data:  (0,) 23 0.197067735272 0.1 0.297069151304875

@@ -95,7 +95,7 @@ class Scheduler(object):
 
         # buffer
         self.buffer:Buffer = Buffer()
-        # monitor the deadline: (accending)
+        # monitor the deadline: (ascending)
         self.ready_queue:TaskQueue = TaskQueue(sort_f=lambda x: x.deadline, decending=False)
         
         # Running queue: 

@@ -21,7 +21,7 @@ from task_agent import ProcessInt
 # 'Throuput factor (S)', 'Thread factor (S)', 'Min required cores', 'Timing_flag', 'Max required Cores', 'RDA./Req.', 'Resource Type', 'Pre-assigned', 'Priority'
 
 task_graph_srcs = {
-    "Entry": ["surr_view_camera_pub", "streo_camera_pub", "LiDAR_pub"],
+    # "Entry": ["surr_view_camera_pub", "streo_camera_pub", "LiDAR_pub"],
     "surr_view_camera_pub": ["ImageBB"],
     "streo_camera_pub": ["Stereo_feature_enc", "Traffic_light_detection"],
     "LiDAR_pub": ["Lidar_based_3dDet"],
@@ -40,7 +40,7 @@ task_graph_ops = {
     "Planning": ["Steering_speed"],
     "Steering_speed": ["Sink_control"],
     "Stereo_feature_enc": ["Semantic_segm", "Lane_drivable_area_det", "Optical_Flow", "Depth_estimation"],
-    "Semantic_segm": ["Lidar_based_3dDet"],
+    "Semantic_segm": ["Lidar_based_3dDet","Sink_screen"],
     "Lidar_based_3dDet": ["Prediction"],
     "Lane_drivable_area_det": ["Sink_screen"],
     "Optical_Flow": ["Sink_screen"],
@@ -50,21 +50,21 @@ task_graph_ops = {
 __all__ = ['task_graph', 'affinity']
 
 
-task_graph = {   
-    "Traffic_light_detection": [],
-    "ImageBB": ["MultiCameraFusion"],
-    "MultiCameraFusion": ["Pure_camera_path_head"],
-    "Pure_camera_path_head": ["Prediction"],
-    "Prediction": ["Planning"],
-    "Planning": ["Steering_speed"],
-    "Steering_speed": [],
-    "Stereo_feature_enc": ["Semantic_segm", "Lane_drivable_area_det", "Optical_Flow", "Depth_estimation"],
-    "Semantic_segm": ["Lidar_based_3dDet"],
-    "Lidar_based_3dDet": ["Prediction"],
-    "Lane_drivable_area_det": [],
-    "Optical_Flow": [],
-    "Depth_estimation": [],
-}
+# task_graph = {   
+#     "Traffic_light_detection": [],
+#     "ImageBB": ["MultiCameraFusion"],
+#     "MultiCameraFusion": ["Pure_camera_path_head"],
+#     "Pure_camera_path_head": ["Prediction"],
+#     "Prediction": ["Planning"],
+#     "Planning": ["Steering_speed"],
+#     "Steering_speed": [],
+#     "Stereo_feature_enc": ["Semantic_segm", "Lane_drivable_area_det", "Optical_Flow", "Depth_estimation"],
+#     "Semantic_segm": ["Lidar_based_3dDet"],
+#     "Lidar_based_3dDet": ["Prediction"],
+#     "Lane_drivable_area_det": [],
+#     "Optical_Flow": [],
+#     "Depth_estimation": [],
+# }
 
 # affnity of a task is set to be a list that contains user-specified tasks, itself, it predecessors and its successors.
 affinity = {
@@ -262,6 +262,125 @@ def vis_task_static_timeline(task_list, show=False, save=False, save_path="task_
             save_path = save_path + ".pdf"        
             plt.savefig(save_path, bbox_inches='tight', **kwargs)
 
+def creat_logical_graph(srcs:Dict[str, List[str]], ops:Dict[str, List[str]], sinks:Dict[str, List[str]]): 
+    """
+    Logical Graph:
+        A logical graph is a directed graph where the nodes are Operators and the edges define 
+        input/output-relationships of the operators and correspond to data streams or data sets. 
+    Function: 
+        create logical graph from srcs, ops, sinks
+    """
+    logical_graph_nx = nx.DiGraph()
+    for src_n in srcs:
+        logical_graph_nx.add_node(src_n, type="src")
+        for op_n in srcs[src_n]:
+            logical_graph_nx.add_node(op_n)
+            logical_graph_nx.add_edge(src_n, op_n, type="control")
+    for op_n in ops:
+        logical_graph_nx.add_node(op_n, type="op")
+        for sink_n in ops[op_n]:
+            logical_graph_nx.add_node(sink_n)
+            logical_graph_nx.add_edge(op_n, sink_n, type="data")
+    for sink_n in sinks:
+        logical_graph_nx.add_node(sink_n, type="sink")
+        for op_n in sinks[sink_n]:
+            logical_graph_nx.add_node(op_n)
+            logical_graph_nx.add_edge(op_n, sink_n, type="data")
+    return logical_graph_nx
+
+def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int):
+    """
+    Physical Graph:
+        A physical graph is the result of translating a Logical Graph for execution in a distributed runtime. 
+        The nodes are Tasks and the edges indicate input/output-relationships or partitions of data streams or data sets.
+    """
+    physical_graph_nx = nx.DiGraph()
+
+    # extract the parallelism of each node
+    df = pd.read_csv("profiling.csv", sep=",", index_col=0)
+    node_parall_dict = {}
+    for node_n in df.index:
+        node_attr = df.loc[node_n].to_dict()
+        factor = node_attr["Throuput factor (S)"]
+        freq = int(node_attr["Freq."]/f_gcd)
+        node_parall_dict[node_n] = [factor, freq]
+
+
+    for node_n, t in logical_graph_nx.nodes(data="type"):
+        if node_n in df.index:
+            node_attr = df.loc[node_n].to_dict()
+            factor = node_attr["Throuput factor (S)"]
+            for i in range(factor):
+                node_name = node_n+"_"+str(i)
+                physical_graph_nx.add_node(node_name, type=t)
+                # add control dependency
+                if i < factor-1:
+                    # physical_graph_nx.add_edge(node_name, node_n+"_"+str(i+1))
+                    pass
+        else:
+            physical_graph_nx.add_node(node_n, type=t)
+
+    # add data dependency, rescale the parallelism
+    for pred_n, succ_n, edge_attr in logical_graph_nx.edges(data=True):
+        if pred_n in df.index and succ_n in df.index:
+            pred_factor, pred_freq = node_parall_dict[pred_n]
+            succ_factor, succ_freq = node_parall_dict[succ_n]
+            pred_num_per_group = int(np.ceil(pred_freq / pred_factor))
+            succ_num_per_group = int(np.ceil(succ_freq / succ_factor))
+            if pred_factor == succ_factor:
+                for i in range(pred_factor):
+                    pred_node_name = pred_n+"_"+str(i)
+                    succ_node_name = succ_n+"_"+str(i)
+                    physical_graph_nx.add_edge(pred_node_name, succ_node_name, type="data", reDistPattn="one2one")
+            elif pred_factor < succ_factor:
+                for idx_succ_freq in range(succ_freq):
+                    # idx in succ_freq -> index in pred_freq -> index in pred_factor
+                    if idx_succ_freq % succ_num_per_group==0:
+                        idx_succ_factor = int(idx_succ_freq // succ_num_per_group)
+                        succ_job_name = succ_n+"_"+str(idx_succ_factor)
+                        
+                        # just like quantization
+                        succ_t = idx_succ_freq/succ_freq
+                        idx_succ_freq = int(succ_t*pred_freq)
+
+                        idx_pred_factor = int(idx_succ_freq // pred_num_per_group)
+                        pre_job_name = pred_n+"_"+str(idx_pred_factor)
+
+                        # add attribute "reDistPattn", to classify the redistributing pattern
+                        # downstream <- upstream
+                        physical_graph_nx.add_edge(pre_job_name, succ_job_name, type="data", reDistPattn="upscaling")
+            else:
+                for idx_pred_freq in range(pred_freq):
+                    # idx in pred_freq -> index in succ_freq -> index in succ_factor
+                    if idx_pred_freq % pred_num_per_group==0:
+                        idx_pred_factor = int(idx_pred_freq // pred_num_per_group)
+                        pred_job_name = pred_n+"_"+str(idx_pred_factor)
+                        
+                        # just like quantization
+                        pred_t = idx_pred_freq/pred_freq
+                        idx_pred_freq = int(pred_t*succ_freq)
+
+                        idx_succ_factor = int(idx_pred_freq // succ_num_per_group)
+                        succ_job_name = succ_n+"_"+str(idx_succ_factor)
+
+                        # add attribute "reDistPattn", to classify the redistributing pattern
+                        # downstream -> upstream
+                        physical_graph_nx.add_edge(pred_job_name, succ_job_name, type="data", reDistPattn="downscaling")
+        elif pred_n in df.index and succ_n not in df.index:
+            pred_factor, pred_freq = node_parall_dict[pred_n]
+            for i in range(pred_factor):
+                pred_node_name = pred_n+"_"+str(i)
+                physical_graph_nx.add_edge(pred_node_name, succ_n, type="control", reDistPattn="none")
+        elif pred_n not in df.index and succ_n in df.index:
+            succ_factor, succ_freq = node_parall_dict[succ_n]
+            for i in range(succ_factor):
+                succ_node_name = succ_n+"_"+str(i)
+                physical_graph_nx.add_edge(pred_n, succ_node_name, type="control", reDistPattn="none")
+        else:
+            physical_graph_nx.add_edge(pred_n, succ_n, type="control", reDistPattn="none")
+    
+    return physical_graph_nx
+
 def creat_jobTask_graph(task_graph:Dict[str, List[str]], f_gcd, plot:bool=False):
     # create task graph from task_graph
     task_graph_nx = nx.DiGraph(task_graph)
@@ -402,7 +521,8 @@ def load_taskint(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]
                 RDA_size=task_attr['RDA./Req.'], main_size=task_attr['Cores/Req.'], seq_cpu_time=task_attr["Flops on path"]/1e3,
                 op_cpu_time=task_attr["Flops on path"]/1e3, op_io_time=1e-6,
                 criti_flag="soft" if task_attr["Criti_flag"]=='S' else "hard", 
-                cbs_en=True # if task_attr["Cbs_en"]=='Y' else False, 
+                cbs_en=True, # if task_attr["Cbs_en"]=='Y' else False, 
+                trigger_mode=task_attr["Trigger_mode"],
             )
             task.freq = task_attr["Freq."]
             # initialize task affinity list
@@ -458,28 +578,25 @@ def init_depen(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[T
     
     for job_n, job in taskJobs.items():
 
-        # name parse
-        thread_n = job_n.split('_')[-1]
-        task_base_name = job_n.replace("_"+thread_n, "")
-        thread_n = int(thread_n)
-
         # group the edge with attribution "reDistPattn" eq "downscaling"
         for pre_n, datadict in job_graph_nx.pred[job_n].items():
             dep_t = datadict["type"]
-            attr = copy.deepcopy(datadict).update({"valid":False})
+            attr = copy.deepcopy(datadict)
+            attr.update({"valid":False})
             if dep_t == "data":
-                job.pred_data.update({pre_n:False})
+                job.pred_data.update({pre_n:attr})
             elif dep_t == "control":
-                job.pred_ctrl.update({pre_n:False})
+                job.pred_ctrl.update({pre_n:attr})
             else:
                 raise Exception("Unknown dependency type")
         for succ_n, datadict in job_graph_nx.succ[job_n].items():
             dep_t = datadict["type"]
-            attr = copy.deepcopy(datadict).update({"valid":False})
+            attr = copy.deepcopy(datadict)
+            attr.update({"valid":False})
             if dep_t == "data":
-                job.succ_data.update({succ_n:False})
+                job.succ_data.update({succ_n:attr})
             elif dep_t == "control":
-                job.succ_ctrl.update({succ_n:False})
+                job.succ_ctrl.update({succ_n:attr})
             else:
                 raise Exception("Unknown dependency type")
         
@@ -526,11 +643,11 @@ def push_task_into_scheduling_table(tasks: Union[List[TaskInt], Dict[str, TaskIn
             pid += 1
             init_p_list.append(p)
     
-    # monitor the wake up time: (accending)
+    # monitor the wake up time: (ascending)
     # activate by the new period or the arrival of the blocked io data
     # TODO: add a queue update logic
     wait_queue:TaskQueue = TaskQueue(init_p_list, sort_f=lambda x: x.release_time, decending=False)
-    # monitor the deadline: (accending)
+    # monitor the deadline: (ascending)
     ready_queue:TaskQueue = TaskQueue(sort_f=lambda x: x.deadline, decending=False)
     # monitor the deadline for pre-emption: (decending)
     running_queue:TaskQueue = TaskQueue(sort_f=lambda x: x.deadline)
@@ -724,11 +841,11 @@ def push_task_into_scheduling_table_cyclic_preemption_disable(tasks: Union[List[
                 p.task.id, p.task.name, p.pid, p.totcpu, p.release_time, p.deadline))
     pid_max = pid
     
-    # monitor the wake up time: (accending)
+    # monitor the wake up time: (ascending)
     # activate by the new period or the arrival of the blocked io data
     # TODO: add a queue update logic
     wait_queue:TaskQueue = TaskQueue(init_p_list, sort_f=lambda x: x.release_time, decending=False)
-    # monitor the deadline: (accending)
+    # monitor the deadline: (ascending)
     ready_queue:TaskQueue = TaskQueue(sort_f=lambda x: x.deadline, decending=False)
     # monitor the deadline for pre-emption: (decending)
     running_queue:TaskQueue = TaskQueue(sort_f=lambda x: x.deadline)
@@ -986,11 +1103,11 @@ def push_task_into_bins(init_p_list: List[TaskInt], affinity, #SchedTab: Schedul
     pid_idx = {_p.task.name:_p.pid for _p in init_p_list}
     pid_max = max(pid_idx.values())
     
-    # monitor the wake up time: (accending)
+    # monitor the wake up time: (ascending)
     # activate by the new period or the arrival of the blocked io data
     # TODO: add a queue update logic
     wait_queue:TaskQueue = TaskQueue(init_p_list, sort_f=lambda x: x.release_time, decending=False)
-    # monitor the deadline: (accending)
+    # monitor the deadline: (ascending)
     ready_queue:TaskQueue = TaskQueue(sort_f=lambda x: x.deadline, decending=False)
     # monitor the deadline for pre-emption: (decending)
     running_queue:TaskQueue = TaskQueue(sort_f=lambda x: x.deadline)
@@ -1005,7 +1122,7 @@ def push_task_into_bins(init_p_list: List[TaskInt], affinity, #SchedTab: Schedul
             return alloc_slot_s
         else:
             return alloc_slot_s[0]
-    # monitor the issue time: (accending)
+    # monitor the issue time: (ascending)
     issue_list:TaskQueue = TaskQueue(sort_f=issue_sort_fn, decending=False)
     completed_list:List[ProcessInt] = []
     miss_list:List[ProcessInt] = []
@@ -1818,24 +1935,24 @@ if __name__ == "__main__":
     parser.add_argument("--bin_pack", action="store_true", help="plot the task timeline")
     parser.add_argument("--test_all", default=False, help="test all the task")
     args = parser.parse_args() 
-    task_dict = load_taskint(args.verbose)
+    glb_n_task_dict = load_taskint(args.verbose)
 
     if args.test_case == "all":
         args.test_all = True
-    f_gcd = np.gcd.reduce([task_dict[task].freq for task in task_dict])
-    f_max = max([task_dict[task].freq for task in task_dict])
+    f_gcd = np.gcd.reduce([glb_n_task_dict[task].freq for task in glb_n_task_dict])
+    f_max = max([glb_n_task_dict[task].freq for task in glb_n_task_dict])
     hyper_p = 1/f_gcd
-    sim_step = min([task_dict[task].exp_comp_t for task in task_dict])/32
+    sim_step = min([glb_n_task_dict[task].exp_comp_t for task in glb_n_task_dict])/32
 
     if args.test_case == "timeline" or args.test_all:
-        vis_task_static_timeline(list(task_dict.values()), save=True, save_path="task_static_timeline_cyclic.pdf", hyper_p=hyper_p, n_p=1, warmup=False, drain=True, )
+        vis_task_static_timeline(list(glb_n_task_dict.values()), save=True, save_path="task_static_timeline_cyclic.pdf", hyper_p=hyper_p, n_p=1, warmup=False, drain=True, )
     elif args.test_case == "liveness" or args.test_all:
-        vis_task_static_timeline(list(task_dict.values()), save=True, save_path="task_liveness_timeline_cyclic.svg", 
+        vis_task_static_timeline(list(glb_n_task_dict.values()), save=True, save_path="task_liveness_timeline_cyclic.svg", 
         hyper_p=hyper_p, n_p=1, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
         txt_size=40, tick_dens=4)
     elif args.test_case == "bin_pack" or args.test_all:
         # push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, 256, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
-        init_p_list = create_init_p_list(task_dict, args.verbose)
+        init_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
         bin_list, init_p_list = push_task_into_bins(init_p_list, affinity, 256, sim_step*2, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
         from scheduling_table import get_task_layout_compact
         get_task_layout_compact(bin_list, init_p_list, save= True, time_step= sim_step,
@@ -1864,10 +1981,48 @@ if __name__ == "__main__":
             exit()
 
     elif args.test_case == "graph" or args.test_all:
-        task_graph_nx, job_graph_nx = creat_jobTask_graph(task_graph, int(f_gcd), plot=True)
-        init_depen(task_dict, job_graph_nx, verbose=args.verbose)
+        # task_graph_nx, job_graph_nx = creat_jobTask_graph(task_graph, int(f_gcd), plot=True)
+        # init_depen(task_dict, job_graph_nx, verbose=args.verbose)
+        logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
+        physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd))
+        init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
+
+        node_color_map = {"op": "red", "sink": "blue", "src": "green"}
+        edge_color_map = {"data": "red", "control": "blue"}
+        node_colors = [node_color_map[d] for n, d in logical_graph_nx.nodes(data="type")]
+        edge_colors = [edge_color_map[d] for u,v,d in logical_graph_nx.edges(data="type")]
+        fig = plt.figure(figsize=(20, 10))
+        ax1 = fig.add_subplot(121)
+        ax2 = fig.add_subplot(122)
+        for layer, nodes in enumerate(nx.topological_generations(logical_graph_nx)):
+            for node in nodes:
+                logical_graph_nx.nodes[node]["layer"] = layer
+        pos = nx.multipartite_layout(logical_graph_nx, subset_key="layer")
+        # text with 45 degree rotation
+        nx.draw(logical_graph_nx, pos, with_labels=False, node_size=100, node_color=node_colors, edge_color=edge_colors, font_size=10, ax=ax1)
+        text = nx.draw_networkx_labels(logical_graph_nx, pos, font_size=10, ax=ax1)
+        for _, t in text.items():
+            t.set_rotation(30)
+        fig.tight_layout()
+
+
+        node_colors = [node_color_map[d] for n, d in physical_graph_nx.nodes(data="type")]
+        edge_colors = [edge_color_map[d] for u,v,d in physical_graph_nx.edges(data="type")]
+        for layer, nodes in enumerate(nx.topological_generations(physical_graph_nx)):
+            # `multipartite_layout` expects the layer as a node attribute, so add the
+            # numeric layer value as a node attribute
+            for node in nodes:
+                physical_graph_nx.nodes[node]["layer"] = layer
+        pos = nx.multipartite_layout(physical_graph_nx, subset_key="layer")
+        nx.draw(physical_graph_nx, pos, with_labels=False, node_size=100, node_color=node_colors, edge_color=edge_colors, font_size=10, ax=ax2)
+        text = nx.draw_networkx_labels(physical_graph_nx, pos, font_size=10, ax=ax2)
+        for _, t in text.items():
+            t.set_rotation(30)
+        fig.tight_layout()
+        plt.savefig("jobTask_graph.pdf", format="pdf")
+
     elif args.test_case == "dynamic" or args.test_all:
-        init_p_list = create_init_p_list(task_dict, args.verbose)
+        init_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
         try:
             # load the bin_list and the init_p_list
             with open("bin_list.pkl", "rb") as f:
@@ -1879,26 +2034,39 @@ if __name__ == "__main__":
             # print("bin_list.pkl or init_p_list.pkl not found")
             bin_list, _ = push_task_into_bins(init_p_list, affinity, 256, sim_step*2, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
 
-        task_graph_nx, job_graph_nx = creat_jobTask_graph(task_graph, int(f_gcd), plot=False)
-        init_depen(init_p_list, job_graph_nx)
+        logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
+        physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd))
+        
+        init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
         from allocator_agent import cyclic_sched
         from scheduler_agent import Scheduler 
         from monitor_agent import Monitor
         from spec import Spec
+        from msg_dispatcher import MsgDispatcher
+        # from message_agent import Message
+        
         rsc_recoder_list = [{} for _ in range(len(bin_list))]
         rsc_recoder_his_list = [{} for _ in range(len(bin_list))]
         scheduler_list = [Scheduler() for _ in range(len(bin_list))]
         monitor_list = [Monitor() for _ in range(len(bin_list))]
         task_spec = Spec(0.1, [1 for _ in init_p_list]) 
+        process_dict_list = [{pid:init_p_list[pid] for pid in _SchedTab.index_occupy_by_id()} for _SchedTab in bin_list]
         rsc_list = [Resource_model_int(size=sched_tab.scheduling_table[0].size) for sched_tab in bin_list]
         curr_cfg_list = [Resource_model_int(size=sched_tab.scheduling_table[0].size) for sched_tab in bin_list]
-
+        # msg_pipe = Message()
+        msg_dispatcher = MsgDispatcher(len(bin_list))
+        # filter the processes with trigger_mode is not "N"
+        sim_triggered_list = [[init_p_list[pid] for pid in _bin.index_occupy_by_id().keys() if init_p_list[pid].task.trigger_mode!='N'] for _bin in bin_list]
+        for _bin, _sim_triggered_list in zip(bin_list, sim_triggered_list):
+            _bin.sim_triggered_list = _sim_triggered_list
+            print("bin: ", _bin.id, "sim_triggered_list: ", [p.task.name for p in _sim_triggered_list])
 
         print("sim_step: ", sim_step)
         cyclic_sched(task_spec, affinity, 
                 bin_list, scheduler_list, monitor_list,
                 rsc_list, curr_cfg_list, 
                 rsc_recoder_list, rsc_recoder_his_list,
-                256, sim_step*2, init_p_list,
-                sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
+                256, sim_step*2, process_dict_list, init_p_list,
+                sim_step, hyper_p, 1, msg_dispatcher,
+                args.verbose, warmup=True, drain=True)
         

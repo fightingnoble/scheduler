@@ -4,6 +4,9 @@ import numpy as np
 from task_agent import TaskInt
 from spec import Spec
 from buffer import Buffer, Data
+from msg_dispatcher import MsgDispatcher, msg_filter
+from message_agent import Message
+from multiprocessing import Queue
 
 class AllocatorInt(object):
     def __init__(self, ):
@@ -227,11 +230,12 @@ def sched_step_cyclic_dense(task_spec:Spec, affinity,
 
 
 
-def sched_step(task_spec:Spec, affinity, 
+def sched_step(task_spec:Spec, affinity, msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
                 bin_list:List[SchedulingTableInt], scheduler_list: List[Scheduler], monitor_list:List[Monitor],
                 rsc_list:List[Resource_model_int], curr_cfg_list:List[Resource_model_int],
                 budget_recoder_list:List[dict], rsc_recoder_his_list:List[Dict[int, LRUCache]], 
-                total_cores:int, quantumSize, n_slot, init_p_list:List[ProcessInt], 
+                total_cores:int, quantumSize, n_slot, 
+                process_dict_list:List[ProcessInt],  glb_p_list:List[ProcessInt],
                 timestep, hyper_p, n_p=1, verbose=False, *, animation=False, warmup=False, drain=False,):
         
     """
@@ -251,6 +255,7 @@ def sched_step(task_spec:Spec, affinity,
     # waiting: waiting for data
     # active: task is in its liveness interval
 
+
     event_range = hyper_p * (n_p+warmup)
     sim_range = hyper_p * (n_p+warmup+drain)
     sim_slot_num = int(sim_range/timestep)
@@ -258,12 +263,13 @@ def sched_step(task_spec:Spec, affinity,
 
     task_spec_bk:Spec = copy.deepcopy(task_spec)
     curr_t = n_slot * timestep
-    task_dict = {p.task.name:p for p in init_p_list}
+    glb_name_p_dict = {p.task.name:p for p in glb_p_list}
 
     # spatial management
     # Each partition maintains a scheduling table, a task monitor, and a scheduler. 
-    for res_cfg, curr_cfg, _SchedTab, sched, monitor, budget_recoder, rsc_recoder_his in zip(rsc_list, curr_cfg_list, bin_list, 
-                                                                scheduler_list, monitor_list, budget_recoder_list, rsc_recoder_his_list):
+    for res_cfg, curr_cfg, _SchedTab, sched, monitor, budget_recoder, rsc_recoder_his, msg_queue, process_dict in zip(rsc_list, curr_cfg_list, bin_list, 
+                                                                scheduler_list, monitor_list, budget_recoder_list, rsc_recoder_his_list
+                                                                , msg_dispatcher.queues, process_dict_list):
 
         # print(f"	Bin {_SchedTab.id:d}:")
         # extract scheudler, including queues and lists from scheduler_list
@@ -278,13 +284,16 @@ def sched_step(task_spec:Spec, affinity,
         inactive_list:List[ProcessInt]
         active_list:List[ProcessInt]
         curr_cfg:Resource_model_int
+        process_dict: Dict[int, ProcessInt]
+        glb_name_p_dict: Dict[str, ProcessInt]
+        msg_queue:Queue
         DEBUG_FG = False
 
         weight_wait_queue, ready_queue, running_queue, \
         miss_list, preempt_list, issue_list, completed_list, throttle_list,\
             inactive_list, active_list = sched.get_queues()
 
-        buffer = sched.get_buffer()
+        buffer:Buffer = sched.get_buffer()
         
         # extract the scheduling table
         tab_temp_size = len(_SchedTab.scheduling_table)
@@ -297,7 +306,7 @@ def sched_step(task_spec:Spec, affinity,
 
         # (running_queue)
         # check running tasks
-        bin_event_flg = check_complete(budget_recoder, timestep, curr_t, task_dict, res_cfg, running_queue, completed_list, inactive_list, buffer, bin_event_flg, bin_name)
+        bin_event_flg = check_complete(budget_recoder, timestep, msg_dispatcher, curr_t, res_cfg, running_queue, completed_list, inactive_list, buffer, bin_event_flg, bin_name)
 
         # check whether the task is miss
         # TODO: other ready tasks shoud be checked
@@ -308,10 +317,55 @@ def sched_step(task_spec:Spec, affinity,
         bin_event_flg = check_throttle(budget_recoder, curr_t, res_cfg, weight_wait_queue, ready_queue, running_queue, miss_list, 
                             throttle_list, active_list, inactive_list, bin_event_flg, bin_name)
 
+        # spill out the data of type "output", which is expired
+        buffer.pop_timeout("output", curr_t, True)
+
+        # simulate the event trigger
+        for _p in _SchedTab.sim_triggered_list:
+            trigger_state = _p.sim_trigger(curr_t, timestep)
+            if trigger_state and not bin_event_flg and curr_t >= _p.task.ERT:
+                bin_event_flg = True
+                print(f"({bin_name})")
+
+        
+        # tackle the event in message pipe, set the valid flag in pred_data of each process
+        # update barrier status
+        # update the data status
+        # if not msg_pipe.empty():
+
+        # clear the message pipe
+        msg_list = []
+        while not msg_queue.empty():
+            msg_list.append(msg_queue.get())
+        if msg_list:
+            for _p in process_dict.values():
+                for key, attr in _p.pred_data.items():
+                    # if msg_pipe.filter(key):
+                    if msg_filter(msg_list, key):
+                        attr["valid"] = True
+                        attr["time"] = curr_t
+                        # TODO: fix the event time as the actual time
+                        if not bin_event_flg:
+                            bin_event_flg = True
+                            print(f"({bin_name})")
+                        print(f"		{_p.task.name} received event {key:s} @ {curr_t:.6f}")
+                        buffer.put(Data(glb_name_p_dict[key].pid, 1, (0,), "output", glb_name_p_dict[key].io_time, curr_t, 1/glb_name_p_dict[key].task.freq))
+
         # check release
         # check the dependencies of the tasks in inactive list
         # if the dependencies are satisfied, move the task to the wait queue
-        bin_event_flg = chk_release(timestep, event_range, curr_t, inactive_list, active_list, bin_event_flg, bin_name) 
+        bin_event_flg = chk_release(event_range, curr_t, inactive_list, active_list, bin_event_flg, bin_name) 
+
+        # # instruction prefetching
+        # cfg_slot_s, cached_cfg, cfg_slot_num  = _SchedTab.sparse_list[_SchedTab.sparse_idx_next]         
+        
+        # # if the pointer reaches the start of the next cfg, update the cfg
+        # if tab_pointer == cfg_slot_s:
+        #     # print(f"		cfg of bin {bin_name:s} is updated @ {curr_t:.6f}")
+        #     curr_cfg.update(cached_cfg)
+        #     # move the pointer to the next cfg
+        #     _SchedTab.idx_plus_1()
+            
 
         # logic for updating the cfg and replenish the budget
         if curr_cfg.slot_e < n_slot or n_slot == 0: 
@@ -333,9 +387,11 @@ def sched_step(task_spec:Spec, affinity,
                 print(f"bin {bin_name:s} {curr_cfg.slot_s*timestep:.6f}~{curr_cfg.slot_e*timestep:.6f}")
                 print(str(next_cfg))
 
+        if curr_cfg.slot_s == n_slot:
+            cfg_slot_s, next_cfg, cfg_slot_num = _SchedTab.sparse_list[_SchedTab.sparse_idx]
             # replenish the budget
             for pid in next_cfg.keys():
-                _p = init_p_list[pid]
+                _p = process_dict[pid]
                 # _p.deadline += _p.task.period
                 _p.rem_flop_budget += next_cfg[pid] * cfg_slot_num * timestep * FLOPS_PER_CORE
 
@@ -346,19 +402,20 @@ def sched_step(task_spec:Spec, affinity,
                     rsc_recoder_his[_p.pid] = LRUCache(3)
                     rsc_recoder_his[_p.pid].put(bin_id)
 
+            # TODO: Queue for the weight prefetching
             # instruction prefetching
             cfg_slot_s, cached_cfg, cfg_slot_num  = _SchedTab.sparse_list[_SchedTab.sparse_idx_next]
 
             # weight prefetching based on the scheduling table
             # TODO: how to represent the tile prefetching: when to start, when to check
-            data_prefetching(init_p_list, weight_wait_queue, cached_cfg=cached_cfg)
+            data_prefetching(process_dict, weight_wait_queue, cached_cfg=cached_cfg)
 
         # TODO: simulate the congestion and the latency of the network
         data_tranfer_sim(weight_wait_queue, buffer, bin_name)
 
         # check data availability: some tasks may be prefetched
         # TODO: model the runtime weight and feature map transfering 
-        pendingToReady(active_list, ready_queue, buffer, budget_recoder, throttle_list, curr_t, bin_name, ) 
+        pendingToReady(active_list, ready_queue, buffer, budget_recoder, throttle_list, curr_t, glb_name_p_dict, bin_name, ) 
         # move the task to the ready queue
         bin_event_flg = throttleToReady(curr_t, budget_recoder, ready_queue, throttle_list, bin_name, bin_event_flg)
 
@@ -371,21 +428,6 @@ def sched_step(task_spec:Spec, affinity,
         aval_rsc = res_cfg.get_available_rsc()
 
         # build the local running configuration
-
-        # running_queue.queue.clear()
-        # # rsc_recoder.clear()
-        # res_cfg.clear()
-        # if curr_cfg.slot_s <= n_slot and n_slot <= curr_cfg.slot_e:
-        #     if curr_cfg != curr_cfg_ref:
-        #         print("ERROR: cfg not match")
-        #     for pid in curr_cfg.rsc_map.keys():
-        #         _p = init_p_list[pid]
-        #         if _p.totburst==0:
-        #             print(f"task {_p.task.name} start at {curr_t:.6f}")
-        #         running_queue.put(_p)
-        #         res_cfg.allocate(_p.pid, curr_cfg.rsc_map[pid])
-        #         record_comp_bw_slot_by_slot(rsc_recoder, n_slot, curr_cfg, pid)
-
         # Try to allocate the resource to the ready tasks
             # combine the ready tasks, running tasks, budget, and deadline together
             # co-operate the designed properties with EDF algorithm
@@ -506,7 +548,7 @@ def throttleToReady(curr_t, budget_recoder, ready_queue, throttle_list, bin_name
         # data prefetching
         # position candidate 
 
-def chk_release(timestep, event_range, curr_t, inactive_list:List[ProcessInt], active_list, 
+def chk_release(event_range, curr_t, inactive_list:List[ProcessInt], active_list, 
                 bin_event_flg:bool=False, 
                 bin_name:str=""):
     """
@@ -518,10 +560,11 @@ def chk_release(timestep, event_range, curr_t, inactive_list:List[ProcessInt], a
     l_active = []
     if curr_t <= event_range:
         for _p in inactive_list:
-            if _p.check_depends(curr_t, timestep):
+            if _p.check_depends():
+                # if curr_t >= _p.task.ERT and _p.trigger_mode != "N": # constraint the fisrt release time of the event triggered task
                 l_active.append(_p)
 
-    if len(l_active):
+    if len(l_active) and not bin_event_flg:
         bin_event_flg = True
         print(f"({bin_name})")
         
@@ -580,8 +623,8 @@ def check_miss(
                         bin_event_flg:bool=False, 
                         bin_name:str=""):
 
-    # for _p in (active_list + wait_queue.queue + ready_queue.queue + running_queue.queue):
-    for _p in (running_queue.queue):
+    for _p in (active_list + ready_queue.queue + running_queue.queue):
+    # for _p in (running_queue.queue):
         if _p.deadline < curr_t and _p.task.criticality == "hard":
             miss_list.append(_p)
             _p.set_state("suspend")
@@ -592,7 +635,7 @@ def check_miss(
 
     for _p in miss_list:
         # release the resource and move to the wait list
-        buffer.pop(_p.pid)
+        # buffer.pop(_p.pid)
         if _p in ready_queue.queue:
             ready_queue.remove(_p)
         elif _p in running_queue.queue:
@@ -622,6 +665,7 @@ def check_miss(
         # _p.required_resource_size = np.ceil(_p.remburst/_p.exp_comp_t/FLOPS_PER_CORE)
         _p.set_state("suspend")
         inactive_list.append(_p)
+        # _p.reset_depends()
 
         # print("Scheduling Table:")
         # print(SchedTab.print_scheduling_table())
@@ -679,7 +723,8 @@ def check_throttle(
         throttle_list.append(_p)
     return bin_event_flg
 
-def check_complete(rsc_recoder, timestep, curr_t, task_dict, res_cfg, 
+def check_complete(rsc_recoder, timestep, msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
+                   curr_t, res_cfg, 
                     running_queue:TaskQueue, 
                     completed_list: List[ProcessInt], 
                     inactive_list:List[ProcessInt],
@@ -703,7 +748,7 @@ def check_complete(rsc_recoder, timestep, curr_t, task_dict, res_cfg,
         # _SchedTab = bin_list[bin_id_t]
         # _SchedTab.release(_p, alloc_slot_s, alloc_size, allo_slot, verbose=False)
         res_cfg.release(_p.pid, verbose=False)
-        buffer.pop(_p.pid)
+        # buffer.pop(_p.pid)
 
         # detect the lateness 
         if _p.deadline < curr_t:
@@ -733,11 +778,14 @@ def check_complete(rsc_recoder, timestep, curr_t, task_dict, res_cfg,
         # _p.required_resource_size = np.ceil(_p.remburst/_p.exp_comp_t/FLOPS_PER_CORE)
         running_queue.remove(_p)
         inactive_list.append(_p)
-        _p.reset_depends()
+        # _p.reset_depends()
 
     # print("Scheduling Table:")
     # print(SchedTab.print_scheduling_table())
-    update_depend(task_dict, completed_list)
+    # update_depend(task_dict, completed_list)
+    for _p in completed_list:
+        # msg_pipe.send(f"{_p.task.name}_completed", prefix="		")
+        msg_dispatcher.broadcast_message(f"{_p.task.name}_completed", prefix="		")
     
     completed_list.clear()
     return bin_event_flg
@@ -817,13 +865,14 @@ def data_tranfer_sim(wait_queue, buffer:Buffer, bin_name):
             # print(_str)
 
 
-def pendingToReady(active_list, ready_queue, w_buffer:Buffer, budget_recoder, throttle_list, curr_t, bin_name=""):
+def pendingToReady(active_list, ready_queue, buffer:Buffer, budget_recoder, throttle_list, curr_t, glb_n_task_dict:Dict[str, ProcessInt], bin_name=""):
     # waitingQueue[i]->waitTime != 0 && waitingQueue[i]->waitTime % waitingQueue[i]->io == 0
     l_ready = []
     for _p in active_list:
         # check data availability
-        w_avail = _p.pid in w_buffer.buffer
-        if w_avail:
+        w_avail = _p.pid in buffer.buffer_w
+        in_avail = _p.check_depends_data(buffer, glb_n_task_dict=glb_n_task_dict)
+        if w_avail and in_avail:
             l_ready.append(_p)
 
     for _p in l_ready:
@@ -866,8 +915,10 @@ def cyclic_sched(task_spec:Spec, affinity,
                 bin_list:List[SchedulingTableInt], scheduler_list: List[Scheduler], monitor_list:List[Monitor],
                 rsc_list:List[Resource_model_int], curr_cfg_list:List[Resource_model_int],
                 rsc_recoder:dict, rsc_recoder_his:Dict[int, LRUCache], 
-                total_cores:int, quantumSize, init_p_list:List[ProcessInt], 
-                timestep, hyper_p, n_p=1, verbose=False, *, animation=False, warmup=False, drain=False,):
+                total_cores:int, quantumSize, 
+                process_dict_list:List[Dict[int, ProcessInt]], glb_p_list:List[ProcessInt],
+                timestep, hyper_p, n_p=1, msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
+                verbose=False, *, animation=False, warmup=False, drain=False,):
     """
     partition the scheduling table
     """
@@ -876,13 +927,13 @@ def cyclic_sched(task_spec:Spec, affinity,
     sim_slot_num = int(sim_range/timestep)
 
     # pre_ready stage for the initial tasks
-    for _SchedTab, sched, curr_cfg in zip(bin_list, scheduler_list, curr_cfg_list):
+    for _SchedTab, sched, curr_cfg, process_dict in zip(bin_list, scheduler_list, curr_cfg_list, process_dict_list):
         # extract scheudler, including queues and lists from scheduler_list
         ready_queue:TaskQueue = sched.ready_queue
         wait_queue:TaskQueue = sched.weight_wait_queue
         inactive_list:List[ProcessInt] = sched.inactive_list
         init_cfg = _SchedTab.scheduling_table[0]
-        task_pid_list = _SchedTab.index_occupy_by_id()
+        task_pid_list = list(process_dict.keys())
         buffer = sched.get_buffer()
 
         # init the tasks queue
@@ -896,7 +947,7 @@ def cyclic_sched(task_spec:Spec, affinity,
         print(f"Bin {_SchedTab.id:d} initial queue:")
         print("	ready tasks:")
         for pid in init_cfg.rsc_map: 
-            _p = init_p_list[pid]
+            _p = process_dict[pid]
             ready_queue.put(_p)
             _p.set_state("ready")
             _p.released = True 
@@ -913,7 +964,7 @@ def cyclic_sched(task_spec:Spec, affinity,
 
         print("	prefetched done:")
         for pid in init_prefetch_obj:
-            _p = init_p_list[pid]
+            _p = process_dict[pid]
             # skip data prefetching; put the data into the buffer directly
             data = Data(_p.pid, 1, (0,), "weight", _p.io_time)
             data.valid = True
@@ -924,7 +975,7 @@ def cyclic_sched(task_spec:Spec, affinity,
         print("	inactivated tasks:")
         for pid in task_pid_list:
             if pid not in init_cfg.rsc_map: # and pid not in cached_map:
-                _p = init_p_list[pid]
+                _p = process_dict[pid]
                 inactive_list.append(_p)
                 _p.set_state("suspend")
                 print("		TASK {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
@@ -944,14 +995,14 @@ def cyclic_sched(task_spec:Spec, affinity,
         # TODO: detect the spec change
             # modify the exp_comp_t and deadline of the tasks
 
-
         # print(f"Slot {n_slot:d}, time {curr_t:.6f}")
-        sched_step(task_spec, affinity, 
+        sched_step(task_spec, affinity, msg_dispatcher,
                 bin_list, scheduler_list, monitor_list,
                 rsc_list, curr_cfg_list, 
                 rsc_recoder, rsc_recoder_his,
-                total_cores, quantumSize, n_slot, init_p_list,
+                total_cores, quantumSize, n_slot, process_dict_list, glb_p_list, 
                 timestep, hyper_p, n_p, verbose, animation=animation, warmup=warmup, drain=drain) 
+        
 
 # prefetcher for a CNN task with a given tile size
 

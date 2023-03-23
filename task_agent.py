@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Dict, List, Tuple, Union, Any, OrderedDict
 import numpy as np
+import math
 # from hw_rsc import FLOPS_PER_CORE
 # from scheduler_global_cfg import *
 from resource_agent import DDL_reservation, RT_reservation, dummy_reservation
@@ -42,6 +43,9 @@ class ProcessBase(object):
         self.succ_data = task.succ_data # used
         self.pred_data = task.pred_data # used
         self.succ_ctrl = task.succ_ctrl # used
+        self.trigger_mode = task.trigger_mode # event-triggered or periodic
+        self.event_triggers = []  # list to hold event triggers
+
         # =============== 2. runtime state ===============
         self.pid = pid # process id
         self.state = "terminated" # task state: running, terminated, suspend, runnable, throttled
@@ -75,23 +79,72 @@ class ProcessBase(object):
         assert state in task_lifetime.keys()
         self.state = state
     
-    def check_depends(self, time=None, time_step=1e-6):
+    def check_depends(self):
         """
         if all the predecessor tasks are completed, return True
         """
-        if not len(self.pred_data):
-            return np.allclose(time%self.task.period, self.task.ERT+self.task.i_offset, atol=time_step)
+        # if not len(self.pred_data):
+        #     return np.allclose(time%self.task.period, self.task.ERT+self.task.i_offset, atol=time_step)
+        # else:
+        #     return np.array(list(self.pred_ctrl.values())+ list(self.pred_data.values())).all()
+        # reDistPattn="downscaling"
+        if len(self.pred_ctrl):
+            for key in self.pred_ctrl.keys():
+                if not self.pred_ctrl[key]["valid"]:
+                    return False
+            return True
         else:
-            return np.array(list(self.pred_ctrl.values())+ list(self.pred_data.values())).all()
+            if self.check_depends_data(None, True):
+                self.reset_depends()
+                return True
+            else:
+                return False
 
+    def check_depends_data(self, buffer=None, barrier=False, glb_n_task_dict=None):
+        assert buffer is not None if not barrier else True
+        dict_t = {}
+        for key in self.pred_data:
+            attr_dict = self.pred_data[key]
+            if barrier:
+                valid = attr_dict["valid"]
+            else:
+                valid = glb_n_task_dict[key].pid in buffer.buffer_mux("output")
+            if attr_dict["reDistPattn"] == "downscaling":
+                # name parse
+                # remove the thread number at the end of the name
+                thread_n = key.split('_')[-1]
+                task_n = key.replace("_"+thread_n, "")
+                dict_t.update({task_n:dict_t.get(task_n, False) or valid})
+            elif not valid:
+                return False
+        return np.array(list(dict_t.values())).all()
+
+    def sim_trigger(self, time=None, time_step=1e-6):
+        """
+        if the task is activated, return True
+        """
+        if self.task.trigger_mode == "timer":
+            if math.isclose(time%self.task.period, self.task.i_offset, abs_tol=time_step*0.99):
+                for key in self.pred_ctrl.keys():
+                    self.pred_ctrl[key]["valid"] = True
+                    self.pred_ctrl[key]["trigger_time"] = time
+                return True
+        elif self.trigger_mode == "event":
+            if self.event_triggers:
+                self.event_triggers.pop(0)
+                for key in self.pred_ctrl.keys():
+                    self.pred_ctrl[key]["valid"] = True
+                return True
+        return False
+    
     def reset_depends(self):
         """
         reset the values of the predecessors to False
         """
         for key in self.pred_ctrl.keys():
-            self.pred_ctrl[key] = False
+            self.pred_ctrl[key]["valid"] = False
         for key in self.pred_data.keys():
-            self.pred_data[key] = False
+            self.pred_data[key]["valid"] = False
 
 class ProcessInt(ProcessBase):
     def __init__(self, task, release_t, deadline_abs, pid):
@@ -99,12 +152,16 @@ class ProcessInt(ProcessBase):
         # task_id -> (main_num, RDA_num)
         self.allocated_resource:OrderedDict[int, Tuple[int, int]] = OrderedDict()
         self.required_resource_size:int = task.required_resource_size
+        self.input_ready:bool = False
+        self.output_ready:bool = False
+        self.weight_ready:bool = False
     
 class TaskBase(object):
     def __init__(self, task_name:str, task_id:int, timing_flag:str,
                  ERT:int, ddl:int, period:int, exp_comp_t:int, i_offset:int, jitter_max:int,
                  op_io_time:int=0, op_cpu_time:int=0, seq_cpu_time:int=0, priority:int=0, 
                  criti_flag:str="soft", cbs_en:bool=False, 
+                 trigger_mode:bool=False
                  ):
         self.id = task_id
         self.name = task_name
@@ -116,6 +173,7 @@ class TaskBase(object):
         self.criticality = criti_flag # soft or hard
         assert self.criticality in criticality.keys()
         assert self.timing_flag in task_timing_type.keys()
+        self.trigger_mode = trigger_mode # event-triggered or periodic
 
         # deadline in each hyper-period (task that have multiple sub-periods in a hyper-period)
         # e.g. the task with 30hz but be divided into 3 tasks with 10hz and 1/30s offset
@@ -177,6 +235,9 @@ class TaskBase(object):
         """
         return ProcessBase(self, release_t, deadline_abs, pid)
 
+    def add_event_trigger(self, trigger):
+        self.event_triggers.append(trigger)
+
     def __str__(self) -> str:
         _str = f"Task {self.id}: {self.name}\n"
         _str += f"\ttiming_flag: {self.timing_flag}, prio: {self.prio}\n"
@@ -200,6 +261,7 @@ class TaskInt(TaskBase):
                     pre_assigned_resource_flag:bool=False, 
                     op_io_time:int=0, op_cpu_time:int=0, seq_cpu_time:int=0, priority:int=0, 
                     criti_flag:str="soft", cbs_en:bool=False, 
+                    trigger_mode:str="N",
                     **kwargs
                 ) -> None:
         super().__init__(
@@ -207,6 +269,7 @@ class TaskInt(TaskBase):
                             ERT=ERT, ddl=ddl, period=period, exp_comp_t=exp_comp_t, i_offset=i_offset, jitter_max=jitter_max, 
                             op_cpu_time=op_cpu_time, op_io_time=op_io_time, seq_cpu_time=seq_cpu_time, priority=priority, 
                             criti_flag=criti_flag, cbs_en=cbs_en,
+                            trigger_mode=trigger_mode,
                         )
         
         # =============== 1. task properties ===============
