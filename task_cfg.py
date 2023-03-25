@@ -1950,36 +1950,6 @@ if __name__ == "__main__":
         vis_task_static_timeline(list(glb_n_task_dict.values()), save=True, save_path="task_liveness_timeline_cyclic.svg", 
         hyper_p=hyper_p, n_p=1, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
         txt_size=40, tick_dens=4)
-    elif args.test_case == "bin_pack" or args.test_all:
-        # push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, 256, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
-        init_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
-        bin_list, init_p_list = push_task_into_bins(init_p_list, affinity_cfg, 256, sim_step*2, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
-        from scheduling_table import get_task_layout_compact
-        get_task_layout_compact(bin_list, init_p_list, save= True, time_step= sim_step,
-        hyper_p=hyper_p, n_p=1, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
-        txt_size=40, tick_dens=2, save_path="task_bin_pack_cyclic.pdf") 
-
-        get_task_layout_compact(bin_list, init_p_list, save= True, time_step= sim_step,
-        hyper_p=hyper_p, n_p=1, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
-        txt_size=40, tick_dens=4, plot_start=0, save_path="task_bin_pack_full.pdf")
-
-        # save the bin_list and the init_p_list
-        with open("bin_list.pkl", "wb") as f:
-            pickle.dump(bin_list, f)
-        # with open("init_p_list.pkl", "wb") as f:
-        #     pickle.dump(init_p_list, f)
-        try:
-            # load the bin_list and the init_p_list
-            with open("bin_list.pkl", "rb") as f:
-                bin_list = pickle.load(f)
-            print("bin_list.pkl saved and loaded successfully")
-            # with open("init_p_list.pkl", "rb") as f:
-            #     init_p_list = pickle.load(f)
-            # print("init_p_list.pkl saved and loaded successfully")
-        except:
-            print("bin_list.pkl or init_p_list.pkl not found")
-            exit()
-
     elif args.test_case == "graph" or args.test_all:
         # task_graph_nx, job_graph_nx = creat_jobTask_graph(task_graph, int(f_gcd), plot=True)
         # init_depen(task_dict, job_graph_nx, verbose=args.verbose)
@@ -2020,53 +1990,3 @@ if __name__ == "__main__":
             t.set_rotation(30)
         fig.tight_layout()
         plt.savefig("jobTask_graph.pdf", format="pdf")
-
-    elif args.test_case == "dynamic" or args.test_all:
-        init_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
-        try:
-            # load the bin_list and the init_p_list
-            with open("bin_list.pkl", "rb") as f:
-                bin_list = pickle.load(f)
-            # with open("init_p_list.pkl", "rb") as f:
-            #     init_p_list = pickle.load(f)
-        except:
-            print("bin_list.pkl not found")
-            # print("bin_list.pkl or init_p_list.pkl not found")
-            bin_list, _ = push_task_into_bins(init_p_list, affinity_cfg, 256, sim_step*2, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
-
-        logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
-        physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd))
-        
-        init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
-        from allocator_agent import cyclic_sched
-        from scheduler_agent import Scheduler 
-        from monitor_agent import Monitor
-        from spec import Spec
-        from msg_dispatcher import MsgDispatcher
-        # from message_agent import Message
-        
-        rsc_recoder_list = [{} for _ in range(len(bin_list))]
-        rsc_recoder_his_list = [{} for _ in range(len(bin_list))]
-        scheduler_list = [Scheduler(_SchedTab, init_p_list) for _SchedTab in bin_list]
-        monitor_list = [Monitor() for _ in range(len(bin_list))]
-        task_spec = Spec(0.1, [1 for _ in init_p_list]) 
-        process_dict_list = [{pid:init_p_list[pid] for pid in _SchedTab.index_occupy_by_id()} for _SchedTab in bin_list]
-        rsc_list = [Resource_model_int(size=sched_tab.scheduling_table[0].size) for sched_tab in bin_list]
-        curr_cfg_list = [Resource_model_int(size=sched_tab.scheduling_table[0].size) for sched_tab in bin_list]
-        # msg_pipe = Message()
-        msg_dispatcher = MsgDispatcher(len(bin_list))
-        # filter the processes with trigger_mode is not "N"
-        sim_triggered_list = [[init_p_list[pid] for pid in _bin.index_occupy_by_id().keys() if init_p_list[pid].task.trigger_mode!='N'] for _bin in bin_list]
-        for _bin, _sim_triggered_list in zip(bin_list, sim_triggered_list):
-            _bin.sim_triggered_list = _sim_triggered_list
-            print("bin: ", _bin.id, "sim_triggered_list: ", [p.task.name for p in _sim_triggered_list])
-
-        print("sim_step: ", sim_step)
-        cyclic_sched(task_spec, affinity_cfg, 
-                bin_list, scheduler_list, monitor_list,
-                rsc_list, curr_cfg_list, 
-                rsc_recoder_list, rsc_recoder_his_list,
-                256, sim_step*2, process_dict_list, init_p_list,
-                sim_step, hyper_p, 1, msg_dispatcher,
-                args.verbose, warmup=True, drain=True)
-        

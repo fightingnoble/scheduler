@@ -38,4 +38,5 @@ SOTA reference scheduling trace, considered as the right result.
 - Extract the scheduler step from sched_step.
 - Integrate scheduler_step to Scheduler
 - Clean up the input parameters of cyclic_sched, sched_step
-- move the test code from task_cfg.py to allocator_agent.py
+- move the test code of bin_pack and dynamic from task_cfg.py to allocator_agent.py
+- move some functions into scheudler_agent.py
