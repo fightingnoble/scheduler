@@ -35,4 +35,7 @@ SOTA reference scheduling trace, considered as the right result.
 ## 20230325
 - Clean up the code in allocator_agent.py
 - Rename the affinity setting as affinirt_cfg, and beautify the layout of the task_graph plot.
-- extract the scheduler step from sched_step
+- Extract the scheduler step from sched_step.
+- Integrate scheduler_step to Scheduler
+- Clean up the input parameters of cyclic_sched, sched_step
+- move the test code from task_cfg.py to allocator_agent.py
