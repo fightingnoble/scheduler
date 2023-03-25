@@ -22,10 +22,10 @@ from task_agent import ProcessInt
 
 task_graph_srcs = {
     # "Entry": ["surr_view_camera_pub", "streo_camera_pub", "LiDAR_pub"],
-    "surr_view_camera_pub": ["ImageBB"],
-    "streo_camera_pub": ["Stereo_feature_enc", "Traffic_light_detection"],
     "LiDAR_pub": ["Lidar_based_3dDet"],
+    "surr_view_camera_pub": ["Traffic_light_detection", "ImageBB", ],
     "IMU_pub": ["Steering_speed"],
+    "streo_camera_pub": ["Stereo_feature_enc"],
 }
 task_graph_sinks = {
     "Sink_control": [],
@@ -47,7 +47,7 @@ task_graph_ops = {
     "Depth_estimation": ["Sink_screen"],
 }
 
-__all__ = ['task_graph', 'affinity']
+__all__ = ['task_graph', 'affinity_cfg']
 
 
 # task_graph = {   
@@ -67,7 +67,7 @@ __all__ = ['task_graph', 'affinity']
 # }
 
 # affnity of a task is set to be a list that contains user-specified tasks, itself, it predecessors and its successors.
-affinity = {
+affinity_cfg = {
     "Traffic_light_detection": [],
     "ImageBB": ["MultiCameraFusion"],
     "MultiCameraFusion": ["ImageBB", "Pure_camera_path_head"],
@@ -527,7 +527,7 @@ def load_taskint(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]
             task.freq = task_attr["Freq."]
             # initialize task affinity list
             thread_n = int(i)
-            affinity_tgt_n_list = affinity[task_n]        
+            affinity_tgt_n_list = affinity_cfg[task_n]        
             affinity_tgt_n_list = [n+'_'+str(thread_n) for n in affinity_tgt_n_list]
             task.affinity_n = affinity_tgt_n_list
             # initialize dependency list
@@ -1953,7 +1953,7 @@ if __name__ == "__main__":
     elif args.test_case == "bin_pack" or args.test_all:
         # push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, 256, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
         init_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
-        bin_list, init_p_list = push_task_into_bins(init_p_list, affinity, 256, sim_step*2, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
+        bin_list, init_p_list = push_task_into_bins(init_p_list, affinity_cfg, 256, sim_step*2, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
         from scheduling_table import get_task_layout_compact
         get_task_layout_compact(bin_list, init_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=1, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
@@ -2032,7 +2032,7 @@ if __name__ == "__main__":
         except:
             print("bin_list.pkl not found")
             # print("bin_list.pkl or init_p_list.pkl not found")
-            bin_list, _ = push_task_into_bins(init_p_list, affinity, 256, sim_step*2, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
+            bin_list, _ = push_task_into_bins(init_p_list, affinity_cfg, 256, sim_step*2, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
 
         logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
         physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd))
@@ -2047,7 +2047,7 @@ if __name__ == "__main__":
         
         rsc_recoder_list = [{} for _ in range(len(bin_list))]
         rsc_recoder_his_list = [{} for _ in range(len(bin_list))]
-        scheduler_list = [Scheduler() for _ in range(len(bin_list))]
+        scheduler_list = [Scheduler(_SchedTab, init_p_list) for _SchedTab in bin_list]
         monitor_list = [Monitor() for _ in range(len(bin_list))]
         task_spec = Spec(0.1, [1 for _ in init_p_list]) 
         process_dict_list = [{pid:init_p_list[pid] for pid in _SchedTab.index_occupy_by_id()} for _SchedTab in bin_list]
@@ -2062,7 +2062,7 @@ if __name__ == "__main__":
             print("bin: ", _bin.id, "sim_triggered_list: ", [p.task.name for p in _sim_triggered_list])
 
         print("sim_step: ", sim_step)
-        cyclic_sched(task_spec, affinity, 
+        cyclic_sched(task_spec, affinity_cfg, 
                 bin_list, scheduler_list, monitor_list,
                 rsc_list, curr_cfg_list, 
                 rsc_recoder_list, rsc_recoder_his_list,

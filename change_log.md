@@ -4,9 +4,9 @@ msg_dispatcher.py
 
 allocator_agent.py: 
 - distinguish the local task list and the global process index; 
-- distinguish the trigger signal of jobs in task chain and data availability check; 
+- distinguish the trigger signal of jobs in the task chain and data availability check; 
 - check the data dependency by checking memory data availability; add mechanism of update & timeout for input dependencies; 
-- now input data availability is checked before entering ready stage; \n\tmessage broadcasting and syn machinism; 
+- now input data availability is checked before entering the ready stage; \n\tmessage broadcasting and syn mechanism; 
 - sim the event trigger 
 
 profiling.csv: 
@@ -19,7 +19,7 @@ task_agent.py
 - add data dependency checking
 - add trigger_mode supports
 - add sim_trigger supports
-- refine the dependency from bool flag as a dict
+- refine the dependency from the bool flag as a dict
 
 task_cfg.py
 - Added a new function creat_logical_graph to create a logical graph from srcs, ops, and sinks.
@@ -30,5 +30,8 @@ change_log.md
 - used for recording the changes 
 
 golden_trace.txt
-- SOTA referece scheduling trace, considered as a right result.
+SOTA reference scheduling trace, considered as the right result.
 
+## 20230325
+- Clean up the code in allocator_agent.py
+- Rename the affinity setting as affinirt_cfg, and beautify the layout of the task_graph plot.

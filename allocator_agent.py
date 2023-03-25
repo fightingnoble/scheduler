@@ -91,6 +91,8 @@ from lru import LRUCache
 from scheduler_agent import Scheduler 
 from monitor_agent import Monitor
 
+
+# =================== local scheduler ===================
 def sched_step_cyclic_dense(task_spec:Spec, affinity, 
                 bin_list:List[SchedulingTableInt], scheduler_list: List[Scheduler], monitor_list:List[Monitor],
                 rsc_list:List[Resource_model_int], curr_cfg_list:List[Resource_model_int],
@@ -227,8 +229,6 @@ def sched_step_cyclic_dense(task_spec:Spec, affinity,
                 #             _p.set_state("wait")
                 #         else: 
                 #             print("		Arriving lateness of task {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
-
-
 
 def sched_step(task_spec:Spec, affinity, msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
                 bin_list:List[SchedulingTableInt], scheduler_list: List[Scheduler], monitor_list:List[Monitor],
@@ -527,6 +527,101 @@ def sched_step(task_spec:Spec, affinity, msg_dispatcher:MsgDispatcher,#msg_pipe:
                 if np.logical_xor(curr_cfg_ref != next_cfg, curr_cfg.slot_s == n_slot+1 or curr_cfg.slot_e == n_slot):
                     print("ERROR: cfg not match")
 
+# =================== top global scheduler ===================
+def cyclic_sched(task_spec:Spec, affinity, 
+                bin_list:List[SchedulingTableInt], scheduler_list: List[Scheduler], monitor_list:List[Monitor],
+                rsc_list:List[Resource_model_int], curr_cfg_list:List[Resource_model_int],
+                rsc_recoder:dict, rsc_recoder_his:Dict[int, LRUCache], 
+                total_cores:int, quantumSize, 
+                process_dict_list:List[Dict[int, ProcessInt]], glb_p_list:List[ProcessInt],
+                timestep, hyper_p, n_p=1, msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
+                verbose=False, *, animation=False, warmup=False, drain=False,):
+    """
+    partition the scheduling table
+    """
+    event_range = hyper_p * (n_p+warmup)
+    sim_range = hyper_p * (n_p+warmup+drain)
+    sim_slot_num = int(sim_range/timestep)
+
+    # pre_ready stage for the initial tasks
+    for _SchedTab, sched, curr_cfg, process_dict in zip(bin_list, scheduler_list, curr_cfg_list, process_dict_list):
+        # extract scheudler, including queues and lists from scheduler_list
+        ready_queue:TaskQueue = sched.ready_queue
+        wait_queue:TaskQueue = sched.weight_wait_queue
+        inactive_list:List[ProcessInt] = sched.inactive_list
+        init_cfg = _SchedTab.scheduling_table[0]
+        task_pid_list = list(process_dict.keys())
+        buffer = sched.get_buffer()
+
+        # init the tasks queue
+
+        _SchedTab.to_sparse_dict(-1)
+        curr_cfg.slot_e = -1 #cfg_slot_s + cfg_slot_num - 1
+        curr_cfg.slot_s = -1 # cfg_slot_s
+        curr_cfg.slot_num = 0 # cfg_slot_num
+
+        # put the initial tasks into the ready queue
+        print(f"Bin {_SchedTab.id:d} initial queue:")
+        print("	ready tasks:")
+        for pid in init_cfg.rsc_map: 
+            _p = process_dict[pid]
+            ready_queue.put(_p)
+            _p.set_state("ready")
+            _p.released = True 
+            print("		TASK {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
+        print("")
+        
+        # instruction prefetching
+        cfg_slot_s, cached_map, cfg_slot_num  = _SchedTab.sparse_list[_SchedTab.sparse_idx_next]
+
+        # weight prefetching based on the scheduling table
+        # TODO: how to represent the tile prefetching: when to start, when to check
+        init_prefetch_obj = {k:v for k,v in cached_map.items() if k not in init_cfg.rsc_map}
+        # data_prefetching(init_p_list, wait_queue, cached_cfg=init_prefetch_obj)
+
+        print("	prefetched done:")
+        for pid in init_prefetch_obj:
+            _p = process_dict[pid]
+            # skip data prefetching; put the data into the buffer directly
+            data = Data(_p.pid, 1, (0,), "weight", _p.io_time)
+            data.valid = True
+            buffer.put(data)
+            print("		TASK {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
+        print("")
+
+        print("	inactivated tasks:")
+        for pid in task_pid_list:
+            if pid not in init_cfg.rsc_map: # and pid not in cached_map:
+                _p = process_dict[pid]
+                inactive_list.append(_p)
+                _p.set_state("suspend")
+                print("		TASK {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
+        print("")
+
+
+    for n_slot in range(sim_slot_num):
+        curr_t = n_slot * timestep
+
+        if (n_slot - 1) * timestep < event_range and n_slot * timestep >= event_range: 
+            print("="*20, "DRAIN", "="*20, "\n")
+        elif n_slot == 0 and warmup:
+            print("="*20, "WARMUP", "="*20, "\n")
+        elif (n_slot * timestep)//hyper_p > (n_slot-1)*timestep//hyper_p:
+            print("="*20, "PERIOD {:d}".format(int((n_slot * timestep)//hyper_p)), "="*20, "\n")
+        
+        # TODO: detect the spec change
+            # modify the exp_comp_t and deadline of the tasks
+
+        # print(f"Slot {n_slot:d}, time {curr_t:.6f}")
+        sched_step(task_spec, affinity, msg_dispatcher,
+                bin_list, scheduler_list, monitor_list,
+                rsc_list, curr_cfg_list, 
+                rsc_recoder, rsc_recoder_his,
+                total_cores, quantumSize, n_slot, process_dict_list, glb_p_list, 
+                timestep, hyper_p, n_p, verbose, animation=animation, warmup=warmup, drain=drain) 
+        
+# =================== intergrated into scheduler class ===================
+
 def throttleToReady(curr_t, budget_recoder, ready_queue, throttle_list, bin_name, bin_event_flg):
     l_res_ready = []
     for _p in throttle_list:
@@ -581,41 +676,6 @@ def chk_release(event_range, curr_t, inactive_list:List[ProcessInt], active_list
         _str = f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) is activated @ {curr_t:.6f}!!"
         print(_str)
     return bin_event_flg
-
-
-def data_prefetching(init_p_list, wait_queue, active_list=None, cached_cfg=None):
-    # for pid in cached_cfg.keys():
-    #     _p = init_p_list[pid]
-    #     if _p in active_list:
-    #         active_list.remove(_p)
-    #         wait_queue.put(_p)
-    #         _p.set_state("wait")
-    #     else: 
-    #         print("		Arriving lateness of task {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
-    
-    # infinite bandwidth, buffer size, constant latency
-    for pid in cached_cfg.keys():
-        _p = init_p_list[pid]
-        wait_queue.put(Data(_p.pid, 1, (0,), "weight", _p.io_time))
-        _p.set_state("wait")
-
-def record_comp_bw_slot_by_slot(rsc_recoder, n_slot, curr_cfg, pid):
-    if pid in rsc_recoder:
-        alloc_slot_s:List[int]
-        alloc_size:List[int]
-        allo_slot:List[int]
-        alloc_slot_s, alloc_size, allo_slot = rsc_recoder[pid]
-        # merge the allocation
-        if alloc_slot_s[-1] + allo_slot[-1] == n_slot and curr_cfg.rsc_map[pid] == alloc_size[-1]:
-            allo_slot[-1] += 1
-            rsc_recoder[pid] = [alloc_slot_s, alloc_size, allo_slot]
-        else:
-            alloc_slot_s.append(n_slot)
-            alloc_size.append(curr_cfg.rsc_map[pid])
-            allo_slot.append(1)
-            rsc_recoder[pid] = [alloc_slot_s, alloc_size, allo_slot]
-    else:
-        rsc_recoder[pid] = [[n_slot,], [curr_cfg.rsc_map[pid],], [1,]]
 
 def check_miss(
                         rsc_recoder, curr_t, res_cfg, wait_queue, ready_queue, 
@@ -790,6 +850,128 @@ def check_complete(rsc_recoder, timestep, msg_dispatcher:MsgDispatcher,#msg_pipe
     completed_list.clear()
     return bin_event_flg
 
+def record_comp_bw_slot_by_slot(rsc_recoder, n_slot, curr_cfg, pid):
+    if pid in rsc_recoder:
+        alloc_slot_s:List[int]
+        alloc_size:List[int]
+        allo_slot:List[int]
+        alloc_slot_s, alloc_size, allo_slot = rsc_recoder[pid]
+        # merge the allocation
+        if alloc_slot_s[-1] + allo_slot[-1] == n_slot and curr_cfg.rsc_map[pid] == alloc_size[-1]:
+            allo_slot[-1] += 1
+            rsc_recoder[pid] = [alloc_slot_s, alloc_size, allo_slot]
+        else:
+            alloc_slot_s.append(n_slot)
+            alloc_size.append(curr_cfg.rsc_map[pid])
+            allo_slot.append(1)
+            rsc_recoder[pid] = [alloc_slot_s, alloc_size, allo_slot]
+    else:
+        rsc_recoder[pid] = [[n_slot,], [curr_cfg.rsc_map[pid],], [1,]]
+
+def updateRunningQueue(timestep, running_queue, rsc_cfg):
+    _p_dict = {p.pid:p for p in running_queue} 
+    for pid in rsc_cfg.rsc_map.keys():
+        _p = _p_dict[pid]
+        _p.currentburst += rsc_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
+        _p.burst += rsc_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
+        _p.totburst += rsc_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
+        _p.remburst -= rsc_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
+        _p.cumulative_executed_time += timestep
+        _p.rem_flop_budget -= rsc_cfg.rsc_map[_p.pid] * timestep * FLOPS_PER_CORE
+
+def pendingToReady(active_list, ready_queue, buffer:Buffer, budget_recoder, throttle_list, curr_t, glb_n_task_dict:Dict[str, ProcessInt], bin_name=""):
+    # waitingQueue[i]->waitTime != 0 && waitingQueue[i]->waitTime % waitingQueue[i]->io == 0
+    l_ready = []
+    for _p in active_list:
+        # check data availability
+        w_avail = _p.pid in buffer.buffer_w
+        in_avail = _p.check_depends_data(buffer, glb_n_task_dict=glb_n_task_dict)
+        if w_avail and in_avail:
+            l_ready.append(_p)
+
+    for _p in l_ready:
+        _str = f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) "
+        if bin_name:
+            _str = f"({bin_name})\n" + _str
+        # if _p.rem_flop_budget > 0: 
+        if _p.pid in budget_recoder:
+            ready_queue.put(_p)
+            active_list.remove(_p)
+            _p.ready_time = curr_t
+            _p.ready = True
+            _p.set_state("ready")
+            _str += "READY!!"
+            print(_str)
+        else:
+            active_list.remove(_p)
+            throttle_list.append(_p)
+            _str += "data ready, but throttled!!"
+            warnings.warn(_str)
+
+# =================== functions related to data transfer ===================
+
+def data_prefetching(init_p_list, wait_queue, active_list=None, cached_cfg=None):
+    # for pid in cached_cfg.keys():
+    #     _p = init_p_list[pid]
+    #     if _p in active_list:
+    #         active_list.remove(_p)
+    #         wait_queue.put(_p)
+    #         _p.set_state("wait")
+    #     else: 
+    #         print("		Arriving lateness of task {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
+    
+    # infinite bandwidth, buffer size, constant latency
+    for pid in cached_cfg.keys():
+        _p = init_p_list[pid]
+        wait_queue.put(Data(_p.pid, 1, (0,), "weight", _p.io_time))
+        _p.set_state("wait")
+
+def updateWaitQueue(timestep, wait_queue:TaskQueue):
+    """
+    Update the waiting time used in waiting queue
+    """
+    # for _p in wait_queue:
+    #     _p.waitTime += timestep
+    for data in wait_queue: 
+        data.waitTime += timestep 
+
+def data_tranfer_sim(wait_queue, buffer:Buffer, bin_name):
+    # waitingQueue[i]->waitTime != 0 && waitingQueue[i]->waitTime % waitingQueue[i]->io == 0
+    l_ready = []
+    # for _p in wait_queue:
+    #     trans_io_tile = _p.waitTime / _p.io_time
+    for data in wait_queue: 
+        trans_io_tile = data.waitTime / data.io_time
+        # trans_io_tile_r = round(trans_io_tile)
+        # trans_comp = np.allclose(trans_io_tile, trans_io_tile_r, atol=1e-2)
+        trans_io_tile_r = int(trans_io_tile)
+        trans_comp = trans_io_tile_r > 1
+        # TODO: _p.waitTime > 0 
+        if trans_comp and data.waitTime > 0: 
+            wait_queue.remove(data)
+            data.valid = True
+            buffer.put(data)
+            _str = f"		TASK {data.pid:d}:{data.data_id}({data.data_type}/{data.size}M) is transfered({bin_name})!!"
+            # print(_str)
+
+# unused functions
+def RunningQueueToWait(running_queue, wait_queue):
+    # CPU[i]->running->burst == CPU[i]->running->cpu
+    l_wait = []
+    for _p in running_queue:
+        exe_io_tile = _p.burst / _p.cpu_time
+        exe_io_tile_r = round(exe_io_tile)
+        exe_comp = np.allclose(exe_io_tile, exe_io_tile_r, atol=1e-2)
+        if exe_comp:
+            l_wait.append(_p)
+    for _p in l_wait:
+        _p.burst = 0
+        _p.ready = False
+        l_wait.remove(_p)
+        running_queue.remove(_p)
+        wait_queue.put(_p)
+        print("		TASK {:d}:{:s}({:d}) WAIT!!".format(_p.task.id, _p.task.name, _p.pid))
+
 def update_depend(tasc_dict:Dict[str, ProcessInt], completed_task:List[ProcessInt]): 
     """
     update the dependency list
@@ -823,188 +1005,6 @@ def check_depends(task_list:List[ProcessInt])->List[ProcessInt]:
             active.append(_p)
             print("		TASK {:d}:{:s}({:d}) is avtivated!!".format(_p.task.id, _p.task.name, _p.pid))
     return active
-
-
-def updateRunningQueue(timestep, running_queue, rsc_cfg):
-    _p_dict = {p.pid:p for p in running_queue} 
-    for pid in rsc_cfg.rsc_map.keys():
-        _p = _p_dict[pid]
-        _p.currentburst += rsc_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
-        _p.burst += rsc_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
-        _p.totburst += rsc_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
-        _p.remburst -= rsc_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
-        _p.cumulative_executed_time += timestep
-        _p.rem_flop_budget -= rsc_cfg.rsc_map[_p.pid] * timestep * FLOPS_PER_CORE
-
-def updateWaitQueue(timestep, wait_queue:TaskQueue):
-    """
-    Update the waiting time used in waiting queue
-    """
-    # for _p in wait_queue:
-    #     _p.waitTime += timestep
-    for data in wait_queue: 
-        data.waitTime += timestep 
-
-def data_tranfer_sim(wait_queue, buffer:Buffer, bin_name):
-    # waitingQueue[i]->waitTime != 0 && waitingQueue[i]->waitTime % waitingQueue[i]->io == 0
-    l_ready = []
-    # for _p in wait_queue:
-    #     trans_io_tile = _p.waitTime / _p.io_time
-    for data in wait_queue: 
-        trans_io_tile = data.waitTime / data.io_time
-        # trans_io_tile_r = round(trans_io_tile)
-        # trans_comp = np.allclose(trans_io_tile, trans_io_tile_r, atol=1e-2)
-        trans_io_tile_r = int(trans_io_tile)
-        trans_comp = trans_io_tile_r > 1
-        # TODO: _p.waitTime > 0 
-        if trans_comp and data.waitTime > 0: 
-            wait_queue.remove(data)
-            data.valid = True
-            buffer.put(data)
-            _str = f"		TASK {data.pid:d}:{data.data_id}({data.data_type}/{data.size}M) is transfered({bin_name})!!"
-            # print(_str)
-
-
-def pendingToReady(active_list, ready_queue, buffer:Buffer, budget_recoder, throttle_list, curr_t, glb_n_task_dict:Dict[str, ProcessInt], bin_name=""):
-    # waitingQueue[i]->waitTime != 0 && waitingQueue[i]->waitTime % waitingQueue[i]->io == 0
-    l_ready = []
-    for _p in active_list:
-        # check data availability
-        w_avail = _p.pid in buffer.buffer_w
-        in_avail = _p.check_depends_data(buffer, glb_n_task_dict=glb_n_task_dict)
-        if w_avail and in_avail:
-            l_ready.append(_p)
-
-    for _p in l_ready:
-        _str = f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) "
-        if bin_name:
-            _str = f"({bin_name})\n" + _str
-        # if _p.rem_flop_budget > 0: 
-        if _p.pid in budget_recoder:
-            ready_queue.put(_p)
-            active_list.remove(_p)
-            _p.ready_time = curr_t
-            _p.ready = True
-            _p.set_state("ready")
-            _str += "READY!!"
-            print(_str)
-        else:
-            active_list.remove(_p)
-            throttle_list.append(_p)
-            _str += "data ready, but throttled!!"
-            warnings.warn(_str)
-
-def RunningQueueToWait(running_queue, wait_queue):
-    # CPU[i]->running->burst == CPU[i]->running->cpu
-    l_wait = []
-    for _p in running_queue:
-        exe_io_tile = _p.burst / _p.cpu_time
-        exe_io_tile_r = round(exe_io_tile)
-        exe_comp = np.allclose(exe_io_tile, exe_io_tile_r, atol=1e-2)
-        if exe_comp:
-            l_wait.append(_p)
-    for _p in l_wait:
-        _p.burst = 0
-        _p.ready = False
-        l_wait.remove(_p)
-        running_queue.remove(_p)
-        wait_queue.put(_p)
-        print("		TASK {:d}:{:s}({:d}) WAIT!!".format(_p.task.id, _p.task.name, _p.pid))
-
-def cyclic_sched(task_spec:Spec, affinity, 
-                bin_list:List[SchedulingTableInt], scheduler_list: List[Scheduler], monitor_list:List[Monitor],
-                rsc_list:List[Resource_model_int], curr_cfg_list:List[Resource_model_int],
-                rsc_recoder:dict, rsc_recoder_his:Dict[int, LRUCache], 
-                total_cores:int, quantumSize, 
-                process_dict_list:List[Dict[int, ProcessInt]], glb_p_list:List[ProcessInt],
-                timestep, hyper_p, n_p=1, msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
-                verbose=False, *, animation=False, warmup=False, drain=False,):
-    """
-    partition the scheduling table
-    """
-    event_range = hyper_p * (n_p+warmup)
-    sim_range = hyper_p * (n_p+warmup+drain)
-    sim_slot_num = int(sim_range/timestep)
-
-    # pre_ready stage for the initial tasks
-    for _SchedTab, sched, curr_cfg, process_dict in zip(bin_list, scheduler_list, curr_cfg_list, process_dict_list):
-        # extract scheudler, including queues and lists from scheduler_list
-        ready_queue:TaskQueue = sched.ready_queue
-        wait_queue:TaskQueue = sched.weight_wait_queue
-        inactive_list:List[ProcessInt] = sched.inactive_list
-        init_cfg = _SchedTab.scheduling_table[0]
-        task_pid_list = list(process_dict.keys())
-        buffer = sched.get_buffer()
-
-        # init the tasks queue
-
-        _SchedTab.to_sparse_dict(-1)
-        curr_cfg.slot_e = -1 #cfg_slot_s + cfg_slot_num - 1
-        curr_cfg.slot_s = -1 # cfg_slot_s
-        curr_cfg.slot_num = 0 # cfg_slot_num
-
-        # put the initial tasks into the ready queue
-        print(f"Bin {_SchedTab.id:d} initial queue:")
-        print("	ready tasks:")
-        for pid in init_cfg.rsc_map: 
-            _p = process_dict[pid]
-            ready_queue.put(_p)
-            _p.set_state("ready")
-            _p.released = True 
-            print("		TASK {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
-        print("")
-        
-        # instruction prefetching
-        cfg_slot_s, cached_map, cfg_slot_num  = _SchedTab.sparse_list[_SchedTab.sparse_idx_next]
-
-        # weight prefetching based on the scheduling table
-        # TODO: how to represent the tile prefetching: when to start, when to check
-        init_prefetch_obj = {k:v for k,v in cached_map.items() if k not in init_cfg.rsc_map}
-        # data_prefetching(init_p_list, wait_queue, cached_cfg=init_prefetch_obj)
-
-        print("	prefetched done:")
-        for pid in init_prefetch_obj:
-            _p = process_dict[pid]
-            # skip data prefetching; put the data into the buffer directly
-            data = Data(_p.pid, 1, (0,), "weight", _p.io_time)
-            data.valid = True
-            buffer.put(data)
-            print("		TASK {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
-        print("")
-
-        print("	inactivated tasks:")
-        for pid in task_pid_list:
-            if pid not in init_cfg.rsc_map: # and pid not in cached_map:
-                _p = process_dict[pid]
-                inactive_list.append(_p)
-                _p.set_state("suspend")
-                print("		TASK {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
-        print("")
-
-
-    for n_slot in range(sim_slot_num):
-        curr_t = n_slot * timestep
-
-        if (n_slot - 1) * timestep < event_range and n_slot * timestep >= event_range: 
-            print("="*20, "DRAIN", "="*20, "\n")
-        elif n_slot == 0 and warmup:
-            print("="*20, "WARMUP", "="*20, "\n")
-        elif (n_slot * timestep)//hyper_p > (n_slot-1)*timestep//hyper_p:
-            print("="*20, "PERIOD {:d}".format(int((n_slot * timestep)//hyper_p)), "="*20, "\n")
-        
-        # TODO: detect the spec change
-            # modify the exp_comp_t and deadline of the tasks
-
-        # print(f"Slot {n_slot:d}, time {curr_t:.6f}")
-        sched_step(task_spec, affinity, msg_dispatcher,
-                bin_list, scheduler_list, monitor_list,
-                rsc_list, curr_cfg_list, 
-                rsc_recoder, rsc_recoder_his,
-                total_cores, quantumSize, n_slot, process_dict_list, glb_p_list, 
-                timestep, hyper_p, n_p, verbose, animation=animation, warmup=warmup, drain=drain) 
-        
-
-# prefetcher for a CNN task with a given tile size
 
 def rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE):
     # release time round up: task should not be released earlier than the release time
