@@ -16,10 +16,13 @@ class RscMapInt(OrderedDict[int, Tuple[int, ...]]):
             _str += f"\t{k}\t->\t{v}\n"
         return _str
 
-    def print_simple(self,) -> str:
+    def print_simple(self, pid2name:Dict[int,str]=None) -> str:
         _str = ""
         for k, v in self.items():
-            _str += f"\t{k}\t->\t{v}\n"
+            if pid2name: 
+                _str += f"\t{pid2name[k]}\t->\t{v}\n"
+            else:
+                _str += f"\t{k}\t->\t{v}\n"
         return _str
 
     def __eq__(self, __o: object) -> bool:

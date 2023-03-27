@@ -274,7 +274,7 @@ def sched_step(task_spec:Spec, msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
         msg_queue:Queue
         DEBUG_FG = False
 
-        sched.scheduler_step(msg_dispatcher, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, DEBUG_FG)
+        sched.scheduler_step(msg_dispatcher, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, monitor, DEBUG_FG)
 
 # =================== top global scheduler ===================
 def cyclic_sched(task_spec:Spec, affinity, 
@@ -378,7 +378,7 @@ if __name__ == "__main__":
     from task_cfg import load_taskint, create_init_p_list
     from task_cfg import affinity_cfg, task_graph_srcs, task_graph_ops, task_graph_sinks
     from task_cfg import creat_physical_graph, creat_logical_graph, init_depen
-    from task_cfg import push_task_into_bins
+    from global_sched import push_task_into_bins
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--verbose", action="store_true", help="verbose")

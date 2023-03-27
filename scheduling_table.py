@@ -21,6 +21,8 @@ class SchedulingTableInt(object):
         self.scheduling_table = np.array([Resource_model_int(num_resources, ) for _ in range(num_time_slots)], dtype=Resource_model_int)
         self.id = id
         self.name = name
+        self.num_resources = num_resources
+        self.temp_size = num_time_slots
         self.locker = None
         self.lock_mask = np.ones((num_time_slots), dtype=bool)
         self.sparse_list = OrderedDict()
@@ -31,6 +33,9 @@ class SchedulingTableInt(object):
         # next index of the sparse list
         self.sparse_idx_next = 0
         self.sparse_mode = False
+
+    def append(self, rsc_agent: Resource_model_int):
+        self.scheduling_table = np.append(self.scheduling_table, rsc_agent)
 
     def index_occupy_by_id(self, time_slot_s:int=None, time_slot_e:int=None) -> Dict[int, List[int]]:
         """
@@ -243,7 +248,7 @@ class SchedulingTableInt(object):
             self.scheduling_table[-1].clear()
         return running
 
-    def print_scheduling_table(self):
+    def print_scheduling_table(self, pid2name:Dict[int,str]=None, timestep=None):
         empty_boader_s = []
         empty_boader_e = []
         title_line = False
@@ -263,10 +268,14 @@ class SchedulingTableInt(object):
                 if empty_flag:
                     empty_boader_e.append(rsc_map_idx)
                 else:
-                    if title_line: 
-                        _str = f"slot:[{pre_idx}-{rsc_map_idx})\n{pre_rsc.print_simple()}"
+                    if timestep is not None:
+                        _str = f"time:[{pre_idx*timestep:.6f}-{rsc_map_idx*timestep:.6f}), slot:[{pre_idx}-{rsc_map_idx})\n"
                     else:
-                        _str = f"slot:[{pre_idx}-{rsc_map_idx})\n{str(pre_rsc)}"
+                        _str = f"slot:[{pre_idx}-{rsc_map_idx})\n"
+                    if title_line: 
+                        _str += f"{pre_rsc.print_simple(pid2name)}"
+                    else:
+                        _str += f"{str(pre_rsc)}"
                         title_line = True
                     print(_str)
                 pre_idx = rsc_map_idx
@@ -281,6 +290,26 @@ class SchedulingTableInt(object):
 
         _str = [f"[{empty_boader_s[i]}-{empty_boader_e[i]})" for i in range(len(empty_boader_s))]
         print("slot:{} Empty".format(",".join(_str,)))
+
+    def print_alloc_detail(self, pid2name:Dict[int,str], timestep):
+        bin_pack_result = self.index_occupy_by_id()
+
+            # sort the result by the start time
+            # item[1] is alloc_slot_s_t, alloc_size_t, allo_slot_t
+            # item[1][0] is alloc_slot_s_t
+        sorted_task_pid = [k for k, v in sorted(bin_pack_result.items(), key=lambda item: item[1][0])]
+
+            # replace the pid with the task name
+            # and print the result
+        print(f"bin: {self.name}({self.id})")
+        for pid in list(sorted_task_pid):
+            _result = bin_pack_result.pop(pid)
+            bin_pack_result[pid2name[pid]] = _result
+            print("task: {:s}({:d})".format(pid2name[pid], pid))
+            print("\tstart time: {:s}".format(", ".join([f"{x*timestep:.6f}" for x in _result[0]])))
+            print("\talloc cores: {:s}".format(", ".join([f"{x:d}" for x in _result[1]])))
+            print("\tused time: {:s}".format(", ".join([f"{x*timestep:.6f}" for x in _result[2]])))
+        print("=====================================\n")
 
     def to_sparse_dict(self, init_pos: int = 0, verbose: bool = False):
         # sparst_dict = {}
@@ -823,7 +852,7 @@ if __name__ == "__main__":
     # # print the scheduling table
     # scheduling_table.print_scheduling_table()
 
-    init_p_list = []
+    pid2name = []
     pid = 0
     for task in task_list[0:5]: 
         # for r, d in zip(task.get_release_event(event_range), task.get_deadline_event(event_range)):
@@ -831,13 +860,13 @@ if __name__ == "__main__":
         d = task.get_deadline_time()
         p = task.make_process(r, d, pid)
         pid += 1
-        init_p_list.append(p)
+        pid2name.append(p)
 
     for i in range(5):
         print(f"task {i} allocation\n")
-        alloc_info[i] = scheduling_table.insert_task(init_p_list[i], require_rsc_size[i], 
-                                                     init_p_list[i].release_time, init_p_list[i].deadline, 
-                                                     init_p_list[i].exp_comp_t, verbose=True)
+        alloc_info[i] = scheduling_table.insert_task(pid2name[i], require_rsc_size[i], 
+                                                     pid2name[i].release_time, pid2name[i].deadline, 
+                                                     pid2name[i].exp_comp_t, verbose=True)
         print("="*20)
         scheduling_table.print_scheduling_table()
     
@@ -848,8 +877,8 @@ if __name__ == "__main__":
         print("before release")
         scheduling_table.print_scheduling_table()
         if alloc_info[i] is not None:
-            print(f"task {init_p_list[i].pid}({i}) release:")
+            print(f"task {pid2name[i].pid}({i}) release:")
             print([*alloc_info[i]])
-            scheduling_table.release(init_p_list[i], *alloc_info[i][1:], verbose=True)
+            scheduling_table.release(pid2name[i], *alloc_info[i][1:], verbose=True)
         print("after release")
         scheduling_table.print_scheduling_table()

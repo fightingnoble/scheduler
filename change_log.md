@@ -40,3 +40,8 @@ SOTA reference scheduling trace, considered as the right result.
 - Clean up the input parameters of cyclic_sched, sched_step
 - move the test code of bin_pack and dynamic from task_cfg.py to allocator_agent.py
 - move some functions into scheudler_agent.py
+
+## 20230327
+scheduling_table.py
+- extract print_alloc_detail from push_task_into_bins.
+- add 
