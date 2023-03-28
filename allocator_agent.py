@@ -427,6 +427,7 @@ if __name__ == "__main__":
             exit()
 
     elif args.test_case == "dynamic" or args.test_all:
+        np.random.seed(0)
         init_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
         try:
             # load the bin_list and the init_p_list
@@ -449,7 +450,6 @@ if __name__ == "__main__":
         from msg_dispatcher import MsgDispatcher
         # from message_agent import Message
         
-        monitor_list = [Monitor() for _ in range(len(bin_list))]
         task_spec = Spec(0.1, [1 for _ in init_p_list]) 
         # process_dict_list = [{pid:init_p_list[pid] for pid in _SchedTab.index_occupy_by_id()} for _SchedTab in bin_list]
         rsc_list = [Resource_model_int(size=sched_tab.scheduling_table[0].size) for sched_tab in bin_list]
@@ -462,6 +462,7 @@ if __name__ == "__main__":
             _bin.sim_triggered_list = _sim_triggered_list
             print("bin: ", _bin.id, "sim_triggered_list: ", [p.task.name for p in _sim_triggered_list])
         scheduler_list = [Scheduler(_SchedTab, init_p_list) for _SchedTab in bin_list]
+        monitor_list = [Monitor(_SchedTab, int(3*hyper_p/sim_step)) for _SchedTab in bin_list]
 
         print("sim_step: ", sim_step)
         cyclic_sched(task_spec, affinity_cfg, 
@@ -471,3 +472,17 @@ if __name__ == "__main__":
                 init_p_list,
                 sim_step, hyper_p, 1, msg_dispatcher,
                 args.verbose, warmup=True, drain=True)
+
+        actual_sched_record = [monitor.trace_recoder for monitor in monitor_list]
+
+        pid2name = {_p.pid:_p.task.name for _p in init_p_list}
+        print("=====================================\n")
+        print("bin_pack_result:")
+        print("=====================================\n")
+        for _SchedTab in actual_sched_record:
+            _SchedTab.print_alloc_detail(pid2name, sim_step)
+
+        from scheduling_table import get_task_layout_compact
+        get_task_layout_compact(actual_sched_record, init_p_list, save= True, time_step= sim_step,
+        hyper_p=hyper_p, n_p=1, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
+        txt_size=40, tick_dens=4, plot_start=0, save_path="exe_monitor_full.pdf")

@@ -138,3 +138,32 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
+reference*/
+123
+123.png
+allocator_agent.py
+allocator.py
+graph_modofier.py
+main.py
+movie.mp4
+pre_assign.py
+profiling.csv
+task_cfg copy.py
+task_define.py
+task_layout_compact.pdf
+task_layout_compact.svg
+task_liveness_timeline_cyclic.pdf
+task_liveness_timeline_cyclic.svg
+task_static_timeline_cyclic.pdf
+task_static_timeline.pdf
+task.py
+util.py
+.vscode/launch.json
+.vscode/settings.json
+plot/rsc_affinity_graph.pdf
+plot/test.pdf
+unused/allocation_graph.py
+unused/data_flow_graph.py
+unused/mapping.py
+unused/naive.py
+unused/natural_cubic_spline.py

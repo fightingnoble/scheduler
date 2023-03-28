@@ -1,4 +1,78 @@
+bin:  0 sim_triggered_list:  ['Traffic_light_detection_0']
+bin:  1 sim_triggered_list:  ['Traffic_light_detection_1']
+bin:  2 sim_triggered_list:  ['Traffic_light_detection_2']
+bin:  3 sim_triggered_list:  ['ImageBB_0', 'Steering_speed_0']
+bin:  4 sim_triggered_list:  ['ImageBB_1']
+bin:  5 sim_triggered_list:  ['ImageBB_2']
+bin:  6 sim_triggered_list:  ['Stereo_feature_enc_0', 'Lidar_based_3dDet_0']
+bin:  7 sim_triggered_list:  ['Stereo_feature_enc_1']
+bin:  8 sim_triggered_list:  []
+bin:  9 sim_triggered_list:  []
+sim_step:  5.336539625e-06
+Bin 0 initial queue:
+        ready tasks:
+                TASK 0:Traffic_light_detection_0(0)
 
+        prefetched done:
+
+        inactivated tasks:
+
+Bin 1 initial queue:
+        ready tasks:
+
+        prefetched done:
+                TASK 1:Traffic_light_detection_1(1)
+
+        inactivated tasks:
+                TASK 1:Traffic_light_detection_1(1)
+
+Bin 2 initial queue:
+        ready tasks:
+
+        prefetched done:
+                TASK 26:Optical_Flow_0(26)
+
+        inactivated tasks:
+                TASK 26:Optical_Flow_0(26)
+                TASK 2:Traffic_light_detection_2(2)
+                TASK 28:Depth_estimation_0(28)
+
+Bin 3 initial queue:
+        ready tasks:
+                TASK 3:ImageBB_0(3)
+
+        prefetched done:
+
+        inactivated tasks:
+                TASK 6:MultiCameraFusion_0(6)
+                TASK 9:Pure_camera_path_head_0(9)
+                TASK 12:Prediction_0(12)
+                TASK 15:Planning_0(15)
+                TASK 18:Steering_speed_0(18)
+                TASK 26:Optical_Flow_0(26)
+                TASK 29:Depth_estimation_1(29)
+
+Bin 4 initial queue:
+        ready tasks:
+
+        prefetched done:
+                TASK 4:ImageBB_1(4)
+
+        inactivated tasks:
+                TASK 4:ImageBB_1(4)
+                TASK 7:MultiCameraFusion_1(7)
+                TASK 10:Pure_camera_path_head_1(10)
+                TASK 13:Prediction_1(13)
+                TASK 16:Planning_1(16)
+
+Bin 5 initial queue:
+        ready tasks:
+
+        prefetched done:
+                TASK 5:ImageBB_2(5)
+
+        inactivated tasks:
+                TASK 5:ImageBB_2(5)
                 TASK 8:MultiCameraFusion_2(8)
                 TASK 11:Pure_camera_path_head_2(11)
                 TASK 14:Prediction_2(14)
@@ -57,12 +131,12 @@ Bin 9 initial queue:
                 TASK 19:Stereo_feature_enc_0(19) issued and start at 0.000000; 
 (Traffic_light_detection_1)
                 TASK 1:Traffic_light_detection_1(1) is activated @ 0.033332!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Traffic_light_detection_1)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (Traffic_light_detection_1)
                 TASK 1:Traffic_light_detection_1(1) data ready, but throttled!!
   warnings.warn(_str)
 (ImageBB_1)
                 TASK 4:ImageBB_1(4) is activated @ 0.033332!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_1)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (ImageBB_1)
                 TASK 4:ImageBB_1(4) data ready, but throttled!!
   warnings.warn(_str)
 (Traffic_light_detection_1)
@@ -73,7 +147,7 @@ Bin 9 initial queue:
                 TASK 4:ImageBB_1(4) issued and start at 0.033337; 
 (Semantic_segm_1)
                 TASK 20:Stereo_feature_enc_1(20) is activated @ 0.049998!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Semantic_segm_1)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (Semantic_segm_1)
                 TASK 20:Stereo_feature_enc_1(20) data ready, but throttled!!
   warnings.warn(_str)
 (Semantic_segm_1)
@@ -85,13 +159,13 @@ Bin 9 initial queue:
                 Semantic_segm_0 received event Stereo_feature_enc_0 @ 0.059561
                 TASK 21:Semantic_segm_0(21) is activated @ 0.059561!!
                 TASK 19:Stereo_feature_enc_0(19) is activated @ 0.059561!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Semantic_segm_0)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (Semantic_segm_0)
                 TASK 21:Semantic_segm_0(21) data ready, but throttled!!
   warnings.warn(_str)
 (Lane_drivable_area_det_0)
                 Lane_drivable_area_det_0 received event Stereo_feature_enc_0 @ 0.059561
                 TASK 24:Lane_drivable_area_det_0(24) is activated @ 0.059561!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Lane_drivable_area_det_0)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (Lane_drivable_area_det_0)
                 TASK 24:Lane_drivable_area_det_0(24) data ready, but throttled!!
   warnings.warn(_str)
 (Lane_drivable_area_det_1)
@@ -99,7 +173,7 @@ Bin 9 initial queue:
                 Depth_estimation_0 received event Stereo_feature_enc_0 @ 0.059561
                 TASK 26:Optical_Flow_0(26) is activated @ 0.059561!!
                 TASK 28:Depth_estimation_0(28) is activated @ 0.059561!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Lane_drivable_area_det_1)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (Lane_drivable_area_det_1)
                 TASK 28:Depth_estimation_0(28) data ready, but throttled!!
   warnings.warn(_str)
 (Traffic_light_detection_2)
@@ -107,13 +181,13 @@ Bin 9 initial queue:
                 Depth_estimation_0 received event Stereo_feature_enc_0 @ 0.059566
                 TASK 26:Optical_Flow_0(26) is activated @ 0.059566!!
                 TASK 28:Depth_estimation_0(28) is activated @ 0.059566!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Traffic_light_detection_2)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (Traffic_light_detection_2)
                 TASK 26:Optical_Flow_0(26) data ready, but throttled!!
   warnings.warn(_str)
 (ImageBB_0)
                 Optical_Flow_0 received event Stereo_feature_enc_0 @ 0.059566
                 TASK 26:Optical_Flow_0(26) is activated @ 0.059566!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_0)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (ImageBB_0)
                 TASK 26:Optical_Flow_0(26) data ready, but throttled!!
   warnings.warn(_str)
 (Traffic_light_detection_2)
@@ -130,12 +204,12 @@ Bin 9 initial queue:
                 TASK 28:Depth_estimation_0(28) issued and start at 0.066002; 
 (Traffic_light_detection_2)
                 TASK 2:Traffic_light_detection_2(2) is activated @ 0.066664!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Traffic_light_detection_2)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (Traffic_light_detection_2)
                 TASK 2:Traffic_light_detection_2(2) data ready, but throttled!!
   warnings.warn(_str)
 (ImageBB_2)
                 TASK 5:ImageBB_2(5) is activated @ 0.066664!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_2)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (ImageBB_2)
                 TASK 5:ImageBB_2(5) data ready, but throttled!!
   warnings.warn(_str)
 (Traffic_light_detection_2)
@@ -151,7 +225,7 @@ Bin 9 initial queue:
 (ImageBB_2)
                 TASK 5:ImageBB_2(5) THROTTLE -> READY!!
                 TASK 5:ImageBB_2(5) issued and start at 0.066669; 
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Traffic_light_detection_2)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (Traffic_light_detection_2)
                 TASK 28:Depth_estimation_0(28) data ready, but throttled!!
   warnings.warn(_str)
 (ImageBB_0)
@@ -161,12 +235,12 @@ Bin 9 initial queue:
                 MultiCameraFusion_0 received event ImageBB_0 @ 0.079733
                 TASK 6:MultiCameraFusion_0(6) is activated @ 0.079733!!
                 TASK 3:ImageBB_0(3) is activated @ 0.079733!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_0)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (ImageBB_0)
                 TASK 3:ImageBB_0(3) data ready, but throttled!!
   warnings.warn(_str)
                 TASK 26:Optical_Flow_0(26) THROTTLE -> READY!!
                 TASK 26:Optical_Flow_0(26) issued and resume at 0.079733; 
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_0)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (ImageBB_0)
                 TASK 6:MultiCameraFusion_0(6) data ready, but throttled!!
   warnings.warn(_str)
 (ImageBB_0)
@@ -179,13 +253,13 @@ Bin 9 initial queue:
                 TASK 21:Semantic_segm_0(21) COMPLETED @ 0.087706
                 Broadcasting message: Semantic_segm_0_completed
                 Lidar_based_3dDet_0 received event Semantic_segm_0 @ 0.087706
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Semantic_segm_0)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (Semantic_segm_0)
                 TASK 23:Lidar_based_3dDet_0(23) data ready, but throttled!!
   warnings.warn(_str)
 (Semantic_segm_0)
                 TASK 23:Lidar_based_3dDet_0(23) THROTTLE -> READY!!
                 TASK 23:Lidar_based_3dDet_0(23) issued and start at 0.090054; 
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Semantic_segm_0)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (Semantic_segm_0)
                 TASK 19:Stereo_feature_enc_0(19) data ready, but throttled!!
   warnings.warn(_str)
 (ImageBB_0)
@@ -207,7 +281,7 @@ Bin 9 initial queue:
                 TASK 0:Traffic_light_detection_0(0) COMPLETED @ 0.093299
                 Broadcasting message: Traffic_light_detection_0_completed
                 TASK 0:Traffic_light_detection_0(0) is activated @ 0.093299!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Traffic_light_detection_0)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (Traffic_light_detection_0)
                 TASK 0:Traffic_light_detection_0(0) data ready, but throttled!!
   warnings.warn(_str)
 (ImageBB_0)
@@ -224,7 +298,7 @@ Bin 9 initial queue:
 (ImageBB_0)
                 Prediction_0 received event Lidar_based_3dDet_0 @ 0.097066
                 TASK 12:Prediction_0(12) is activated @ 0.097066!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_0)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (ImageBB_0)
                 TASK 12:Prediction_0(12) data ready, but throttled!!
   warnings.warn(_str)
 (ImageBB_1)
@@ -248,7 +322,7 @@ Bin 9 initial queue:
                 Broadcasting message: Prediction_0_completed
                 Planning_0 received event Prediction_0 @ 0.099281
                 TASK 15:Planning_0(15) is activated @ 0.099281!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_0)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (ImageBB_0)
                 TASK 15:Planning_0(15) data ready, but throttled!!
   warnings.warn(_str)
 (ImageBB_0)
@@ -258,7 +332,7 @@ Bin 9 initial queue:
                 TASK 15:Planning_0(15) COMPLETED @ 0.099516
                 Broadcasting message: Planning_0_completed
                 Steering_speed_0 received event Planning_0 @ 0.099516
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_0)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (ImageBB_0)
                 TASK 18:Steering_speed_0(18) data ready, but throttled!!
   warnings.warn(_str)
 (ImageBB_0)
@@ -314,14 +388,14 @@ pop data:  (0,) 19 0.059561118754625 0.05 0.109564495040875
                 Semantic_segm_1 received event Stereo_feature_enc_1 @ 0.109564
                 TASK 22:Semantic_segm_1(22) is activated @ 0.109564!!
                 TASK 20:Stereo_feature_enc_1(20) is activated @ 0.109564!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Semantic_segm_1)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (Semantic_segm_1)
                 TASK 22:Semantic_segm_1(22) data ready, but throttled!!
   warnings.warn(_str)
 pop data:  (0,) 19 0.059561118754625 0.05 0.109564495040875
 (Lane_drivable_area_det_0)
                 Optical_Flow_1 received event Stereo_feature_enc_1 @ 0.109564
                 TASK 27:Optical_Flow_1(27) is activated @ 0.109564!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Lane_drivable_area_det_0)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (Lane_drivable_area_det_0)
                 TASK 27:Optical_Flow_1(27) data ready, but throttled!!
   warnings.warn(_str)
 pop data:  (0,) 19 0.059561118754625 0.05 0.109564495040875
@@ -329,7 +403,7 @@ pop data:  (0,) 19 0.059561118754625 0.05 0.109564495040875
 (Lane_drivable_area_det_1)
                 Lane_drivable_area_det_1 received event Stereo_feature_enc_1 @ 0.109564
                 TASK 25:Lane_drivable_area_det_1(25) is activated @ 0.109564!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Lane_drivable_area_det_1)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (Lane_drivable_area_det_1)
                 TASK 25:Lane_drivable_area_det_1(25) data ready, but throttled!!
   warnings.warn(_str)
 pop data:  (0,) 19 0.05956645529425 0.05 0.10956983158049999
@@ -351,7 +425,7 @@ pop data:  (0,) 19 0.05956645529425 0.05 0.10956983158049999
                 TASK 18:Steering_speed_0(18) is activated @ 0.112265!!
                 TASK 3:ImageBB_0(3) THROTTLE -> READY!!
                 TASK 3:ImageBB_0(3) issued and resume at 0.112265; 
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_0)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (ImageBB_0)
                 TASK 29:Depth_estimation_1(29) data ready, but throttled!!
   warnings.warn(_str)
 (ImageBB_0)
@@ -362,7 +436,7 @@ pop data:  (0,) 3 0.079733238537125 0.03333333333333333 0.1130706015745
                 MultiCameraFusion_1 received event ImageBB_1 @ 0.113071
                 TASK 7:MultiCameraFusion_1(7) is activated @ 0.113071!!
                 TASK 4:ImageBB_1(4) is activated @ 0.113071!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_1)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (ImageBB_1)
                 TASK 7:MultiCameraFusion_1(7) data ready, but throttled!!
   warnings.warn(_str)
 (ImageBB_1)
@@ -428,7 +502,7 @@ pop data:  (0,) 3 0.079733238537125 0.03333333333333333 0.1130706015745
                 Broadcasting message: MultiCameraFusion_1_completed
                 Pure_camera_path_head_1 received event MultiCameraFusion_1 @ 0.124128
                 TASK 10:Pure_camera_path_head_1(10) is activated @ 0.124128!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_1)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (ImageBB_1)
                 TASK 10:Pure_camera_path_head_1(10) data ready, but throttled!!
   warnings.warn(_str)
 pop data:  (0,) 6 0.09079588517975 0.03333333333333333 0.12413324821712499
@@ -484,7 +558,7 @@ pop data:  (0,) 6 0.09079588517975 0.03333333333333333 0.12413324821712499
                 Broadcasting message: Pure_camera_path_head_1_completed
                 Prediction_1 received event Pure_camera_path_head_1 @ 0.130148
                 TASK 13:Prediction_1(13) is activated @ 0.130148!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_1)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (ImageBB_1)
                 TASK 13:Prediction_1(13) data ready, but throttled!!
   warnings.warn(_str)
 pop data:  (0,) 9 0.09681550187674999 0.03333333333333333 0.130152864914125
@@ -497,7 +571,7 @@ pop data:  (0,) 12 0.0992809831835 0.03333333333333333 0.13261834622087498
                 Broadcasting message: Prediction_1_completed
                 Planning_1 received event Prediction_1 @ 0.132618
                 TASK 16:Planning_1(16) is activated @ 0.132618!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_1)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (ImageBB_1)
                 TASK 16:Planning_1(16) data ready, but throttled!!
   warnings.warn(_str)
 (ImageBB_1)
@@ -608,7 +682,7 @@ pop data:  (0,) 21 0.087706028736875 0.05 0.13770940502312498
                 MultiCameraFusion_2 received event ImageBB_2 @ 0.146403
                 TASK 8:MultiCameraFusion_2(8) is activated @ 0.146403!!
                 TASK 5:ImageBB_2(5) is activated @ 0.146403!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_2)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (ImageBB_2)
                 TASK 8:MultiCameraFusion_2(8) data ready, but throttled!!
   warnings.warn(_str)
 pop data:  (0,) 4 0.1130706015745 0.03333333333333333 0.146407964611875
@@ -665,7 +739,7 @@ pop data:  (0,) 7 0.1241279116775 0.03333333333333333 0.15746527471487498
                 Broadcasting message: MultiCameraFusion_2_completed
                 Pure_camera_path_head_2 received event MultiCameraFusion_2 @ 0.157465
                 TASK 11:Pure_camera_path_head_2(11) is activated @ 0.157465!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_2)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (ImageBB_2)
                 TASK 11:Pure_camera_path_head_2(11) data ready, but throttled!!
   warnings.warn(_str)
 (ImageBB_2)
@@ -698,7 +772,7 @@ pop data:  (0,) 7 0.1241279116775 0.03333333333333333 0.15746527471487498
                 Optical_Flow_0 received event Stereo_feature_enc_0 @ 0.159563
                 Depth_estimation_0 received event Stereo_feature_enc_0 @ 0.159563
                 TASK 28:Depth_estimation_0(28) is activated @ 0.159563!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (Lane_drivable_area_det_1)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (Lane_drivable_area_det_1)
                 TASK 26:Optical_Flow_0(26) data ready, but throttled!!
   warnings.warn(_str)
 (Traffic_light_detection_2)
@@ -735,7 +809,7 @@ pop data:  (0,) 10 0.1301475283745 0.03333333333333333 0.163484891411875
                 Broadcasting message: Pure_camera_path_head_2_completed
                 Prediction_2 received event Pure_camera_path_head_2 @ 0.163485
                 TASK 14:Prediction_2(14) is activated @ 0.163485!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_2)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (ImageBB_2)
                 TASK 14:Prediction_2(14) data ready, but throttled!!
   warnings.warn(_str)
 (ImageBB_2)
@@ -746,7 +820,7 @@ pop data:  (0,) 10 0.1301475283745 0.03333333333333333 0.163484891411875
                 Broadcasting message: Prediction_2_completed
                 Planning_2 received event Prediction_2 @ 0.165950
                 TASK 17:Planning_2(17) is activated @ 0.165950!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_2)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (ImageBB_2)
                 TASK 17:Planning_2(17) data ready, but throttled!!
   warnings.warn(_str)
 pop data:  (0,) 13 0.13261834622087498 0.03333333333333333 0.16595570925824998
@@ -887,7 +961,7 @@ pop data:  (0,) 22 0.13771474156275 0.05 0.187718117849
                 Broadcasting message: MultiCameraFusion_0_completed
                 Pure_camera_path_head_0 received event MultiCameraFusion_0 @ 0.190797
                 TASK 9:Pure_camera_path_head_0(9) is activated @ 0.190797!!
-/home/zhangchenguang/git_repo/focus_scheduler/scheduler/allocator_agent.py:899: UserWarning: (ImageBB_0)
+/home/zhangchenguang/git_repo/focus_scheduler/scheduler/scheduler_agent.py:512: UserWarning: (ImageBB_0)
                 TASK 9:Pure_camera_path_head_0(9) data ready, but throttled!!
   warnings.warn(_str)
 pop data:  (0,) 8 0.15746527471487498 0.03333333333333333 0.19080263775224998
@@ -1070,3 +1144,169 @@ pop data:  (0,) 5 0.24640404410512498 0.03333333333333333 0.2797414071425
 pop data:  (0,) 23 0.197067735272 0.1 0.297069151304875
 pop data:  (0,) 23 0.197067735272 0.1 0.297069151304875
 pop data:  (0,) 23 0.197067735272 0.1 0.297069151304875
+=====================================
+
+bin_pack_result:
+=====================================
+
+bin: Traffic_light_detection_0(0)
+task: Traffic_light_detection_0(0)
+        start time: 0.000000, 0.100001
+        alloc cores: 5, 5
+        used time: 0.093299, 0.093299
+=====================================
+
+bin: Traffic_light_detection_1(1)
+task: Traffic_light_detection_1(1)
+        start time: 0.033337, 0.133333
+        alloc cores: 5, 5
+        used time: 0.093299, 0.093299
+=====================================
+
+bin: Traffic_light_detection_2(2)
+task: Optical_Flow_0(26)
+        start time: 0.066002
+        alloc cores: 5
+        used time: 0.000667
+task: Traffic_light_detection_2(2)
+        start time: 0.066669, 0.166671, 0.199997
+        alloc cores: 5, 2, 6
+        used time: 0.093299, 0.033327, 0.066643
+task: Depth_estimation_0(28)
+        start time: 0.166004
+        alloc cores: 4
+        used time: 0.032142
+=====================================
+
+bin: ImageBB_0(3)
+task: ImageBB_0(3)
+        start time: 0.000000, 0.100001
+        alloc cores: 60, 60
+        used time: 0.079733, 0.079733
+task: Optical_Flow_0(26)
+        start time: 0.066669
+        alloc cores: 5
+        used time: 0.031139
+task: MultiCameraFusion_0(6)
+        start time: 0.079808, 0.179809
+        alloc cores: 60, 60
+        used time: 0.010988, 0.010988
+task: Pure_camera_path_head_0(9)
+        start time: 0.090807, 0.190808
+        alloc cores: 7, 7
+        used time: 0.006009, 0.006009
+task: Prediction_0(12)
+        start time: 0.097813, 0.197815
+        alloc cores: 21, 21
+        used time: 0.001468, 0.001468
+task: Planning_0(15)
+        start time: 0.099350, 0.199352
+        alloc cores: 21, 21
+        used time: 0.000165, 0.000165
+task: Steering_speed_0(18)
+        start time: 0.099521, 0.103689, 0.107857, 0.112025, 0.116187, 0.120355, 0.124523, 0.128691, 0.132858, 0.137021, 0.141189, 0.145357, 0.149525, 0.153687, 0.157855, 0.162023, 0.166191, 0.170358, 0.174521, 0.178689, 0.182857, 0.187024, 0.191187, 0.195355, 0.199523
+        alloc cores: 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2
+        used time: 0.000240, 0.000240, 0.000240, 0.000240, 0.000240, 0.000240, 0.000240, 0.000240, 0.000240, 0.000240, 0.000240, 0.000240, 0.000240, 0.000240, 0.000240, 0.000240, 0.000240, 0.000240, 0.000240, 0.000240, 0.000240, 0.000240, 0.000240, 0.000240, 0.000240
+task: Depth_estimation_1(29)
+        start time: 0.116006
+        alloc cores: 4
+        used time: 0.032142
+=====================================
+
+bin: ImageBB_1(4)
+task: ImageBB_1(4)
+        start time: 0.033337, 0.133333
+        alloc cores: 60, 60
+        used time: 0.079733, 0.079733
+task: MultiCameraFusion_1(7)
+        start time: 0.113140
+        alloc cores: 60
+        used time: 0.010988
+task: Pure_camera_path_head_1(10)
+        start time: 0.124139
+        alloc cores: 7
+        used time: 0.006009
+task: Prediction_1(13)
+        start time: 0.131151
+        alloc cores: 21
+        used time: 0.001468
+task: Planning_1(16)
+        start time: 0.132688
+        alloc cores: 21
+        used time: 0.000165
+=====================================
+
+bin: ImageBB_2(5)
+task: ImageBB_2(5)
+        start time: 0.066669, 0.166671
+        alloc cores: 60, 60
+        used time: 0.079733, 0.079733
+task: MultiCameraFusion_2(8)
+        start time: 0.146477
+        alloc cores: 60
+        used time: 0.010988
+task: Pure_camera_path_head_2(11)
+        start time: 0.157476
+        alloc cores: 7
+        used time: 0.006009
+task: Prediction_2(14)
+        start time: 0.164483
+        alloc cores: 21
+        used time: 0.001468
+task: Planning_2(17)
+        start time: 0.166020
+        alloc cores: 21
+        used time: 0.000165
+=====================================
+
+bin: Semantic_segm_0(6)
+task: Stereo_feature_enc_0(19)
+        start time: 0.000000, 0.100001
+        alloc cores: 6, 6
+        used time: 0.059561, 0.059561
+task: Semantic_segm_0(21)
+        start time: 0.066002, 0.166004
+        alloc cores: 6, 6
+        used time: 0.021704, 0.021704
+task: Lidar_based_3dDet_0(23)
+        start time: 0.090054, 0.190056
+        alloc cores: 6, 6
+        used time: 0.007007, 0.007007
+=====================================
+
+bin: Semantic_segm_1(7)
+task: Stereo_feature_enc_1(20)
+        start time: 0.050003, 0.150005
+        alloc cores: 6, 6
+        used time: 0.059561, 0.059561
+task: Semantic_segm_1(22)
+        start time: 0.116006
+        alloc cores: 6
+        used time: 0.021704
+=====================================
+
+bin: Lane_drivable_area_det_0(8)
+task: Lane_drivable_area_det_0(24)
+        start time: 0.066002, 0.166004
+        alloc cores: 8, 8
+        used time: 0.032142, 0.032142
+task: Optical_Flow_1(27)
+        start time: 0.116006
+        alloc cores: 5
+        used time: 0.031806
+=====================================
+
+bin: Lane_drivable_area_det_1(9)
+task: Depth_estimation_0(28)
+        start time: 0.066002
+        alloc cores: 4
+        used time: 0.032142
+task: Lane_drivable_area_det_1(25)
+        start time: 0.116006
+        alloc cores: 8
+        used time: 0.032142
+task: Optical_Flow_0(26)
+        start time: 0.166004
+        alloc cores: 5
+        used time: 0.031806
+=====================================

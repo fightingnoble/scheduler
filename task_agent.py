@@ -56,6 +56,7 @@ class ProcessBase(object):
         self.totcpu = task.totcpu         # total cpu time, ++ when cpu burst
 
         self.released = False
+        self.i_offset = task.i_offset     # offset of the trigger time
         self.release_time = release_t     # recored when the process is released
         self.deadline = deadline_abs      # recored when the process is generated  
         self.exp_comp_t = task.exp_comp_t # total cpu time, ++ when cpu burst
@@ -67,6 +68,7 @@ class ProcessBase(object):
         self.ready = False
         self.start_time = 0   # record at begining
         self.end_time = 0     # record at endding
+        self.curr_start_time = 0 # record at getting cpu
         self.currentburst = 0 # For preemption, clear once context switches or preemption judgment happens, ++ when cpu burst
         self.burst = 0        # Record the current cpu time for current I/O op, ++ when cpu burst, clear from waiting to running
         self.totburst = 0     # Sync with clocks, ++ when cpu burst, 
@@ -124,7 +126,7 @@ class ProcessBase(object):
         if the task is activated, return True
         """
         if self.task.trigger_mode == "timer":
-            if math.isclose(time%self.task.period, self.task.i_offset, abs_tol=time_step*0.99):
+            if math.isclose(time%self.task.period, self.i_offset, abs_tol=time_step*0.99):
                 for key in self.pred_ctrl.keys():
                     self.pred_ctrl[key]["valid"] = True
                     self.pred_ctrl[key]["trigger_time"] = time

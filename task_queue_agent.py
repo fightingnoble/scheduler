@@ -10,12 +10,12 @@ class TaskQueue(Queue):
 
     Entries are typically tuples of the form:  (priority number, data).
     '''
-    def __init__(self, init_list:List=[], maxsize: int = -1, decending=True, sort_f=None) -> None:
+    def __init__(self, init_list:List=[], maxsize: int = -1, descending=True, sort_f=None) -> None:
         super().__init__(maxsize)
         self.queue:List = []
         if init_list: 
             self.queue.extend(init_list)
-        self.reverse = decending
+        self.reverse = descending
         self.sort_f = sort_f
         self._sort()
 

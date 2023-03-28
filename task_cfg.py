@@ -603,6 +603,29 @@ def init_depen(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[T
         if verbose:
             print(job_n, job.pred_data, job.pred_ctrl, job.succ_data, job.succ_ctrl)
 
+def create_init_p_list(tasks: Union[List[TaskInt], Dict[str, TaskInt]], verbose:bool):
+    if isinstance(tasks, list):
+        task_list = tasks
+    elif isinstance(tasks, dict):
+        task_list = list(tasks.values())
+
+    # init the wait queue 
+    # add1216: distinguish the task defined by user and the process in the task queue
+    # generate the a serial of ideal task instances
+    init_p_list = []
+    pid = 0
+    for task in task_list: 
+        # for r, d in zip(task.get_release_event(event_range), task.get_deadline_event(event_range)):
+        r = task.get_release_time()
+        d = task.get_deadline_time()
+        p = task.make_process(r, d, pid)
+        pid += 1
+        init_p_list.append(p)
+        if verbose:
+            print("TASK {:d}:{:s}({:d}), is expected to finish {}T OPs in {:f}-{:f} !!".format(
+                p.task.id, p.task.name, p.pid, p.totcpu, p.release_time, p.deadline))
+                
+    return init_p_list
 
 def push_task_into_scheduling_table(tasks: Union[List[TaskInt], Dict[str, TaskInt]], SchedTab: SchedulingTableInt, 
                                     quantumSize,
@@ -646,10 +669,10 @@ def push_task_into_scheduling_table(tasks: Union[List[TaskInt], Dict[str, TaskIn
     # monitor the wake up time: (ascending)
     # activate by the new period or the arrival of the blocked io data
     # TODO: add a queue update logic
-    wait_queue:TaskQueue = TaskQueue(init_p_list, sort_f=lambda x: x.release_time, decending=False)
+    wait_queue:TaskQueue = TaskQueue(init_p_list, sort_f=lambda x: x.release_time, descending=False)
     # monitor the deadline: (ascending)
-    ready_queue:TaskQueue = TaskQueue(sort_f=lambda x: x.deadline, decending=False)
-    # monitor the deadline for pre-emption: (decending)
+    ready_queue:TaskQueue = TaskQueue(sort_f=lambda x: x.deadline, descending=False)
+    # monitor the deadline for pre-emption: (descending)
     running_queue:TaskQueue = TaskQueue(sort_f=lambda x: x.deadline)
     
     expired_list:List[TaskInt] = []
@@ -844,10 +867,10 @@ def push_task_into_scheduling_table_cyclic_preemption_disable(tasks: Union[List[
     # monitor the wake up time: (ascending)
     # activate by the new period or the arrival of the blocked io data
     # TODO: add a queue update logic
-    wait_queue:TaskQueue = TaskQueue(init_p_list, sort_f=lambda x: x.release_time, decending=False)
+    wait_queue:TaskQueue = TaskQueue(init_p_list, sort_f=lambda x: x.release_time, descending=False)
     # monitor the deadline: (ascending)
-    ready_queue:TaskQueue = TaskQueue(sort_f=lambda x: x.deadline, decending=False)
-    # monitor the deadline for pre-emption: (decending)
+    ready_queue:TaskQueue = TaskQueue(sort_f=lambda x: x.deadline, descending=False)
+    # monitor the deadline for pre-emption: (descending)
     running_queue:TaskQueue = TaskQueue(sort_f=lambda x: x.deadline)
     
     expired_list:List[ProcessInt] = []
@@ -1106,10 +1129,10 @@ def push_task_into_bins(init_p_list: List[TaskInt], affinity, #SchedTab: Schedul
     # monitor the wake up time: (ascending)
     # activate by the new period or the arrival of the blocked io data
     # TODO: add a queue update logic
-    wait_queue:TaskQueue = TaskQueue(init_p_list, sort_f=lambda x: x.release_time, decending=False)
+    wait_queue:TaskQueue = TaskQueue(init_p_list, sort_f=lambda x: x.release_time, descending=False)
     # monitor the deadline: (ascending)
-    ready_queue:TaskQueue = TaskQueue(sort_f=lambda x: x.deadline, decending=False)
-    # monitor the deadline for pre-emption: (decending)
+    ready_queue:TaskQueue = TaskQueue(sort_f=lambda x: x.deadline, descending=False)
+    # monitor the deadline for pre-emption: (descending)
     running_queue:TaskQueue = TaskQueue(sort_f=lambda x: x.deadline)
     
     rsc_recoder = {}
@@ -1123,7 +1146,7 @@ def push_task_into_bins(init_p_list: List[TaskInt], affinity, #SchedTab: Schedul
         else:
             return alloc_slot_s[0]
     # monitor the issue time: (ascending)
-    issue_list:TaskQueue = TaskQueue(sort_f=issue_sort_fn, decending=False)
+    issue_list:TaskQueue = TaskQueue(sort_f=issue_sort_fn, descending=False)
     completed_list:List[ProcessInt] = []
     miss_list:List[ProcessInt] = []
     preempt_list:List[ProcessInt] = []
@@ -1485,30 +1508,6 @@ def push_task_into_bins(init_p_list: List[TaskInt], affinity, #SchedTab: Schedul
         print("=====================================\n")
     
     return bin_list, init_p_list
-
-def create_init_p_list(tasks: Union[List[TaskInt], Dict[str, TaskInt]], verbose:bool):
-    if isinstance(tasks, list):
-        task_list = tasks
-    elif isinstance(tasks, dict):
-        task_list = list(tasks.values())
-
-    # init the wait queue 
-    # add1216: distinguish the task defined by user and the process in the task queue
-    # generate the a serial of ideal task instances
-    init_p_list = []
-    pid = 0
-    for task in task_list: 
-        # for r, d in zip(task.get_release_event(event_range), task.get_deadline_event(event_range)):
-        r = task.get_release_time()
-        d = task.get_deadline_time()
-        p = task.make_process(r, d, pid)
-        pid += 1
-        init_p_list.append(p)
-        if verbose:
-            print("TASK {:d}:{:s}({:d}), is expected to finish {}T OPs in {:f}-{:f} !!".format(
-                p.task.id, p.task.name, p.pid, p.totcpu, p.release_time, p.deadline))
-                
-    return init_p_list
 
 def get_rsc_2b_released(rsc_recoder, n_slot, _p):
     alloc_slot_s_t, alloc_size_t, allo_slot_t, bin_id_t = rsc_recoder[_p.pid]

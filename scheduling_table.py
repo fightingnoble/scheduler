@@ -15,7 +15,7 @@ class SchedulingTableInt(object):
     the number of time slots is determined by the hyper-period of the tasks
     the number of resources is determined by the number of resources that are available
     """
-    def __init__(self, num_resources: int, num_time_slots:int, id: int = None, name: str = None):
+    def __init__(self, num_resources: int, num_time_slots:int, id: int = None, name: str = None, hp:int=None):
         # self.scheduling_table = np.zeros((num_resources, num_time_slots), dtype=int)
         # self.scheduling_table = np.full((num_time_slots), Resource_model_int(num_resources, id, name), dtype=Resource_model_int)
         self.scheduling_table = np.array([Resource_model_int(num_resources, ) for _ in range(num_time_slots)], dtype=Resource_model_int)
@@ -34,8 +34,20 @@ class SchedulingTableInt(object):
         self.sparse_idx_next = 0
         self.sparse_mode = False
 
+        # available when used as a recorder
+        self.wr_pointer = 0
+        self.hypper_period = hp
+
     def append(self, rsc_agent: Resource_model_int):
-        self.scheduling_table = np.append(self.scheduling_table, rsc_agent)
+        # Too slow
+        # self.scheduling_table = np.append(self.scheduling_table, rsc_agent)
+        
+        if self.wr_pointer >= self.temp_size:
+            assert self.hypper_period is not None
+            self.temp_size += self.hypper_period
+            self.scheduling_table = np.append(self.scheduling_table, np.array([Resource_model_int(self.num_resources, ) for _ in range(self.hypper_period)], dtype=Resource_model_int))
+        self.scheduling_table[self.wr_pointer].update(rsc_agent.rsc_map)
+        self.wr_pointer += 1
 
     def index_occupy_by_id(self, time_slot_s:int=None, time_slot_e:int=None) -> Dict[int, List[int]]:
         """

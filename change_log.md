@@ -44,4 +44,36 @@ SOTA reference scheduling trace, considered as the right result.
 ## 20230327
 scheduling_table.py
 - extract print_alloc_detail from push_task_into_bins.
-- add 
+- optimize p_name and time print feature in print_scheduling_table
+resource_agent.py
+- add pid2name conversion support.
+Monitor_agent.py
+- add trace_recoder to monitor
+allocator_agent.py
+- pass monitor into scheduler_step
+create glb_sched.py
+
+## 20230328
+allocator_agent.py
+- Plot the dynamic scheduling trace, recorded by monitor. 
+
+monitor_agent.py scheduling_table.py
+- add hyper_cycle, avoid slow down by pre-extend the size of the recorder of hyper_cycle each time. 
+
+task_agent.py 
+- add attibution curr_start_time to process
+
+scheduler_agent.py
+- Fix typos "descending"s!
+- Fix bug: "alloc_core"s are not integers at runtime/add ceil operation and type checks.
+- Fix bug: the budget is covered rather than replenish
+    - We discuss this issue in two scenarios:
+        1. with data arriving one time: allocate the resources according to the budget
+        2. with data arriving late: allocate the resources following the "EDF", and estimate the resources at runtime
+    - read planned_rsc_size from budget_recoder[_p.pid][1] other than curr_cfg.rsc_map[_p.pid].
+- Add test case: simulate sensor data arrival time varies by injecting noise to self.task.period, self.task.i_offset
+
+profiling.csv
+- modifiy the type, 'soft' or 'hard' of some tasks.
+
+test and update golden trace
