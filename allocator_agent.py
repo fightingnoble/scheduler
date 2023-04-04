@@ -88,7 +88,7 @@ from task_queue_agent import TaskQueue
 from task_agent import ProcessInt
 import copy
 from lru import LRUCache
-from scheduler_agent import Scheduler 
+from scheduler_agent import Scheduler, glb_dynamic_sched_step
 from monitor_agent import Monitor
 
 
@@ -370,6 +370,54 @@ def cyclic_sched(task_spec:Spec, affinity,
                 timestep, hyper_p, n_p, verbose, warmup=warmup, drain=drain) 
 
 
+def glb_sched(task_spec:Spec, affinity, 
+                scheduler_list: List[Scheduler], monitor_list:List[Monitor],
+                rsc_list:List[Resource_model_int], 
+                total_cores:int, 
+                glb_p_list:List[ProcessInt],
+                timestep, hyper_p, n_p=1, msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
+                quantum_check_en:bool = False, quantumSize=None,
+                verbose=False, *, warmup=False, drain=False,):
+    """
+    partition the scheduling table
+    """
+    event_range = hyper_p * (n_p+warmup)
+    sim_range = hyper_p * (n_p+warmup+drain)
+    sim_slot_num = int(sim_range/timestep)
+
+    glb_name_p_dict = {p.task.name:p for p in glb_p_list}
+
+    # spatial management
+    # Each partition maintains a scheduling table, a task monitor, and a scheduler. 
+    # for res_cfg, sched, monitor,  msg_queue, in zip(rsc_list, scheduler_list, monitor_list, msg_dispatcher.queues, ):
+    res_cfg, sched, monitor,  msg_queue = rsc_list[0], scheduler_list[0], monitor_list[0], msg_dispatcher.queues[0]
+    inactive_list:List[ProcessInt] = sched.inactive_list
+    for _p in glb_p_list:
+        if _p not in inactive_list:
+            inactive_list.append(_p)
+    sched.process_dict.update({p.pid:p for p in glb_p_list})
+
+    for n_slot in range(sim_slot_num):
+        curr_t = n_slot * timestep
+
+        if (n_slot - 1) * timestep < event_range and n_slot * timestep >= event_range: 
+            print("="*20, "DRAIN", "="*20, "\n")
+        elif n_slot == 0 and warmup:
+            print("="*20, "WARMUP", "="*20, "\n")
+        elif (n_slot * timestep)//hyper_p > (n_slot-1)*timestep//hyper_p:
+            print("="*20, "PERIOD {:d}".format(int((n_slot * timestep)//hyper_p)), "="*20, "\n")
+        
+        curr_t = n_slot * timestep
+
+        # extract scheudler, including queues and lists from scheduler_list
+        glb_name_p_dict: Dict[str, ProcessInt]
+        msg_queue:Queue
+        DEBUG_FG = False
+
+        glb_dynamic_sched_step(sched, msg_dispatcher, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, monitor, DEBUG_FG, quantum_check_en, quantumSize)
+
+
+
 if __name__ == "__main__": 
     import argparse
     import numpy as np 
@@ -384,10 +432,12 @@ if __name__ == "__main__":
     parser.add_argument("--verbose", action="store_true", help="verbose")
     parser.add_argument("--test_case", type=str, default="all", help="task name")
     parser.add_argument("--plot", action="store_true", help="plot the task timeline")
-    parser.add_argument("--bin_pack", action="store_true", help="plot the task timeline")
     parser.add_argument("--test_all", default=False, help="test all the task")
+    parser.add_argument("--num_cores", default=266, type=int, help="number of cores")
+    parser.add_argument("--BinExtendRule", default="list", type=str, help="Rule for when and how to extend the bin")
     args = parser.parse_args() 
     glb_n_task_dict = load_taskint(args.verbose)
+    num_cores = args.num_cores
 
     if args.test_case == "all":
         args.test_all = True
@@ -395,35 +445,36 @@ if __name__ == "__main__":
     f_max = max([glb_n_task_dict[task].freq for task in glb_n_task_dict])
     hyper_p = 1/f_gcd
     sim_step = min([glb_n_task_dict[task].exp_comp_t for task in glb_n_task_dict])/32
+    quantumSize = sim_step*2
 
     if args.test_case == "bin_pack" or args.test_all:
-        # push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, 256, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
+        # push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, num_cores, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
         init_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
-        bin_list, init_p_list = push_task_into_bins(init_p_list, affinity_cfg, 256, sim_step*2, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
+        bin_list, init_p_list = push_task_into_bins(init_p_list, affinity_cfg, num_cores, quantumSize, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
         from scheduling_table import get_task_layout_compact
         get_task_layout_compact(bin_list, init_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=1, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
-        txt_size=40, tick_dens=2, save_path="task_bin_pack_cyclic.pdf") 
+        txt_size=40, tick_dens=2, save_path=f"plot/task_bin_pack_cyclic_{num_cores}.pdf") 
 
         get_task_layout_compact(bin_list, init_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=1, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
-        txt_size=40, tick_dens=4, plot_start=0, save_path="task_bin_pack_full.pdf")
+        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/task_bin_pack_full_{num_cores}.pdf")
 
         # save the bin_list and the init_p_list
-        with open("bin_list.pkl", "wb") as f:
+        with open(f"cache/bin_list_{num_cores}.pkl", "wb") as f:
             pickle.dump(bin_list, f)
-        # with open("init_p_list.pkl", "wb") as f:
+        # with open(f"init_p_list_{num_cores}.pkl", "wb") as f:
         #     pickle.dump(init_p_list, f)
         try:
             # load the bin_list and the init_p_list
-            with open("bin_list.pkl", "rb") as f:
+            with open(f"cache/bin_list_{num_cores}.pkl", "rb") as f:
                 bin_list = pickle.load(f)
-            print("bin_list.pkl saved and loaded successfully")
-            # with open("init_p_list.pkl", "rb") as f:
+            print(f"cache/bin_list_{num_cores}.pkl saved and loaded successfully")
+            # with open(f"init_p_list_{num_cores}.pkl", "rb") as f:
             #     init_p_list = pickle.load(f)
-            # print("init_p_list.pkl saved and loaded successfully")
+            # print(f"init_p_list_{num_cores}.pkl saved and loaded successfully")
         except:
-            print("bin_list.pkl or init_p_list.pkl not found")
+            print(f"cache/bin_list_{num_cores}.pkl or init_p_list_{num_cores}.pkl not found")
             exit()
 
     elif args.test_case == "dynamic" or args.test_all:
@@ -431,14 +482,14 @@ if __name__ == "__main__":
         init_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
         try:
             # load the bin_list and the init_p_list
-            with open("bin_list.pkl", "rb") as f:
+            with open(f"cache/bin_list_{num_cores}.pkl", "rb") as f:
                 bin_list = pickle.load(f)
-            # with open("init_p_list.pkl", "rb") as f:
+            # with open(f"init_p_list_{num_cores}.pkl", "rb") as f:
             #     init_p_list = pickle.load(f)
         except:
-            print("bin_list.pkl not found")
-            # print("bin_list.pkl or init_p_list.pkl not found")
-            bin_list, _ = push_task_into_bins(init_p_list, affinity_cfg, 256, sim_step*2, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
+            print(f"cache/bin_list_{num_cores}.pkl not found")
+            # print(f"cache/bin_list_{num_cores}.pkl or init_p_list_{num_cores}.pkl not found")
+            bin_list, _ = push_task_into_bins(init_p_list, affinity_cfg, num_cores, quantumSize, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
 
         logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
         physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd))
@@ -452,8 +503,8 @@ if __name__ == "__main__":
         
         task_spec = Spec(0.1, [1 for _ in init_p_list]) 
         # process_dict_list = [{pid:init_p_list[pid] for pid in _SchedTab.index_occupy_by_id()} for _SchedTab in bin_list]
-        rsc_list = [Resource_model_int(size=sched_tab.scheduling_table[0].size) for sched_tab in bin_list]
-        # curr_cfg_list = [Resource_model_int(size=sched_tab.scheduling_table[0].size) for sched_tab in bin_list]
+        rsc_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
+        # curr_cfg_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
         # msg_pipe = Message()
         msg_dispatcher = MsgDispatcher(len(bin_list))
         # filter the processes with trigger_mode is not "N"
@@ -462,13 +513,13 @@ if __name__ == "__main__":
             _bin.sim_triggered_list = _sim_triggered_list
             print("bin: ", _bin.id, "sim_triggered_list: ", [p.task.name for p in _sim_triggered_list])
         scheduler_list = [Scheduler(_SchedTab, init_p_list) for _SchedTab in bin_list]
-        monitor_list = [Monitor(_SchedTab, int(3*hyper_p/sim_step)) for _SchedTab in bin_list]
+        monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
 
         print("sim_step: ", sim_step)
         cyclic_sched(task_spec, affinity_cfg, 
                 scheduler_list, monitor_list,
                 rsc_list, 
-                256, 
+                num_cores, 
                 init_p_list,
                 sim_step, hyper_p, 1, msg_dispatcher,
                 args.verbose, warmup=True, drain=True)
@@ -485,4 +536,64 @@ if __name__ == "__main__":
         from scheduling_table import get_task_layout_compact
         get_task_layout_compact(actual_sched_record, init_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=1, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
-        txt_size=40, tick_dens=4, plot_start=0, save_path="exe_monitor_full.pdf")
+        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/exe_monitor_ful_{num_cores}l.pdf")
+
+    elif args.test_case == "glb_dynamic":
+        np.random.seed(0)
+        init_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
+        bin_list = [SchedulingTableInt(num_cores, 1, 0, "bin_glb_dynamic")]
+        logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
+        physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd))
+        
+        init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
+        from scheduler_agent import Scheduler 
+        from monitor_agent import Monitor
+        from spec import Spec
+        from msg_dispatcher import MsgDispatcher
+        # from message_agent import Message
+        
+        task_spec = Spec(0.1, [1 for _ in init_p_list]) 
+        # process_dict_list = [{pid:init_p_list[pid] for pid in _SchedTab.index_occupy_by_id()} for _SchedTab in bin_list]
+        rsc_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
+        # curr_cfg_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
+        # msg_pipe = Message()
+        msg_dispatcher = MsgDispatcher(len(bin_list))
+        # filter the processes with trigger_mode is not "N"
+        sim_triggered_list = [[p for p in init_p_list if p.task.trigger_mode!='N'],]
+        for _bin, _sim_triggered_list in zip(bin_list, sim_triggered_list):
+            _bin.sim_triggered_list = _sim_triggered_list
+            print("bin: ", _bin.id, "sim_triggered_list: ", [p.task.name for p in _sim_triggered_list])
+        scheduler_list = [Scheduler(_SchedTab, init_p_list) for _SchedTab in bin_list]
+        monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
+
+        print("sim_step: ", sim_step)
+        glb_sched(task_spec, affinity_cfg, 
+                scheduler_list, monitor_list,
+                rsc_list, 
+                num_cores, 
+                init_p_list,
+                sim_step, hyper_p, 1, msg_dispatcher,
+                True, quantumSize, 
+                args.verbose, warmup=True, drain=True)
+        
+        print("number of context switch {}".format(scheduler_list[0].barrier.number_of_asserts))
+
+        actual_sched_record = [monitor.trace_recoder for monitor in monitor_list]
+
+        pid2name = {_p.pid:_p.task.name for _p in init_p_list}
+        print("=====================================\n")
+        print("bin_pack_result:")
+        print("=====================================\n")
+        for _SchedTab in actual_sched_record:
+            _SchedTab.print_alloc_detail(pid2name, sim_step)
+
+        from scheduling_table import get_task_layout_compact
+        get_task_layout_compact(actual_sched_record, init_p_list, save= True, time_step= sim_step,
+        hyper_p=hyper_p, n_p=1, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
+        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/dyn_glb_exe_monitor_full_{num_cores}.pdf")
+
+        # plot with bokhe
+        # get_task_layout_compact(actual_sched_record, init_p_list, save= True, time_step= sim_step,
+        # hyper_p=hyper_p, n_p=1, warmup=True, drain=True, plot_legend=False, 
+        # txt_size=40, tick_dens=4, plot_start=0, tool="bokeh", 
+        # save_path=f"plot/dyn_glb_exe_monitor_full_bokeh_{num_cores}")

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Union, List, Dict, Iterator, Callable, Union
 import copy
 import pickle
-
+import math
 import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -1186,7 +1186,7 @@ def push_task_into_bins(init_p_list: List[TaskInt], affinity, #SchedTab: Schedul
 
     def _next_bin_obj_1(max_core_size:int, size_list:List[int], name_list:List[str]): 
         """
-        genrate the bin list according to the size_list until the max_core_size is reached
+        generate the bin list according to the size_list until the max_core_size is reached
         """ 
         cum_size = 0
         bin_id = 0
@@ -1200,7 +1200,7 @@ def push_task_into_bins(init_p_list: List[TaskInt], affinity, #SchedTab: Schedul
 
     def _next_bin_obj_2(max_core_size:int, p_list:List[ProcessInt], RDA_ratio:float=1.2): 
         """
-        genrate the bin list according to the size_list until the max_core_size is reached
+        generate the bin list according to the size_list until the max_core_size is reached
         """ 
         cum_size = 0
         bin_list = []
@@ -1803,7 +1803,7 @@ def preempt_the_conflicts(_p:ProcessInt, bin:SchedulingTableInt,
         # task is runnning but has executed for an integer multiples of the quantum size (control the pre-emption grain)
         if quantum_check_en:
             cum_exec_quantum = _p_2b_preempt.cumulative_executed_time / quantumSize
-            reach_preempt_grain = np.allclose(cum_exec_quantum, round(cum_exec_quantum), atol=1e-2)
+            reach_preempt_grain = math.isclose(cum_exec_quantum, round(cum_exec_quantum), abs_tol=1e-2)
             if _p_2b_preempt.currentburst > 0 and not reach_preempt_grain: 
                 continue
         else:
@@ -1944,9 +1944,9 @@ if __name__ == "__main__":
     sim_step = min([glb_n_task_dict[task].exp_comp_t for task in glb_n_task_dict])/32
 
     if args.test_case == "timeline" or args.test_all:
-        vis_task_static_timeline(list(glb_n_task_dict.values()), save=True, save_path="task_static_timeline_cyclic.pdf", hyper_p=hyper_p, n_p=1, warmup=False, drain=True, )
+        vis_task_static_timeline(list(glb_n_task_dict.values()), save=True, save_path="plot/task_static_timeline_cyclic.pdf", hyper_p=hyper_p, n_p=1, warmup=False, drain=True, )
     elif args.test_case == "liveness" or args.test_all:
-        vis_task_static_timeline(list(glb_n_task_dict.values()), save=True, save_path="task_liveness_timeline_cyclic.svg", 
+        vis_task_static_timeline(list(glb_n_task_dict.values()), save=True, save_path="plot/task_liveness_timeline_cyclic.svg", 
         hyper_p=hyper_p, n_p=1, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
         txt_size=40, tick_dens=4)
     elif args.test_case == "graph" or args.test_all:
@@ -1988,4 +1988,4 @@ if __name__ == "__main__":
         for _, t in text.items():
             t.set_rotation(30)
         fig.tight_layout()
-        plt.savefig("jobTask_graph.pdf", format="pdf")
+        plt.savefig("plot/jobTask_graph.pdf", format="pdf")

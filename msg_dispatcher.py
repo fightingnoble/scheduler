@@ -2,14 +2,18 @@
 from queue import Queue
 
 class MsgDispatcher:
-    def __init__(self, num_processes):
-        self.num_processes = num_processes
-        self.queues = [Queue() for _ in range(num_processes)]
+    def __init__(self, num_queues):
+        self.num_processes = num_queues
+        self.queues = [Queue() for _ in range(num_queues)]
 
     def broadcast_message(self, message, prefix=""):
         print(prefix+f"Broadcasting message: {message}")
         for queue in self.queues:
             queue.put(message)
+    
+    def send_message(self, queue_id, message, prefix=""):
+        print(prefix+f"Sending message to queue {queue_id}: {message}")
+        self.queues[queue_id].put(message)
 
 #     def start_processes(self, target, args=()):
 #         processes = []

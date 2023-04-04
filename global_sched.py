@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Union, List, Dict, Iterator, Callable, Union
 import copy
-
+import math
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -13,6 +13,7 @@ from resource_agent import Resource_model_int
 from task_agent import TaskInt
 from task_queue_agent import TaskQueue 
 from task_agent import ProcessInt, ProcessBase
+from monitor_agent import Monitor
 
 # ==================== top-level scheduling procedure ====================
 def push_task_into_bins(init_p_list: List[TaskInt], affinity, #SchedTab: SchedulingTableInt, 
@@ -83,7 +84,7 @@ def push_task_into_bins(init_p_list: List[TaskInt], affinity, #SchedTab: Schedul
 
     def _next_bin_obj_1(max_core_size:int, size_list:List[int], name_list:List[str]): 
         """
-        genrate the bin list according to the size_list until the max_core_size is reached
+        generate the bin list according to the size_list until the max_core_size is reached
         """ 
         cum_size = 0
         bin_id = 0
@@ -318,7 +319,6 @@ def push_task_into_bins(init_p_list: List[TaskInt], affinity, #SchedTab: Schedul
         _SchedTab.print_alloc_detail(pid2name, timestep)
     
     return bin_list, init_p_list
-
 
 
 #
@@ -638,7 +638,7 @@ def preempt_the_conflicts(_p:ProcessInt, bin:SchedulingTableInt,
         # task is runnning but has executed for an integer multiples of the quantum size (control the pre-emption grain)
         if quantum_check_en:
             cum_exec_quantum = _p_2b_preempt.cumulative_executed_time / quantumSize
-            reach_preempt_grain = np.allclose(cum_exec_quantum, round(cum_exec_quantum), atol=1e-2)
+            reach_preempt_grain = math.isclose(cum_exec_quantum, round(cum_exec_quantum), abs_tol=1e-2)
             if _p_2b_preempt.currentburst > 0 and not reach_preempt_grain: 
                 continue
         else:
@@ -743,6 +743,7 @@ def bin_iter_uniform_dist(_new_bin: Callable, max_core_size: int, size_list: Lis
     Cum_req_size = np.cumsum(size_list)
     idx = (np.cumsum(size_list) > max_core_size).nonzero()[0][0]
     # distribute these spare resources to the first idx-1 bins
+    size_list = []
     if Cum_req_size[idx - 1] < max_core_size:
         Cum_alloc_size = Cum_req_size * max_core_size / Cum_req_size[idx - 1]
         for _idx in range(idx):
@@ -752,6 +753,7 @@ def bin_iter_uniform_dist(_new_bin: Callable, max_core_size: int, size_list: Lis
             else:
                 size = int(Cum_alloc_size[_idx] - Cum_alloc_size[_idx - 1])
                 Cum_req_size[_idx] = size + Cum_req_size[_idx - 1]
+            size_list.append(size)
     # yield from (_new_bin(bin_id, size, name) for bin_id, (size, name) in enumerate(zip(Cum_req_size[:idx], name_list[:idx])))
     bin_iter_list(_new_bin, Cum_req_size[:idx], name_list[:idx])
 

@@ -74,6 +74,28 @@ scheduler_agent.py
 - Add test case: simulate sensor data arrival time varies by injecting noise to self.task.period, self.task.i_offset
 
 profiling.csv
-- modifiy the type, 'soft' or 'hard' of some tasks.
+- modify the type, 'soft' or 'hard' of some tasks.
 
-test and update golden trace
+test and update the golden trace
+
+## 20230404
+- replace `np.allclose` by `math.isclose`;
+- fix typos.
+global_sched.py, task_cfg.py
+
+add parent folder to log, cache, and plot
+- task_cfg.py, allocator_agent.py
+
+add "_{num_cores}" suffix to saved files
+- allocator_agent.py
+
+scheduling_table.py 
+- explore plotting with Bokeh and Plotly.
+
+scheduler_agent.py, allocator_agent.py, barrier.py monitor.py
+- add support to the global dynamic scheduler in Planaria. 
+- a cyclic simulation, a glb_dynamic_step function;
+- add a placeholder when the resources are occupied by the re-allocation procedure.
+
+global_var.py
+- try to add some parameters
