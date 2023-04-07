@@ -435,6 +435,17 @@ if __name__ == "__main__":
     parser.add_argument("--test_all", default=False, help="test all the task")
     parser.add_argument("--num_cores", default=266, type=int, help="number of cores")
     parser.add_argument("--BinExtendRule", default="list", type=str, help="Rule for when and how to extend the bin")
+    parser.add_argument("--preemptable", default=False, action="store_true", help="enable preemption")
+    parser.add_argument("--quantum_check_en", default=False, action="store_true", help="enable quantum check")
+    parser.add_argument("--quantumSize", default=2, type=int, help="quantum size, # of simulation steps")
+    # parser.add_argument("--hyper_p", default=None, type=float, help="hyper period")
+    # parser.add_argument("--warmup", default=False, action="store_true", help="warmup")
+    # parser.add_argument("--drain", default=False, action="store_true", help="drain")
+    # parser.add_argument("--sim_step", default=None, type=float, help="simulation step")
+    # parser.add_argument("--n_p", default=1, type=int, help="number of periods")
+    parser.add_argument("--jitter_sim_en", default=False, action="store_true", help="enable jitter simulation")
+    parser.add_argument("--jitter_sim_para", default={"a":-0.2, "b":0.2, "loc":0, "scale":1}, type=dict, help="jitter simulation parameters")
+
     args = parser.parse_args() 
     glb_n_task_dict = load_taskint(args.verbose)
     num_cores = args.num_cores
@@ -445,7 +456,7 @@ if __name__ == "__main__":
     f_max = max([glb_n_task_dict[task].freq for task in glb_n_task_dict])
     hyper_p = 1/f_gcd
     sim_step = min([glb_n_task_dict[task].exp_comp_t for task in glb_n_task_dict])/32
-    quantumSize = sim_step*2
+    quantumSize = sim_step*args.quantumSize
 
     if args.test_case == "bin_pack" or args.test_all:
         # push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, num_cores, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
@@ -512,7 +523,7 @@ if __name__ == "__main__":
         for _bin, _sim_triggered_list in zip(bin_list, sim_triggered_list):
             _bin.sim_triggered_list = _sim_triggered_list
             print("bin: ", _bin.id, "sim_triggered_list: ", [p.task.name for p in _sim_triggered_list])
-        scheduler_list = [Scheduler(_SchedTab, init_p_list) for _SchedTab in bin_list]
+        scheduler_list = [Scheduler(_SchedTab, init_p_list, jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para) for _SchedTab in bin_list]
         monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
 
         print("sim_step: ", sim_step)
@@ -536,7 +547,7 @@ if __name__ == "__main__":
         from scheduling_table import get_task_layout_compact
         get_task_layout_compact(actual_sched_record, init_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=1, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
-        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/exe_monitor_ful_{num_cores}l.pdf")
+        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/exe_monitor_ful_{num_cores}.pdf")
 
     elif args.test_case == "glb_dynamic":
         np.random.seed(0)
@@ -563,7 +574,7 @@ if __name__ == "__main__":
         for _bin, _sim_triggered_list in zip(bin_list, sim_triggered_list):
             _bin.sim_triggered_list = _sim_triggered_list
             print("bin: ", _bin.id, "sim_triggered_list: ", [p.task.name for p in _sim_triggered_list])
-        scheduler_list = [Scheduler(_SchedTab, init_p_list) for _SchedTab in bin_list]
+        scheduler_list = [Scheduler(_SchedTab, init_p_list, jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para) for _SchedTab in bin_list]
         monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
 
         print("sim_step: ", sim_step)
@@ -573,7 +584,7 @@ if __name__ == "__main__":
                 num_cores, 
                 init_p_list,
                 sim_step, hyper_p, 1, msg_dispatcher,
-                True, quantumSize, 
+                args.quantum_check_en, quantumSize, 
                 args.verbose, warmup=True, drain=True)
         
         print("number of context switch {}".format(scheduler_list[0].barrier.number_of_asserts))

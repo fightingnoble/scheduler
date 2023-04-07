@@ -58,7 +58,7 @@ allocator_agent.py
 - Plot the dynamic scheduling trace, recorded by monitor. 
 
 monitor_agent.py scheduling_table.py
-- add hyper_cycle, avoid slow down by pre-extend the size of the recorder of hyper_cycle each time. 
+- add hyper_cycle, avoid slowing down by pre-extend the size of the recorder of hyper_cycle each time. 
 
 task_agent.py 
 - add attibution curr_start_time to process
@@ -99,3 +99,12 @@ scheduler_agent.py, allocator_agent.py, barrier.py monitor.py
 
 global_var.py
 - try to add some parameters
+
+## 20230406
+fix bug: 
+- steering is triggered too frequently; 
+- in glb_dyn scheduler, 
+    - the required cores are 0.
+    - the preemptable checking is unused
+
+- parameterize some test options

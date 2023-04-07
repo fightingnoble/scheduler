@@ -101,6 +101,7 @@ class Scheduler(object):
     def __init__(self, 
                  _SchedTab: SchedulingTableInt, glb_p_list:List[ProcessInt],
                  budget_recoder:Dict[int, List]=None, rsc_recoder_his:Dict[int, LRUCache]=None, 
+                 jitter_sim_en:bool=False, jitter_sim_para:Dict=None,
                  ) -> None:
         self.ready_queue: TaskQueue = TaskQueue()
         self.expired_queue: List = []
@@ -150,6 +151,9 @@ class Scheduler(object):
         self.position_dict: Dict[int, int] = {}
         self.barrier = Barrier(0)
         self.assert_barrier = False
+
+        self.jitter_sim_en = jitter_sim_en
+        self.jitter_sim_para = jitter_sim_para
 
 
     def get_queues(self):
@@ -523,6 +527,32 @@ def pendingToReady_cbs(active_list, ready_queue, buffer:Buffer, budget_recoder, 
             _str += "data ready, but throttled!!"
             warnings.warn(_str)
 
+def jitter_sim(sched, curr_t, _p, trigger_state):
+    """
+        test case: 
+        sensor data arrival time varies by injecting jitter
+        inject noise to self.task.period, self.task.i_offset
+    """
+    # jitter parameters: a, b, loc, scale
+    a, b, loc, scale = sched.jitter_sim_para["a"], sched.jitter_sim_para["b"], sched.jitter_sim_para["loc"], sched.jitter_sim_para["scale"]
+                # 0.2 # truncnorm.rvs(-0.2, 0.2, size=1, scale=1)[0]
+    jitter_gen = lambda: _p.task.exp_comp_t * truncnorm.rvs(a, b, loc=loc, scale=scale, size=1)[0]
+    _p.i_offset = _p.task.i_offset + jitter_gen()
+    
+    # judge whether the offset is negative, which is a illegal value
+    if _p.i_offset < 0:
+        if curr_t == 0:
+            for key in _p.pred_ctrl.keys():
+                _p.pred_ctrl[key]["valid"] = True
+                _p.pred_ctrl[key]["trigger_time"] = _p.i_offset
+                trigger_state = True
+            _p.i_offset = _p.task.i_offset + _p.task.exp_comp_t * jitter_gen()
+            if _p.i_offset < 0:
+                _p.i_offset += _p.task.period
+        else:
+            _p.i_offset += _p.task.period
+    return trigger_state
+
 def scheduler_step(sched, msg_dispatcher, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, monitor:Monitor, DEBUG_FG):
     weight_wait_queue, ready_queue, running_queue, \
         miss_list, preempt_list, issue_list, completed_list, throttle_list,\
@@ -559,25 +589,14 @@ def scheduler_step(sched, msg_dispatcher, n_slot, timestep, event_range, sim_slo
     # simulate the event trigger
     for _p in _SchedTab.sim_triggered_list:
         trigger_state = _p.sim_trigger(curr_t, timestep)
-        if trigger_state or curr_t == 0:
-            # test case: 
-            # sensor data arrival time varies
-            # inject noise to self.task.period, self.task.i_offset
-            _p.i_offset = _p.task.i_offset + _p.task.exp_comp_t * truncnorm.rvs(-0.2, 0.2, size=1, scale=1)[0] # 0.2 # truncnorm.rvs(-0.2, 0.2, size=1, scale=1)[0]
-            if _p.i_offset < 0:
-                if curr_t == 0:
-                    for key in _p.pred_ctrl.keys():
-                        _p.pred_ctrl[key]["valid"] = True
-                        _p.pred_ctrl[key]["trigger_time"] = _p.i_offset
-                        trigger_state = True
-                    _p.i_offset = _p.task.i_offset + _p.task.exp_comp_t * truncnorm.rvs(-0.2, 0.2, size=1, scale=1)[0] # 0.2 # truncnorm.rvs(-0.2, 0.2, size=1, scale=1)[0]
-                    if _p.i_offset < 0:
-                        _p.i_offset += _p.task.period
-                else:
-                    _p.i_offset += _p.task.period
+        if sched.jitter_sim_en:
+            if trigger_state or curr_t == 0:
+                trigger_state = jitter_sim(sched, curr_t, _p, trigger_state)
         if bin_name and trigger_state and not bin_event_flg and curr_t >= _p.task.ERT:
             bin_event_flg = True
             print(f"({bin_name})")
+        if DEBUG_FG and trigger_state:
+            print(f"		{_p.task.name} triggered @ {curr_t:.6f}")
 
         
     # tackle the event in message pipe, set the valid flag in pred_data of each process
@@ -852,26 +871,12 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, n_slot
     # simulate the event trigger
     for _p in _SchedTab.sim_triggered_list:
         trigger_state = _p.sim_trigger(curr_t, timestep)
-        if trigger_state or curr_t == 0:
-            # test case: 
-            # sensor data arrival time varies
-            # inject noise to self.task.period, self.task.i_offset
-            _p.i_offset = _p.task.i_offset + _p.task.exp_comp_t * truncnorm.rvs(-0.2, 0.2, size=1, scale=1)[0] # 0.2 # truncnorm.rvs(-0.2, 0.2, size=1, scale=1)[0]
-            if _p.i_offset < 0:
-                if curr_t == 0:
-                    for key in _p.pred_ctrl.keys():
-                        _p.pred_ctrl[key]["valid"] = True
-                        _p.pred_ctrl[key]["trigger_time"] = _p.i_offset
-                        trigger_state = True
-                    _p.i_offset = _p.task.i_offset + _p.task.exp_comp_t * truncnorm.rvs(-0.2, 0.2, size=1, scale=1)[0] # 0.2 # truncnorm.rvs(-0.2, 0.2, size=1, scale=1)[0]
-                    if _p.i_offset < 0:
-                        _p.i_offset += _p.task.period
-                else:
-                    _p.i_offset += _p.task.period
-        if trigger_state and not bin_event_flg and curr_t >= _p.task.ERT:
-            bin_event_flg = True
+        if sched.jitter_sim_en:
+            if trigger_state or curr_t == 0:
+                trigger_state = jitter_sim(sched, curr_t, _p, trigger_state)
+        if DEBUG_FG and trigger_state:
+            print(f"		{_p.task.name} triggered @ {curr_t:.6f}")
 
-        
     # tackle the event in message pipe, set the valid flag in pred_data of each process
     # update barrier status
     # update the data status
@@ -908,6 +913,7 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, n_slot
     sort_fn = lambda x: x.deadline
 
     # filtter the preemptable jobs
+    preemptable_list = []
     if quantum_check_en: 
         assert quantumSize is not None
         for _p_2b_preempt in running_queue.queue:
@@ -915,7 +921,12 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, n_slot
             reach_preempt_grain = math.isclose(cum_exec_quantum, round(cum_exec_quantum), abs_tol=1e-2)
             if _p_2b_preempt.currentburst > 0 and not reach_preempt_grain: 
                 continue
-    sorted_queue = sorted(ready_queue.queue + running_queue.queue, key=sort_fn)
+            else:
+                preemptable_list.append(_p_2b_preempt)
+    else:
+        preemptable_list = running_queue.queue
+
+    sorted_queue = sorted(ready_queue.queue + preemptable_list, key=sort_fn)
 
 
     # make the decision only when some tasks join the ready queue or leave the running queue
@@ -927,12 +938,15 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, n_slot
 
         # estimate the runtime and the resource requirement
         time_slot_s, time_slot_e, req_rsc_size = rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE)
-        if time_slot_s == time_slot_e:
+        # if time_slot_s == time_slot_e:
+        #     sorted_queue.pop(0)
+        #     continue
+        # elif time_slot_s > time_slot_e:
+        #     sorted_queue.pop(0)
+        #     continue
+        if req_rsc_size == 0:
             sorted_queue.pop(0)
             continue
-        elif time_slot_s > time_slot_e:
-            assert False, "time_slot_s > time_slot_e"
-
         assert req_rsc_size > 0
         if curr_aval_rsc >= req_rsc_size: # and req_rsc_size > 0:
             sorted_queue.pop(0)
@@ -1090,7 +1104,12 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, n_slot
         issue_list.clear()
 
         # assert a barrier
-        barrier.assert_barrier(2*40/100e9*truncnorm.rvs(-0.2, 0.2, size=1, loc=0.8, scale=1)[0] + 100*1e-9)
+        # data movement: 
+        # size: 40MB
+        # bandwidth: 100GB/s
+        # direction: off-chip -> on-chip, on-chip -> off-chip
+        # latency: 100ns
+        barrier.assert_barrier(2*40e6/100e9*truncnorm.rvs(-0.2, 0.2, size=1, loc=0.6, scale=1)[0] + 100*1e-9)
         print(f"		Barrier asserted at {curr_t:.6f};")
         sched.assert_barrier = True
 

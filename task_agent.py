@@ -94,6 +94,8 @@ class ProcessBase(object):
             for key in self.pred_ctrl.keys():
                 if not self.pred_ctrl[key]["valid"]:
                     return False
+            # clear the pred_ctrl valid flag
+            self.reset_depends(type="ctrl")
             return True
         else:
             if self.check_depends_data(None, True):
@@ -139,14 +141,25 @@ class ProcessBase(object):
                 return True
         return False
     
-    def reset_depends(self):
+    def reset_depends(self, type="all"):
         """
         reset the values of the predecessors to False
         """
-        for key in self.pred_ctrl.keys():
-            self.pred_ctrl[key]["valid"] = False
-        for key in self.pred_data.keys():
-            self.pred_data[key]["valid"] = False
+        clear_pred_ctrl = False
+        clear_pred_data = False
+        if type == "all":
+            clear_pred_ctrl = True
+            clear_pred_data = True
+        elif type == "ctrl":
+            clear_pred_ctrl = True
+        elif type == "data":
+            clear_pred_data = True
+        if clear_pred_ctrl:
+            for key in self.pred_ctrl.keys():
+                self.pred_ctrl[key]["valid"] = False
+        if clear_pred_data:
+            for key in self.pred_data.keys():
+                self.pred_data[key]["valid"] = False
 
 class ProcessInt(ProcessBase):
     def __init__(self, task, release_t, deadline_abs, pid):
