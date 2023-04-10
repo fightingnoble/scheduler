@@ -511,7 +511,20 @@ def load_taskint(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]
         for i in range(task_attr["Throuput factor (S)"]):
             T = task_attr["Throuput factor (S)"]/task_attr["Freq."]
             phase = i/task_attr["Freq."]
-
+            parallel_cfg = {}
+            if task_attr["Parallel_type"] == "Upb":
+                parallel_cfg["mode"] = "upb"
+                parallel_cfg["max"] = int(task_attr["Parallel_range"])
+            elif task_attr["Parallel_type"] == "Lwb":
+                parallel_cfg["mode"] = "lwb"
+                parallel_cfg["min"] = int(task_attr["Parallel_range"])
+            elif task_attr["Parallel_type"] == "Range":
+                parallel_cfg["mode"] = "range"
+                # split the range into two parts
+                parallel_cfg["min"], parallel_cfg["max"] = map(int, task_attr["Parallel_range"].split(","))
+            elif task_attr["Parallel_type"] == "list":
+                parallel_cfg["mode"] = "list"
+                parallel_cfg["list"] = map(int, task_attr["Parallel_range"].split(","))
             task = TaskInt(
                 task_name=task_n+"_"+str(i), task_id=task_id, timing_flag=task_attr["Timing_flag"], 
                 ERT=task_attr["T release"]/1000, ddl=(task_attr['DDL']-task_attr["T release"])/1000, period=T, 
@@ -522,7 +535,9 @@ def load_taskint(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]
                 op_cpu_time=task_attr["Flops on path"]/1e3, op_io_time=1e-6,
                 criti_flag="soft" if task_attr["Criti_flag"]=='S' else "hard", 
                 cbs_en=True, # if task_attr["Cbs_en"]=='Y' else False, 
-                trigger_mode=task_attr["Trigger_mode"],
+                trigger_mode=task_attr["Trigger_mode"], 
+                parallel_cfg=parallel_cfg,
+
             )
             task.freq = task_attr["Freq."]
             # initialize task affinity list

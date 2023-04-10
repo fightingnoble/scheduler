@@ -461,7 +461,7 @@ if __name__ == "__main__":
     if args.test_case == "bin_pack" or args.test_all:
         # push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, num_cores, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
         init_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
-        bin_list, init_p_list = push_task_into_bins(init_p_list, affinity_cfg, num_cores, quantumSize, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
+        bin_list, init_p_list = push_task_into_bins(init_p_list, affinity_cfg, num_cores, args.quantum_check_en, quantumSize, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
         from scheduling_table import get_task_layout_compact
         get_task_layout_compact(bin_list, init_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=1, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
@@ -500,7 +500,7 @@ if __name__ == "__main__":
         except:
             print(f"cache/bin_list_{num_cores}.pkl not found")
             # print(f"cache/bin_list_{num_cores}.pkl or init_p_list_{num_cores}.pkl not found")
-            bin_list, _ = push_task_into_bins(init_p_list, affinity_cfg, num_cores, quantumSize, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
+            bin_list, _ = push_task_into_bins(init_p_list, affinity_cfg, num_cores, args.quantum_check_en, quantumSize, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
 
         logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
         physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd))

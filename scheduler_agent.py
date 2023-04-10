@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.stats import truncnorm
 import math
+from copy import deepcopy
 from typing import Dict, List
 from task_queue_agent import TaskQueue
 from scheduling_table import SchedulingTableInt
@@ -855,6 +856,7 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, n_slot
             print(f"		Barrier is satisfied at {curr_t:.6f}")
             sched.assert_barrier = False
 
+    pre_rsc_bk = deepcopy(res_cfg.rsc_map)
     # (running_queue)
     # check running tasks
     bin_event_flg = check_complete(None, timestep, msg_dispatcher, curr_t, res_cfg, running_queue, completed_list, inactive_list, buffer, bin_event_flg, bin_name)
@@ -937,7 +939,7 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, n_slot
         _p = sorted_queue[0]
 
         # estimate the runtime and the resource requirement
-        time_slot_s, time_slot_e, req_rsc_size = rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE)
+        time_slot_s, time_slot_e, req_rsc_size = _p.rsc_req_estm(n_slot, timestep, FLOPS_PER_CORE)
         # if time_slot_s == time_slot_e:
         #     sorted_queue.pop(0)
         #     continue
@@ -965,20 +967,58 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, n_slot
     expired_pid = set(pre_rsc.keys()) - set(rsc_map.keys())
     old_pid = set(pre_rsc.keys()) - expired_pid
 
-    if len(new_pid) or len(expired_pid):
-        # allocate the remaining resources proportionally to the score
-        cum_size = []
-        cum_score_reverse = np.cumsum(list(reversed(score_dict.values())))
-        cum_size = [curr_aval_rsc * s / cum_score_reverse[-1] for s in cum_score_reverse]
-        for i, pid in enumerate(reversed(score_dict.keys())):
-            if i == 0:
-                size = int(cum_size[0])
-                rsc_map[pid] += size
-                cum_size[0] = size
+    if len(new_pid) or len(expired_pid) or pre_rsc != pre_rsc_bk:
+        while True:
+            # check the rsc_size is valid
+            # compare with the core_max, core_min, core_list, parallel_mode
+            for pid in score_dict:
+                _p = process_dict[pid]
+                req_rsc_size = rsc_map[pid]
+                if _p.parallel_mode in ["upb","range"]:
+                    if req_rsc_size > _p.core_max:
+                        curr_aval_rsc += req_rsc_size - _p.core_max
+                        rsc_map[pid] = _p.core_max
+                elif _p.parallel_mode in ["lwb", "range"]:
+                    if req_rsc_size < _p.core_min:
+                        curr_aval_rsc -= _p.core_min - req_rsc_size
+                        rsc_map[pid] = _p.core_min
+                elif _p.parallel_mode == "list":
+                    # select the nearest one
+                    curr_aval_rsc += req_rsc_size - min(_p.core_list, key=lambda x:abs(x-req_rsc_size))
+                    rsc_map[pid] = min(_p.core_list, key=lambda x:abs(x-req_rsc_size))
+                      
+            if curr_aval_rsc == 0:
+                break
+            elif curr_aval_rsc > 0:
+                # remove the process which has been reached the core_max
+                for pid in list(score_dict.keys()):
+                    _p = process_dict[pid]
+                    req_rsc_size = rsc_map[pid]
+                    if req_rsc_size == _p.core_max:
+                        score_dict.pop(pid)
             else:
-                size = int(cum_size[i] - cum_size[i - 1])
-                rsc_map[pid] += size
-                cum_size[i] = size + cum_size[i - 1]
+                # remove the process which has been reached the core_min
+                for pid in list(score_dict.keys()):
+                    _p = process_dict[pid]
+                    req_rsc_size = rsc_map[pid]
+                    if req_rsc_size == _p.core_min:
+                        score_dict.pop(pid)
+            
+            if len(score_dict) == 0:
+                break
+            # allocate the remaining resources proportionally to the score
+            cum_score_reverse = np.cumsum(list(reversed(score_dict.values())))
+            cum_size = [curr_aval_rsc * s / cum_score_reverse[-1] for s in cum_score_reverse]
+            for i, pid in enumerate(reversed(score_dict.keys())):
+                if i == 0:
+                    size = int(cum_size[0])
+                    rsc_map[pid] += size
+                    cum_size[0] = size
+                else:
+                    size = int(cum_size[i] - cum_size[i - 1])
+                    rsc_map[pid] += size
+                    cum_size[i] = size + cum_size[i - 1]
+            curr_aval_rsc = 0
 
         # update the position dict
         used_position = []
@@ -1248,18 +1288,6 @@ def check_depends(task_list:List[ProcessInt])->List[ProcessInt]:
             print("		TASK {:d}:{:s}({:d}) is avtivated!!".format(_p.task.id, _p.task.name, _p.pid))
     return active
 
-def rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE):
-    # release time round up: task should not be released earlier than the release time
-    time_slot_s = int(np.ceil(_p.release_time/timestep))
-    if time_slot_s < n_slot:
-        time_slot_s = n_slot
-    # deadline round down: task should not be finised later than the deadline
-    time_slot_e = int(_p.deadline//timestep)
-    if time_slot_e <= time_slot_s:
-        req_rsc_size = 0
-    else:
-        req_rsc_size = int(np.ceil(_p.remburst/(time_slot_e-time_slot_s)/timestep/FLOPS_PER_CORE))
-    return time_slot_s,time_slot_e,req_rsc_size
 
 
 if __name__ == "__main__":

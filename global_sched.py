@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Union, List, Dict, Iterator, Callable, Union
+from collections import OrderedDict
 import copy
 import math
 import numpy as np
@@ -13,12 +14,14 @@ from resource_agent import Resource_model_int
 from task_agent import TaskInt
 from task_queue_agent import TaskQueue 
 from task_agent import ProcessInt, ProcessBase
-from monitor_agent import Monitor
+
+import warnings
 
 # ==================== top-level scheduling procedure ====================
-def push_task_into_bins(init_p_list: List[TaskInt], affinity, #SchedTab: SchedulingTableInt, 
-                                    total_cores:int, quantumSize, 
-                                    timestep, hyper_p, n_p=1, verbose=False, *, animation=False, warmup=False, drain=False,):
+def push_task_into_bins(init_p_list: List[TaskInt], affinity, 
+                        total_cores:int, quantum_check_en, quantumSize, 
+                        timestep, hyper_p, n_p=1, verbose=False, *, 
+                        animation=False, warmup=False, drain=False,):
 
     """
     implement a naive 2d bin-packing algorithm
@@ -70,9 +73,8 @@ def push_task_into_bins(init_p_list: List[TaskInt], affinity, #SchedTab: Schedul
         print("Create a new bin: ", id, "name:", name, "size:", size)
         return new_bin(size, tab_temp_size, id=id, name=name)
 
-    # aa = lambda _p: int(np.ceil(_p.task.flops/(int(np.ceil(_p.release_time/timestep))-int(_p.deadline//timestep))/timestep/FLOPS_PER_CORE))
     def get_core_size(_p):
-        _, _, req_rsc_size = rsc_req_estm(_p, 0, timestep, FLOPS_PER_CORE)
+        _, _, req_rsc_size = _p.rsc_req_estm(0, timestep, FLOPS_PER_CORE)
         return req_rsc_size
 
     size_l = []
@@ -82,20 +84,8 @@ def push_task_into_bins(init_p_list: List[TaskInt], affinity, #SchedTab: Schedul
             size_l.append(_p.task.pre_assigned_resource.main_size + _p.task.pre_assigned_resource.RDA_size)
             name_l.append(_p.task.name)
 
-    def _next_bin_obj_1(max_core_size:int, size_list:List[int], name_list:List[str]): 
-        """
-        generate the bin list according to the size_list until the max_core_size is reached
-        """ 
-        cum_size = 0
-        bin_id = 0
-        for size, name in zip(size_list, name_list): 
-            # if cum_size + size > max_core_size:
-            #     yield _new_bin(bin_id, max_core_size - cum_size, name)
-            #     break
-            yield _new_bin(bin_id, size, name)
-            bin_id += 1
-            cum_size += size
-    iter_next_bin_obj = bin_iter_list(_new_bin, size_l, name_l)
+    # iter_next_bin_obj = bin_iter_list(_new_bin, size_l, name_l)
+    iter_next_bin_obj = bin_iter_uniform_dist(_new_bin, total_cores, size_l, name_l)
     # iter_next_bin_obj = _next_bin_obj_1(max_core_size=256, size_list=size_l, name_list=name_l)
     bin_list:List[SchedulingTableInt] = list(iter_next_bin_obj)
     bin_name_list = [bin.name for bin in bin_list]
@@ -209,40 +199,6 @@ def push_task_into_bins(init_p_list: List[TaskInt], affinity, #SchedTab: Schedul
             # print("Scheduling Table:")
             # print(SchedTab.print_scheduling_table())
             miss_list.clear()
-
-        # convert the cpp to python code
-
-        # if (CPU[i]->running != NULL && CPU[i]->running->currentburst != 0 && CPU[i]->running->currentburst % quantumSize == 0)
-        # { //judge preemption on the running that have not completed but completed a Time Unit (control the pre-emption grain)
-        #     if (tmp != NULL)
-        #     { // next process is not NULL
-        #         if ((CPU[i]->running->prio) > (tmp->prio))
-        #         { // next process has lower priority
-        #             CPU[i]->idle = 0;
-        #             CPU[i]->running->currentburst = 0;
-        #             DEBUG printf("Running: PID %d, priority %d.\n", CPU[i]->running->pid, CPU[i]->running->prio);
-        #             DEBUG printf("Next   : PID %d, priority %d.\n", tmp->pid, tmp->prio);
-        #             DEBUG printf("@@@----> Keep PID %d running!\n\n", CPU[i]->running->pid);
-        #         }
-
-        #         if ((CPU[i]->running->prio) <= (tmp->prio))
-        #         { // running to ready, pre-empt the running and set CPU as idel and clear the currentburst
-        #             Enqueue(CPU[i]->running, readyQueue);
-        #             DEBUG printf("Running: PID %d, priority %d.\n", CPU[i]->running->pid, CPU[i]->running->prio);
-        #             DEBUG printf("Next   : PID %d, priority %d.\n", tmp->pid, tmp->prio);
-        #             DEBUG printf("###====> PID %d is going to run!\n\n", tmp->pid);
-        #             CPU[i]->idle = 1;
-        #             CPU[i]->running->currentburst = 0;
-        #             CPU[i]->running = NULL;
-        #         }
-        #     }
-        # }
-        
-        # judge if preemption: if the running task has not completed but completed a Time Unit (control the pre-emption grain) 
-        # for task in running_list:
-        #     if task.currentburst != 0 and task.currentburst % quantumSize == 0:
-        #         pass
-
 
         glb_alloc(init_p_list, affinity, quantumSize, timestep, pid_idx, ready_queue, running_queue, rsc_recoder, rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, n_slot, curr_t)        
         # issue the task
@@ -385,7 +341,7 @@ def allocate_rsc_4_process(_p:ProcessInt, n_slot:int,
                 iter_next_bin_obj:Iterator, bin_list:List[SchedulingTableInt], bin_name_list:List[str], ):
     # initialize the resource request parameters
     p_name = _p.task.name
-    time_slot_s, time_slot_e, req_rsc_size = rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE)
+    time_slot_s, time_slot_e, req_rsc_size = _p.rsc_req_estm(n_slot, timestep, FLOPS_PER_CORE)
 
     # expected slot number
     expected_slot_num = time_slot_e-time_slot_s # int(np.ceil(_p.exp_comp_t/timestep))
@@ -399,7 +355,7 @@ def allocate_rsc_4_process(_p:ProcessInt, n_slot:int,
     # 2. the pre-defined resource preservation should be respected 
     # 3. the affinity settings of all the tasks should be respected 
     # 4. all tasks should be allocated with the resource
-    # 5. tasks is epected to migrate as less as possible
+    # 5. tasks is expected to migrate as less as possible
     # 6. the resource should be allocated as compact as possible
     # 7. the resource should be allocated as balanced as possible
 
@@ -527,13 +483,16 @@ def allocate_rsc_4_process(_p:ProcessInt, n_slot:int,
                     
         # check the state; if the task cannot be pushed into any bin, create a new bin
         if not state:
-            bin = next(iter_next_bin_obj)
-            bin_id = bin.id
-            state, alloc_slot_s, alloc_size, allo_slot = bin.insert_task(_p, req_rsc_size, time_slot_s, time_slot_e, expected_slot_num, verbose=False) 
-            bin_list.append(bin)
-            bin_name_list.append(bin.name)
-            total_alloc_unit = np.sum(np.array(alloc_size) * np.array(allo_slot))
-            total_FLOPS_alloc = total_alloc_unit * timestep * FLOPS_PER_CORE
+            try:
+                bin = next(iter_next_bin_obj)
+                bin_id = bin.id
+                state, alloc_slot_s, alloc_size, allo_slot = bin.insert_task(_p, req_rsc_size, time_slot_s, time_slot_e, expected_slot_num, verbose=False) 
+                bin_list.append(bin)
+                bin_name_list.append(bin.name)
+                total_alloc_unit = np.sum(np.array(alloc_size) * np.array(allo_slot))
+                total_FLOPS_alloc = total_alloc_unit * timestep * FLOPS_PER_CORE
+            except StopIteration:
+                warnings.warn("No more bin can be created")
 
     # if the task is allowed to execute under insufficient resources
     if state and total_FLOPS_alloc < _p.remburst:
@@ -570,16 +529,6 @@ def allocate_rsc_4_process(_p:ProcessInt, n_slot:int,
     else:
         Warning("TASK {:d}:{:s}({:d}) IS DELAY ISSUED!!".format(_p.task.id, _p.task.name, _p.pid))
 
-def rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE):
-    # release time round up: task should not be released earlier than the release time
-    time_slot_s = int(np.ceil(_p.release_time/timestep))
-    if time_slot_s < n_slot:
-        time_slot_s = n_slot
-    # deadline round down: task should not be finised later than the deadline
-    time_slot_e = int(_p.deadline//timestep)
-    req_rsc_size = int(np.ceil(_p.remburst/(time_slot_e-time_slot_s)/timestep/FLOPS_PER_CORE))
-    return time_slot_s,time_slot_e,req_rsc_size
-
 
 def preempt_the_conflicts(_p:ProcessInt, bin:SchedulingTableInt, 
         req_rsc_size:int, expected_slot_num:int, 
@@ -601,7 +550,12 @@ def preempt_the_conflicts(_p:ProcessInt, bin:SchedulingTableInt,
     # filter the confict tasks that have lower affinity with the current bin compared with the current task
     if key is not None:
         occupation_candi_dict = {k:v for k,v in occupation_candi_dict.items() if key(_p) > key(_p_index_by_pid[k])}
+    # sort the conflict tasks by their priority
     occupation_candi = list(occupation_candi_dict.keys())
+    # select the task with the latest deadline
+    # TODO: evaluate more strategies
+    occupation_candi.sort(key=lambda x: _p_index_by_pid[x].deadline, reverse=True)
+
 
     aval_flops = sum(bin.idx_free_by_slot(time_slot_s, time_slot_e, _p.pid)) * timestep * FLOPS_PER_CORE
     # note that here is an assumption that current bin is designed for the task, all the candidate tasks are preempted
@@ -620,12 +574,8 @@ def preempt_the_conflicts(_p:ProcessInt, bin:SchedulingTableInt,
         state, alloc_slot_s, alloc_size, allo_slot = False, None, None, None
         total_alloc_unit, total_FLOPS_alloc = 0, 0
         return state, alloc_slot_s, alloc_size, allo_slot, total_alloc_unit, total_FLOPS_alloc
-
-    # decide which task to preempt
-    # select the task with the latest deadline
-    # TODO: evaluate more strategies
-    occupation_candi.sort(key=lambda x: _p_index_by_pid[x].deadline, reverse=True)
     
+    # decide which task to preempt
     for pid in occupation_candi:
         # load allocation history
         _p_2b_preempt = _p_index_by_pid[pid]
@@ -656,7 +606,8 @@ def preempt_the_conflicts(_p:ProcessInt, bin:SchedulingTableInt,
         # pop the task from the bin
         print(f"pop the task {_p_2b_preempt.task.id}:{_p_2b_preempt.task.name}({pid})from the bin {bin_id}")
         # release all the tasks in the p_2b_preempt
-        bin_id_t, alloc_slot_s_t, alloc_size_t, allo_slot_t = get_rsc_2b_released(rsc_recoder, n_slot, _p_2b_preempt)
+        # get same results as occupation_candi_dict[pid]
+        # bin_id_t, alloc_slot_s_t, alloc_size_t, allo_slot_t = get_rsc_2b_released(rsc_recoder, n_slot, _p_2b_preempt) 
         bin.release(_p_2b_preempt, alloc_slot_s_t, alloc_size_t, allo_slot_t, verbose=False)
         # update the rsc_recoder
         rsc_recoder.pop(_p_2b_preempt.pid)
@@ -741,21 +692,24 @@ def bin_iter_uniform_dist(_new_bin: Callable, max_core_size: int, size_list: Lis
     """
     # index the size list whose cumsum is not larger than the max_core_size
     Cum_req_size = np.cumsum(size_list)
-    idx = (np.cumsum(size_list) > max_core_size).nonzero()[0][0]
-    # distribute these spare resources to the first idx-1 bins
-    size_list = []
-    if Cum_req_size[idx - 1] < max_core_size:
-        Cum_alloc_size = Cum_req_size * max_core_size / Cum_req_size[idx - 1]
-        for _idx in range(idx):
-            if _idx == 0:
-                size = int(Cum_alloc_size[_idx])
-                Cum_req_size[_idx] = size
-            else:
-                size = int(Cum_alloc_size[_idx] - Cum_alloc_size[_idx - 1])
-                Cum_req_size[_idx] = size + Cum_req_size[_idx - 1]
-            size_list.append(size)
-    # yield from (_new_bin(bin_id, size, name) for bin_id, (size, name) in enumerate(zip(Cum_req_size[:idx], name_list[:idx])))
-    bin_iter_list(_new_bin, Cum_req_size[:idx], name_list[:idx])
+    if Cum_req_size[-1] > max_core_size:
+        idx = (np.cumsum(size_list) > max_core_size).nonzero()[0][0]
+        # distribute these spare resources to the first idx-1 bins
+        if Cum_req_size[idx - 1] < max_core_size:
+            size_list = []
+            Cum_alloc_size = Cum_req_size * max_core_size / Cum_req_size[idx - 1]
+            for _idx in range(idx):
+                if _idx == 0:
+                    size = int(Cum_alloc_size[_idx])
+                    Cum_req_size[_idx] = size
+                else:
+                    size = int(Cum_alloc_size[_idx] - Cum_alloc_size[_idx - 1])
+                    Cum_req_size[_idx] = size + Cum_req_size[_idx - 1]
+                size_list.append(size)
+        # yield from (_new_bin(bin_id, size, name) for bin_id, (size, name) in enumerate(zip(Cum_req_size[:idx], name_list[:idx])))
+        return bin_iter_list(_new_bin, size_list[:idx], name_list[:idx])
+    else:
+        return bin_iter_list(_new_bin, size_list, name_list)
 
 def get_size_mainPlusRDA(get_core_size:Callable, p_list:List[ProcessInt], RDA_ratio:float=1.2): 
     for _p in p_list:

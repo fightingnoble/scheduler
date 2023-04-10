@@ -108,3 +108,13 @@ fix bug:
     - the preemptable checking is unused
 
 - parameterize some test options
+
+## 20230410
+- add the parallel constraint
+    - resources allocation with parallel constraints (scheduler_agent.py) 
+    - profiling.csv define the constraints,
+    - task_cfg.py read the constraints.
+    - add core_max, core_min, core_list, parallel_mode to task and process classes
+- move function `rsc_req_estm` as an element of ProcessInt class
+
+- fix some small issues for bin size exploring in the next step.

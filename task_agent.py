@@ -170,13 +170,32 @@ class ProcessInt(ProcessBase):
         self.input_ready:bool = False
         self.output_ready:bool = False
         self.weight_ready:bool = False
-    
+
+        self.core_max = task.core_max
+        self.core_min = task.core_min
+        self.core_list = task.core_list
+        self.parallel_mode = task.parallel_mode
+
+    def rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE):
+        # release time round up: task should not be released earlier than the release time
+        time_slot_s = int(np.ceil(_p.release_time/timestep))
+        if time_slot_s < n_slot:
+            time_slot_s = n_slot
+        # deadline round down: task should not be finised later than the deadline
+        time_slot_e = int(_p.deadline//timestep)
+        if time_slot_e <= time_slot_s:
+            req_rsc_size = 0
+        else:
+            req_rsc_size = int(np.ceil(_p.remburst/(time_slot_e-time_slot_s)/timestep/FLOPS_PER_CORE))
+        return time_slot_s,time_slot_e,req_rsc_size
+
 class TaskBase(object):
     def __init__(self, task_name:str, task_id:int, timing_flag:str,
                  ERT:int, ddl:int, period:int, exp_comp_t:int, i_offset:int, jitter_max:int,
                  op_io_time:int=0, op_cpu_time:int=0, seq_cpu_time:int=0, priority:int=0, 
                  criti_flag:str="soft", cbs_en:bool=False, 
-                 trigger_mode:bool=False
+                 trigger_mode:bool=False, 
+                 parallel_cfg:dict={},
                  ):
         self.id = task_id
         self.name = task_name
@@ -189,6 +208,10 @@ class TaskBase(object):
         assert self.criticality in criticality.keys()
         assert self.timing_flag in task_timing_type.keys()
         self.trigger_mode = trigger_mode # event-triggered or periodic
+        self.core_max = parallel_cfg["max"] if "max" in parallel_cfg else None
+        self.core_min = parallel_cfg["min"] if "min" in parallel_cfg else None
+        self.core_list = parallel_cfg["list"] if "list" in parallel_cfg else None
+        self.parallel_mode = parallel_cfg["mode"] if "mode" in parallel_cfg else None
 
         # deadline in each hyper-period (task that have multiple sub-periods in a hyper-period)
         # e.g. the task with 30hz but be divided into 3 tasks with 10hz and 1/30s offset
@@ -277,6 +300,7 @@ class TaskInt(TaskBase):
                     op_io_time:int=0, op_cpu_time:int=0, seq_cpu_time:int=0, priority:int=0, 
                     criti_flag:str="soft", cbs_en:bool=False, 
                     trigger_mode:str="N",
+                    parallel_cfg:dict=None,
                     **kwargs
                 ) -> None:
         super().__init__(
@@ -284,7 +308,7 @@ class TaskInt(TaskBase):
                             ERT=ERT, ddl=ddl, period=period, exp_comp_t=exp_comp_t, i_offset=i_offset, jitter_max=jitter_max, 
                             op_cpu_time=op_cpu_time, op_io_time=op_io_time, seq_cpu_time=seq_cpu_time, priority=priority, 
                             criti_flag=criti_flag, cbs_en=cbs_en,
-                            trigger_mode=trigger_mode,
+                            trigger_mode=trigger_mode, parallel_cfg=parallel_cfg,
                         )
         
         # =============== 1. task properties ===============
