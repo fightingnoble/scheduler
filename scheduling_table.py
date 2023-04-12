@@ -130,7 +130,7 @@ class SchedulingTableInt(object):
         return rsc_avl
     
     def insert_task(self, task:ProcessInt, req_rsc_size:int, time_slot_s:int, time_slot_e:int, expected_slot_num:int, 
-                    verbose=False)->Tuple[bool, Union[int,List[int]], Union[int,List[int]], Union[int,List[int]]]: 
+                    verbose=False, DEBUG=False)->Tuple[bool, Union[int,List[int]], Union[int,List[int]], Union[int,List[int]]]: 
         """
         play a insert-based scheduling: 
         1. search available tensor cores at each slot
@@ -180,7 +180,8 @@ class SchedulingTableInt(object):
             # warning: expected_slot_num may be larger than the available slots
             if rsc_avl[:expected_slot_num].sum() < expected_req_rsc_size: 
                 # as soon as possible
-                print("Not enough resources: as soon as possible")
+                if DEBUG:
+                    print("Not enough resources: as soon as possible")
                 for i in range(len(s)): 
                     if rsc_avl[s[i]] > 0:
                         cond2 = rsc_avl[:e[i]].sum() >= expected_req_rsc_size
@@ -196,7 +197,8 @@ class SchedulingTableInt(object):
                 # there is enough rsc in 
                 # [0, expected_slot_num] + time_slot_s
                 # try to distribute the rsc_lack to the intervals as evenly as possible
-                print("Enough resources: as evenly as possible")
+                if DEBUG:
+                    print("Enough resources: as evenly as possible")
                 # calculate the lacked resources in the interval: 
                 for i in range(len(s)): 
                     if rsc_avl[s[i]] > 0:
@@ -292,10 +294,10 @@ class SchedulingTableInt(object):
                     else:
                         _str = f"slot:[{pre_idx}-{rsc_map_idx})\n"
                     if title_line: 
-                        _str += f"{pre_rsc.print_simple(pid2name)}"
-                    else:
-                        _str += f"{str(pre_rsc)}"
+                        _str += pre_rsc.title_line
                         title_line = True
+                    _str += f"{pre_rsc.print_simple(pid2name)}"
+
                     print(_str)
                 pre_idx = rsc_map_idx
                 pre_rsc = rsc_map
@@ -313,13 +315,13 @@ class SchedulingTableInt(object):
     def print_alloc_detail(self, pid2name:Dict[int,str], timestep):
         bin_pack_result = self.index_occupy_by_id()
 
-            # sort the result by the start time
-            # item[1] is alloc_slot_s_t, alloc_size_t, allo_slot_t
-            # item[1][0] is alloc_slot_s_t
+        # sort the result by the start time
+        # item[1] is alloc_slot_s_t, alloc_size_t, allo_slot_t
+        # item[1][0] is alloc_slot_s_t
         sorted_task_pid = [k for k, v in sorted(bin_pack_result.items(), key=lambda item: item[1][0])]
 
-            # replace the pid with the task name
-            # and print the result
+        # replace the pid with the task name
+        # and print the result
         print(f"bin: {self.name}({self.id})")
         for pid in list(sorted_task_pid):
             _result = bin_pack_result.pop(pid)

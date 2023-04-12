@@ -5,7 +5,7 @@ from task_agent import TaskInt
 from spec import Spec
 from buffer import Buffer, Data
 from msg_dispatcher import MsgDispatcher, msg_filter
-from message_agent import Message
+from message_pipe import MessagePipe
 from multiprocessing import Queue
 
 class AllocatorInt(object):
@@ -442,9 +442,11 @@ if __name__ == "__main__":
     # parser.add_argument("--warmup", default=False, action="store_true", help="warmup")
     # parser.add_argument("--drain", default=False, action="store_true", help="drain")
     # parser.add_argument("--sim_step", default=None, type=float, help="simulation step")
-    # parser.add_argument("--n_p", default=1, type=int, help="number of periods")
+    parser.add_argument("--n_p", default=1, type=int, help="number of periods")
     parser.add_argument("--jitter_sim_en", default=False, action="store_true", help="enable jitter simulation")
     parser.add_argument("--jitter_sim_para", default={"a":-0.2, "b":0.2, "loc":0, "scale":1}, type=dict, help="jitter simulation parameters")
+    parser.add_argument("--file_suffix", default="", type=str, help="file suffix")
+    parser.add_argument("--i_file_suffix", default="", type=str, help="file suffix")
 
     args = parser.parse_args() 
     glb_n_task_dict = load_taskint(args.verbose)
@@ -457,49 +459,56 @@ if __name__ == "__main__":
     hyper_p = 1/f_gcd
     sim_step = min([glb_n_task_dict[task].exp_comp_t for task in glb_n_task_dict])/32
     quantumSize = sim_step*args.quantumSize
+    num_periods = args.n_p
+    np.random.seed(0)
 
     if args.test_case == "bin_pack" or args.test_all:
         # push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, num_cores, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
         init_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
-        bin_list, init_p_list = push_task_into_bins(init_p_list, affinity_cfg, num_cores, args.quantum_check_en, quantumSize, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
+        bin_list, init_p_list = push_task_into_bins(init_p_list, affinity_cfg, num_cores, args.quantum_check_en, quantumSize, sim_step, hyper_p, num_periods, args.verbose, warmup=True, drain=True)
         from scheduling_table import get_task_layout_compact
         get_task_layout_compact(bin_list, init_p_list, save= True, time_step= sim_step,
-        hyper_p=hyper_p, n_p=1, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
-        txt_size=40, tick_dens=2, save_path=f"plot/task_bin_pack_cyclic_{num_cores}.pdf") 
+        hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
+        txt_size=40, tick_dens=2, save_path=f"plot/task_bin_pack_cyclic_{num_cores}{args.file_suffix}.pdf") 
 
         get_task_layout_compact(bin_list, init_p_list, save= True, time_step= sim_step,
-        hyper_p=hyper_p, n_p=1, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
-        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/task_bin_pack_full_{num_cores}.pdf")
+        hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
+        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/task_bin_pack_full_{num_cores}{args.file_suffix}.pdf")
+
+        # select a period to save 
+        assert num_periods > 1
+        bin_list2save = []
+        # for _sched_tab in bin_list:
+
 
         # save the bin_list and the init_p_list
-        with open(f"cache/bin_list_{num_cores}.pkl", "wb") as f:
+        with open(f"cache/bin_list_{num_cores}{args.i_file_suffix}.pkl", "wb") as f:
             pickle.dump(bin_list, f)
-        # with open(f"init_p_list_{num_cores}.pkl", "wb") as f:
+        # with open(f"init_p_list_{num_cores}{args.i_file_suffix}.pkl", "wb") as f:
         #     pickle.dump(init_p_list, f)
         try:
             # load the bin_list and the init_p_list
-            with open(f"cache/bin_list_{num_cores}.pkl", "rb") as f:
+            with open(f"cache/bin_list_{num_cores}{args.i_file_suffix}.pkl", "rb") as f:
                 bin_list = pickle.load(f)
-            print(f"cache/bin_list_{num_cores}.pkl saved and loaded successfully")
-            # with open(f"init_p_list_{num_cores}.pkl", "rb") as f:
+            print(f"cache/bin_list_{num_cores}{args.i_file_suffix}.pkl saved and loaded successfully")
+            # with open(f"init_p_list_{num_cores}{args.i_file_suffix}.pkl", "rb") as f:
             #     init_p_list = pickle.load(f)
-            # print(f"init_p_list_{num_cores}.pkl saved and loaded successfully")
+            # print(f"init_p_list_{num_cores}{args.file_suffix}.pkl saved and loaded successfully")
         except:
-            print(f"cache/bin_list_{num_cores}.pkl or init_p_list_{num_cores}.pkl not found")
+            print(f"cache/bin_list_{num_cores}{args.i_file_suffix}.pkl or init_p_list_{num_cores}{args.i_file_suffix}.pkl not found")
             exit()
 
     elif args.test_case == "dynamic" or args.test_all:
-        np.random.seed(0)
         init_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
         try:
             # load the bin_list and the init_p_list
-            with open(f"cache/bin_list_{num_cores}.pkl", "rb") as f:
+            with open(f"cache/bin_list_{num_cores}{args.i_file_suffix}.pkl", "rb") as f:
                 bin_list = pickle.load(f)
-            # with open(f"init_p_list_{num_cores}.pkl", "rb") as f:
+            # with open(f"init_p_list_{num_cores}{args.i_file_suffix}.pkl", "rb") as f:
             #     init_p_list = pickle.load(f)
         except:
-            print(f"cache/bin_list_{num_cores}.pkl not found")
-            # print(f"cache/bin_list_{num_cores}.pkl or init_p_list_{num_cores}.pkl not found")
+            print(f"cache/bin_list_{num_cores}{args.i_file_suffix}.pkl not found")
+            # print(f"cache/bin_list_{num_cores}{args.i_file_suffix}.pkl or init_p_list_{num_cores}{args.i_file_suffix}.pkl not found")
             bin_list, _ = push_task_into_bins(init_p_list, affinity_cfg, num_cores, args.quantum_check_en, quantumSize, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
 
         logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
@@ -532,7 +541,7 @@ if __name__ == "__main__":
                 rsc_list, 
                 num_cores, 
                 init_p_list,
-                sim_step, hyper_p, 1, msg_dispatcher,
+                sim_step, hyper_p, num_periods, msg_dispatcher,
                 args.verbose, warmup=True, drain=True)
 
         actual_sched_record = [monitor.trace_recoder for monitor in monitor_list]
@@ -546,8 +555,8 @@ if __name__ == "__main__":
 
         from scheduling_table import get_task_layout_compact
         get_task_layout_compact(actual_sched_record, init_p_list, save= True, time_step= sim_step,
-        hyper_p=hyper_p, n_p=1, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
-        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/exe_monitor_ful_{num_cores}.pdf")
+        hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
+        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/exe_monitor_ful_{num_cores}{args.file_suffix}.pdf")
 
     elif args.test_case == "glb_dynamic":
         np.random.seed(0)
@@ -583,11 +592,12 @@ if __name__ == "__main__":
                 rsc_list, 
                 num_cores, 
                 init_p_list,
-                sim_step, hyper_p, 1, msg_dispatcher,
+                sim_step, hyper_p, num_periods, msg_dispatcher,
                 args.quantum_check_en, quantumSize, 
                 args.verbose, warmup=True, drain=True)
         
         print("number of context switch {}".format(scheduler_list[0].barrier.number_of_asserts))
+        print("cumulative context switch {}".format(scheduler_list[0].barrier.cumulative_time))
 
         actual_sched_record = [monitor.trace_recoder for monitor in monitor_list]
 
@@ -600,11 +610,11 @@ if __name__ == "__main__":
 
         from scheduling_table import get_task_layout_compact
         get_task_layout_compact(actual_sched_record, init_p_list, save= True, time_step= sim_step,
-        hyper_p=hyper_p, n_p=1, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
-        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/dyn_glb_exe_monitor_full_{num_cores}.pdf")
+        hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
+        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/dyn_glb_exe_monitor_full_{num_cores}{args.file_suffix}.pdf")
 
         # plot with bokhe
         # get_task_layout_compact(actual_sched_record, init_p_list, save= True, time_step= sim_step,
         # hyper_p=hyper_p, n_p=1, warmup=True, drain=True, plot_legend=False, 
         # txt_size=40, tick_dens=4, plot_start=0, tool="bokeh", 
-        # save_path=f"plot/dyn_glb_exe_monitor_full_bokeh_{num_cores}")
+        # save_path=f"plot/dyn_glb_exe_monitor_full_bokeh_{num_cores}{args.file_suffix}")

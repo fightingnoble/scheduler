@@ -8,10 +8,11 @@ import yaml
 # from scheduler_global_cfg import *
 
 class RscMapInt(OrderedDict[int, Tuple[int, ...]]): 
+    title_line = "\tTaskID\t->\tRscSize\n"
     # TaskID -> RscSize
     def __str__(self) -> str:
         # return str(dict(self))
-        _str = "\tTaskID\t->\tRscSize\n"
+        _str = self.title_line
         for k, v in self.items():
             _str += f"\t{k}\t->\t{v}\n"
         return _str

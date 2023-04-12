@@ -31,8 +31,9 @@ class LRUCache:
         self.dict[key]=value
 
     def withdraw(self):
+        delta_size = len(self.dict) - len(self.bk)
         self.dict = deepcopy(self.bk)
-        self.remain += len(self.dict) - len(self.bk)
+        self.remain += delta_size
 
     def get_lru(self):
         """

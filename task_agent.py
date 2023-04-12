@@ -300,7 +300,7 @@ class TaskInt(TaskBase):
                     op_io_time:int=0, op_cpu_time:int=0, seq_cpu_time:int=0, priority:int=0, 
                     criti_flag:str="soft", cbs_en:bool=False, 
                     trigger_mode:str="N",
-                    parallel_cfg:dict=None,
+                    parallel_cfg:dict={},
                     **kwargs
                 ) -> None:
         super().__init__(

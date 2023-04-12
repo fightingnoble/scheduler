@@ -118,3 +118,25 @@ fix bug:
 - move function `rsc_req_estm` as an element of ProcessInt class
 
 - fix some small issues for bin size exploring in the next step.
+
+## 20230412
+
+- fix bug: 
+ - `lru` losses its capacity after `withdraw` operation
+ - `parallel_cfg:dict` default value changes from None -> {}
+ - pop empty `lru` after withdrawing
+ - distinguish the suffix of input files and output files
+
+- print info:
+    - title line printing (resource_agent.py, scheduling_agent.py)
+    - filter some unimportant messages (scheduling_agent.py)
+
+- new bin packing mapper:
+    - pre-alloc.py
+    - global_sched.py
+
+- allocator_agent.py
+    - new parameter n_p
+
+- task_cfg.py
+    - remove close loop in affinity cfg

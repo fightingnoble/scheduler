@@ -16,7 +16,7 @@ from task_queue_agent import TaskQueue
 from task_agent import ProcessInt, ProcessBase
 
 import warnings
-
+from pre_alloc import get_target_bin_score, glb_alloc_new, get_rsc_2b_released
 # ==================== top-level scheduling procedure ====================
 def push_task_into_bins(init_p_list: List[TaskInt], affinity, 
                         total_cores:int, quantum_check_en, quantumSize, 
@@ -200,7 +200,10 @@ def push_task_into_bins(init_p_list: List[TaskInt], affinity,
             # print(SchedTab.print_scheduling_table())
             miss_list.clear()
 
-        glb_alloc(init_p_list, affinity, quantumSize, timestep, pid_idx, ready_queue, running_queue, rsc_recoder, rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, n_slot, curr_t)        
+        # glb_alloc(init_p_list, affinity, quantumSize, timestep, pid_idx, ready_queue, running_queue, rsc_recoder, rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, n_slot, curr_t)        
+        glb_alloc_new(init_p_list, quantum_check_en, quantumSize, timestep, ready_queue, running_queue, rsc_recoder, 
+                  rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, n_slot, curr_t)
+
         # issue the task
         # if the task of the queue equals to the current slot, then issue the task
         if len(issue_list):
@@ -300,7 +303,8 @@ def glb_alloc(init_p_list, affinity, quantumSize, timestep, pid_idx, ready_queue
     # C. priorize the task that has firm affinity with the existing bins
 
     # rearange the task in the ready queue
-    cond_fn1 = lambda x: (x.task.deadline - curr_t)/x.exp_comp_t
+    # cond_fn1 = lambda x: (x.task.deadline - curr_t)/x.exp_comp_t
+    cond_fn1 = lambda x: x.deadline
     cond_fn2 = lambda x: get_target_bin_score(x, bin_name_list=bin_name_list, rsc_recoder_his=rsc_recoder_his, reverse=True)
     sorted_ready_queue = sorted(ready_queue.queue, key=lambda x: (cond_fn1(x), cond_fn2(x)))
         
@@ -317,20 +321,6 @@ def glb_alloc(init_p_list, affinity, quantumSize, timestep, pid_idx, ready_queue
                 ready_queue.put(_p)
         preempt_list.clear()
 
-def get_rsc_2b_released(rsc_recoder, n_slot, _p):
-    alloc_slot_s_t, alloc_size_t, allo_slot_t, bin_id_t = rsc_recoder[_p.pid]
-    if isinstance(alloc_slot_s_t, list):
-        alloc_slot_s, alloc_size, allo_slot = [], [], []
-        for i in range(len(alloc_slot_s_t)):
-            if alloc_slot_s_t[i]+allo_slot_t[i] > n_slot: 
-                alloc_slot_s.append(alloc_slot_s_t[i] if alloc_slot_s_t[i] > n_slot else n_slot )
-                alloc_size.append(alloc_size_t[i] )
-                allo_slot.append(allo_slot_t[i] if alloc_slot_s_t[i] > n_slot else allo_slot_t[i]-(n_slot - alloc_slot_s_t[i]) )
-    else:
-        alloc_slot_s = alloc_slot_s_t if alloc_slot_s_t > n_slot else n_slot
-        alloc_size = alloc_size_t
-        allo_slot = allo_slot_t if alloc_slot_s_t > n_slot else allo_slot_t-(n_slot - alloc_slot_s_t)
-    return bin_id_t,alloc_slot_s,alloc_size,allo_slot
 
 def allocate_rsc_4_process(_p:ProcessInt, n_slot:int, 
                 affinity:Dict[str, List[str]], pid_idx:dict, init_p_list:List[ProcessInt], 
@@ -606,8 +596,8 @@ def preempt_the_conflicts(_p:ProcessInt, bin:SchedulingTableInt,
         # pop the task from the bin
         print(f"pop the task {_p_2b_preempt.task.id}:{_p_2b_preempt.task.name}({pid})from the bin {bin_id}")
         # release all the tasks in the p_2b_preempt
-        # get same results as occupation_candi_dict[pid]
-        # bin_id_t, alloc_slot_s_t, alloc_size_t, allo_slot_t = get_rsc_2b_released(rsc_recoder, n_slot, _p_2b_preempt) 
+        # Faulty: get same results as occupation_candi_dict[pid] 
+        bin_id_t, alloc_slot_s_t, alloc_size_t, allo_slot_t = get_rsc_2b_released(rsc_recoder, n_slot, _p_2b_preempt) 
         bin.release(_p_2b_preempt, alloc_slot_s_t, alloc_size_t, allo_slot_t, verbose=False)
         # update the rsc_recoder
         rsc_recoder.pop(_p_2b_preempt.pid)
@@ -722,37 +712,3 @@ def get_size_mainPlusRDA(get_core_size:Callable, p_list:List[ProcessInt], RDA_ra
             size_RDA = 0
         size = size_main + size_RDA
 
-# how does task affinity match with the existing bins
-def get_target_bin_score(_p:ProcessInt, bin_name_list:List[str], rsc_recoder_his:Dict[int, LRUCache], reverse=True): 
-    """
-    match the affinity targets list with the existing bins list
-    """
-    affinity_tgt_bin_id_list = []
-    # case 1: task is pre-assigned with the resource
-    p_name = _p.task.name
-    if p_name in bin_name_list: 
-        affinity_tgt_bin_id_list.append(bin_name_list.index(p_name))
-    else:
-        affinity_tgt_bin_id_list.append(-1)
-    
-    for task_n, task_id in zip(_p.task.affinity_n, _p.task.affinity): 
-        # case 2: suppose the target is pre-assigned with the resource but is not allocated
-        if task_n in bin_name_list:
-            affinity_tgt_bin_id_list.append(bin_name_list.index(task_n))
-        # case 3: suppose the target was allocated with the resource
-        elif task_id in rsc_recoder_his:
-            affinity_tgt_bin_id_list.append(rsc_recoder_his[task_id].get_mru())
-        else:
-            affinity_tgt_bin_id_list.append(-1)
-
-    # score function
-    # if p_name in bin_name_list, score = 1
-    # else set weight of each affinity target as the reciprocal of the 2^i, i is the index of the affinity target
-    if affinity_tgt_bin_id_list[0] != -1:
-        score = 1.0
-    else:
-        weight = 1/2**np.arange(len(_p.task.affinity))
-        score = np.sum(weight*(np.array(affinity_tgt_bin_id_list)!=-1)[1:][::-1])
-    if reverse:
-        return 1 - score
-    return score

@@ -77,10 +77,10 @@ affinity_cfg = {
     "Steering_speed": ["Planning"],
     "Stereo_feature_enc": ["Semantic_segm", "Lane_drivable_area_det", "Optical_Flow", "Depth_estimation"],
     "Semantic_segm": ["Stereo_feature_enc", "LiDAR_based_3dDet"],
-    "Lidar_based_3dDet": ["Semantic_segm", "Prediction"],
-    "Lane_drivable_area_det": ["Optical_Flow", "Depth_estimation"],
-    "Optical_Flow": ["Lane_drivable_area_det", "Depth_estimation"],
-    "Depth_estimation": ["Lane_drivable_area_det", "Optical_Flow"],
+    "Lidar_based_3dDet": ["Stereo_feature_enc", "Semantic_segm", "Prediction"],
+    "Lane_drivable_area_det": ["Stereo_feature_enc"],
+    "Optical_Flow": ["Stereo_feature_enc", "Lane_drivable_area_det",],
+    "Depth_estimation": ["Stereo_feature_enc", "Lane_drivable_area_det",],
 }
 # post-processing
 # For the task that is pre-assigned with the resource, the affinity is set to be itself
