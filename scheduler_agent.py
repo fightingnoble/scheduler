@@ -22,7 +22,7 @@ from task_agent import ProcessInt
 from lru import LRUCache
 from monitor_agent import Monitor
 from barrier_agent import Barrier
-
+from message_handler import message_trigger
 class Scheduler(object): 
     """
     Scheduler is responsible for the scheduling of the tasks:
@@ -528,32 +528,6 @@ def pendingToReady_cbs(active_list, ready_queue, buffer:Buffer, budget_recoder, 
             _str += "data ready, but throttled!!"
             warnings.warn(_str)
 
-def jitter_sim(sched, curr_t, _p, trigger_state):
-    """
-        test case: 
-        sensor data arrival time varies by injecting jitter
-        inject noise to self.task.period, self.task.i_offset
-    """
-    # jitter parameters: a, b, loc, scale
-    a, b, loc, scale = sched.jitter_sim_para["a"], sched.jitter_sim_para["b"], sched.jitter_sim_para["loc"], sched.jitter_sim_para["scale"]
-                # 0.2 # truncnorm.rvs(-0.2, 0.2, size=1, scale=1)[0]
-    jitter_gen = lambda: _p.task.exp_comp_t * truncnorm.rvs(a, b, loc=loc, scale=scale, size=1)[0]
-    _p.i_offset = _p.task.i_offset + jitter_gen()
-    
-    # judge whether the offset is negative, which is a illegal value
-    if _p.i_offset < 0:
-        if curr_t == 0:
-            for key in _p.pred_ctrl.keys():
-                _p.pred_ctrl[key]["valid"] = True
-                _p.pred_ctrl[key]["trigger_time"] = _p.i_offset
-                trigger_state = True
-            _p.i_offset = _p.task.i_offset + _p.task.exp_comp_t * jitter_gen()
-            if _p.i_offset < 0:
-                _p.i_offset += _p.task.period
-        else:
-            _p.i_offset += _p.task.period
-    return trigger_state
-
 def scheduler_step(sched, msg_dispatcher, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, monitor:Monitor, DEBUG_FG):
     weight_wait_queue, ready_queue, running_queue, \
         miss_list, preempt_list, issue_list, completed_list, throttle_list,\
@@ -588,18 +562,11 @@ def scheduler_step(sched, msg_dispatcher, n_slot, timestep, event_range, sim_slo
     buffer.pop_timeout("output", curr_t, True)
 
     # simulate the event trigger
-    for _p in _SchedTab.sim_triggered_list:
-        trigger_state = _p.sim_trigger(curr_t, timestep)
-        if sched.jitter_sim_en:
-            if trigger_state or curr_t == 0:
-                trigger_state = jitter_sim(sched, curr_t, _p, trigger_state)
-        if bin_name and trigger_state and not bin_event_flg and curr_t >= _p.task.ERT:
-            bin_event_flg = True
-            print(f"({bin_name})")
-        if DEBUG_FG and trigger_state:
-            print(f"		{_p.task.name} triggered @ {curr_t:.6f}")
+    trigger_state = message_trigger(_SchedTab.sim_triggered_list, sched.jitter_sim_en, sched.jitter_sim_para, timestep, curr_t, DEBUG_FG)
+    if bin_name and trigger_state and not bin_event_flg:
+        bin_event_flg = True
+        print(f"({bin_name})")
 
-        
     # tackle the event in message pipe, set the valid flag in pred_data of each process
     # update barrier status
     # update the data status
@@ -855,6 +822,7 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, n_slot
         if not barrier_state:
             print(f"		Barrier is satisfied at {curr_t:.6f}")
             sched.assert_barrier = False
+        barrier.cumulative_time += timestep
 
     pre_rsc_bk = deepcopy(res_cfg.rsc_map)
     # (running_queue)
@@ -871,13 +839,7 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, n_slot
     buffer.pop_timeout("output", curr_t, True)
 
     # simulate the event trigger
-    for _p in _SchedTab.sim_triggered_list:
-        trigger_state = _p.sim_trigger(curr_t, timestep)
-        if sched.jitter_sim_en:
-            if trigger_state or curr_t == 0:
-                trigger_state = jitter_sim(sched, curr_t, _p, trigger_state)
-        if DEBUG_FG and trigger_state:
-            print(f"		{_p.task.name} triggered @ {curr_t:.6f}")
+    message_trigger(_SchedTab.sim_triggered_list, sched.jitter_sim_en, sched.jitter_sim_para, timestep, curr_t, DEBUG_FG)
 
     # tackle the event in message pipe, set the valid flag in pred_data of each process
     # update barrier status
@@ -1164,8 +1126,6 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, n_slot
         monitor.add_a_record(res_cfg)
     else:
         monitor.add_a_placehold_record()
-
-
 
 def pendingToReady(active_list, ready_queue, buffer:Buffer, curr_t, glb_n_task_dict:Dict[str, ProcessInt], bin_name=""):
     # waitingQueue[i]->waitTime != 0 && waitingQueue[i]->waitTime % waitingQueue[i]->io == 0

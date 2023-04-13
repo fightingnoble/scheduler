@@ -140,3 +140,19 @@ fix bug:
 
 - task_cfg.py
     - remove close loop in affinity cfg
+
+
+## 20230413
+
+- extract message processing functions
+ - message_handler.py
+ - scheduler_agent.py 
+
+- barrier block time statistic
+    - scheduler_agent.py 
+
+- test glb_dynamic dynamic bin_pack with
+    > 256 core, -0.2=a, 0.2=b, 0.6=loc and 1=var 
+    and glb_dynamic method misses some tasks.
+
+

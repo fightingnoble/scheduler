@@ -4,6 +4,7 @@ class Barrier(object):
     def __init__(self, reset_time):
         self.number_of_asserts = 0
         self.assert_barrier(reset_time)
+        self.cumulative_time = 0
         
     
     def update(self, delta_time):
