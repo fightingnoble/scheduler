@@ -10,11 +10,11 @@ import networkx as nx
 import pandas as pd
 
 from global_var import *
-from lru import LRUCache
-from scheduling_table import SchedulingTableInt
-from resource_agent import Resource_model_int
+from model.lru import LRUCache
+from sched.scheduling_table import SchedulingTableInt
+from model.resource_agent import Resource_model_int
 from task_agent import TaskInt
-from task_queue_agent import TaskQueue 
+from model.task_queue_agent import TaskQueue 
 from task_agent import ProcessInt
 
 # 'ID', 'Task (chain) names', 'Flops on path', 'Expected Latency (ms)', 'T release', 'Freq.', 'DDL', 'Cores/Req.', 
@@ -665,7 +665,7 @@ def push_task_into_scheduling_table(tasks: Union[List[TaskInt], Dict[str, TaskIn
     elif isinstance(tasks, dict):
         task_list = list(tasks.values())
 
-    from task_queue_agent import TaskQueue 
+    from model.task_queue_agent import TaskQueue 
     import copy
 
     task_define_bk = copy.deepcopy(task_list) # used for detect the task changes

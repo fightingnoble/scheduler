@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 from typing import List, Dict
 
 if TYPE_CHECKING:
-    from buffer import Data, Buffer
+    from model.buffer import Data, Buffer
     from task_agent import ProcessInt
 
 # Context is a data structure used to record the 

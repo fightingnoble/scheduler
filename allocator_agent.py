@@ -3,9 +3,9 @@ import warnings
 import numpy as np
 from task_agent import TaskInt
 from spec import Spec
-from buffer import Buffer, Data
-from msg_dispatcher import MsgDispatcher
-from message_pipe import MessagePipe
+from model.buffer import Buffer, Data
+from model.msg_dispatcher import MsgDispatcher
+from model.message_pipe import MessagePipe
 from multiprocessing import Queue
 
 class AllocatorInt(object):
@@ -79,23 +79,23 @@ class AllocatorInt(object):
         else: 
             pass
 
-from scheduling_table import SchedulingTableInt
-from resource_agent import Resource_model_int
+from sched.scheduling_table import SchedulingTableInt
+from model.resource_agent import Resource_model_int
 import matplotlib.pyplot as plt
 from global_var import *
 
-from task_queue_agent import TaskQueue 
+from model.task_queue_agent import TaskQueue 
 from task_agent import ProcessInt
 import copy
-from lru import LRUCache
+from model.lru import LRUCache
 from scheduler_agent import Scheduler, glb_dynamic_sched_step
-from monitor_agent import Monitor
+from sched.monitor_agent import Monitor
 
 from scheduler_agent import Scheduler 
-from monitor_agent import Monitor
+from sched.monitor_agent import Monitor
 from spec import Spec
-from msg_dispatcher import MsgDispatcher
-from data_pipe import DataPipe
+from model.msg_dispatcher import MsgDispatcher
+from model.data_pipe import DataPipe
 from Context_message import ContextMsg
 
 # =================== local scheduler ===================
@@ -505,7 +505,7 @@ if __name__ == "__main__":
         # push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, num_cores, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
         init_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
         bin_list, init_p_list = push_task_into_bins(init_p_list, affinity_cfg, num_cores, args.quantum_check_en, quantumSize, sim_step, hyper_p, num_periods, args.verbose, warmup=True, drain=True)
-        from scheduling_table import get_task_layout_compact
+        from sched.scheduling_table import get_task_layout_compact
         get_task_layout_compact(bin_list, init_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
         txt_size=40, tick_dens=2, save_path=f"plot/task_bin_pack_cyclic_{num_cores}{args.file_suffix}.pdf") 
@@ -591,7 +591,7 @@ if __name__ == "__main__":
         for _SchedTab in actual_sched_record:
             _SchedTab.print_alloc_detail(pid2name, sim_step)
 
-        from scheduling_table import get_task_layout_compact
+        from sched.scheduling_table import get_task_layout_compact
         get_task_layout_compact(actual_sched_record, init_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
         txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/exe_monitor_full_{num_cores}{args.file_suffix}.pdf")
@@ -658,7 +658,7 @@ if __name__ == "__main__":
         for _SchedTab in actual_sched_record:
             _SchedTab.print_alloc_detail(pid2name, sim_step)
 
-        from scheduling_table import get_task_layout_compact
+        from sched.scheduling_table import get_task_layout_compact
         get_task_layout_compact(actual_sched_record, init_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
         txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/dyn_glb_exe_monitor_full_{num_cores}{args.file_suffix}.pdf")

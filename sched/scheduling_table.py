@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple, Union, Optional, Iterable, Iterator
 from collections import OrderedDict
-from resource_agent import Resource_model_int
+from model.resource_agent import Resource_model_int
 from functools import reduce
 from task_agent import ProcessInt, TaskInt
 from matplotlib import pyplot as plt

@@ -17,8 +17,8 @@
 #     - sim_delay: simulate the delay of the data transfer, pop the data finished transferring.
 
 import math
-from task_queue_agent import TaskQueue
-from buffer import Data, Buffer
+from model.task_queue_agent import TaskQueue
+from model.buffer import Data, Buffer
 from typing import List, Dict, Callable
 
 class DataPipe:

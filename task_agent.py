@@ -3,15 +3,15 @@ from typing import Dict, List, Tuple, Union, Any, OrderedDict
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from buffer import Buffer
-    from buffer import Data
+    from model.buffer import Buffer
+    from model.buffer import Data
 from Context_message import ContextMsg
 
 import numpy as np
 import math
 # from hw_rsc import FLOPS_PER_CORE
 # from scheduler_global_cfg import *
-from resource_agent import DDL_reservation, RT_reservation, dummy_reservation
+from model.resource_agent import DDL_reservation, RT_reservation, dummy_reservation
 # preemptable?/able to preempt others
 scheduling_attr = {
     "fixed": 0,

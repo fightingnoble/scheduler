@@ -192,3 +192,7 @@ unused/def sched_step(task_spec:Spec, affinity,.py
 log/**
 plot/**
 cache/**
+
+.VSCodeCounter/**
+
+trace/**

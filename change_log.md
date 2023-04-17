@@ -174,3 +174,7 @@ Fix bug:
 
 New feature:
     - clear() in TaskQueue.
+
+## 20230417-pm14
+
+document clustring, model, sched

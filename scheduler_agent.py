@@ -3,28 +3,28 @@ from scipy.stats import truncnorm
 import math
 from copy import deepcopy
 from typing import Dict, List
-from task_queue_agent import TaskQueue
-from scheduling_table import SchedulingTableInt
+from model.task_queue_agent import TaskQueue
+from sched.scheduling_table import SchedulingTableInt
 from task_agent import ProcessInt
-from buffer import Buffer
+from model.buffer import Buffer
 import warnings
 from collections import OrderedDict
 
-from buffer import Buffer, Data
-from msg_dispatcher import MsgDispatcher
+from model.buffer import Buffer, Data
+from model.msg_dispatcher import MsgDispatcher
 from multiprocessing import Queue
-from scheduling_table import SchedulingTableInt
-from resource_agent import Resource_model_int
+from sched.scheduling_table import SchedulingTableInt
+from model.resource_agent import Resource_model_int
 from global_var import *
 
-from task_queue_agent import TaskQueue 
+from model.task_queue_agent import TaskQueue 
 from task_agent import ProcessInt
-from lru import LRUCache
-from monitor_agent import Monitor
-from barrier_agent import Barrier
+from model.lru import LRUCache
+from sched.monitor_agent import Monitor
+from model.barrier_agent import Barrier
 from message_handler import message_trigger
 from Context_message import ContextMsg
-from data_pipe import DataPipe
+from model.data_pipe import DataPipe
 
 
 class Scheduler(object): 

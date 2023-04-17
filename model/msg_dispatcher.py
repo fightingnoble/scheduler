@@ -1,6 +1,6 @@
 # from multiprocessing import Process, Queue
 from queue import Queue
-from buffer import Data
+from model.buffer import Data
 
 class MsgDispatcher:
     def __init__(self, num_queues, queue_list=None):

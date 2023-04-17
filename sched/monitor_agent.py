@@ -1,6 +1,6 @@
 from typing import List, Dict
-from scheduling_table import SchedulingTableInt
-from scheduling_table import Resource_model_int
+from sched.scheduling_table import SchedulingTableInt
+from sched.scheduling_table import Resource_model_int
 
 class Monitor(object):
 

@@ -8,11 +8,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from global_var import *
-from lru import LRUCache
-from scheduling_table import SchedulingTableInt
-from resource_agent import Resource_model_int
+from model.lru import LRUCache
+from sched.scheduling_table import SchedulingTableInt
+from model.resource_agent import Resource_model_int
 from task_agent import TaskInt
-from task_queue_agent import TaskQueue 
+from model.task_queue_agent import TaskQueue 
 from task_agent import ProcessInt, ProcessBase
 
 import warnings
