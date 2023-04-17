@@ -1,11 +1,17 @@
 from __future__ import annotations
 from typing import Dict, List, Tuple, Union, Any, OrderedDict
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from buffer import Buffer
+    from buffer import Data
+from Context_message import ContextMsg
+
 import numpy as np
 import math
 # from hw_rsc import FLOPS_PER_CORE
 # from scheduler_global_cfg import *
 from resource_agent import DDL_reservation, RT_reservation, dummy_reservation
-
 # preemptable?/able to preempt others
 scheduling_attr = {
     "fixed": 0,
@@ -76,6 +82,7 @@ class ProcessBase(object):
         self.cumulative_executed_time = 0 
         
         self.req_queue = []   # cache the arrival requests
+        self.msg_cache:List[ContextMsg] = []    # cache the generated messages
 
     def set_state(self, state):
         assert state in task_lifetime.keys()
@@ -122,6 +129,61 @@ class ProcessBase(object):
             elif not valid:
                 return False
         return np.array(list(dict_t.values())).all()
+
+    def get_upstream_ctx(self, glb_n_task_dict:Dict, buffer:Buffer):
+        """
+        extract the serialized context of the upstream tasks
+        """
+        src_dict = {}
+        for key in self.pred_data:
+            attr_dict = self.pred_data[key]
+            pid = glb_n_task_dict[key].pid
+            tgt_buffer = buffer.buffer_mux("output")
+            valid = pid in tgt_buffer
+            if valid:
+                data:Data = tgt_buffer[pid][0]
+                src_dict.update({key:data.ctx.serialize()})
+        if len(self.pred_data):
+            assert len(src_dict) > 0
+        return src_dict
+
+    def get_downstream_ctx(self):
+        """
+        return the downstream context
+        """
+        return list(self.succ_data.keys())
+
+    def get_trigger_ctx(self):
+        trigger_dict = {}
+        for key in self.pred_ctrl: 
+            msg:ContextMsg = ContextMsg.create_sensor_ctx(self.pred_ctrl[key]["trigger_time"])
+            trigger_dict.update({key:msg.serialize()})
+        return trigger_dict
+    
+    def build_ctx(self, ):
+        """
+        build the context of the task
+        """
+        # _p.msg_cache.append(ContextMsg().cache_upstreaming(_p, buffer, glb_n_task_dict))
+        # create the context of the task
+        ctx = ContextMsg.create_p_ctx(self)
+        # generate and cache the context before firing the data to the next node
+        self.msg_cache.append(ctx)
+        return ctx
+
+    def update_ctx(self, ctx_type, **kwargs):
+        """
+        update the context of the task
+        """
+        if ctx_type == "upstream":
+            self.msg_cache[0].cache_upstreaming(self, **kwargs)
+        elif ctx_type == "weight":
+            self.msg_cache[0].cache_weight(self, **kwargs)
+        elif ctx_type == "trigger":
+            if len(self.pred_ctrl):
+                self.msg_cache[0].cache_trigger(self)
+        
+            
 
     def sim_trigger(self, time=None, time_step=1e-6):
         """

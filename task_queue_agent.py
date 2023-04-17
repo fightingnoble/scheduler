@@ -56,6 +56,9 @@ class TaskQueue(Queue):
         del self.queue[index]
         self._sort()
 
+    def clear(self):
+        self.queue.clear()
+
         
 
 

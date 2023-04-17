@@ -4,7 +4,7 @@ import numpy as np
 from task_agent import TaskInt
 from spec import Spec
 from buffer import Buffer, Data
-from msg_dispatcher import MsgDispatcher, msg_filter
+from msg_dispatcher import MsgDispatcher
 from message_pipe import MessagePipe
 from multiprocessing import Queue
 
@@ -91,6 +91,12 @@ from lru import LRUCache
 from scheduler_agent import Scheduler, glb_dynamic_sched_step
 from monitor_agent import Monitor
 
+from scheduler_agent import Scheduler 
+from monitor_agent import Monitor
+from spec import Spec
+from msg_dispatcher import MsgDispatcher
+from data_pipe import DataPipe
+from Context_message import ContextMsg
 
 # =================== local scheduler ===================
 # def sched_step_cyclic_dense(task_spec:Spec, affinity, 
@@ -230,7 +236,9 @@ from monitor_agent import Monitor
 #                 #         else: 
 #                 #             print("		Arriving lateness of task {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
 
-def sched_step(task_spec:Spec, msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
+def sched_step(task_spec:Spec, # msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
+                a_data_pipe:DataPipe, 
+                w_data_pipe:DataPipe,
                 scheduler_list: List[Scheduler], monitor_list:List[Monitor],
                 rsc_list:List[Resource_model_int], 
                 total_cores:int, n_slot, 
@@ -266,7 +274,7 @@ def sched_step(task_spec:Spec, msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
 
     # spatial management
     # Each partition maintains a scheduling table, a task monitor, and a scheduler. 
-    for res_cfg, sched, monitor,  msg_queue, in zip(rsc_list, scheduler_list, monitor_list, msg_dispatcher.queues, ):
+    for res_cfg, sched, monitor,  msg_queue, in zip(rsc_list, scheduler_list, monitor_list, a_data_pipe.queues, ):
 
         # print(f"	Bin {_SchedTab.id:d}:")
         # extract scheudler, including queues and lists from scheduler_list
@@ -274,7 +282,10 @@ def sched_step(task_spec:Spec, msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
         msg_queue:Queue
         DEBUG_FG = False
 
-        sched.scheduler_step(msg_dispatcher, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, monitor, DEBUG_FG)
+        sched.scheduler_step(a_data_pipe, w_data_pipe, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, monitor, DEBUG_FG)
+    # update the wait task
+    w_data_pipe.update_wait_time(timestep)
+    a_data_pipe.update_wait_time(timestep)
 
 # =================== top global scheduler ===================
 def cyclic_sched(task_spec:Spec, affinity, 
@@ -282,7 +293,10 @@ def cyclic_sched(task_spec:Spec, affinity,
                 rsc_list:List[Resource_model_int], 
                 total_cores:int, 
                 glb_p_list:List[ProcessInt],
-                timestep, hyper_p, n_p=1, msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
+                timestep, hyper_p, n_p=1, 
+                # msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
+                a_data_pipe:DataPipe=None,
+                w_data_pipe:DataPipe=None, 
                 verbose=False, *, warmup=False, drain=False,):
     """
     partition the scheduling table
@@ -314,9 +328,24 @@ def cyclic_sched(task_spec:Spec, affinity,
         print("	ready tasks:")
         for pid in init_cfg.rsc_map: 
             _p = process_dict[pid]
-            ready_queue.put(_p)
-            _p.set_state("ready")
-            _p.released = True 
+            # _p.build_ctx()
+            # _p.update_ctx("trigger")
+
+            # simulate the prefetching of the weight
+            msg:ContextMsg = ContextMsg.create_weight_ctx()
+            data = Data(_p.pid, 1, (0,), "weight", _p.io_time, 0, 1/_p.task.freq)
+            data.ctx = msg
+            data.cache_msg_transfer(0)
+
+            data.update_receive_time(0)
+            data.valid = True
+            buffer.put(data)
+
+            # _p.update_ctx('weight', buffer=buffer)
+            # _p.update_ctx('upstream', buffer=buffer, glb_n_task_dict=glb_n_task_dict)
+            # ready_queue.put(_p)
+            # _p.set_state("ready")
+            # _p.released = True 
             print("		TASK {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
         print("")
         
@@ -332,15 +361,21 @@ def cyclic_sched(task_spec:Spec, affinity,
         for pid in init_prefetch_obj:
             _p = process_dict[pid]
             # skip data prefetching; put the data into the buffer directly
-            data = Data(_p.pid, 1, (0,), "weight", _p.io_time)
+            msg:ContextMsg = ContextMsg.create_weight_ctx()
+            data = Data(_p.pid, 1, (0,), "weight", _p.io_time, 0, 1/_p.task.freq)
+            data.ctx = msg
+            data.cache_msg_transfer(0)
+
+            data.update_receive_time(0)
             data.valid = True
             buffer.put(data)
+
             print("		TASK {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
         print("")
 
         print("	inactivated tasks:")
         for pid in task_pid_list:
-            if pid not in init_cfg.rsc_map: # and pid not in cached_map:
+            # if pid not in init_cfg.rsc_map: # and pid not in cached_map:
                 _p = process_dict[pid]
                 inactive_list.append(_p)
                 _p.set_state("suspend")
@@ -362,12 +397,13 @@ def cyclic_sched(task_spec:Spec, affinity,
             # modify the exp_comp_t and deadline of the tasks
 
         # print(f"Slot {n_slot:d}, time {curr_t:.6f}")
-        sched_step(task_spec, msg_dispatcher,
-                scheduler_list, monitor_list,
-                rsc_list, 
-                total_cores, n_slot, 
-                glb_p_list, 
-                timestep, hyper_p, n_p, verbose, warmup=warmup, drain=drain) 
+        sched_step(task_spec, a_data_pipe,
+                    w_data_pipe,
+                    scheduler_list, monitor_list,
+                    rsc_list, 
+                    total_cores, n_slot, 
+                    glb_p_list, 
+                    timestep, hyper_p, n_p, verbose, warmup=warmup, drain=drain) 
 
 
 def glb_sched(task_spec:Spec, affinity, 
@@ -375,7 +411,10 @@ def glb_sched(task_spec:Spec, affinity,
                 rsc_list:List[Resource_model_int], 
                 total_cores:int, 
                 glb_p_list:List[ProcessInt],
-                timestep, hyper_p, n_p=1, msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
+                timestep, hyper_p, n_p=1, 
+                msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
+                a_data_pipe:DataPipe=None,
+                w_data_pipe:DataPipe=None, 
                 quantum_check_en:bool = False, quantumSize=None,
                 verbose=False, *, warmup=False, drain=False,):
     """
@@ -414,7 +453,7 @@ def glb_sched(task_spec:Spec, affinity,
         msg_queue:Queue
         DEBUG_FG = False
 
-        glb_dynamic_sched_step(sched, msg_dispatcher, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, monitor, DEBUG_FG, quantum_check_en, quantumSize)
+        glb_dynamic_sched_step(sched, msg_dispatcher, a_data_pipe, w_data_pipe, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, monitor, DEBUG_FG, quantum_check_en, quantumSize)
 
 
 
@@ -515,10 +554,6 @@ if __name__ == "__main__":
         physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd))
         
         init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
-        from scheduler_agent import Scheduler 
-        from monitor_agent import Monitor
-        from spec import Spec
-        from msg_dispatcher import MsgDispatcher
         # from message_agent import Message
         
         task_spec = Spec(0.1, [1 for _ in init_p_list]) 
@@ -526,7 +561,9 @@ if __name__ == "__main__":
         rsc_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
         # curr_cfg_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
         # msg_pipe = Message()
-        msg_dispatcher = MsgDispatcher(len(bin_list))
+        # msg_dispatcher = MsgDispatcher(len(bin_list))
+        a_data_pipe = DataPipe("activation", len(bin_list))
+        w_data_pipe = DataPipe("weight", len(bin_list))
         # filter the processes with trigger_mode is not "N"
         sim_triggered_list = [[init_p_list[pid] for pid in _bin.index_occupy_by_id().keys() if init_p_list[pid].task.trigger_mode!='N'] for _bin in bin_list]
         for _bin, _sim_triggered_list in zip(bin_list, sim_triggered_list):
@@ -541,7 +578,8 @@ if __name__ == "__main__":
                 rsc_list, 
                 num_cores, 
                 init_p_list,
-                sim_step, hyper_p, num_periods, msg_dispatcher,
+                sim_step, hyper_p, num_periods, 
+                a_data_pipe, w_data_pipe, 
                 args.verbose, warmup=True, drain=True)
 
         actual_sched_record = [monitor.trace_recoder for monitor in monitor_list]
@@ -556,7 +594,19 @@ if __name__ == "__main__":
         from scheduling_table import get_task_layout_compact
         get_task_layout_compact(actual_sched_record, init_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
-        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/exe_monitor_ful_{num_cores}{args.file_suffix}.pdf")
+        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/exe_monitor_full_{num_cores}{args.file_suffix}.pdf")
+
+        # save trace_list to trace_file
+        with open(f"trace/dynamic_e2e_trace_{num_cores}{args.file_suffix}.pkl", "wb") as f:
+            pickle.dump(trace_list, f)
+        
+        try:
+            with open(f"trace/dynamic_e2e_trace_{num_cores}{args.file_suffix}.pkl", "rb") as f:
+                trace_list = pickle.load(f)
+            print("trace saved successfully")
+        except:
+            print("trace file not found")
+            exit(0)            
 
     elif args.test_case == "glb_dynamic":
         np.random.seed(0)
@@ -566,10 +616,6 @@ if __name__ == "__main__":
         physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd))
         
         init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
-        from scheduler_agent import Scheduler 
-        from monitor_agent import Monitor
-        from spec import Spec
-        from msg_dispatcher import MsgDispatcher
         # from message_agent import Message
         
         task_spec = Spec(0.1, [1 for _ in init_p_list]) 
@@ -578,6 +624,8 @@ if __name__ == "__main__":
         # curr_cfg_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
         # msg_pipe = Message()
         msg_dispatcher = MsgDispatcher(len(bin_list))
+        a_data_pipe = DataPipe("activation", len(bin_list))
+        w_data_pipe = DataPipe("weight", len(bin_list))
         # filter the processes with trigger_mode is not "N"
         sim_triggered_list = [[p for p in init_p_list if p.task.trigger_mode!='N'],]
         for _bin, _sim_triggered_list in zip(bin_list, sim_triggered_list):
@@ -592,7 +640,9 @@ if __name__ == "__main__":
                 rsc_list, 
                 num_cores, 
                 init_p_list,
-                sim_step, hyper_p, num_periods, msg_dispatcher,
+                sim_step, hyper_p, num_periods, 
+                msg_dispatcher,
+                a_data_pipe, w_data_pipe,
                 args.quantum_check_en, quantumSize, 
                 args.verbose, warmup=True, drain=True)
         
@@ -612,6 +662,17 @@ if __name__ == "__main__":
         get_task_layout_compact(actual_sched_record, init_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
         txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/dyn_glb_exe_monitor_full_{num_cores}{args.file_suffix}.pdf")
+
+        # save trace_list to trace_file
+        with open(f"trace/dyn_glb_e2e_trace_{num_cores}{args.file_suffix}.pkl", "wb") as f:
+            pickle.dump(trace_list, f)
+        try:
+            with open(f"trace/dyn_glb_e2e_trace_{num_cores}{args.file_suffix}.pkl", "rb") as f:
+                trace_list = pickle.load(f)
+            print("trace saved successfully")
+        except:
+            print("trace file not found")
+            exit(0)
 
         # plot with bokhe
         # get_task_layout_compact(actual_sched_record, init_p_list, save= True, time_step= sim_step,

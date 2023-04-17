@@ -6,6 +6,7 @@ This class models the buffer with the following attributes:
 import collections
 import typing
 from queue import Queue
+from Context_message import ContextMsg
 
 class Data(object):
     def __init__(self, pid:int, size:int, data_id:typing.Tuple, data_type:str, io_time, event_time=0, life_time=-1) -> None:
@@ -18,6 +19,7 @@ class Data(object):
         self.io_time = io_time
         self.event_time = event_time
         self.life_time = life_time
+        self.ctx:ContextMsg = None
 
     def check_valid(self, curr_time):
         if self.event_time + self.io_time <= curr_time:
@@ -25,7 +27,22 @@ class Data(object):
             return True
         return False
     
-        
+    def serialize(self):
+        return {"pid": self.pid, "size": self.size, "data_id": self.data_id, "data_type": self.data_type, 
+                "waitTime": self.waitTime, "io_time": self.io_time, "event_time": self.event_time, 
+                "life_time": self.life_time}
+    
+    def cache_data_info(self):
+        self.ctx.cache_data_info(self)
+
+    def update_receive_time(self, time:int) -> None:
+        self.ctx.update_receive_time(time)
+    
+    def cache_msg_transfer(self, time:int) -> None:
+        self.ctx.cache_msg_transfer(time)
+    
+    def track_downstream(self) -> typing.List:
+        return self.ctx.get_downstream_node()
 
 class Buffer(object):
     def __init__(self, capacity:int=-1, sort_fn:typing.Callable=None) -> None:

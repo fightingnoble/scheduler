@@ -46,3 +46,4 @@ def jitter_sim(_p, jitter_sim_para:Dict, curr_t, trigger_state):
     elif _p.i_offset > _p.task.period:
         _p.i_offset -= _p.task.period
     return init_trigger_state
+

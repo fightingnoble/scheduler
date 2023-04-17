@@ -946,7 +946,7 @@ def push_task_into_scheduling_table_cyclic_preemption_disable(tasks: Union[List[
                 _p.release_time += _p.task.period
                 _p.deadline += _p.task.period
 
-                _p.end_time = curr_t * timestep
+                _p.end_time = curr_t
                 _p.currentburst = 0
                 _p.burst = 0
                 _p.totburst = 0
@@ -1306,7 +1306,7 @@ def push_task_into_bins(init_p_list: List[TaskInt], affinity, #SchedTab: Schedul
                 _p.release_time += _p.task.period
                 _p.deadline += _p.task.period
 
-                _p.end_time = curr_t * timestep
+                _p.end_time = curr_t
                 _p.currentburst = 0
                 _p.burst = 0
                 _p.totburst = 0

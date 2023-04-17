@@ -156,3 +156,21 @@ fix bug:
     and glb_dynamic method misses some tasks.
 
 
+## 20230417
+integrate context into the stream flow
+    - trace_example.py: example of generated trace log
+    - task_agent.py: support of extracting the context
+    - Context_message.py: The context class, a `dict` class, marks the processor, sensor, 
+        and data node, and the properties of these nodes. 
+    - buffer.py: integrate the context into the Data. 
+    - data_pipe.py: simulate the communication backbone. 
+    - scheduler_agent.py, allocator_agent.py: algorithm
+    - remove the control message path, and move the handler to msg_dispatcher.py
+    - the streaming context trace is saved to trace_list and trace_file, 
+        which is defined in global_var.py.
+
+Fix bug:
+    - task_cfg.py, clb_sched.py: end time error, curr_t * timestep
+
+New feature:
+    - clear() in TaskQueue.
