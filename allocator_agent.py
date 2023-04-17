@@ -1,7 +1,7 @@
 from typing import Union, List, Dict, Iterator, Callable
 import warnings
 import numpy as np
-from task_agent import TaskInt
+from task.task_agent import TaskInt
 from spec import Spec
 from model.buffer import Buffer, Data
 from model.msg_dispatcher import MsgDispatcher
@@ -85,7 +85,7 @@ import matplotlib.pyplot as plt
 from global_var import *
 
 from model.task_queue_agent import TaskQueue 
-from task_agent import ProcessInt
+from task.task_agent import ProcessInt
 import copy
 from model.lru import LRUCache
 from scheduler_agent import Scheduler, glb_dynamic_sched_step
@@ -462,9 +462,9 @@ if __name__ == "__main__":
     import numpy as np 
     import pickle
 
-    from task_cfg import load_taskint, create_init_p_list
-    from task_cfg import affinity_cfg, task_graph_srcs, task_graph_ops, task_graph_sinks
-    from task_cfg import creat_physical_graph, creat_logical_graph, init_depen
+    from task.task_cfg import load_taskint, create_init_p_list
+    from task.task_cfg import affinity_cfg, task_graph_srcs, task_graph_ops, task_graph_sinks
+    from task.task_cfg import creat_physical_graph, creat_logical_graph, init_depen
     from global_sched import push_task_into_bins
 
     parser = argparse.ArgumentParser()

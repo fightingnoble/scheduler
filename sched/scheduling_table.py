@@ -4,7 +4,7 @@ from typing import List, Dict, Tuple, Union, Optional, Iterable, Iterator
 from collections import OrderedDict
 from model.resource_agent import Resource_model_int
 from functools import reduce
-from task_agent import ProcessInt, TaskInt
+from task.task_agent import ProcessInt, TaskInt
 from matplotlib import pyplot as plt
 from bokeh.plotting import figure, show
 from bokeh.models import ColumnDataSource, HoverTool, Range1d, LabelSet, Label, Legend

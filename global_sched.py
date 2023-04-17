@@ -11,9 +11,9 @@ from global_var import *
 from model.lru import LRUCache
 from sched.scheduling_table import SchedulingTableInt
 from model.resource_agent import Resource_model_int
-from task_agent import TaskInt
+from task.task_agent import TaskInt
 from model.task_queue_agent import TaskQueue 
-from task_agent import ProcessInt, ProcessBase
+from task.task_agent import ProcessInt, ProcessBase
 
 import warnings
 from pre_alloc import get_target_bin_score, glb_alloc_new, get_rsc_2b_released

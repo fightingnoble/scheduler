@@ -1,6 +1,6 @@
 from scipy.stats import truncnorm
 from typing import List, Dict
-from task_agent import ProcessBase
+from task.task_agent import ProcessBase
 
 def message_trigger(sim_triggered_list:List[ProcessBase], jitter_sim_en, jitter_sim_para, 
                     timestep, curr_t, DEBUG_FG):

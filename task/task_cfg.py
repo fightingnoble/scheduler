@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Union, List, Dict, Iterator, Callable, Union
 import copy
-import pickle
 import math
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,9 +12,9 @@ from global_var import *
 from model.lru import LRUCache
 from sched.scheduling_table import SchedulingTableInt
 from model.resource_agent import Resource_model_int
-from task_agent import TaskInt
+from task.task_agent import TaskInt
 from model.task_queue_agent import TaskQueue 
-from task_agent import ProcessInt
+from task.task_agent import ProcessInt
 
 # 'ID', 'Task (chain) names', 'Flops on path', 'Expected Latency (ms)', 'T release', 'Freq.', 'DDL', 'Cores/Req.', 
 # 'Throuput factor (S)', 'Thread factor (S)', 'Min required cores', 'Timing_flag', 'Max required Cores', 'RDA./Req.', 'Resource Type', 'Pre-assigned', 'Priority'

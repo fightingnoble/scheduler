@@ -4,7 +4,7 @@ from typing import List, Dict
 
 if TYPE_CHECKING:
     from model.buffer import Data, Buffer
-    from task_agent import ProcessInt
+    from task.task_agent import ProcessInt
 
 # Context is a data structure used to record the 
 # processing history (by each process or node) and 

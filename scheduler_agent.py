@@ -5,7 +5,7 @@ from copy import deepcopy
 from typing import Dict, List
 from model.task_queue_agent import TaskQueue
 from sched.scheduling_table import SchedulingTableInt
-from task_agent import ProcessInt
+from task.task_agent import ProcessInt
 from model.buffer import Buffer
 import warnings
 from collections import OrderedDict
@@ -18,7 +18,7 @@ from model.resource_agent import Resource_model_int
 from global_var import *
 
 from model.task_queue_agent import TaskQueue 
-from task_agent import ProcessInt
+from task.task_agent import ProcessInt
 from model.lru import LRUCache
 from sched.monitor_agent import Monitor
 from model.barrier_agent import Barrier

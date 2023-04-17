@@ -1,5 +1,5 @@
 from typing import Dict
-from task_agent import TaskBase
+from task.task_agent import TaskBase
 class Spec(object):
     e2e_latency = 0
     
