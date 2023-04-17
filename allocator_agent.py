@@ -2,7 +2,7 @@ from typing import Union, List, Dict, Iterator, Callable
 import warnings
 import numpy as np
 from task.task_agent import TaskInt
-from spec import Spec
+from task.spec import Spec
 from model.buffer import Buffer, Data
 from model.msg_dispatcher import MsgDispatcher
 from model.message_pipe import MessagePipe
@@ -93,10 +93,10 @@ from sched.monitor_agent import Monitor
 
 from scheduler_agent import Scheduler 
 from sched.monitor_agent import Monitor
-from spec import Spec
+from task.spec import Spec
 from model.msg_dispatcher import MsgDispatcher
 from model.data_pipe import DataPipe
-from Context_message import ContextMsg
+from model.Context_message import ContextMsg
 
 # =================== local scheduler ===================
 # def sched_step_cyclic_dense(task_spec:Spec, affinity, 

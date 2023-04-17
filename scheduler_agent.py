@@ -22,8 +22,8 @@ from task.task_agent import ProcessInt
 from model.lru import LRUCache
 from sched.monitor_agent import Monitor
 from model.barrier_agent import Barrier
-from message_handler import message_trigger
-from Context_message import ContextMsg
+from model.message_handler import message_trigger
+from model.Context_message import ContextMsg
 from model.data_pipe import DataPipe
 
 

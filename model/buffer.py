@@ -6,7 +6,7 @@ This class models the buffer with the following attributes:
 import collections
 import typing
 from queue import Queue
-from Context_message import ContextMsg
+from model.Context_message import ContextMsg
 
 class Data(object):
     def __init__(self, pid:int, size:int, data_id:typing.Tuple, data_type:str, io_time, event_time=0, life_time=-1) -> None:
