@@ -177,4 +177,6 @@ New feature:
 
 ## 20230417-pm14
 
-document clustring, model, sched
+document clustring, 
+    - model, sched
+    - old, unused
