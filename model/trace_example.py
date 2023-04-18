@@ -2,7 +2,7 @@ trace_example = {
     'trigger': {
         'IMU_pub': {
             'trigger': {
-                'trigger_time': 0.0},
+                'ingestion_time': 0.0},
             'src': {},
             'weight': {},
             'process_info': {},
@@ -20,7 +20,7 @@ trace_example = {
                             'trigger': {
                                 'LiDAR_pub': {
                                     'trigger': {
-                                        'trigger_time': 0.0},
+                                        'ingestion_time': 0.0},
                                     'src': {},
                                     'weight': {},
                                     'process_info': {},
@@ -35,7 +35,7 @@ trace_example = {
                                             'trigger': {
                                                 'streo_camera_pub': {
                                                     'trigger': {
-                                                        'trigger_time': 0.0},
+                                                        'ingestion_time': 0.0},
                                                     'src': {},
                                                     'weight': {},
                                                     'process_info': {},
@@ -124,7 +124,7 @@ trace_example = {
                                                 'trigger': {
                                                     'surr_view_camera_pub': {
                                                         'trigger': {
-                                                            'trigger_time': 0.0},
+                                                            'ingestion_time': 0.0},
                                                         'src': {},
                                                         'weight': {},
                                                         'process_info': {},

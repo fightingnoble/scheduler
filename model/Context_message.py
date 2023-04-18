@@ -109,10 +109,11 @@ class ContextMsg(object):
         return ctx
 
     @staticmethod
-    def create_sensor_ctx(time) -> ContextMsg:
+    def create_sensor_ctx(ingestion_time, event_time=None) -> ContextMsg:
         ctx = ContextMsg()
         ctx.msg_context["data_type"] = "sensor"
-        ctx.msg_context["trigger"]["trigger_time"] = time
+        ctx.msg_context["trigger"]["ingestion_time"] = ingestion_time
+        ctx.msg_context["trigger"]["event_time"] = event_time
         return ctx
     
     @staticmethod
@@ -128,7 +129,7 @@ class ContextMsg(object):
         trigger_dict  = _root.get_trigger()
         for key, ctx in trigger_dict.items():
             if ctx["data_type"] == "sensor":
-                dict_o[key] = ctx["trigger"]["trigger_time"]
+                dict_o[key] = ctx["trigger"]["ingestion_time"]
         _src = _root.get_src()
         for key, ctx in _src.items():
             dict_t, end_t = cls.find_sensor(ctx)

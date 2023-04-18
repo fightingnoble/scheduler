@@ -22,7 +22,7 @@ from task.task_agent import ProcessInt
 from model.lru import LRUCache
 from sched.monitor_agent import Monitor
 from model.barrier_agent import Barrier
-from model.message_handler import message_trigger
+from model.message_handler import message_trigger, message_trigger_event
 from model.Context_message import ContextMsg
 from model.data_pipe import DataPipe
 
@@ -597,7 +597,7 @@ def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe, n_slot, ti
     buffer.pop_timeout("output", curr_t, True)
 
     # simulate the event trigger
-    trigger_state = message_trigger(_SchedTab.sim_triggered_list, sched.jitter_sim_en, sched.jitter_sim_para, timestep, curr_t, DEBUG_FG)
+    trigger_state = message_trigger_event(_SchedTab.sim_triggered_list, sched.jitter_sim_en, sched.jitter_sim_para, timestep, curr_t, DEBUG_FG)
     if bin_name and trigger_state and not bin_event_flg:
         bin_event_flg = True
         print(f"({bin_name})")
@@ -893,7 +893,7 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data
     buffer.pop_timeout("output", curr_t, True)
 
     # simulate the event trigger
-    message_trigger(_SchedTab.sim_triggered_list, sched.jitter_sim_en, sched.jitter_sim_para, timestep, curr_t, DEBUG_FG)
+    message_trigger_event(_SchedTab.sim_triggered_list, sched.jitter_sim_en, sched.jitter_sim_para, timestep, curr_t, DEBUG_FG)
 
     # tackle the event in message pipe, set the valid flag in pred_data of each process
     # update barrier status

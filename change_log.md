@@ -177,7 +177,14 @@ New feature:
 
 ## 20230417-pm14
 
-document clustring, 
+document clustering, 
     - model, sched
     - old, unused
     - task
+
+## 20230418
+
+Change the sensor simulation from periodic mode to event-driven mode.
+    - message_handeler.py, scheduler_agent.py: new message_trigger handler;
+    - Context_message.py: replace trigger_time by event_time ingestion_time
+    - profiling.csv, task_agent.py: task trigger_mode setting.
