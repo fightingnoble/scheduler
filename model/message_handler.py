@@ -71,7 +71,7 @@ def message_trigger_event(sim_triggered_list:List[ProcessBase], jitter_sim_en, j
                 _p.next_ingestion_time += jitter
 
         assert _p.trigger_mode == "event", "trigger mode is not event"
-        if curr_t >= _p.next_ingestion_time:
+        if curr_t - _p.next_ingestion_time >= -timestep*0.99:
             _p.event_triggers.append([_p.next_ingestion_time, _p.next_event_time])
         trigger_state = _p.sim_trigger(curr_t, timestep)
         if trigger_state:
