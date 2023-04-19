@@ -531,7 +531,7 @@ def pendingToReady_cbs(buffer:Buffer, budget_recoder,
                        active_list, ready_queue, throttle_list, 
                        curr_t, glb_n_task_dict:Dict[str, ProcessInt], bin_name=""):
     # waitingQueue[i]->waitTime != 0 && waitingQueue[i]->waitTime % waitingQueue[i]->io == 0
-    l_ready = []
+    l_ready:List[ProcessInt] = []
     for _p in active_list:
         # check data availability
         w_avail = _p.pid in buffer.buffer_w

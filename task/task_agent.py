@@ -157,7 +157,8 @@ class ProcessBase(object):
         trigger_dict = {}
         for key in self.pred_ctrl: 
             msg:ContextMsg = ContextMsg.create_sensor_ctx(self.pred_ctrl[key]["ingestion_time"], 
-                                                          self.pred_ctrl[key]["event_time"])
+                                                          self.pred_ctrl[key]["event_time"],
+                                                          self.pred_ctrl[key]["period"])
             trigger_dict.update({key:msg.serialize()})
         return trigger_dict
     
@@ -203,6 +204,7 @@ class ProcessBase(object):
                     self.pred_ctrl[key]["valid"] = True
                     self.pred_ctrl[key]["ingestion_time"] = self.next_ingestion_time
                     self.pred_ctrl[key]["event_time"] = self.next_event_time
+                    self.pred_ctrl[key]["period"] = self.task.period
                 return True
         return False
     
