@@ -1,6 +1,7 @@
 from scipy.stats import truncnorm
 from typing import List, Dict
 from task.task_agent import ProcessBase
+from global_var import *
 
 def message_trigger(sim_triggered_list:List[ProcessBase], jitter_sim_en, jitter_sim_para, 
                     timestep, curr_t, DEBUG_FG):
@@ -58,7 +59,7 @@ def jitter_sim(_p, jitter_sim_para:Dict, curr_t, trigger_state):
         _p.i_offset -= _p.task.period
     return init_trigger_state
 
-def message_trigger_event(sim_triggered_list:List[ProcessBase], jitter_sim_en, jitter_sim_para, 
+def message_trigger_event(sim_triggered_list:List[ProcessBase], jitter_sim_en, jitter_sim_para, inactive_list,
                     timestep, curr_t, DEBUG_FG):
     Bin_trigger_state = False
     # set the the property next_event_time
@@ -71,15 +72,18 @@ def message_trigger_event(sim_triggered_list:List[ProcessBase], jitter_sim_en, j
                 _p.next_ingestion_time += jitter
 
         assert _p.trigger_mode == "event", "trigger mode is not event"
-        if curr_t - _p.next_ingestion_time >= -timestep*0.99:
+        if timestep*(1-numerical_error_tol_rel) > curr_t - _p.next_ingestion_time >= -timestep*numerical_error_tol_rel:
             _p.event_triggers.append([_p.next_ingestion_time, _p.next_event_time])
-        trigger_state = _p.sim_trigger(curr_t, timestep)
-        if trigger_state:
             _p.next_event_time += _p.task.period
             _p.next_ingestion_time = _p.next_event_time
             if jitter_sim_en:
                     jitter = jitter_sim_event(_p, jitter_sim_para)
                     _p.next_ingestion_time += jitter
+
+        if _p not in inactive_list:
+            continue
+
+        trigger_state = _p.sim_trigger(curr_t, timestep)
         if DEBUG_FG and trigger_state:
             print(f"		{_p.task.name} triggered @ {curr_t:.6f}")
     return Bin_trigger_state

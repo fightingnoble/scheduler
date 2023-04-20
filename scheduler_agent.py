@@ -179,9 +179,10 @@ class Scheduler(object):
                                 self.budget_recoder, self.ready_queue, self.throttle_list, self._SchedTab.name,
                                 bin_event_flg)
 
-    def chk_release(self, event_range, curr_t, 
+    def chk_release(self, event_range, curr_t, timestep, 
                     bin_event_flg:bool=False, ):
-        return chk_release(event_range, curr_t, self.inactive_list, self.active_list, bin_event_flg, self._SchedTab.name)
+        return chk_release(self, event_range, curr_t, self.inactive_list, self.active_list, self._SchedTab, timestep, 
+                           bin_event_flg, self._SchedTab.name)
 
     def check_miss(self,
                             curr_t, res_cfg, 
@@ -265,9 +266,10 @@ def throttleToReady(curr_t, budget_recoder, ready_queue, throttle_list, bin_name
         # data prefetching
         # position candidate 
 
-def chk_release(event_range, curr_t, inactive_list:List[ProcessInt], active_list, 
+def chk_release(sched, event_range, curr_t, inactive_list:List[ProcessInt], active_list, 
+                _SchedTab, timestep, 
                 bin_event_flg:bool=False, 
-                bin_name:str=""):
+                bin_name:str="", DEBUG_FG:bool=False,):
     """
     check release
         1. check the dependencies of the tasks in inactive list
@@ -276,10 +278,20 @@ def chk_release(event_range, curr_t, inactive_list:List[ProcessInt], active_list
 
     l_active = []
     if curr_t <= event_range:
+        # simulate the event trigger
+        trigger_state = message_trigger_event(_SchedTab.sim_triggered_list, sched.jitter_sim_en, sched.jitter_sim_para, 
+                                              inactive_list, timestep, curr_t, DEBUG_FG)
+        if bin_name and trigger_state and not bin_event_flg:
+            bin_event_flg = True
+            print(f"({bin_name})")
+
         for _p in inactive_list:
             if _p.check_depends():
                 # if curr_t >= _p.task.ERT and _p.trigger_mode != "N": # constraint the fisrt release time of the event triggered task
                 _p.build_ctx()
+                # advance the trigger time
+                if len(_p.pred_ctrl):
+                    _p.event_triggers.pop(0)
                 _p.update_ctx("trigger")
                 l_active.append(_p)
 
@@ -528,7 +540,7 @@ def updateRunningQueue(timestep, running_queue, rsc_cfg):
         _p.rem_flop_budget -= rsc_cfg.rsc_map[_p.pid] * timestep * FLOPS_PER_CORE
 
 def pendingToReady_cbs(buffer:Buffer, budget_recoder, 
-                       active_list, ready_queue, throttle_list, 
+                       active_list:List[ProcessInt], ready_queue, throttle_list, 
                        curr_t, glb_n_task_dict:Dict[str, ProcessInt], bin_name=""):
     # waitingQueue[i]->waitTime != 0 && waitingQueue[i]->waitTime % waitingQueue[i]->io == 0
     l_ready:List[ProcessInt] = []
@@ -536,6 +548,7 @@ def pendingToReady_cbs(buffer:Buffer, budget_recoder,
         # check data availability
         w_avail = _p.pid in buffer.buffer_w
         in_avail = _p.check_depends_data(buffer, glb_n_task_dict=glb_n_task_dict)
+        # in_avail, dict_o = _p.check_depends_data_watermark_aware(buffer, glb_n_task_dict=glb_n_task_dict)
         if w_avail and in_avail:
             l_ready.append(_p)
 
@@ -595,12 +608,7 @@ def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe, n_slot, ti
 
     # spill out the data of type "output", which is expired
     buffer.pop_timeout("output", curr_t, True)
-
-    # simulate the event trigger
-    trigger_state = message_trigger_event(_SchedTab.sim_triggered_list, sched.jitter_sim_en, sched.jitter_sim_para, timestep, curr_t, DEBUG_FG)
-    if bin_name and trigger_state and not bin_event_flg:
-        bin_event_flg = True
-        print(f"({bin_name})")
+    # buffer.recyle_no_ref("output", True)
 
     # tackle the event in message pipe, set the valid flag in pred_data of each process
     # update barrier status
@@ -613,7 +621,7 @@ def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe, n_slot, ti
     # check release
     # check the dependencies of the tasks in inactive list
     # if the dependencies are satisfied, move the task to the wait queue
-    bin_event_flg = chk_release(event_range, curr_t, inactive_list, active_list, bin_event_flg, bin_name) 
+    bin_event_flg = chk_release(sched, event_range, curr_t, inactive_list, active_list, _SchedTab, timestep, bin_event_flg, bin_name) 
 
     # # instruction prefetching
     # cfg_slot_s, cached_cfg, cfg_slot_num  = _SchedTab.sparse_list[_SchedTab.sparse_idx_next]         
@@ -818,8 +826,8 @@ def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe, n_slot, ti
             if np.logical_xor(curr_cfg_ref != next_cfg, curr_cfg.slot_s == n_slot+1 or curr_cfg.slot_e == n_slot):
                 print("ERROR: cfg not match")
 
-def data_pipe_read(curr_t, glb_name_p_dict, process_dict, buffer, bin_name, bin_event_flg, a_msg_queue):
-    msg_dict = {}
+def data_pipe_read(curr_t, glb_name_p_dict, process_dict, buffer, bin_name, bin_event_flg, a_msg_queue: List[Data]):
+    msg_dict:Dict[int, Data] = {}
     # read out all message and clear the message pipe
     for data in a_msg_queue:
         tgt_p_name_l = data.track_downstream()
@@ -827,6 +835,8 @@ def data_pipe_read(curr_t, glb_name_p_dict, process_dict, buffer, bin_name, bin_
             tgt_pid = glb_name_p_dict[key].pid
             if tgt_pid in process_dict:
                 msg_dict[tgt_pid] = data
+                # add the ref_pid to the data
+                data.ref_pid.append(tgt_pid)
     for data in set(msg_dict.values()):
         buffer.put(data)
     a_msg_queue.clear()
@@ -892,9 +902,6 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data
     # spill out the data of type "output", which is expired
     buffer.pop_timeout("output", curr_t, True)
 
-    # simulate the event trigger
-    message_trigger_event(_SchedTab.sim_triggered_list, sched.jitter_sim_en, sched.jitter_sim_para, timestep, curr_t, DEBUG_FG)
-
     # tackle the event in message pipe, set the valid flag in pred_data of each process
     # update barrier status
     # update the data status
@@ -915,7 +922,7 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data
     # check release
     # check the dependencies of the tasks in inactive list
     # if the dependencies are satisfied, move the task to the wait queue
-    bin_event_flg = chk_release(event_range, curr_t, inactive_list, active_list, bin_event_flg, bin_name) 
+    bin_event_flg = chk_release(sched, event_range, curr_t, inactive_list, active_list, _SchedTab, timestep, bin_event_flg, bin_name) 
 
     # check data availability: some tasks may be prefetched
     # TODO: model the runtime weight and feature map transfering 

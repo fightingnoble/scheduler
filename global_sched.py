@@ -112,7 +112,7 @@ def push_task_into_bins(init_p_list: List[TaskInt], affinity,
         # enqueue the process that is released in this slot
         lt = []
         for _p in wait_queue:
-            if _p.release_time <= n_slot * timestep and _p.release_time < event_range:
+            if _p.release_time <= curr_t and _p.release_time < event_range:
                 lt.append(_p)
         for _p in lt:
             print("TASK {:d}:{:s}({:d}) RELEASEED AT {}!!".format(_p.task.id, _p.task.name, _p.pid, curr_t))

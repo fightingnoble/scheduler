@@ -9,7 +9,7 @@ from queue import Queue
 from model.Context_message import ContextMsg
 
 class Data(object):
-    def __init__(self, pid:int, size:int, data_id:typing.Tuple, data_type:str, io_time, event_time=0, life_time=-1) -> None:
+    def __init__(self, pid:int, size:int, data_id:typing.Tuple, data_type:str, io_time, processed_done_time=0, life_time=-1, event_time=0) -> None:
         self.pid = pid
         self.size = size
         self.data_id = data_id
@@ -17,19 +17,16 @@ class Data(object):
         self.valid = False
         self.waitTime = 0
         self.io_time = io_time
+        self.processed_done_time = processed_done_time
         self.event_time = event_time
         self.life_time = life_time
         self.ctx:ContextMsg = None
-
-    def check_valid(self, curr_time):
-        if self.event_time + self.io_time <= curr_time:
-            self.valid = True
-            return True
-        return False
+        self.ref_pid = []
+        self.period = 0
     
     def serialize(self):
         return {"pid": self.pid, "size": self.size, "data_id": self.data_id, "data_type": self.data_type, 
-                "waitTime": self.waitTime, "io_time": self.io_time, "event_time": self.event_time, 
+                "waitTime": self.waitTime, "io_time": self.io_time, "event_time": self.processed_done_time, 
                 "life_time": self.life_time}
     
     def cache_data_info(self):
@@ -45,13 +42,17 @@ class Data(object):
         return self.ctx.get_downstream_node()
 
 class Buffer(object):
-    def __init__(self, capacity:int=-1, sort_fn:typing.Callable=None) -> None:
+    def __init__(self, capacity:int=-1, sort_fn:typing.Callable=None, watermark_en=False) -> None:
         self.capacity = capacity
         self.buffer_w:typing.OrderedDict[int, typing.List[Data]] = collections.OrderedDict()
         self.buffer_i:typing.OrderedDict[int, typing.List[Data]] = collections.OrderedDict()
         self.buffer_o:typing.OrderedDict[int, typing.List[Data]] = collections.OrderedDict()
         self.remain_cap = capacity
-        self.sort_fn = sort_fn if sort_fn else lambda x: x.data_id
+        # event_time, data_id,
+        if watermark_en:
+            self.sort_fn = sort_fn if sort_fn else lambda x: (x.ctx.get_timestamp(), x.data_id)
+        else:
+            self.sort_fn = sort_fn if sort_fn else lambda x: x.data_id
 
     
     def buffer_mux(self, data_type):
@@ -103,13 +104,13 @@ class Buffer(object):
         for pid in list(tgt_buffer.keys()):
             # sort by data.event_time + data.life_time - curr_t, then sort_fn, ascending
             # the evicted data is the one with the event_time + life_time - curr_t < 0
-            tgt_buffer[pid].sort(key=lambda x: (x.event_time + x.life_time - curr_t, self.sort_fn(x)))
+            tgt_buffer[pid].sort(key=lambda x: (x.processed_done_time + x.life_time - curr_t, self.sort_fn(x)))
             while tgt_buffer[pid]:
                 data = tgt_buffer[pid][0]
-                if data.event_time + data.life_time - curr_t >= 0:
+                if data.processed_done_time + data.life_time - curr_t >= 0:
                     break
                 if verbose: 
-                    print("pop data: ", data.data_id, data.pid, data.event_time, data.life_time, curr_t)
+                    print("pop data: ", data.data_id, data.pid, data.processed_done_time, data.life_time, curr_t)
                 tgt_buffer[pid].pop(0)
                 self.remain_cap += data.size
                 pop_status = True
@@ -117,6 +118,18 @@ class Buffer(object):
             if len(tgt_buffer[pid]) == 0:
                 del tgt_buffer[pid]
 
+    def recyle_no_ref(self, data_type, verbose:bool=False):
+        tgt_buffer = self.buffer_mux(data_type)
+        for pid in list(tgt_buffer.keys()):
+            for data in tgt_buffer[pid]:
+                if len(data.ref_pid) == 0:
+                    if verbose: 
+                        print("pop data: ", data.data_id)
+                    tgt_buffer[pid].remove(data)
+                    self.remain_cap += data.size
+            tgt_buffer[pid].sort(key=self.sort_fn)
+            if len(tgt_buffer[pid]) == 0:
+                del tgt_buffer[pid]
 
 if __name__ == "__main__":
     buffer_in = Buffer(100)

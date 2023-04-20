@@ -9,3 +9,6 @@ SRAM_size_per_core = 1.25 # MB
 
 trace_file = "trace.txt"
 trace_list = []
+
+numerical_error_tol_abs = 1e-6
+numerical_error_tol_rel = 0.01
