@@ -12,7 +12,7 @@ from collections import OrderedDict
 
 from model.buffer import Buffer, Data
 from model.msg_dispatcher import MsgDispatcher
-from multiprocessing import Queue
+from queue import Queue
 from sched.scheduling_table import SchedulingTableInt
 from model.resource_agent import Resource_model_int
 from global_var import *
@@ -344,7 +344,7 @@ def check_miss(
             if rsc_recoder is not None:
                 rsc_recoder.pop(_p.pid)
             running_queue.remove(_p)
-        print("		TASK {:d}:{:s}({:d}) MISSED DEADLINE!!".format(_p.task.id, _p.task.name, _p.pid))
+        print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}")
         _p.task.missed_deadline_count += 1
         # _p.release_time += _p.task.period
         _p.deadline += _p.task.period
@@ -574,7 +574,11 @@ def pendingToReady_cbs(buffer:Buffer, budget_recoder,
             _str += "data ready, but throttled!!"
             warnings.warn(_str)
 
-def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, monitor:Monitor, DEBUG_FG):
+def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe, 
+                    n_slot, timestep, 
+                    event_range, sim_slot_num, curr_t, 
+                    glb_name_p_dict, res_cfg, msg_queue, 
+                    monitor:Monitor, DEBUG_FG, quantum_check_en:bool = False, quantumSize=None):
     weight_wait_queue, ready_queue, running_queue, \
         miss_list, preempt_list, issue_list, completed_list, throttle_list,\
             inactive_list, active_list = sched.get_queues()
@@ -729,8 +733,7 @@ def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe, n_slot, ti
         fn_crit = lambda x: x.deadline
         fn_task_flag = lambda x: 0 if x.task.task_flag=="stationary" else 1
         # the most critical one is the first one, with the smallest value, use the ascending order
-        sorted_ready_queue = sorted(ready_queue.queue, key=lambda x: (fn_crit(x), fn_task_flag(x)))
-            
+        sorted_queue = sorted(ready_queue.queue, key=lambda x: (fn_crit(x), fn_task_flag(x)))
         # trigger condition
         # release time round up: task should not be released earlier than the release time
         fn_release_slot = lambda x: max(int(np.ceil(x.release_time/timestep)), n_slot)
@@ -741,8 +744,8 @@ def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe, n_slot, ti
         # all the tasks chunks shares the same deadline; without spec changes, 
         # the execution sequence not matter the schedulibility. 
 
-        while len(sorted_ready_queue) > 0:
-            _p = sorted_ready_queue[0]
+        while len(sorted_queue) > 0 and aval_rsc > 0:
+            _p = sorted_queue[0]
 
             # calculate the required resource size
             # get the current configuration
@@ -773,7 +776,7 @@ def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe, n_slot, ti
 
             if  aval_rsc >= req_rsc_size and req_rsc_size > 0:
                 issue_list.append(_p)
-                sorted_ready_queue.remove(_p)
+                sorted_queue.remove(_p)
                 # TODO: update the resource allocation
                 aval_rsc -= req_rsc_size
             else:
