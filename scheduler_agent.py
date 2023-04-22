@@ -205,9 +205,15 @@ class Scheduler(object):
     def check_complete(self, timestep, # msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
                        a_data_pipe:DataPipe,
                         curr_t, res_cfg, 
-                        bin_event_flg:bool=False):
+                        bin_event_flg:bool=False,
+                        save_trace:bool=True,
+                        mode:str="current", 
+                        bin_list:List[SchedulingTableInt]=None, 
+                        n_slot:int=0, rsc_recoder=None,):
         # check_complete(budget_recoder, timestep, msg_dispatcher, curr_t, res_cfg, running_queue, completed_list, inactive_list, buffer, bin_event_flg, bin_name)
-        return check_complete(self, self.budget_recoder, timestep, None, a_data_pipe, curr_t, res_cfg, self.running_queue, self.completed_list, self.inactive_list, self.buffer, bin_event_flg, self._SchedTab.name) 
+        return check_complete(self, self.budget_recoder, timestep, None, a_data_pipe, curr_t, res_cfg, 
+                              self.running_queue, self.completed_list, self.inactive_list, self.buffer, 
+                              bin_event_flg, self._SchedTab.name, save_trace, mode, bin_list, n_slot, rsc_recoder) 
 
     def record_comp_bw_slot_by_slot(self, n_slot, pid):
         if pid in self.budget_recoder:
@@ -632,7 +638,9 @@ def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe,
 
     # (running_queue)
     # check running tasks
-    bin_event_flg = check_complete(sched, budget_recoder, timestep, None, a_data_pipe, curr_t, res_cfg, running_queue, completed_list, inactive_list, buffer, bin_event_flg, bin_name)
+    bin_event_flg = check_complete(sched, budget_recoder, timestep, None, a_data_pipe, curr_t, 
+                                   res_cfg, running_queue, completed_list, 
+                                   inactive_list, buffer, bin_event_flg, bin_name, n_slot=n_slot)
 
     # check whether the task is miss
     # TODO: other ready tasks shoud be checked
