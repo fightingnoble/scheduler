@@ -15,6 +15,37 @@ from task.task_agent import TaskInt
 from model.task_queue_agent import TaskQueue 
 from task.task_agent import ProcessInt, ProcessBase
 
+import numpy as np
+from scipy.stats import truncnorm
+import math
+from copy import deepcopy
+from typing import Dict, List
+from model.task_queue_agent import TaskQueue
+from sched.scheduling_table import SchedulingTableInt
+from task.task_agent import ProcessInt
+from model.buffer import Buffer
+import warnings
+from collections import OrderedDict
+
+from model.buffer import Buffer, Data
+from model.msg_dispatcher import MsgDispatcher
+from queue import Queue
+from sched.scheduling_table import SchedulingTableInt
+from model.resource_agent import Resource_model_int
+from global_var import *
+
+from model.task_queue_agent import TaskQueue 
+from task.task_agent import ProcessInt
+from model.lru import LRUCache
+from sched.monitor_agent import Monitor
+from model.barrier_agent import Barrier
+from model.message_handler import message_trigger, message_trigger_event
+from model.Context_message import ContextMsg
+from model.data_pipe import DataPipe
+
+from scheduler_agent import Scheduler, check_miss, check_depends, check_complete, chk_release
+from scheduler_agent import data_pipe_read, pendingToReady, updateRunningQueue
+
 import warnings
 from pre_alloc import get_target_bin_score, glb_alloc_new, get_rsc_2b_released
 # ==================== top-level scheduling procedure ====================
@@ -92,9 +123,9 @@ def push_task_into_bins(init_p_list: List[TaskInt], affinity,
     # bin_list:List[SchedulingTableInt] = [next(iter_next_bin_obj)]
     # bin_name_list = [bin_list[0].name]
 
+    # for animation generation
+    frame_list = []
     if animation:
-        # for animation generation
-        frame_list = []
         import matplotlib.animation as animation
         fig, ax = plt.subplots()
         plot_window = tab_spatial_size
@@ -110,154 +141,19 @@ def push_task_into_bins(init_p_list: List[TaskInt], affinity,
             print("="*20, "PERIOD {:d}".format(int((n_slot * timestep)//hyper_p)), "="*20, "\n")
         
         # enqueue the process that is released in this slot
-        lt = []
-        for _p in wait_queue:
-            if _p.release_time <= curr_t and _p.release_time < event_range:
-                lt.append(_p)
-        for _p in lt:
-            print("TASK {:d}:{:s}({:d}) RELEASEED AT {}!!".format(_p.task.id, _p.task.name, _p.pid, curr_t))
-            ready_queue.put(_p)
-            wait_queue.remove(_p)
-        lt.clear()
+        push_step(
+            n_slot, curr_t, init_p_list, pid_max,
+            # bin related data structure
+            iter_next_bin_obj, bin_list, bin_name_list, tab_temp_size,
+            # scheduling related data structure
+            wait_queue, ready_queue, running_queue, rsc_recoder, rsc_recoder_his,
+            issue_list, completed_list, miss_list, preempt_list, issue_sort_fn,
+            # simulation related parameters
+            quantum_check_en, quantumSize, timestep, event_range,
+            # visualization related parameters
+            *[animation, frame_list, ax, plot_window,] if animation else []
+        )
 
-        # ========================================================
-        # scan the task list: check finish
-        if len(running_queue):
-            for _p in running_queue:
-                # judge if task complete: completion_count += 1, cum_trunAroundTime += (time + 1.0 - a_time), 
-                # update arrival time, deadline, clear current execution unit
-                if (_p.totburst >= _p.totcpu):
-                    completed_list.append(_p)
-                    _p.set_state("suspend")
-        
-        if completed_list:
-            for _p in completed_list:
-                # release the resource and move to the wait list
-                bin_id_t, alloc_slot_s, alloc_size, allo_slot = get_rsc_2b_released(rsc_recoder, n_slot, _p)
-                
-                _SchedTab = bin_list[bin_id_t]
-                _SchedTab.release(_p, alloc_slot_s, alloc_size, allo_slot, verbose=False)
-                print("TASK {:d}:{:s}({:d}) COMPLETED!!".format(_p.task.id, _p.task.name, _p.pid))
-                # update statistics
-                # TODO: add lock 
-                _p.task.completion_count += 1
-                _p.task.cum_trunAroundTime += (curr_t - _p.release_time)
-                
-                _p.release_time += _p.task.period
-                _p.deadline += _p.task.period
-
-                _p.end_time = curr_t
-                _p.currentburst = 0
-                _p.burst = 0
-                _p.totburst = 0
-                _p.remburst = _p.task.flops
-                _p.cumulative_executed_time = 0
-                _p.required_resource_size = np.ceil(_p.remburst/_p.exp_comp_t/FLOPS_PER_CORE)
-                rsc_recoder.pop(_p.pid)
-                running_queue.remove(_p)
-                wait_queue.put(_p)
-
-            # print("Scheduling Table:")
-            # print(SchedTab.print_scheduling_table())
-            completed_list.clear()
-        # ========================================================
-
-        # judge if deadline miss: deadline_misses += 1, update arrival time, deadline, clear current execution unit
-        for _p in (ready_queue.queue + running_queue.queue):
-            if(_p.deadline < curr_t):
-                miss_list.append(_p)
-                _p.set_state("suspend")
-        
-        if miss_list:
-            for _p in miss_list:
-                # release the resource and move to the wait list
-                if _p in ready_queue.queue:
-                    ready_queue.remove(_p)
-                elif _p in running_queue.queue:
-                    bin_id_t, alloc_slot_s, alloc_size, allo_slot = get_rsc_2b_released(rsc_recoder, n_slot, _p)
-                    
-                    _SchedTab = bin_list[bin_id_t]
-                    _SchedTab.release(_p, alloc_slot_s, alloc_size, allo_slot, verbose=False)
-                    rsc_recoder.pop(_p.pid)
-                    running_queue.remove(_p)
-                # print("TASK {:d}:{:s}({:d}) MISSED DEADLINE!!".format(_p.task.id, _p.task.name, _p.pid));
-                print("TASK {:d}:{:s}({:d}) MISSED DEADLINE!!".format(_p.task.id, _p.task.name, _p.pid)+\
-                        "released @ {} start @ {}:\n".format(_p.release_time, _p.start_time) +\
-                        "is expected to finish {}T OPs before {} is expired, ".format(_p.totcpu, _p.deadline) +\
-                        "but only executed {}T OPs in {}s time !!".format(_p.totburst, _p.cumulative_executed_time))
-                _p.task.missed_deadline_count += 1
-                _p.release_time += _p.task.period
-                _p.deadline += _p.task.period
-
-                _p.burst = 0
-                _p.totburst = 0
-                _p.remburst += _p.task.flops
-                _p.required_resource_size = np.ceil(_p.remburst/_p.exp_comp_t/FLOPS_PER_CORE)
-                _p.cumulative_executed_time = 0
-                _p.currentburst = 0
-
-            # print("Scheduling Table:")
-            # print(SchedTab.print_scheduling_table())
-            miss_list.clear()
-
-        # glb_alloc(init_p_list, affinity, quantumSize, timestep, pid_idx, ready_queue, running_queue, rsc_recoder, rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, n_slot, curr_t)        
-        glb_alloc_new(init_p_list, quantum_check_en, quantumSize, timestep, ready_queue, running_queue, rsc_recoder, 
-                  rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, n_slot, curr_t)
-
-        # issue the task
-        # if the task of the queue equals to the current slot, then issue the task
-        if len(issue_list):
-            for _p in issue_list:
-                if _p in ready_queue:
-                    ready_queue.remove(_p)
-            while len(issue_list):
-                _p = issue_list[0]
-                if issue_sort_fn(_p) == n_slot: 
-                    running_queue.put(_p)
-                    if _p.totburst == 0:
-                        _p.start_time = curr_t
-                    _p.waitTime = 0
-                    issue_list.get()
-                else:
-                    break
-            # issue_list.clear()
-            # print("Scheduling Table:")
-            # print(SchedTab.print_scheduling_table())
-            # if animation:
-            #     frm_arr = []
-            #     for _SchedTab in bin_list:
-            #         frm_arr.append(_SchedTab.get_plot_frame(n_slot, n_slot+plot_window))
-            #     frm_arr = np.concatenate(frm_arr, axis=0)
-            #     frm = ax.imshow(frm_arr, animated=True, vmax=pid_max)
-            #     frame_list.append([frm])
-
-        # =================================================
-        _p_dict = {p.pid:p for p in running_queue}
-        for _SchedTab in bin_list:
-            curr_cfg = _SchedTab.scheduling_table[n_slot]
-            if curr_cfg.rsc_map:
-                # update the running task
-                # _p_dict_n = {p.task.name:p for p in running_queue}
-                # if "MultiCameraFusion_0" in _p_dict_n.keys():
-                #     if not _p_dict_n["MultiCameraFusion_0"].pid in curr_cfg.rsc_map.keys():
-                #         print("MultiCameraFusion_0 is not in the current configuration")
-                for pid in curr_cfg.rsc_map.keys():
-                    _p = _p_dict[pid]
-                    _p.currentburst += curr_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
-                    _p.burst += curr_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
-                    _p.totburst += curr_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
-                    _p.remburst -= curr_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
-                    _p.cumulative_executed_time += timestep
-
-        # SchedTab.step()
-        if animation: 
-            if n_slot % 8 == 0 and n_slot+plot_window < tab_temp_size:
-                frm_arr = []
-                for _SchedTab in bin_list:
-                    frm_arr.append(_SchedTab.get_plot_frame(n_slot, n_slot+plot_window))
-                frm_arr = np.concatenate(frm_arr, axis=0)
-                frm = ax.imshow(frm_arr, animated=True, vmax=pid_max)
-                frame_list.append([frm])
     if animation:
         ani = animation.ArtistAnimation(fig, frame_list, interval=20, blit=False,
                                     repeat_delay=1000)
@@ -278,6 +174,398 @@ def push_task_into_bins(init_p_list: List[TaskInt], affinity,
         _SchedTab.print_alloc_detail(pid2name, timestep)
     
     return bin_list, init_p_list
+
+
+def push_step(
+    n_slot, curr_t, init_p_list, pid_max,
+    # bin related data structure
+    iter_next_bin_obj, bin_list, bin_name_list, tab_temp_size, 
+    # scheduling related data structure
+    wait_queue, ready_queue, running_queue, rsc_recoder, rsc_recoder_his,
+    issue_list, completed_list, miss_list, preempt_list, issue_sort_fn,
+    # simulation related parameters
+    quantum_check_en, quantumSize, timestep, event_range,
+    # visualization related parameters
+    animation=None, frame_list=None, ax=None, plot_window=None,
+):
+    lt = []
+    for _p in wait_queue:
+        if _p.release_time <= curr_t and _p.release_time < event_range:
+            lt.append(_p)
+            _p.remburst += _p.task.flops
+    for _p in lt:
+        print("TASK {:d}:{:s}({:d}) RELEASEED AT {}!!".format(_p.task.id, _p.task.name, _p.pid, curr_t))
+        ready_queue.put(_p)
+        wait_queue.remove(_p)
+    lt.clear()
+
+        # ========================================================
+        # scan the task list: check finish
+    if len(running_queue):
+        for _p in running_queue:
+                # judge if task complete: completion_count += 1, cum_trunAroundTime += (time + 1.0 - a_time), 
+                # update arrival time, deadline, clear current execution unit
+            if (_p.totburst >= _p.totcpu):
+                completed_list.append(_p)
+                _p.set_state("suspend")
+        
+    if completed_list:
+        for _p in completed_list:
+            # release the resource and move to the wait list
+            bin_id_t, alloc_slot_s, alloc_size, allo_slot = get_rsc_2b_released(rsc_recoder, n_slot, _p)
+                
+            _SchedTab = bin_list[bin_id_t]
+            _SchedTab.release(_p, alloc_slot_s, alloc_size, allo_slot, verbose=False)
+            print("TASK {:d}:{:s}({:d}) COMPLETED!!".format(_p.task.id, _p.task.name, _p.pid))
+            # update statistics
+            # TODO: add lock 
+            _p.task.completion_count += 1
+            _p.task.cum_trunAroundTime += (curr_t - _p.release_time)
+                
+            _p.release_time += _p.task.period
+            _p.deadline += _p.task.period
+
+            _p.end_time = curr_t
+            _p.currentburst = 0
+            _p.burst = 0
+            _p.totburst = 0
+            _p.remburst = 0
+            _p.cumulative_executed_time = 0
+            _p.required_resource_size = np.ceil(_p.remburst/_p.exp_comp_t/FLOPS_PER_CORE)
+            rsc_recoder.pop(_p.pid)
+            running_queue.remove(_p)
+            wait_queue.put(_p)
+
+            # print("Scheduling Table:")
+            # print(SchedTab.print_scheduling_table())
+        completed_list.clear()
+        # ========================================================
+
+        # judge if deadline miss: deadline_misses += 1, update arrival time, deadline, clear current execution unit
+    for _p in (ready_queue.queue + running_queue.queue):
+        if(_p.deadline < curr_t):
+            miss_list.append(_p)
+            _p.set_state("suspend")
+        
+    if miss_list:
+        for _p in miss_list:
+                # release the resource and move to the wait list
+            if _p in ready_queue.queue:
+                ready_queue.remove(_p)
+            elif _p in running_queue.queue:
+                bin_id_t, alloc_slot_s, alloc_size, allo_slot = get_rsc_2b_released(rsc_recoder, n_slot, _p)
+                    
+                _SchedTab = bin_list[bin_id_t]
+                _SchedTab.release(_p, alloc_slot_s, alloc_size, allo_slot, verbose=False)
+                rsc_recoder.pop(_p.pid)
+                running_queue.remove(_p)
+                # print("TASK {:d}:{:s}({:d}) MISSED DEADLINE!!".format(_p.task.id, _p.task.name, _p.pid));
+            print("TASK {:d}:{:s}({:d}) MISSED DEADLINE!!".format(_p.task.id, _p.task.name, _p.pid)+\
+                        "released @ {} start @ {}:\n".format(_p.release_time, _p.start_time) +\
+                        "is expected to finish {}T OPs before {} is expired, ".format(_p.totcpu, _p.deadline) +\
+                        "but only executed {}T OPs in {}s time !!".format(_p.totburst, _p.cumulative_executed_time))
+            _p.task.missed_deadline_count += 1
+            _p.release_time += _p.task.period
+            _p.deadline += _p.task.period
+
+            _p.burst = 0
+            _p.totburst = 0
+            _p.remburst = 0
+            _p.required_resource_size = np.ceil(_p.remburst/_p.exp_comp_t/FLOPS_PER_CORE)
+            _p.cumulative_executed_time = 0
+            _p.currentburst = 0
+
+            # print("Scheduling Table:")
+            # print(SchedTab.print_scheduling_table())
+        miss_list.clear()
+
+        # glb_alloc(init_p_list, affinity, quantumSize, timestep, pid_idx, ready_queue, running_queue, rsc_recoder, rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, n_slot, curr_t)        
+    glb_alloc_new(init_p_list, quantum_check_en, quantumSize, timestep, ready_queue, running_queue, rsc_recoder, 
+                  rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, n_slot, curr_t)
+
+        # issue the task
+        # if the task of the queue equals to the current slot, then issue the task
+    if len(issue_list):
+        for _p in issue_list:
+            if _p in ready_queue:
+                ready_queue.remove(_p)
+        while len(issue_list):
+            _p = issue_list[0]
+            if issue_sort_fn(_p) == n_slot: 
+                running_queue.put(_p)
+                if _p.totburst == 0:
+                    _p.start_time = curr_t
+                _p.waitTime = 0
+                issue_list.get()
+            else:
+                break
+            # issue_list.clear()
+            # print("Scheduling Table:")
+            # print(SchedTab.print_scheduling_table())
+            # if animation:
+            #     frm_arr = []
+            #     for _SchedTab in bin_list:
+            #         frm_arr.append(_SchedTab.get_plot_frame(n_slot, n_slot+plot_window))
+            #     frm_arr = np.concatenate(frm_arr, axis=0)
+            #     frm = ax.imshow(frm_arr, animated=True, vmax=pid_max)
+            #     frame_list.append([frm])
+
+        # =================================================
+    _p_dict = {p.pid:p for p in running_queue}
+    for _SchedTab in bin_list:
+        curr_cfg = _SchedTab.scheduling_table[n_slot]
+        if curr_cfg.rsc_map:
+                # update the running task
+                # _p_dict_n = {p.task.name:p for p in running_queue}
+                # if "MultiCameraFusion_0" in _p_dict_n.keys():
+                #     if not _p_dict_n["MultiCameraFusion_0"].pid in curr_cfg.rsc_map.keys():
+                #         print("MultiCameraFusion_0 is not in the current configuration")
+            for pid in curr_cfg.rsc_map.keys():
+                _p = _p_dict[pid]
+                _p.currentburst += curr_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
+                _p.burst += curr_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
+                _p.totburst += curr_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
+                _p.remburst -= curr_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
+                _p.cumulative_executed_time += timestep
+
+        # SchedTab.step()
+    if animation: 
+        if n_slot % 8 == 0 and n_slot+plot_window < tab_temp_size:
+            frm_arr = []
+            for _SchedTab in bin_list:
+                frm_arr.append(_SchedTab.get_plot_frame(n_slot, n_slot+plot_window))
+            frm_arr = np.concatenate(frm_arr, axis=0)
+            frm = ax.imshow(frm_arr, animated=True, vmax=pid_max)
+            frame_list.append([frm])
+
+
+def push_task_into_bins_new(
+
+                            glb_p_list: List[ProcessInt], affinity, 
+                            total_cores:int, quantum_check_en, quantumSize, 
+                            timestep, hyper_p, 
+
+                            scheduler_list: List[Scheduler], monitor_list:List[Monitor],
+                            msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
+                            a_data_pipe:DataPipe=None,
+                            w_data_pipe:DataPipe=None, 
+
+                            n_p=1, verbose=False, DEBUG_FG=False, *, 
+                            warmup=False, drain=False,):
+
+    """
+    implement a naive 2d bin-packing algorithm
+    input: task_list, which is already arranged in the topological order
+    output: a list of bins, each bin is a list of tasks
+    """
+    event_range = hyper_p * (n_p+warmup)
+    sim_range = hyper_p * (n_p+warmup+drain)
+    sim_slot_num = int(sim_range/timestep)
+    tab_spatial_size = total_cores
+
+    glb_name_p_dict = {p.task.name:p for p in glb_p_list}
+
+    sched, monitor,  msg_queue = scheduler_list[0], monitor_list[0], msg_dispatcher.queues[0]
+    inactive_list:List[ProcessInt] = sched.inactive_list
+    for _p in glb_p_list:
+        if _p not in inactive_list:
+            inactive_list.append(_p)
+    sched.process_dict.update({p.pid:p for p in glb_p_list})
+    rsc_recoder = sched.budget_recoder
+
+    def issue_sort_fn(x:ProcessInt):
+        alloc_slot_s, alloc_size, allo_slot, bin_id = rsc_recoder[x.pid]
+        if isinstance(alloc_slot_s, int):
+            return alloc_slot_s
+        else:
+            return alloc_slot_s[0]
+    # monitor the issue time: (ascending)
+    issue_list:TaskQueue = TaskQueue(sort_f=issue_sort_fn, descending=False)
+    curr_cfg:Resource_model_int
+ 
+    # try to push the task into the bins in the bin_list
+    # if the task cannot be pushed into any bin, create a new bin
+    # _new_bins = lambda id: new_bins(total_cores, int(sim_range/timestep), id=id, name="bin"+str(id))
+
+    # define _new
+    def _new_bin(id, size=tab_spatial_size, name=None): 
+        if name is None:
+            name = "bin"+str(id)
+        print("Create a new bin: ", id, "name:", name, "size:", size)
+        return new_bin(size, sim_slot_num, id=id, name=name)
+
+    def get_core_size(_p):
+        _, _, req_rsc_size = _p.rsc_req_estm(0, timestep, FLOPS_PER_CORE)
+        return req_rsc_size
+
+    size_l = []
+    name_l = []
+    for _p in glb_p_list:
+        if _p.task.pre_assigned_resource_flag:
+            size_l.append(_p.task.pre_assigned_resource.main_size + _p.task.pre_assigned_resource.RDA_size)
+            name_l.append(_p.task.name)
+
+    # iter_next_bin_obj = bin_iter_list(_new_bin, size_l, name_l)
+    iter_next_bin_obj = bin_iter_uniform_dist(_new_bin, total_cores, size_l, name_l)
+    # iter_next_bin_obj = _next_bin_obj_1(max_core_size=256, size_list=size_l, name_list=name_l)
+    bin_list:List[SchedulingTableInt] = list(iter_next_bin_obj)
+    bin_name_list = [bin.name for bin in bin_list]
+    # bin_list:List[SchedulingTableInt] = [next(iter_next_bin_obj)]
+    # bin_name_list = [bin_list[0].name]
+
+    for n_slot in range(sim_slot_num):
+        curr_t = n_slot * timestep
+
+        if (n_slot - 1) * timestep < event_range and n_slot * timestep >= event_range: 
+            print("="*20, "DRAIN", "="*20, "\n")
+        elif n_slot == 0 and warmup:
+            print("="*20, "WARMUP", "="*20, "\n")
+        elif (n_slot * timestep)//hyper_p > (n_slot-1)*timestep//hyper_p:
+            print("="*20, "PERIOD {:d}".format(int((n_slot * timestep)//hyper_p)), "="*20, "\n")
+        
+        # enqueue the process that is released in this slot
+        # push_step(init_p_list, quantum_check_en, quantumSize, timestep, animation, event_range, sim_slot_num, pid_max, wait_queue, ready_queue, running_queue, rsc_recoder, rsc_recoder_his, issue_sort_fn, issue_list, completed_list, miss_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, frame_list, ax, plot_window, n_slot, curr_t)
+        push_step_new(sched, msg_dispatcher, a_data_pipe, w_data_pipe, 
+                           n_slot, timestep, 
+                           event_range, sim_slot_num, curr_t, 
+                           glb_name_p_dict, None, 
+                             issue_sort_fn, issue_list, 
+                            iter_next_bin_obj, bin_list, bin_name_list, 
+                           DEBUG_FG, quantum_check_en, quantumSize)
+        # update the wait task
+        w_data_pipe.update_wait_time(timestep)
+        a_data_pipe.update_wait_time(timestep)
+
+    pid2name = {_p.pid:_p.task.name for _p in glb_p_list}
+    for _SchedTab in bin_list:
+        print("=====================================\n")
+        print(f"Scheduling Table of {_SchedTab.name}({_SchedTab.id}):")
+        _SchedTab.print_scheduling_table(pid2name, timestep)
+        print("=====================================\n")
+    
+    print("=====================================\n")
+    print("bin_pack_result:")
+    print("=====================================\n")
+    for _SchedTab in bin_list:
+        _SchedTab.print_alloc_detail(pid2name, timestep)
+    
+    return bin_list
+
+
+def push_step_new(sched: Scheduler, msg_dispatcher: MsgDispatcher,
+                  a_data_pipe: DataPipe, w_data_pipe: DataPipe,
+                  n_slot: int, timestep: float,
+                  event_range: float, sim_slot_num: int, curr_t: float,
+                  glb_name_p_dict, res_cfg: Resource_model_int,
+                  issue_sort_fn, issue_list,
+                  iter_next_bin_obj, bin_list, bin_name_list,
+                  DEBUG_FG=False, quantum_check_en: bool = False, quantumSize=None):
+
+
+    weight_wait_queue, ready_queue, running_queue, \
+        miss_list, preempt_list, _, completed_list, throttle_list,\
+            inactive_list, active_list = sched.get_queues()
+    position_dict=sched.position_dict
+    ctx_switch_list:List[ProcessInt] = sched.ctx_switch_list
+    barrier = sched.barrier
+
+    curr_cfg, _, rsc_recoder, rsc_recoder_his, process_dict = sched.get_state()
+    buffer:Buffer = sched.get_buffer()
+        
+    # extract the scheduling table
+    bin_event_flg = False
+    a_msg_queue = a_data_pipe.queues[0]
+    bin_name = ""
+    _SchedTab = sched._SchedTab
+    bin_spatial_size = _SchedTab.num_resources
+
+    # (running_queue)
+    # check running tasks
+    bin_event_flg = check_complete(sched, None, timestep, msg_dispatcher, a_data_pipe, curr_t, None, 
+                                   running_queue, completed_list, inactive_list, buffer, 
+                                   bin_event_flg, bin_name, save_trace=False, 
+                                   mode="future", bin_list=bin_list, 
+                                   n_slot=n_slot, rsc_recoder=rsc_recoder)
+
+    # check whether the task is miss
+    # TODO: other ready tasks shoud be checked
+    # TODO: cache eviction
+    bin_event_flg = check_miss(sched, None, curr_t, None, weight_wait_queue, ready_queue, 
+                               running_queue, miss_list, throttle_list, active_list, 
+                               inactive_list, buffer, bin_event_flg, bin_name, 
+                               mode="future", bin_list=bin_list, n_slot=n_slot, rsc_recoder=rsc_recoder)
+
+    # spill out the data of type "output", which is expired
+    buffer.pop_timeout("output", curr_t, True)
+
+    # tackle the event in message pipe, set the valid flag in pred_data of each process
+    # update barrier status
+    # update the data status
+    # if not msg_pipe.empty():
+
+    # a_data_pipe.data_tranfer_sim(curr_t)
+    # cache all the src and weight data
+    # while a_data_pipe.buffer.queue:
+    #     data:Data
+    #     mode, data, dest = a_data_pipe.buffer.queue[0]
+    #     a_data_pipe.remain_cap += data.size
+    #     data.valid = True
+    #     data.update_receive_time(curr_t)
+    #     a_data_pipe.buffer.get()
+    #     a_data_pipe.broadcast_message(data, prefix="  ")
+    a_data_pipe.data_tranfer_sim(curr_t)
+    bin_event_flg = data_pipe_read(curr_t, glb_name_p_dict, process_dict, buffer, bin_name, bin_event_flg, a_msg_queue)
+
+    # check release
+    # check the dependencies of the tasks in inactive list
+    # if the dependencies are satisfied, move the task to the wait queue
+    bin_event_flg = chk_release(sched, event_range, curr_t, inactive_list, active_list, _SchedTab, timestep, bin_event_flg, bin_name) 
+
+    # check data availability: some tasks may be prefetched
+    # TODO: model the runtime weight and feature map transfering 
+    pendingToReady(active_list, ready_queue, buffer, curr_t, glb_name_p_dict, bin_name, ) 
+
+    # sort the tasks in the ready queue and the running queue
+    sort_fn = lambda x: x.deadline
+
+    glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, ready_queue, running_queue, rsc_recoder, 
+                rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, n_slot, curr_t)
+
+    # issue the task
+    # if the task of the queue equals to the current slot, then issue the task
+    if len(issue_list):
+        for _p in issue_list:
+            if _p in ready_queue:
+                ready_queue.remove(_p)
+        while len(issue_list):
+            _p = issue_list[0]
+            if issue_sort_fn(_p) == n_slot: 
+                running_queue.put(_p)
+                if _p.totburst == 0:
+                    _p.start_time = curr_t
+                _p.waitTime = 0
+                issue_list.get()
+            else:
+                break
+
+    # =================================================
+    _p_dict = {p.pid:p for p in running_queue}
+    for _SchedTab in bin_list:
+        curr_cfg = _SchedTab.scheduling_table[n_slot]
+        if curr_cfg.rsc_map:
+            # update the running task
+            # _p_dict_n = {p.task.name:p for p in running_queue}
+            # if "MultiCameraFusion_0" in _p_dict_n.keys():
+            #     if not _p_dict_n["MultiCameraFusion_0"].pid in curr_cfg.rsc_map.keys():
+            #         print("MultiCameraFusion_0 is not in the current configuration")
+            for pid in curr_cfg.rsc_map.keys():
+                _p = _p_dict[pid]
+                _p.currentburst += curr_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
+                _p.burst += curr_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
+                _p.totburst += curr_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
+                _p.remburst -= curr_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
+                _p.cumulative_executed_time += timestep
+
 
 
 #

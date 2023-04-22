@@ -4,6 +4,7 @@ import pandas as pd
 
 argparser = argparse.ArgumentParser()
 argparser.add_argument("--folder", type=str, default="./log", help="path to log folder")
+argparser.add_argument("--output", type=str, default="./log/analyze.csv", help="path to output csv file")
 args = argparser.parse_args()
 folder = args.folder # log 文件夹路径
 
@@ -11,8 +12,9 @@ completed_list = []  # 用于存储已完成任务及其计数
 miss_list = []  # 用于存储未完成任务及其计数
 filename_list = []  # 用于存储文件名
 
-# 遍历指定文件夹下的所有 .log.txt 文件
-for filename in os.listdir(folder):
+# 遍历指定文件夹下的所有 .log.txt 文件, 按照文件名排序
+# for filename in os.listdir(folder):
+for filename in sorted(os.listdir(folder)):
     if filename.endswith(".log.txt"):
         completed_dict = {}  # 用于存储已完成任务及其时间
         miss_dict = {}  # 用于存储未完成任务及其时间
@@ -85,4 +87,4 @@ def merge_cells(group):
 grouped = df.groupby(level=0, axis=1)
 merged_df = grouped.apply(merge_cells)
 
-df.to_csv("log/analyze.csv")
+df.to_csv(args.output, index=True, header=True, encoding="utf-8-sig")

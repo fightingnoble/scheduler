@@ -17,7 +17,7 @@ from task.task_agent import ProcessInt, ProcessBase
 from sched.monitor_agent import Monitor
 import warnings
 
-def glb_alloc_new(init_p_list, quantum_check_en, quantumSize, timestep, ready_queue, running_queue, rsc_recoder, 
+def glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, ready_queue, running_queue, rsc_recoder, 
                   rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list:TaskQueue, bin_name_list, n_slot, curr_t):
     # =================================================
     # push the ready task into the idle slot
@@ -60,7 +60,7 @@ def glb_alloc_new(init_p_list, quantum_check_en, quantumSize, timestep, ready_qu
         #         we should not issue the task or compensate the resource latter. 
 
         # issue the task
-        allocate_rsc_4_process_new(_p, n_slot, init_p_list, timestep, FLOPS_PER_CORE, quantumSize,  
+        allocate_rsc_4_process_new(_p, n_slot, process_dict, timestep, FLOPS_PER_CORE, quantumSize,  
                 rsc_recoder, rsc_recoder_his, ready_queue, running_queue, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, 
                 quantum_check_en, strategy='first_fit', glb_key=sort_fn, verbose=False, DEBUG=False)
 
@@ -73,7 +73,8 @@ def glb_alloc_new(init_p_list, quantum_check_en, quantumSize, timestep, ready_qu
         preempt_list.clear()
 
 def allocate_rsc_4_process_new(_p:ProcessInt, n_slot:int, 
-                init_p_list:List[ProcessInt], 
+                # init_p_list:List[ProcessInt], 
+                process_dict:Dict[int, ProcessInt],
                 timestep, FLOPS_PER_CORE, quantumSize, 
                 rsc_recoder:dict, rsc_recoder_his:Dict[int, LRUCache], 
                 ready_queue:TaskQueue, running_queue:TaskQueue, 
@@ -88,7 +89,7 @@ def allocate_rsc_4_process_new(_p:ProcessInt, n_slot:int,
 
     # try to push the task into the bins in the bin_list
     state, bin_id, succ_info, fail_info = bin_select(_p, time_slot_s, time_slot_e, req_rsc_size, 
-                init_p_list, 
+                process_dict, 
                 timestep, FLOPS_PER_CORE, 
                 quantum_check_en, quantumSize, 
                 rsc_recoder, rsc_recoder_his, 
@@ -210,7 +211,8 @@ def allocate_rsc_4_process_new(_p:ProcessInt, n_slot:int,
         Warning("TASK {:d}:{:s}({:d}) IS DELAY ISSUED!!".format(_p.task.id, _p.task.name, _p.pid))
 
 def bin_select(_p:ProcessInt, time_slot_s, time_slot_e, req_rsc_size,
-                init_p_list:List[ProcessInt], 
+                # init_p_list:List[ProcessInt], 
+                process_dict:Dict[int, ProcessInt],
                 timestep, FLOPS_PER_CORE, 
                 quantum_check_en, quantumSize, 
                 rsc_recoder:dict, rsc_recoder_his:Dict[int, LRUCache], 
@@ -230,7 +232,8 @@ def bin_select(_p:ProcessInt, time_slot_s, time_slot_e, req_rsc_size,
     # initialize the resource request parameters
     p_name = _p.task.name
     expected_slot_num = time_slot_e-time_slot_s 
-    _p_index_by_pid = {_p.pid: _p for _p in init_p_list}
+    # _p_index_by_pid = {_p.pid: _p for _p in init_p_list}
+    _p_index_by_pid = process_dict
     # TODO: arange the bin_list according to the affinity of the class
 
     state, bin_id, succ_info, fail_info = False, -1, None, None

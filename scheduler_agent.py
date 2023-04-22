@@ -25,6 +25,7 @@ from model.barrier_agent import Barrier
 from model.message_handler import message_trigger, message_trigger_event
 from model.Context_message import ContextMsg
 from model.data_pipe import DataPipe
+from pre_alloc import get_rsc_2b_released
 
 
 class Scheduler(object): 
@@ -190,7 +191,7 @@ class Scheduler(object):
 
         # check_miss(budget_recoder, curr_t, res_cfg, weight_wait_queue, ready_queue, running_queue, miss_list, 
                             # throttle_list, active_list, inactive_list, buffer, bin_event_flg, bin_name)
-        return check_miss(self.budget_recoder, curr_t, res_cfg, self.weight_wait_queue, self.ready_queue, self.running_queue, self.miss_list,
+        return check_miss(self, self.budget_recoder, curr_t, res_cfg, self.weight_wait_queue, self.ready_queue, self.running_queue, self.miss_list,
                             self.throttle_list, self.active_list, self.inactive_list, self.buffer, bin_event_flg, self._SchedTab.name)
 
     def check_throttle(self,
@@ -198,7 +199,7 @@ class Scheduler(object):
                             bin_event_flg:bool=False):
         # check_throttle(budget_recoder, curr_t, res_cfg, weight_wait_queue, ready_queue, running_queue, miss_list, 
         #                             throttle_list, active_list, inactive_list, bin_event_flg, bin_name)
-        return check_throttle(self.budget_recoder, curr_t, res_cfg, self.weight_wait_queue, self.ready_queue, self.running_queue, self.miss_list,
+        return check_throttle(self, self.budget_recoder, curr_t, res_cfg, self.weight_wait_queue, self.ready_queue, self.running_queue, self.miss_list,
                             self.throttle_list, self.active_list, self.inactive_list, bin_event_flg, self._SchedTab.name)
 
     def check_complete(self, timestep, # msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
@@ -206,7 +207,7 @@ class Scheduler(object):
                         curr_t, res_cfg, 
                         bin_event_flg:bool=False):
         # check_complete(budget_recoder, timestep, msg_dispatcher, curr_t, res_cfg, running_queue, completed_list, inactive_list, buffer, bin_event_flg, bin_name)
-        return check_complete(self.budget_recoder, timestep, None, a_data_pipe, curr_t, res_cfg, self.running_queue, self.completed_list, self.inactive_list, self.buffer, bin_event_flg, self._SchedTab.name) 
+        return check_complete(self, self.budget_recoder, timestep, None, a_data_pipe, curr_t, res_cfg, self.running_queue, self.completed_list, self.inactive_list, self.buffer, bin_event_flg, self._SchedTab.name) 
 
     def record_comp_bw_slot_by_slot(self, n_slot, pid):
         if pid in self.budget_recoder:
@@ -226,9 +227,9 @@ class Scheduler(object):
         else:
             self.budget_recoder[pid] = [[n_slot,], [self.curr_cfg.rsc_map[pid],], [1,]]
 
-    def updateRunningQueue(self, timestep, rsc_cfg):
+    def updateRunningQueue(self, timestep, res_cfg):
         # updateRunningQueue(timestep, running_queue, res_cfg) 
-        return updateRunningQueue(timestep, self.running_queue, rsc_cfg)
+        return updateRunningQueue(timestep, self.running_queue, res_cfg)
     
     def pendingToReady(self, curr_t, glb_n_task_dict:Dict[str, ProcessInt]):
         # pendingToReady(active_list, ready_queue, buffer, budget_recoder, throttle_list, curr_t, glb_name_p_dict, bin_name, ) 
@@ -285,15 +286,15 @@ def chk_release(sched, event_range, curr_t, inactive_list:List[ProcessInt], acti
             bin_event_flg = True
             print(f"({bin_name})")
 
-        for _p in inactive_list:
-            if _p.check_depends():
-                # if curr_t >= _p.task.ERT and _p.trigger_mode != "N": # constraint the fisrt release time of the event triggered task
-                _p.build_ctx()
-                # advance the trigger time
-                if len(_p.pred_ctrl):
-                    _p.event_triggers.pop(0)
-                _p.update_ctx("trigger")
-                l_active.append(_p)
+    for _p in inactive_list:
+        if _p.check_depends():
+            # if curr_t >= _p.task.ERT and _p.trigger_mode != "N": # constraint the fisrt release time of the event triggered task
+            _p.build_ctx()
+            # advance the trigger time
+            if len(_p.pred_ctrl):
+                _p.event_triggers.pop(0)
+            _p.update_ctx("trigger")
+            l_active.append(_p)
 
     if bin_name and len(l_active) and not bin_event_flg:
         bin_event_flg = True
@@ -313,12 +314,17 @@ def chk_release(sched, event_range, curr_t, inactive_list:List[ProcessInt], acti
         print(_str)
     return bin_event_flg
 
-def check_miss(
-                        rsc_recoder, curr_t, res_cfg, wait_queue, ready_queue, 
-                        running_queue, miss_list, throttle_list, active_list, inactive_list, buffer,
-                        bin_event_flg:bool=False, 
-                        bin_name:str=""):
 
+def check_miss(sched: Scheduler,
+               budget_recoder, curr_t, res_cfg, wait_queue, ready_queue,
+               running_queue, miss_list, throttle_list, active_list, inactive_list, buffer,
+               bin_event_flg: bool = False,
+               bin_name: str = "", mode: str = "current",
+               bin_list: List[SchedulingTableInt] = None,
+               n_slot: int = 0,
+               rsc_recoder=None,):
+
+    bin_id = sched._SchedTab.id
     for _p in (active_list + ready_queue.queue + running_queue.queue):
     # for _p in (running_queue.queue):
         if _p.deadline < curr_t and _p.task.criticality == "hard":
@@ -337,19 +343,25 @@ def check_miss(
         elif _p in active_list:
             active_list.remove(_p)
         elif _p in running_queue.queue:
-            # bin_id_t, alloc_slot_s, alloc_size, allo_slot = get_rsc_2b_released(rsc_recoder, n_slot, _p)
-            # _SchedTab = bin_list[bin_id_t]
-            # _SchedTab.release(_p, alloc_slot_s, alloc_size, allo_slot, verbose=False)
-            res_cfg.release(_p.pid, verbose=False)
+            if mode == "future":
+                bin_id_t, alloc_slot_s, alloc_size, allo_slot = get_rsc_2b_released(budget_recoder, n_slot, _p)
+                _SchedTab = bin_list[bin_id_t]
+                _SchedTab.release(_p, alloc_slot_s, alloc_size, allo_slot, verbose=False)
+            elif mode == "current":
+                res_cfg.release(_p.pid, verbose=False)
+            if budget_recoder is not None:
+                if _p.rem_flop_budget[bin_id] < 1e-12: 
+                    budget_recoder.pop(_p.pid)
+                    _p.rem_flop_budget.pop(bin_id)
             if rsc_recoder is not None:
                 rsc_recoder.pop(_p.pid)
+
             running_queue.remove(_p)
         print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}")
         _p.task.missed_deadline_count += 1
         # _p.release_time += _p.task.period
         _p.deadline += _p.task.period
         _p.remburst = 0
-        _p.rem_flop_budget = 0
 
         _p.ready_time = -1
         _p.ready = False
@@ -371,19 +383,21 @@ def check_miss(
     miss_list.clear()
     return bin_event_flg
 
-def check_throttle(
-                        rsc_recoder, curr_t, res_cfg, wait_queue, ready_queue, 
-                        running_queue, miss_list, throttle_list, active_list, inactive_list, 
-                        bin_event_flg:bool=False, 
-                        bin_name:str=""):
+
+def check_throttle(sched:Scheduler,
+                   rsc_recoder, curr_t, res_cfg, wait_queue, ready_queue,
+                   running_queue, miss_list, throttle_list, active_list, inactive_list,
+                   bin_event_flg: bool = False,
+                   bin_name: str = ""):
 
     # for _p in (active_list + wait_queue.queue + ready_queue.queue + running_queue.queue):
+    bin_id = sched._SchedTab.id
     l_throttle = []
     for _p in (running_queue.queue):
         budget_usedup_flg = False
         # determine if the budget is used up, considering the numerical error
         # less than 1 OPS
-        if _p.rem_flop_budget < 1e-12:
+        if _p.rem_flop_budget[bin_id] < 1e-12:
             budget_usedup_flg = True
         if budget_usedup_flg and _p.cbs_en: 
             l_throttle.append(_p)
@@ -422,7 +436,7 @@ def check_throttle(
         throttle_list.append(_p)
     return bin_event_flg
 
-def check_complete(rsc_recoder, timestep, 
+def check_complete(sched:Scheduler, budget_recoder, timestep, 
                    msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
                    a_data_pipe:DataPipe,
                    curr_t, res_cfg, 
@@ -431,13 +445,17 @@ def check_complete(rsc_recoder, timestep,
                     inactive_list:List[ProcessInt],
                     buffer:Buffer, 
                     bin_event_flg:bool=False, 
-                    bin_name:str=""):
+                    bin_name:str="", 
+                    save_trace:bool=True,
+                    mode:str="current", 
+                    bin_list:List[SchedulingTableInt]=None, 
+                    n_slot:int=0, rsc_recoder=None,
+                    ):
+    bin_id = sched._SchedTab.id
     for _p in running_queue:
         # check whether the task is completed
         if (_p.totburst >= _p.totcpu):
             completed_list.append(_p)
-            if rsc_recoder is not None:
-                rsc_recoder.pop(_p.pid)
             _p.set_state("suspend")
 
     if bin_name and len(completed_list) and not bin_event_flg:
@@ -464,15 +482,20 @@ def check_complete(rsc_recoder, timestep,
         a_data_pipe.put(data,)
         # if succ_ctrl is not empty, 
         # redirect print(data.ctx.serialize()) to the trace_file path
-        if len(_p.succ_ctrl):
+        if len(_p.succ_ctrl) and save_trace:
             trace_list.append(data.ctx.serialize())
 
         # reset the task
         # release the resource and move to the wait list
-        # bin_id_t, alloc_slot_s, alloc_size, allo_slot = get_rsc_2b_released(rsc_recoder, tab_pointer, _p)
-        # _SchedTab = bin_list[bin_id_t]
-        # _SchedTab.release(_p, alloc_slot_s, alloc_size, allo_slot, verbose=False)
-        res_cfg.release(_p.pid, verbose=False)
+        if mode == "future": 
+            # release the resource and move to the wait list
+            bin_id_t, alloc_slot_s, alloc_size, allo_slot = get_rsc_2b_released(rsc_recoder, n_slot, _p)
+                
+            _SchedTab = bin_list[bin_id_t]
+            _SchedTab.release(_p, alloc_slot_s, alloc_size, allo_slot, verbose=False)
+
+        elif mode == "current":
+            res_cfg.release(_p.pid, verbose=False)
         # buffer.pop(_p.pid)
 
         # detect the lateness 
@@ -484,7 +507,6 @@ def check_complete(rsc_recoder, timestep,
         _p.release_time += _p.task.period
         _p.deadline += _p.task.period
         _p.remburst = 0
-        _p.rem_flop_budget = 0
 
         _p.ready_time = -1 
         _p.ready = False
@@ -495,6 +517,18 @@ def check_complete(rsc_recoder, timestep,
         _p.cumulative_executed_time = 0
 
         # _p.required_resource_size = np.ceil(_p.remburst/_p.exp_comp_t/FLOPS_PER_CORE)
+        if budget_recoder is not None:
+            if _p.rem_flop_budget[bin_id] >= _p.task.flops-numerical_error_tol_abs:
+                curr_cfg = sched.curr_cfg
+                # truncate the curr_cfg
+                curr_cfg.slot_num = curr_cfg.slot_num - (n_slot - curr_cfg.slot_s)
+                curr_cfg.slot_s = n_slot
+            else:
+                budget_recoder.pop(_p.pid)
+                _p.rem_flop_budget.pop(bin_id)
+
+        if rsc_recoder is not None:
+            rsc_recoder.pop(_p.pid)
         running_queue.remove(_p)
         inactive_list.append(_p)
         # _p.reset_depends()
@@ -528,16 +562,15 @@ def record_comp_bw_slot_by_slot(rsc_recoder, n_slot, curr_cfg, pid):
     else:
         rsc_recoder[pid] = [[n_slot,], [curr_cfg.rsc_map[pid],], [1,]]
 
-def updateRunningQueue(timestep, running_queue, rsc_cfg):
+def updateRunningQueue(timestep, running_queue, res_cfg):
     _p_dict = {p.pid:p for p in running_queue} 
-    for pid in rsc_cfg.rsc_map.keys():
+    for pid in res_cfg.rsc_map.keys():
         _p = _p_dict[pid]
-        _p.currentburst += rsc_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
-        _p.burst += rsc_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
-        _p.totburst += rsc_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
-        _p.remburst -= rsc_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
+        _p.currentburst += res_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
+        _p.burst += res_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
+        _p.totburst += res_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
+        _p.remburst -= res_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
         _p.cumulative_executed_time += timestep
-        _p.rem_flop_budget -= rsc_cfg.rsc_map[_p.pid] * timestep * FLOPS_PER_CORE
 
 def pendingToReady_cbs(buffer:Buffer, budget_recoder, 
                        active_list:List[ProcessInt], ready_queue, throttle_list, 
@@ -599,15 +632,15 @@ def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe,
 
     # (running_queue)
     # check running tasks
-    bin_event_flg = check_complete(budget_recoder, timestep, None, a_data_pipe, curr_t, res_cfg, running_queue, completed_list, inactive_list, buffer, bin_event_flg, bin_name)
+    bin_event_flg = check_complete(sched, budget_recoder, timestep, None, a_data_pipe, curr_t, res_cfg, running_queue, completed_list, inactive_list, buffer, bin_event_flg, bin_name)
 
     # check whether the task is miss
     # TODO: other ready tasks shoud be checked
     # TODO: cache eviction
-    bin_event_flg = check_miss(budget_recoder, curr_t, res_cfg, weight_wait_queue, ready_queue, running_queue, miss_list, 
+    bin_event_flg = check_miss(sched, budget_recoder, curr_t, res_cfg, weight_wait_queue, ready_queue, running_queue, miss_list, 
                             throttle_list, active_list, inactive_list, buffer, bin_event_flg, bin_name)
 
-    bin_event_flg = check_throttle(budget_recoder, curr_t, res_cfg, weight_wait_queue, ready_queue, running_queue, miss_list, 
+    bin_event_flg = check_throttle(sched, budget_recoder, curr_t, res_cfg, weight_wait_queue, ready_queue, running_queue, miss_list, 
                             throttle_list, active_list, inactive_list, bin_event_flg, bin_name)
 
     # spill out the data of type "output", which is expired
@@ -664,8 +697,10 @@ def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe,
         for pid in next_cfg.keys():
             _p = process_dict[pid]
             # _p.deadline += _p.task.period
-            _p.rem_flop_budget += next_cfg[pid] * cfg_slot_num * timestep * FLOPS_PER_CORE
-
+            if bin_id not in _p.rem_flop_budget:
+                _p.rem_flop_budget[bin_id] = 0
+            _p.rem_flop_budget[bin_id] += next_cfg[pid] * cfg_slot_num * timestep * FLOPS_PER_CORE
+            # ???????? cover the previous budget
             budget_recoder[pid] = [cfg_slot_s, next_cfg[pid], cfg_slot_num]
             if _p.pid in rsc_recoder_his:
                 rsc_recoder_his[_p.pid].put(bin_id)
@@ -767,7 +802,7 @@ def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe,
                 #   use _p.curr_start_time to replace _p.release_time, use _p.currentburst to replace _p.totburst
                 if _p.totburst == 0:
                     print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) is deteted a lateness of {late_slot_num:d} slots")
-                req_rsc_size = min(math.ceil(_p.rem_flop_budget/(curr_cfg.slot_e - fn_release_slot(_p) + 1)/timestep /FLOPS_PER_CORE), aval_rsc)
+                req_rsc_size = min(math.ceil(_p.rem_flop_budget[bin_id]/(curr_cfg.slot_e - fn_release_slot(_p) + 1)/timestep /FLOPS_PER_CORE), aval_rsc)
             else:
                 req_rsc_size = planned_rsc_size
             assert isinstance(req_rsc_size, int) or isinstance(req_rsc_size, np.integer)
@@ -818,6 +853,9 @@ def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe,
         # execute the task in running list
         # update the running task
     updateRunningQueue(timestep, running_queue, res_cfg) 
+    for _p in running_queue:
+        if _p.remburst > 0:
+            _p.rem_flop_budget[bin_id] -= res_cfg.rsc_map[_p.pid] * timestep * FLOPS_PER_CORE
 
     monitor.add_a_record(res_cfg)
 
@@ -894,12 +932,12 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data
     pre_rsc_bk = deepcopy(res_cfg.rsc_map)
     # (running_queue)
     # check running tasks
-    bin_event_flg = check_complete(None, timestep, msg_dispatcher, a_data_pipe, curr_t, res_cfg, running_queue, completed_list, inactive_list, buffer, bin_event_flg, bin_name)
+    bin_event_flg = check_complete(sched, None, timestep, msg_dispatcher, a_data_pipe, curr_t, res_cfg, running_queue, completed_list, inactive_list, buffer, bin_event_flg, bin_name)
 
     # check whether the task is miss
     # TODO: other ready tasks shoud be checked
     # TODO: cache eviction
-    bin_event_flg = check_miss(None, curr_t, res_cfg, weight_wait_queue, ready_queue, running_queue, miss_list, 
+    bin_event_flg = check_miss(sched, None, curr_t, res_cfg, weight_wait_queue, ready_queue, running_queue, miss_list, 
                             throttle_list, active_list, inactive_list, buffer, bin_event_flg, bin_name)
 
     # spill out the data of type "output", which is expired

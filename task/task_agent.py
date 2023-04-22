@@ -66,9 +66,9 @@ class ProcessBase(object):
         self.release_time = release_t     # recored when the process is released
         self.deadline = deadline_abs      # recored when the process is generated  
         self.exp_comp_t = task.exp_comp_t # total cpu time, ++ when cpu burst
-        self.remburst = task.totcpu       # Record the remaining cpu time for current I/O op, -- when cpu burst, set when moved from waiting to running
+        self.remburst = 0                 # Record the remaining cpu time for current I/O op, -- when cpu burst, set when moved from waiting to running
         self.cbs_en = task.cbs_en         # whether the task has a constant bandwidth, i.e., applys resource reservation algorithm
-        self.rem_flop_budget = 0            # the predefined budget of execution time, -- when cpu burst excceds the budget, moved from running to throttled, set when process is activated
+        self.rem_flop_budget = {}          # the predefined budget of execution time, -- when cpu burst excceds the budget, moved from running to throttled, set when process is activated
 
         self.ready_time = -1 
         self.ready = False
@@ -322,6 +322,19 @@ class ProcessBase(object):
         if clear_pred_data:
             for key in self.pred_data.keys():
                 self.pred_data[key]["valid"] = False
+
+def rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE):
+    # release time round up: task should not be released earlier than the release time
+    time_slot_s = int(np.ceil(_p.release_time/timestep))
+    if time_slot_s < n_slot:
+        time_slot_s = n_slot
+    # deadline round down: task should not be finised later than the deadline
+    time_slot_e = int(_p.deadline//timestep)
+    if time_slot_e <= time_slot_s:
+        req_rsc_size = 0
+    else:
+        req_rsc_size = int(np.ceil(_p.remburst/(time_slot_e-time_slot_s)/timestep/FLOPS_PER_CORE))
+    return time_slot_s,time_slot_e,req_rsc_size
 
 class ProcessInt(ProcessBase):
     def __init__(self, task, release_t, deadline_abs, pid):
