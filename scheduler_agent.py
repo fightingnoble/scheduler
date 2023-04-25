@@ -350,7 +350,7 @@ def check_miss(sched: Scheduler,
             active_list.remove(_p)
         elif _p in running_queue.queue:
             if mode == "future":
-                bin_id_t, alloc_slot_s, alloc_size, allo_slot = get_rsc_2b_released(budget_recoder, n_slot, _p)
+                bin_id_t, alloc_slot_s, alloc_size, allo_slot = get_rsc_2b_released(rsc_recoder, n_slot, _p)
                 _SchedTab = bin_list[bin_id_t]
                 _SchedTab.release(_p, alloc_slot_s, alloc_size, allo_slot, verbose=False)
             elif mode == "current":
@@ -505,10 +505,12 @@ def check_complete(sched:Scheduler, budget_recoder, timestep,
         # buffer.pop(_p.pid)
 
         # detect the lateness 
+        _str = f"TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) COMPLETED @ {curr_t:.6f}"
         if _p.deadline < curr_t:
-            print("Complete lateness of task {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
-        else: 
-            print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) COMPLETED @ {curr_t:.6f}")
+            _str = "(lateness detected)" + _str
+        else:
+            _str = "		" + _str
+        print(_str)
         
         _p.release_time += _p.task.period
         _p.deadline += _p.task.period
@@ -524,14 +526,25 @@ def check_complete(sched:Scheduler, budget_recoder, timestep,
 
         # _p.required_resource_size = np.ceil(_p.remburst/_p.exp_comp_t/FLOPS_PER_CORE)
         if budget_recoder is not None:
-            if _p.rem_flop_budget[bin_id] >= _p.task.flops-numerical_error_tol_abs:
-                curr_cfg = sched.curr_cfg
-                # truncate the curr_cfg
-                curr_cfg.slot_num = curr_cfg.slot_num - (n_slot - curr_cfg.slot_s)
-                curr_cfg.slot_s = n_slot
+            per_slot_flops = FLOPS_PER_CORE*timestep*budget_recoder[_p.pid][1]
+            # if _p.rem_flop_budget[bin_id] >= per_slot_flops-numerical_error_tol_abs:
+            #     curr_cfg = sched.curr_cfg
+            #     # truncate the curr_cfg
+            #     curr_cfg.slot_num = curr_cfg.slot_num - (n_slot - curr_cfg.slot_s)
+            #     curr_cfg.slot_s = n_slot
+            # budget_recoder.pop(_p.pid)
+            # _p.rem_flop_budget.pop(bin_id)
+            # TODO: a large number of tasks are truncated, remaing budget ~= 1 slot, check why
+            if _p.rem_flop_budget[bin_id] >= per_slot_flops+numerical_error_tol_abs:
+                budget_recoder[_p.pid][-1] -= n_slot - budget_recoder[_p.pid][0] 
+                budget_recoder[_p.pid][0] = n_slot
+                print(f"\t\tTruncate the curr_cfg @{n_slot}({curr_t:.6f}), \
+                        \n\t\trem_flop_budget: {_p.rem_flop_budget[bin_id]/per_slot_flops:.6f}(x{per_slot_flops:.6f})")
             else:
                 budget_recoder.pop(_p.pid)
                 _p.rem_flop_budget.pop(bin_id)
+
+
 
         if rsc_recoder is not None:
             rsc_recoder.pop(_p.pid)
@@ -862,7 +875,8 @@ def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe,
         # update the running task
     updateRunningQueue(timestep, running_queue, res_cfg) 
     for _p in running_queue:
-        if _p.remburst > 0:
+        per_slot_flops = FLOPS_PER_CORE*timestep*budget_recoder[_p.pid][1]
+        if _p.remburst > -per_slot_flops+numerical_error_tol_abs:
             _p.rem_flop_budget[bin_id] -= res_cfg.rsc_map[_p.pid] * timestep * FLOPS_PER_CORE
 
     monitor.add_a_record(res_cfg)

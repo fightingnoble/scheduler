@@ -192,3 +192,14 @@ Change the sensor simulation from periodic mode to event-driven mode.
 ## 20230419
 
 add additional information, and NetworkX building for end-to-end analysis
+
+## 20230425
+
+task 的remburst==0的时候还剩下大量的rem_flops_budget
+
+破案：完成前的最后一个slot，remburst有概率小于零。
+```
+    for _p in running_queue:
+        if _p.remburst > 0:
+            _p.rem_flop_budget[bin_id] -= res_cfg.rsc_map[_p.pid] * timestep * FLOPS_PER_CORE
+```
