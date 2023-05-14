@@ -6,6 +6,7 @@ from task.spec import Spec
 from model.buffer import Buffer, Data
 from model.msg_dispatcher import MsgDispatcher
 from model.message_pipe import MessagePipe
+from model.message_handler import message_trigger_event_new
 from multiprocessing import Queue
 
 class AllocatorInt(object):
@@ -237,6 +238,7 @@ from model.Context_message import ContextMsg
 #                 #             print("		Arriving lateness of task {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
 
 def sched_step(task_spec:Spec, # msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
+                event_iter_dict:Dict, 
                 a_data_pipe:DataPipe, 
                 w_data_pipe:DataPipe,
                 scheduler_list: List[Scheduler], monitor_list:List[Monitor],
@@ -281,7 +283,9 @@ def sched_step(task_spec:Spec, # msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
         glb_name_p_dict: Dict[str, ProcessInt]
         msg_queue:Queue
         DEBUG_FG = False
+        inactive_list:List[ProcessInt] = sched.inactive_list 
 
+        message_trigger_event_new(event_iter_dict, inactive_list, glb_p_list, timestep, curr_t, True) 
         sched.scheduler_step(a_data_pipe, w_data_pipe, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, monitor, DEBUG_FG)
     # update the wait task
     w_data_pipe.update_wait_time(timestep)
@@ -290,6 +294,7 @@ def sched_step(task_spec:Spec, # msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
 # =================== top global scheduler ===================
 def cyclic_sched(task_spec:Spec, affinity, 
                 scheduler_list: List[Scheduler], monitor_list:List[Monitor],
+                event_iter_dict:Dict, 
                 rsc_list:List[Resource_model_int], 
                 total_cores:int, 
                 glb_p_list:List[ProcessInt],
@@ -397,7 +402,9 @@ def cyclic_sched(task_spec:Spec, affinity,
             # modify the exp_comp_t and deadline of the tasks
 
         # print(f"Slot {n_slot:d}, time {curr_t:.6f}")
-        sched_step(task_spec, a_data_pipe,
+        sched_step(task_spec, 
+                    event_iter_dict,
+                    a_data_pipe,
                     w_data_pipe,
                     scheduler_list, monitor_list,
                     rsc_list, 
@@ -407,7 +414,9 @@ def cyclic_sched(task_spec:Spec, affinity,
 
 
 def glb_sched(task_spec:Spec, affinity, 
-                scheduler_list: List[Scheduler], monitor_list:List[Monitor],
+                scheduler_list: List[Scheduler], 
+                monitor_list:List[Monitor],
+                event_iter_dict:Dict, 
                 rsc_list:List[Resource_model_int], 
                 total_cores:int, 
                 glb_p_list:List[ProcessInt],
@@ -453,6 +462,7 @@ def glb_sched(task_spec:Spec, affinity,
         msg_queue:Queue
         DEBUG_FG = False
 
+        message_trigger_event_new(event_iter_dict, inactive_list, glb_p_list, timestep, curr_t, True) 
         glb_dynamic_sched_step(sched, msg_dispatcher, a_data_pipe, w_data_pipe, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, monitor, DEBUG_FG, quantum_check_en, quantumSize)
 
 
@@ -486,6 +496,8 @@ if __name__ == "__main__":
     parser.add_argument("--jitter_sim_para", default={"a":-0.2, "b":0.2, "loc":0, "scale":1}, type=dict, help="jitter simulation parameters")
     parser.add_argument("--file_suffix", default="", type=str, help="file suffix")
     parser.add_argument("--i_file_suffix", default="", type=str, help="file suffix")
+    parser.add_argument("--seed", default=0, type=int, help="random seed")
+    parser.add_argument("--barrier_dis", default=False, action="store_true", help="disable barrier")
 
     args = parser.parse_args() 
     glb_n_task_dict = load_taskint(args.verbose)
@@ -499,8 +511,19 @@ if __name__ == "__main__":
     sim_step = min([glb_n_task_dict[task].exp_comp_t for task in glb_n_task_dict])/32
     quantumSize = sim_step*args.quantumSize
     num_periods = args.n_p
-    np.random.seed(0)
     glb_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
+
+    # assert all the process has hard deadline
+    for _p in glb_p_list:
+        _p.task.criticality = "hard"
+
+    np.random.seed(args.seed)
+    from model.message_handler import gen_sensor_event
+    event_iter_dict = gen_sensor_event(glb_p_list, hyper_p, num_periods, True, args.jitter_sim_en, args.jitter_sim_para, args.seed)
+    # convert to list then convert to iterator
+    event_iter_dict = {task: [list(event_iter_dict[task][0]), list(event_iter_dict[task][1])] for task in event_iter_dict}
+    pickle.dump(event_iter_dict, open(f"event_iter_dict_{args.test_case}_{args.jitter_sim_en}.pkl", "wb"))
+    event_iter_dict = {task: [iter(event_iter_dict[task][0]), iter(event_iter_dict[task][1])] for task in event_iter_dict}
 
     if args.test_case == "bin_pack" or args.test_all:
         # push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, num_cores, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
@@ -517,8 +540,6 @@ if __name__ == "__main__":
         # select a period to save 
         assert num_periods >= 1
         bin_list2save = []
-        # for _sched_tab in bin_list:
-
 
         # save the bin_list and the init_p_list
         with open(f"cache/bin_list_{num_cores}{args.i_file_suffix}.pkl", "wb") as f:
@@ -563,17 +584,13 @@ if __name__ == "__main__":
         # msg_dispatcher = MsgDispatcher(len(bin_list))
         a_data_pipe = DataPipe("activation", len(bin_list))
         w_data_pipe = DataPipe("weight", len(bin_list))
-        # filter the processes with trigger_mode is not "N"
-        sim_triggered_list = [[glb_p_list[pid] for pid in _bin.index_occupy_by_id().keys() if glb_p_list[pid].task.trigger_mode!='N'] for _bin in bin_list]
-        for _bin, _sim_triggered_list in zip(bin_list, sim_triggered_list):
-            _bin.sim_triggered_list = _sim_triggered_list
-            print("bin: ", _bin.id, "sim_triggered_list: ", [p.task.name for p in _sim_triggered_list])
-        scheduler_list = [Scheduler(_SchedTab, glb_p_list, jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para) for _SchedTab in bin_list]
+        scheduler_list = [Scheduler(_SchedTab, glb_p_list, jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
         monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
 
         print("sim_step: ", sim_step)
         cyclic_sched(task_spec, affinity_cfg, 
                 scheduler_list, monitor_list,
+                event_iter_dict,
                 rsc_list, 
                 num_cores, 
                 glb_p_list,
@@ -623,17 +640,13 @@ if __name__ == "__main__":
         msg_dispatcher = MsgDispatcher(len(bin_list))
         a_data_pipe = DataPipe("activation", len(bin_list))
         w_data_pipe = DataPipe("weight", len(bin_list))
-        # filter the processes with trigger_mode is not "N"
-        sim_triggered_list = [[p for p in glb_p_list if p.task.trigger_mode!='N'],]
-        for _bin, _sim_triggered_list in zip(bin_list, sim_triggered_list):
-            _bin.sim_triggered_list = _sim_triggered_list
-            print("bin: ", _bin.id, "sim_triggered_list: ", [p.task.name for p in _sim_triggered_list])
-        scheduler_list = [Scheduler(_SchedTab, glb_p_list, jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para) for _SchedTab in bin_list]
+        scheduler_list = [Scheduler(_SchedTab, glb_p_list, jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
         monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
 
         print("sim_step: ", sim_step)
         glb_sched(task_spec, affinity_cfg, 
                 scheduler_list, monitor_list,
+                event_iter_dict,
                 rsc_list, 
                 num_cores, 
                 glb_p_list,
@@ -693,18 +706,13 @@ if __name__ == "__main__":
         msg_dispatcher = MsgDispatcher(len(bin_list))
         a_data_pipe = DataPipe("activation", len(bin_list))
         w_data_pipe = DataPipe("weight", len(bin_list))
-        # filter the processes with trigger_mode is not "N"
-        sim_triggered_list = [[p for p in glb_p_list if p.task.trigger_mode!='N'],]
-        for _bin, _sim_triggered_list in zip(bin_list, sim_triggered_list):
-            _bin.sim_triggered_list = _sim_triggered_list
-            print("bin: ", _bin.id, "sim_triggered_list: ", [p.task.name for p in _sim_triggered_list])
-        scheduler_list = [Scheduler(_SchedTab, glb_p_list, jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para) for _SchedTab in bin_list]
+        scheduler_list = [Scheduler(_SchedTab, glb_p_list, jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
         monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
 
         print("sim_step: ", sim_step)
         bin_list = push_task_into_bins_new(
 
-            glb_p_list, affinity_cfg, 
+            glb_p_list, affinity_cfg, event_iter_dict,
             num_cores, args.quantum_check_en, quantumSize, 
             sim_step, hyper_p, 
 
@@ -719,11 +727,11 @@ if __name__ == "__main__":
         from sched.scheduling_table import get_task_layout_compact
         get_task_layout_compact(bin_list, glb_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
-        txt_size=40, tick_dens=2, save_path=f"plot/new_task_bin_pack_cyclic_{num_cores}{args.file_suffix}.pdf") 
+        txt_size=40, tick_dens=2, save_path=f"plot/{num_cores}/new_task_bin_pack_cyclic_{num_cores}{args.file_suffix}.pdf") 
 
         get_task_layout_compact(bin_list, glb_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
-        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/new_task_bin_pack_full_{num_cores}{args.file_suffix}.pdf")
+        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/{num_cores}/new_task_bin_pack_full_{num_cores}{args.file_suffix}.pdf")
 
         # select a period to save 
         assert num_periods >= 1

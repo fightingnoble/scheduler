@@ -12,6 +12,7 @@ from bokeh.layouts import row, column, gridplot
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
+import os
 
 class SchedulingTableInt(object): 
     """
@@ -453,6 +454,11 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[
                     plot_start=None, plot_end=None, 
                     tick_dens = 1, txt_size = 30, *, tool="matplotlib",
                     **kwargs):
+
+    dir_path = os.path.dirname(save_path)
+
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path)
 
     event_range = hyper_p * (n_p+warmup)
     sim_range = hyper_p * (n_p+warmup+drain)

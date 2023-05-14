@@ -81,9 +81,11 @@ class ProcessBase(object):
         self.waitTime = 0     # Time in wait queue, ++ when in wait queue
         self.cumulative_executed_time = 0 
         
-        self.req_queue = []   # cache the arrival requests
+        self.req_queue = []    # cache the arrival requests
         self.msg_cache:List[ContextMsg] = []    # cache the generated messages
         self.event_time = 0    # record the event_time of the last process 
+        self.next_event_time = None
+        self.next_ingestion_time = None
 
     def set_state(self, state):
         assert state in task_lifetime.keys()

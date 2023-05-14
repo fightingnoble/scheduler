@@ -203,3 +203,11 @@ task 的remburst==0的时候还剩下大量的rem_flops_budget
         if _p.remburst > 0:
             _p.rem_flop_budget[bin_id] -= res_cfg.rsc_map[_p.pid] * timestep * FLOPS_PER_CORE
 ```
+
+## 20230429
+
+Try to figure why each configuration executes different number of jobs:
+    add job analyzer;
+    generate trigger event globally (event_iter_dict, message_trigger_event_new @ allocator_agent.py);
+    add folder path cheking to layout plot(get_task_layout_compact @ scheduling_table.py)
+

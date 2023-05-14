@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from typing import Union, List, Dict, Iterator, Callable, Union
-from collections import OrderedDict
-import copy
+from typing import List, Dict, Iterator, Callable
 import math
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,20 +14,16 @@ from model.task_queue_agent import TaskQueue
 from task.task_agent import ProcessInt, ProcessBase
 
 import numpy as np
-from scipy.stats import truncnorm
 import math
-from copy import deepcopy
 from typing import Dict, List
 from model.task_queue_agent import TaskQueue
 from sched.scheduling_table import SchedulingTableInt
 from task.task_agent import ProcessInt
 from model.buffer import Buffer
 import warnings
-from collections import OrderedDict
 
-from model.buffer import Buffer, Data
+from model.buffer import Buffer
 from model.msg_dispatcher import MsgDispatcher
-from queue import Queue
 from sched.scheduling_table import SchedulingTableInt
 from model.resource_agent import Resource_model_int
 from global_var import *
@@ -38,13 +32,11 @@ from model.task_queue_agent import TaskQueue
 from task.task_agent import ProcessInt
 from model.lru import LRUCache
 from sched.monitor_agent import Monitor
-from model.barrier_agent import Barrier
-from model.message_handler import message_trigger, message_trigger_event
-from model.Context_message import ContextMsg
 from model.data_pipe import DataPipe
 
-from scheduler_agent import Scheduler, check_miss, check_depends, check_complete, chk_release
-from scheduler_agent import data_pipe_read, pendingToReady, updateRunningQueue
+from scheduler_agent import Scheduler, check_miss, check_complete, chk_release
+from scheduler_agent import data_pipe_read, pendingToReady
+from model.message_handler import message_trigger_event_new
 
 import warnings
 from pre_alloc import get_target_bin_score, glb_alloc_new, get_rsc_2b_released
@@ -341,7 +333,7 @@ def push_step(
 
 def push_task_into_bins_new(
 
-                            glb_p_list: List[ProcessInt], affinity, 
+                            glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,
                             total_cores:int, quantum_check_en, quantumSize, 
                             timestep, hyper_p, 
 
@@ -425,6 +417,7 @@ def push_task_into_bins_new(
         
         # enqueue the process that is released in this slot
         # push_step(init_p_list, quantum_check_en, quantumSize, timestep, animation, event_range, sim_slot_num, pid_max, wait_queue, ready_queue, running_queue, rsc_recoder, rsc_recoder_his, issue_sort_fn, issue_list, completed_list, miss_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, frame_list, ax, plot_window, n_slot, curr_t)
+        message_trigger_event_new(event_iter_dict, inactive_list, glb_p_list, timestep, curr_t, True) 
         push_step_new(sched, msg_dispatcher, a_data_pipe, w_data_pipe, 
                            n_slot, timestep, 
                            event_range, sim_slot_num, curr_t, 
