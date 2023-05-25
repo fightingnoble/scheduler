@@ -338,7 +338,7 @@ def cyclic_sched(task_spec:Spec, affinity,
 
             # simulate the prefetching of the weight
             msg:ContextMsg = ContextMsg.create_weight_ctx()
-            data = Data(_p.pid, 1, (0,), "weight", _p.io_time, 0, 1/_p.task.freq)
+            data = Data(_p.pid, 1, (0,), "weight", _p.io_time)
             data.ctx = msg
             data.cache_msg_transfer(0)
 
@@ -367,7 +367,7 @@ def cyclic_sched(task_spec:Spec, affinity,
             _p = process_dict[pid]
             # skip data prefetching; put the data into the buffer directly
             msg:ContextMsg = ContextMsg.create_weight_ctx()
-            data = Data(_p.pid, 1, (0,), "weight", _p.io_time, 0, 1/_p.task.freq)
+            data = Data(_p.pid, 1, (0,), "weight", _p.io_time)
             data.ctx = msg
             data.cache_msg_transfer(0)
 
@@ -498,6 +498,7 @@ if __name__ == "__main__":
     parser.add_argument("--i_file_suffix", default="", type=str, help="file suffix")
     parser.add_argument("--seed", default=0, type=int, help="random seed")
     parser.add_argument("--barrier_dis", default=False, action="store_true", help="disable barrier")
+    parser.add_argument("--data_lifetime_mode", default="static", type=str, help="lifetime mode: most_recent, ref_count, timeout, watermark") 
 
     args = parser.parse_args() 
     glb_n_task_dict = load_taskint(args.verbose)
@@ -531,11 +532,11 @@ if __name__ == "__main__":
         from sched.scheduling_table import get_task_layout_compact
         get_task_layout_compact(bin_list, glb_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
-        txt_size=40, tick_dens=2, save_path=f"plot/task_bin_pack_cyclic_{num_cores}{args.file_suffix}.pdf") 
+        txt_size=40, tick_dens=2, save_path=f"plot/{num_cores}/task_bin_pack_cyclic_{num_cores}{args.file_suffix}.pdf") 
 
         get_task_layout_compact(bin_list, glb_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
-        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/task_bin_pack_full_{num_cores}{args.file_suffix}.pdf")
+        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/{num_cores}/task_bin_pack_full_{num_cores}{args.file_suffix}.pdf")
 
         # select a period to save 
         assert num_periods >= 1
@@ -610,7 +611,7 @@ if __name__ == "__main__":
         from sched.scheduling_table import get_task_layout_compact
         get_task_layout_compact(actual_sched_record, glb_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
-        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/exe_monitor_full_{num_cores}{args.file_suffix}.pdf")
+        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/{num_cores}/dyn_full_{num_cores}{args.file_suffix}.pdf")
 
         # save trace_list to trace_file
         with open(f"trace/dynamic_e2e_trace_{num_cores}{args.file_suffix}.pkl", "wb") as f:
@@ -669,9 +670,10 @@ if __name__ == "__main__":
             _SchedTab.print_alloc_detail(pid2name, sim_step)
 
         from sched.scheduling_table import get_task_layout_compact
+        file_name = f"plot/{num_cores}/glb_dyn_full_{num_cores}{args.file_suffix}.pdf" if not args.barrier_dis else f"plot/{num_cores}/glb_dyn_full_{num_cores}_ideal{args.file_suffix}.pdf"
         get_task_layout_compact(actual_sched_record, glb_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
-        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/dyn_glb_exe_monitor_full_{num_cores}{args.file_suffix}.pdf")
+        txt_size=40, tick_dens=4, plot_start=0, save_path=file_name)
 
         # save trace_list to trace_file
         with open(f"trace/dyn_glb_e2e_trace_{num_cores}{args.file_suffix}.pkl", "wb") as f:
@@ -688,7 +690,7 @@ if __name__ == "__main__":
         # get_task_layout_compact(actual_sched_record, init_p_list, save= True, time_step= sim_step,
         # hyper_p=hyper_p, n_p=1, warmup=True, drain=True, plot_legend=False, 
         # txt_size=40, tick_dens=4, plot_start=0, tool="bokeh", 
-        # save_path=f"plot/dyn_glb_exe_monitor_full_bokeh_{num_cores}{args.file_suffix}")
+        # save_path=f"plot/glb_dyn_full_bokeh_{num_cores}{args.file_suffix}")
 
     elif args.test_case == "bin_pack_new":
         bin_list = [SchedulingTableInt(num_cores, 1, 0, "bin_glb_dynamic")]
@@ -760,5 +762,5 @@ if __name__ == "__main__":
         # get_task_layout_compact(actual_sched_record, init_p_list, save= True, time_step= sim_step,
         # hyper_p=hyper_p, n_p=1, warmup=True, drain=True, plot_legend=False, 
         # txt_size=40, tick_dens=4, plot_start=0, tool="bokeh", 
-        # save_path=f"plot/dyn_glb_exe_monitor_full_bokeh_{num_cores}{args.file_suffix}")
+        # save_path=f"plot/glb_dyn_full_bokeh_{num_cores}{args.file_suffix}")
 

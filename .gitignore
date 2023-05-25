@@ -149,3 +149,5 @@ cache/**
 
 trace/**
 old/**
+
+*.pkl

@@ -681,6 +681,7 @@ def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe,
     # if not msg_pipe.empty():
 
     a_data_pipe.data_tranfer_sim(curr_t)
+    # out of order originated from data transfering 
     bin_event_flg = data_pipe_read(curr_t, glb_name_p_dict, process_dict, buffer, bin_name, bin_event_flg, a_msg_queue)
 
     # check release
@@ -884,6 +885,227 @@ def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe,
 
         # execute the task in running list
         # update the running task
+
+    # if curr_cfg.slot_s <= n_slot and n_slot <= curr_cfg.slot_e:
+    # # calculate the criticity of the task
+    # fn_crit = lambda x: x.deadline
+    # fn_task_flag = lambda x: 0 if x.task.task_flag=="stationary" else 1
+
+    # preemptable_list = []
+    # if quantum_check_en: 
+    #     assert quantumSize is not None
+    #     for _p_2b_preempt in running_queue.queue:
+    #         cum_exec_quantum = _p_2b_preempt.cumulative_executed_time / quantumSize
+    #         reach_preempt_grain = math.isclose(cum_exec_quantum, round(cum_exec_quantum), abs_tol=1e-2)
+    #         if _p_2b_preempt.currentburst > 0 and not reach_preempt_grain: 
+    #             continue
+    #         else:
+    #             preemptable_list.append(_p_2b_preempt)
+    # else:
+    #     preemptable_list = running_queue.queue
+
+    # # the most critical one is the first one, with the smallest value, use the ascending order
+    # sorted_queue = sorted(ready_queue.queue + preemptable_list, key=lambda x: (fn_crit(x), fn_task_flag(x)))
+    # # trigger condition
+    # # release time round up: task should not be released earlier than the release time
+    # fn_release_slot = lambda x: max(int(np.ceil(x.release_time/timestep)), n_slot)
+    # fn_ddl_slot = lambda x: int(x.deadline//timestep)
+    # fn_trig = lambda x: fn_release_slot(x) - budget_recoder[x.pid][0]
+
+    # # if there is no execution lateness in previous cfg, then the running queue is empty
+    # # all the tasks chunks shares the same deadline; without spec changes, 
+    # # the execution sequence not matter the schedulibility. 
+
+    # rsc_map = OrderedDict()
+    # score_dict = OrderedDict()
+    # curr_aval_rsc = res_cfg.size
+    # sched_trigger = False
+    
+    # # A. task release
+    # # 1. new task entering the ready queue and there are available resources
+    # trigger_condA1 = len(ready_queue.queue) > 0 and aval_rsc > 0
+    # # B. load banlance
+    # #    there are available resources then 
+    # #     - task(s) is/are pushed to the ready queue
+    # #     - task(s) is/are pulled from other bins
+
+    # # C. resource reallocation
+    # # 1. budget allocation changes
+    # # 2. some tasks starving and some tasks release resources
+    # # budget alloc changes
+    # trigger_cond2 = False
+    # # 
+
+    # if len(sorted_queue) > 0 and aval_rsc > 0:
+    #     sched_trigger = True
+    # while len(sorted_queue) > 0 and aval_rsc > 0:
+    #     _p = sorted_queue[0]
+
+    #     # calculate the required resource size
+    #     # 1. get the 1st chunk of configuration
+    #     chunk_s, chunk_alloc, chunk_slot_num = budget_recoder[_p.pid]
+    #     late_slot_num = fn_trig(_p)
+    #     # check whether the task is late
+    #     chunk_flops = chunk_alloc * chunk_slot_num * timestep * FLOPS_PER_CORE
+    #     if late_slot_num > 0 or chunk_flops < _p.rem_flop_budget[bin_id]:
+    #         # check whether the chunk is timeout
+    #         chunk_e = chunk_s + chunk_slot_num
+    #         if _p.totburst == 0:
+    #             print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) is deteted a lateness of {late_slot_num:d} slots")
+    #         if chunk_e > n_slot: 
+    #             assert chunk_e == curr_cfg.slot_e + 1
+    #             req_rsc_size = min(math.ceil(_p.rem_flop_budget[bin_id]/(chunk_e - fn_release_slot(_p) + 1)/timestep /FLOPS_PER_CORE), aval_rsc)                
+    #         # TODO: borrow slack from downstream tasks
+    #         else:
+    #             sorted_queue.pop(0)
+    #             continue
+    #     else:
+    #         req_rsc_size = chunk_alloc
+
+    #     assert isinstance(req_rsc_size, int) or isinstance(req_rsc_size, np.integer)
+    #     assert req_rsc_size > 0
+    #     _p.required_resource_size = req_rsc_size
+
+    #     if curr_aval_rsc >= req_rsc_size: # and req_rsc_size > 0:
+    #         sorted_queue.pop(0)
+    #         curr_aval_rsc -= req_rsc_size
+    #         rsc_map[_p.pid] = req_rsc_size
+    #     else:
+    #         rsc_map[_p.pid] = curr_aval_rsc
+    #         curr_aval_rsc = 0
+    #         break
+
+    # if sched_trigger:
+    #     # compare the new cfg with the old one to decide the preemption
+    #     pre_rsc = res_cfg.rsc_map
+    #     new_pid = set(rsc_map.keys()) - set(pre_rsc.keys())
+    #     expired_pid = set(pre_rsc.keys()) - set(rsc_map.keys())
+    #     old_pid = set(pre_rsc.keys()) - expired_pid
+
+    #     if len(new_pid) or len(expired_pid) or pre_rsc != pre_rsc_bk:
+    #         # update the position dict
+    #         used_position = []
+    #         for pid in old_pid:
+    #             p_size = rsc_map[pid]
+    #             # set the is_new flag to False
+    #             position_dict[pid][-1] = False
+    #             for s, size in zip(*position_dict[pid][:-1]):
+    #                 e = s + size
+    #                 used_position += [i for i in range(s, e)]
+
+    #         # remove the expired task from the position dict
+    #         for pid in expired_pid:
+    #             position_dict.pop(pid)
+                
+    #             preempt_list.append(process_dict[pid])
+            
+    #         aval_pos = [i for i in range(bin_spatial_size) if i not in used_position]
+            
+    #         # check if the old task's allocation is changed
+    #         # if so, release the old position and allocate the new one
+    #         # to release the data transfering overhead, we try to allocate the new position as close as possible to the old one
+    #         # TODO: consider the data transfering overhead
+    #         # Currently, we only consider 1D layout, with a huristic algorithm: 
+    #         # reallocating the position from the original base position, i.e., cum_pos, 
+    #         # looking left and right, and select the leftmost position from left_pos, then, rightmost position from right_pos. 
+    #         # the task decrease the size is handled at first. 
+    #         size_plus = []
+    #         size_minus = []
+    #         for pid in old_pid:
+    #             old_size = pre_rsc[pid]
+    #             new_size = rsc_map[pid]
+    #             if new_size > old_size:
+    #                 size_plus.append(pid)
+    #             elif new_size < old_size:
+    #                 size_minus.append(pid)
+
+    #         for group in [size_minus, size_plus]:
+    #             for pid in group: 
+    #                 old_size = pre_rsc[pid]
+    #                 new_size = rsc_map[pid]
+    #                 # release the old position
+    #                 for s, size in zip(*position_dict[pid][:-1]):
+    #                     e = s + size
+    #                     aval_pos += [i for i in range(s, e)]
+    #                 aval_pos.sort()
+    #                 # get the start position of the old task
+    #                 cum_pos = position_dict[pid][0][0]
+    #                 # divide the avaliable position into two parts
+    #                 left_pos = aval_pos[:aval_pos.index(cum_pos)]
+    #                 right_pos = aval_pos[aval_pos.index(cum_pos):]
+    #                 # select the leftmost position from cum_pos
+    #                 interval_picked = aval_pos[aval_pos.index(cum_pos):aval_pos.index(cum_pos)+new_size]
+    #                 if len(interval_picked) < new_size:
+    #                     # select the leftmost position from left_pos
+    #                     interval_picked = left_pos[-(new_size-len(interval_picked)):] + interval_picked
+    #                 # check if the position is continuous
+    #                 interval_picked.sort()
+    #                 # remove selected position from aval_pos
+    #                 aval_pos = [i for i in aval_pos if i not in interval_picked]
+    #                 start = [interval_picked[0]]
+    #                 size = []
+    #                 for i in range(new_size-1):
+    #                     if interval_picked[i] != interval_picked[i+1]-1:
+    #                         size.append(interval_picked[i]-start[-1]+1)
+    #                         start.append(interval_picked[i+1])
+    #                 size.append(interval_picked[-1]-start[-1]+1)
+    #                 position_dict[pid] = [start, size, True]
+                
+    #                 ctx_switch_list.append(process_dict[pid])
+
+    #         # pick a proper position for the new task in the available position
+    #         for pid in new_pid:
+    #             p_size = rsc_map[pid]
+    #             # select the leftmost position
+    #             interval_picked = aval_pos[:p_size]
+    #             # check if the position is continuous
+    #             interval_picked.sort()
+    #             # remove selected position from aval_pos
+    #             aval_pos = [i for i in aval_pos if i not in interval_picked]
+    #             start = [interval_picked[0]]
+    #             size = []
+    #             for i in range(p_size-1):
+    #                 if interval_picked[i] != interval_picked[i+1]-1:
+    #                     size.append(interval_picked[i]-start[-1]+1)
+    #                     start.append(interval_picked[i+1])
+    #             size.append(interval_picked[-1]-start[-1]+1)
+    #             position_dict[pid] = [start, size, True]
+
+    #             issue_list.append(process_dict[pid])
+
+    #         # update the resource configuration
+    #         for _p in preempt_list:
+    #             print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) preempted at {curr_t:.6f};")
+    #             running_queue.remove(_p)
+    #             ready_queue.put(_p)
+    #             res_cfg.release(_p.pid)
+    #         preempt_list.clear()
+            
+    #         for _p in ctx_switch_list:
+    #             print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) ctx switch at {curr_t:.6f}({pre_rsc[_p.pid]} -> {rsc_map[_p.pid]});")
+    #             res_cfg.release(_p.pid)
+    #             res_cfg.allocate(_p.pid, rsc_map[_p.pid])
+    #         ctx_switch_list.clear()
+
+    #         for _p in issue_list:
+    #             running_queue.put(_p)
+    #             ready_queue.remove(_p)
+    #             _p.set_state("running")
+    #             res_cfg.allocate(_p.pid, rsc_map[_p.pid])
+    #             _p.waitTime = 0 
+    #             _str = f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) issued and "
+    #             if _p.totburst==0:
+    #                 _p.start_time = curr_t
+    #                 _str += f"start at {curr_t:.6f}; "
+    #             else:
+    #                 _str += f"resume at {curr_t:.6f}; "
+    #             _p.curr_start_time = curr_t
+    #             if bin_name and not bin_event_flg:
+    #                 bin_event_flg = True 
+    #                 print(f"({bin_name})")
+    #             print(_str)
+    #         issue_list.clear()
+
     updateRunningQueue(timestep, running_queue, res_cfg) 
     for _p in running_queue:
         per_slot_flops = FLOPS_PER_CORE*timestep*budget_recoder[_p.pid][1]
@@ -1293,7 +1515,7 @@ def data_prefetching(init_p_list, wait_queue:DataPipe, curr_t, bin_id, cached_cf
     for pid in cached_cfg.keys():
         _p = init_p_list[pid]
         msg:ContextMsg = ContextMsg.create_weight_ctx()
-        data = Data(_p.pid, 1, (0,), "weight", _p.io_time, curr_t, 1/_p.task.freq)
+        data = Data(_p.pid, 1, (0,), "weight", _p.io_time)
         data.ctx = msg
         data.cache_msg_transfer(curr_t)
 
