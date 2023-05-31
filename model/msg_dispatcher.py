@@ -44,7 +44,7 @@ def msg_read(msg_queue, curr_t, glb_name_p_dict, process_dict, buffer, bin_name,
                         bin_event_flg = True
                         print(f"({bin_name})")
                     print(f"		{_p.task.name} received event {key:s} @ {curr_t:.6f}")
-                    buffer.put(Data(glb_name_p_dict[key].pid, 1, (0,), "output", glb_name_p_dict[key].io_time, curr_t, 1/glb_name_p_dict[key].task.freq))
+                    buffer.put(Data(glb_name_p_dict[key].pid, 1, (0,), "output", glb_name_p_dict[key].io_time, curr_t, 1/glb_name_p_dict[key].task.freq, glb_name_p_dict[key].task.period))
     return bin_event_flg
 
 def msg_filter(msg_list:list, keyword:str):

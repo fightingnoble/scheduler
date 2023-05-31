@@ -151,3 +151,5 @@ trace/**
 old/**
 
 *.pkl
+
+*_ref*

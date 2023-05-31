@@ -31,6 +31,8 @@ if TYPE_CHECKING:
 class ContextMsg(object):
     def __init__(self, ctx_type='process') -> None:
         self.msg_context = {}
+        # time stamp of the trigger event
+        self.msg_context["time_stamp"] = float("inf")
         self.msg_context["stream_domain"] = {}
         # trigger event
         self.msg_context["trigger"] = {}
@@ -46,28 +48,40 @@ class ContextMsg(object):
         self.msg_context["data_info"] = {}
         # transfer details
         self.msg_context["transfer_info"] = {}
-        
-    def cache_upstreaming(self, process:ProcessInt, glb_n_task_dict:Dict, buffer:Buffer) -> None:
-        # update the upstreaming data source
-        self.msg_context["src"].update(process.get_upstream_ctx(glb_n_task_dict, buffer))
-        # # check how many streaming domains are involved
-        # if not len(self.msg_context["trigger"]):
-        #     if len(self.msg_context["src"]) == 1: 
-        #         self.msg_context["stream_domain"] = list(self.msg_context["src"].values())[0]["stream_domain"]
-        #     elif len(self.msg_context["src"]) > 1:
-        #         self.msg_context["stream_domain"] = "multi-stream"
+
+    def cache_upstreaming(self, matched_pair:List[Data]) -> None:
+        for key in matched_pair:
+            data:Data = matched_pair[key]
+            self.msg_context["src"].update({key:data.ctx.serialize()})
+
+
+    # def cache_upstreaming(self, process:ProcessInt, glb_n_task_dict:Dict, buffer:Buffer) -> None:
+    #     # update the upstreaming data source
+    #     self.msg_context["src"].update(process.get_upstream_ctx(glb_n_task_dict, buffer))
+    #     # # check how many streaming domains are involved
+    #     # if not len(self.msg_context["trigger"]):
+    #     #     if len(self.msg_context["src"]) == 1: 
+    #     #         self.msg_context["stream_domain"] = list(self.msg_context["src"].values())[0]["stream_domain"]
+    #     #     elif len(self.msg_context["src"]) > 1:
+    #     #         self.msg_context["stream_domain"] = "multi-stream"
     
     def cache_trigger(self, process:ProcessInt) -> None:
         trigger_dict = process.get_trigger_ctx()
         assert len(trigger_dict) <= 1
         self.msg_context["trigger"].update(trigger_dict)
-        # if len(trigger_dict) == 1:
-        #     # set the time stamp of the trigger event
-        #     self.msg_context["time_stamp"] = trigger_dict["event_time"]
-        #     self.msg_context["stream_domain"] = trigger_dict["trigger"]
+        if len(trigger_dict) == 1:
+            # set the time stamp of the trigger event
+            trigger = list(trigger_dict.values())[0]
+            self.msg_context["time_stamp"] = trigger["trigger"]['event_time']
+            self.msg_context["stream_domain"] = trigger["data_type"]
+        else:
+            raise ValueError("Multiple trigger events are not supported yet.")
         
     def get_timestamp(self) -> float:
         return self.msg_context["time_stamp"]
+    
+    def get_watermark(self) -> float:
+        return self.msg_context["watermark"]
 
     def cache_weight(self, process:ProcessInt, buffer:Buffer) -> None:
         tgt_buffer = buffer.buffer_mux("weight")

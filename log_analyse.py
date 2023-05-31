@@ -29,7 +29,7 @@ for filename in sorted(os.listdir(folder)):
                     task_end = line.rfind("(")
                     task_name = line[task_start:task_end]
                     time_start = line.rfind("@") + 1
-                    time_end = line.rfind("\n")
+                    time_end = line.rfind("/")
                     time_value = float(line[time_start:time_end])
                     # 添加到 completed_dict 中
                     if task_name not in completed_dict: 
@@ -42,7 +42,7 @@ for filename in sorted(os.listdir(folder)):
                     task_end = line.rfind("(")
                     task_name = line[task_start:task_end]
                     time_start = line.rfind("@") + 1
-                    time_end = line.rfind("\n")
+                    time_end = line.rfind("/")
                     time_value = float(line[time_start:time_end])
                     # 添加到 miss_dict 中
                     if task_name not in miss_dict:

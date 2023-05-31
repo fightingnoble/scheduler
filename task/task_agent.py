@@ -44,7 +44,7 @@ task_lifetime = {
 
 class ProcessBase(object): 
     def __init__(self, task, release_t, deadline_abs, pid):
-        self.task = task
+        self.task:TaskBase = task
         self.pred_ctrl = task.pred_ctrl # used
         self.succ_data = task.succ_data # used
         self.pred_data = task.pred_data # used
@@ -83,7 +83,7 @@ class ProcessBase(object):
         
         self.req_queue = []    # cache the arrival requests
         self.msg_cache:List[ContextMsg] = []    # cache the generated messages
-        self.event_time = 0    # record the event_time of the last process 
+        self.event_time = -1    # record the event_time of the last process 
         self.next_event_time = None
         self.next_ingestion_time = None
 
@@ -133,101 +133,6 @@ class ProcessBase(object):
                 return False
         return np.array(list(dict_t.values())).all()
 
-    def check_depends_data_watermark_aware(self, buffer=None, glb_n_task_dict=None):
-        # check the watermark
-        # Some operators consume multiple input streams; a union, for example,
-        # Such an operator’s current event time is the minimum of its input streams’ event times. 
-        # As its input streams update their event times, so does the operator.
-        
-        # find out the earliest event time
-        dict_t = {}
-        stream_dict = {}
-        freq_dict = {}
-        for key in self.pred_data:
-            attr_dict = self.pred_data[key]
-            # ensure the data is in the buffer, and the event time is larger than the operator's event time
-            valid = glb_n_task_dict[key].pid in buffer.buffer_mux("output")
-            valid = valid and tgt_queue[-1].event_time > self.event_time
-            if attr_dict["reDistPattn"] == "downscaling":
-                # name parse
-                # remove the thread number at the end of the name
-                thread_n = key.split('_')[-1]
-                task_n = key.replace("_"+thread_n, "")
-                if valid:
-                    tgt_queue = buffer.buffer_mux("output")[glb_n_task_dict[key].pid]
-                    event_time = tgt_queue[0].ctx.get_timestamp()
-                    dict_t.update({task_n:min(dict_t.get(task_n, float("inf")), event_time)})
-                    freq_dict.update({task_n:freq_dict.get(task_n, 0)+1})
-                    if task_n not in stream_dict:
-                        stream_dict.update({task_n:[]})
-                    # extend the stream dict and filter the sorted stream dict by the event time
-                    stream_dict[task_n].extend(list(filter(lambda x: x.ctx.get_timestamp() >= self.event_time, tgt_queue.queue)))
-                    stream_dict[task_n].sort(key=lambda x: x.ctx.get_timestamp())
-                else:
-                    dict_t.update({task_n:float("inf")})
-            elif valid:
-                tgt_queue = buffer.buffer_mux("output")[glb_n_task_dict[key].pid]
-                event_time = tgt_queue[0].ctx.get_timestamp()
-                freq_dict.update({key:freq_dict.get(key, 0)+1})
-                dict_t.update({key:event_time})
-                stream_dict.update({key:list(filter(lambda x: x.ctx.get_timestamp() >= self.event_time, tgt_queue.queue))})
-                stream_dict[key].sort(key=lambda x: x.ctx.get_timestamp())
-            else:
-                return False, {}
-
-        # ensure no watermark is inf
-        if np.array(list(dict_t.values())).any() == float("inf"):
-            return False, {}
-        else:
-            # get the minimum event time
-            key = min(stream_dict.keys(), key=(lambda k: dict_t[k]))
-            earliest_stream = stream_dict[key]
-            min_event_time = dict_t[key]
-
-            # match the timestamps of the input streams
-            matched_stream = [earliest_stream[key][0]]
-            i = 0
-            for stream in stream_dict.values():
-                # determine the window size: which is the larger period of the two streams
-                window_size = max(earliest_stream[0].period, stream[0].period)
-                while i < len(stream): 
-                    if stream[i].ctx.get_timestamp() < min_event_time:
-                        i += 1
-                    elif stream[i].ctx.get_timestamp() <= min_event_time + window_size:
-                        matched_stream.append(stream[i])
-                        break
-                
-                
-
-            # j = 0
-            # while i < len(a_stream) and j < len(b_stream):
-            #     # 如果 b 数据流元素的时间戳在 a 数据流元素的 +- 5s 窗口内
-            #     if a_stream[i]['timestamp'] - 5000 <= b_stream[j]['timestamp'] <= a_stream[i]['timestamp'] + 5000: 
-            #         matched_stream.append((a_stream[i]['key'], a_stream[i]['value'], b_stream[j]['value']))
-            #         j += 1
-            #     elif b_stream[j]['timestamp'] < a_stream[i]['timestamp'] - 5000:
-            #         j += 1
-            #     else:
-            #         i += 1
-
-            return True, dict_t
-
-                
-
-    def interval_join(stream_a: List[Tuple[str, int]], stream_b: List[Tuple[str, int]], lower_bound: int, upper_bound: int) -> List[Tuple[Tuple[str, int], Tuple[str, int]]]:
-        current_event_time = min(min(stream_a, key=lambda x: x[1])[1], min(stream_b, key=lambda x: x[1])[1])
-        joined_pairs = []
-        for a_key, a_timestamp in stream_a:
-            for b_key, b_timestamp in stream_b:
-                if b_timestamp < a_timestamp + lower_bound:
-                    continue
-                if b_timestamp > a_timestamp + upper_bound:
-                    break
-                joined_pairs.append(((a_key, a_timestamp), (b_key, b_timestamp)))
-        return joined_pairs
-
-
-
     def get_upstream_ctx(self, glb_n_task_dict:Dict, buffer:Buffer):
         """
         extract the serialized context of the upstream tasks
@@ -276,7 +181,7 @@ class ProcessBase(object):
         update the context of the task
         """
         if ctx_type == "upstream":
-            self.msg_cache[0].cache_upstreaming(self, **kwargs)
+            self.msg_cache[0].cache_upstreaming(**kwargs)
         elif ctx_type == "weight":
             self.msg_cache[0].cache_weight(self, **kwargs)
         elif ctx_type == "trigger":

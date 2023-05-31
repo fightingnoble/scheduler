@@ -15,6 +15,7 @@ from model.resource_agent import Resource_model_int
 from task.task_agent import TaskInt
 from model.task_queue_agent import TaskQueue 
 from task.task_agent import ProcessInt
+from task.graph_scaling import build_node_relationship
 
 # 'ID', 'Task (chain) names', 'Flops on path', 'Expected Latency (ms)', 'T release', 'Freq.', 'DDL', 'Cores/Req.', 
 # 'Throuput factor (S)', 'Thread factor (S)', 'Min required cores', 'Timing_flag', 'Max required Cores', 'RDA./Req.', 'Resource Type', 'Pre-assigned', 'Priority'
@@ -256,6 +257,8 @@ def vis_task_static_timeline(task_list, show=False, save=False, save_path="task_
                 plt.savefig(save_path, bbox_inches='tight', format=f,**kwargs)
         elif "format" not in kwargs and len(path_parse) > 1: 
             kwargs["format"] = path_parse[-1]
+            save_path = path_parse[0] + ".pdf"        
+            plt.savefig(save_path, bbox_inches='tight', **kwargs)
         else:
             kwargs["format"] = "pdf"
             save_path = save_path + ".pdf"        
@@ -324,47 +327,52 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int):
         if pred_n in df.index and succ_n in df.index:
             pred_factor, pred_freq = node_parall_dict[pred_n]
             succ_factor, succ_freq = node_parall_dict[succ_n]
-            pred_num_per_group = int(np.ceil(pred_freq / pred_factor))
-            succ_num_per_group = int(np.ceil(succ_freq / succ_factor))
-            if pred_factor == succ_factor:
-                for i in range(pred_factor):
-                    pred_node_name = pred_n+"_"+str(i)
-                    succ_node_name = succ_n+"_"+str(i)
-                    physical_graph_nx.add_edge(pred_node_name, succ_node_name, type="data", reDistPattn="one2one")
-            elif pred_factor < succ_factor:
-                for idx_succ_freq in range(succ_freq):
-                    # idx in succ_freq -> index in pred_freq -> index in pred_factor
-                    if idx_succ_freq % succ_num_per_group==0:
-                        idx_succ_factor = int(idx_succ_freq // succ_num_per_group)
-                        succ_job_name = succ_n+"_"+str(idx_succ_factor)
-                        
-                        # just like quantization
-                        succ_t = idx_succ_freq/succ_freq
-                        idx_succ_freq = int(succ_t*pred_freq)
+            build_node_relationship(physical_graph_nx, 
+                                    pred_freq, succ_freq, 
+                                    pred_factor, succ_factor,
+                                    pred_n, succ_n,)
+            # count the number of edges from pred to each succ
+            for i in range(succ_factor):
+                count = 0
+                succ_node_name = succ_n+"_"+str(i)
+                for j in range(pred_factor):
+                    pred_node_name = pred_n+"_"+str(j)
+                    if physical_graph_nx.has_edge(pred_node_name, succ_node_name):
+                        count += 1
+                # add attribute to the edge, type: data, factor: count
+                # reDistPattn: one2one (count==1), 
+                # reDistPattn: downscaling (count>1)
+                if count == 1:
+                    reDistPattn = "one2one"
+                else:
+                    reDistPattn = "downscaling"
+                for j in range(pred_factor):
+                    pred_node_name = pred_n+"_"+str(j)
+                    if physical_graph_nx.has_edge(pred_node_name, succ_node_name):
+                        physical_graph_nx.edges[pred_node_name, succ_node_name]["reDistPattn"] = reDistPattn
+                        physical_graph_nx.edges[pred_node_name, succ_node_name]["type"] = "data"
+                        physical_graph_nx.edges[pred_node_name, succ_node_name]["factor"] = count
+            
+            for i in range(pred_factor):
+                count = 0
+                pred_node_name = pred_n+"_"+str(i)
+                for j in range(succ_factor):
+                    succ_node_name = succ_n+"_"+str(j)
+                    if physical_graph_nx.has_edge(pred_node_name, succ_node_name):
+                        count += 1
+                        if count > 1:
+                            break
+                # add attribute to the edge, type: data, factor: count
+                # reDistPattn: upscaling (count>1)
+                if count > 1:
+                    reDistPattn = "upscaling"
+                    for j in range(succ_factor):
+                        succ_node_name = succ_n+"_"+str(j)
+                        if physical_graph_nx.has_edge(pred_node_name, succ_node_name):
+                            physical_graph_nx.edges[pred_node_name, succ_node_name]["reDistPattn"] = reDistPattn
+                            physical_graph_nx.edges[pred_node_name, succ_node_name]["type"] = "data"
+                            physical_graph_nx.edges[pred_node_name, succ_node_name]["factor"] = count
 
-                        idx_pred_factor = int(idx_succ_freq // pred_num_per_group)
-                        pre_job_name = pred_n+"_"+str(idx_pred_factor)
-
-                        # add attribute "reDistPattn", to classify the redistributing pattern
-                        # downstream <- upstream
-                        physical_graph_nx.add_edge(pre_job_name, succ_job_name, type="data", reDistPattn="upscaling")
-            else:
-                for idx_pred_freq in range(pred_freq):
-                    # idx in pred_freq -> index in succ_freq -> index in succ_factor
-                    if idx_pred_freq % pred_num_per_group==0:
-                        idx_pred_factor = int(idx_pred_freq // pred_num_per_group)
-                        pred_job_name = pred_n+"_"+str(idx_pred_factor)
-                        
-                        # just like quantization
-                        pred_t = idx_pred_freq/pred_freq
-                        idx_pred_freq = int(pred_t*succ_freq)
-
-                        idx_succ_factor = int(idx_pred_freq // succ_num_per_group)
-                        succ_job_name = succ_n+"_"+str(idx_succ_factor)
-
-                        # add attribute "reDistPattn", to classify the redistributing pattern
-                        # downstream -> upstream
-                        physical_graph_nx.add_edge(pred_job_name, succ_job_name, type="data", reDistPattn="downscaling")
         elif pred_n in df.index and succ_n not in df.index:
             pred_factor, pred_freq = node_parall_dict[pred_n]
             for i in range(pred_factor):
@@ -597,6 +605,7 @@ def init_depen(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[T
             dep_t = datadict["type"]
             attr = copy.deepcopy(datadict)
             attr.update({"valid":False})
+            attr.update({"event_queue":TaskQueue(sort_f=lambda x: x.ctx.get_timestamp())})
             if dep_t == "data":
                 job.pred_data.update({pre_n:attr})
             elif dep_t == "control":

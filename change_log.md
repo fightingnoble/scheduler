@@ -211,3 +211,15 @@ Try to figure why each configuration executes different number of jobs:
     generate trigger event globally (event_iter_dict, message_trigger_event_new @ allocator_agent.py);
     add folder path cheking to layout plot(get_task_layout_compact @ scheduling_table.py)
 
+## 20230525
+some file path, remove lifetime of the weight
+mark the part that dyn_sched should debug
+
+## 20230526
+watermark strategy 写完:
+    event_time of operator is initialized as -1 and the data is inf
+    对于data trigger以及 event trigger两种方式：
+    1. data trigger: 从最早的事件开始往后找，默认所有的数据周期相同
+    2. event trigger: 从给定的event timestamp 开始往前找，以data的period为搜索步长（对于event 频率大于数据和小于数据的情况都适用）
+    event time 现在在matched_pair中取最大的
+graph_scaling: 修复scaling node 并行度的时候数据流不正确的问题

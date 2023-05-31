@@ -27,6 +27,8 @@ from model.Context_message import ContextMsg
 from model.data_pipe import DataPipe
 from pre_alloc import get_rsc_2b_released
 
+from model.streaming_processing.wartermark_strategy import WatermarkStrategy
+
 
 class Scheduler(object): 
     """
@@ -365,7 +367,7 @@ def check_miss(sched: Scheduler,
                 rsc_recoder.pop(_p.pid)
 
             running_queue.remove(_p)
-        print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}")
+        print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!")
         _p.task.missed_deadline_count += 1
         # _p.release_time += _p.task.period
         _p.deadline += _p.task.period
@@ -480,7 +482,8 @@ def check_complete(sched:Scheduler, budget_recoder, timestep,
         # cache processing info for ctx message and attach to the data
         msg:ContextMsg = _p.msg_cache.pop(0)
         msg.cache_processing(_p)
-        data = Data(_p.pid, 1, (0,), "output", _p.io_time, curr_t, 1/_p.task.freq)
+        _p.event_time = msg.get_timestamp()
+        data = Data(_p.pid, 1, (0,), "output", _p.io_time, curr_t, 1/_p.task.freq, _p.task.period)
         data.ctx = msg
         data.cache_data_info()
 
@@ -507,7 +510,7 @@ def check_complete(sched:Scheduler, budget_recoder, timestep,
         # buffer.pop(_p.pid)
 
         # detect the lateness 
-        _str = f"TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) COMPLETED @ {curr_t:.6f}"
+        _str = f"TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) COMPLETED @ {curr_t:.6f}/{_p.event_time:.6f}!!"
         if _p.deadline < curr_t:
             _str = "(lateness detected)" + _str
         else:
@@ -560,7 +563,7 @@ def check_complete(sched:Scheduler, budget_recoder, timestep,
     if msg_dispatcher is not None:
         for _p in completed_list:
             # msg_pipe.send(f"{_p.task.name}_completed", prefix="		")
-            msg_dispatcher.broadcast_message(f"{_p.task.name}_completed", prefix="		")
+            msg_dispatcher.broadcast_message(f"{_p.task.name} completed", prefix="		")
     
     completed_list.clear()
     return bin_event_flg
@@ -601,15 +604,24 @@ def pendingToReady_cbs(buffer:Buffer, budget_recoder,
     for _p in active_list:
         # check data availability
         w_avail = _p.pid in buffer.buffer_w
-        in_avail = _p.check_depends_data(buffer, glb_n_task_dict=glb_n_task_dict)
-        # in_avail, dict_o = _p.check_depends_data_watermark_aware(buffer, glb_n_task_dict=glb_n_task_dict)
+        # in_avail = _p.check_depends_data(buffer, glb_n_task_dict=glb_n_task_dict)
+
+        if len(_p.pred_ctrl)>0 and len(_p.pred_data)>0: 
+            matched_pair, in_avail, event_time = WatermarkStrategy.check_data_depends(_p, buffer, glb_n_task_dict, _p.msg_cache[0].get_timestamp())
+            if in_avail:
+                _p.msg_cache[0].msg_context["time_stamp"] = event_time
+        else:
+            in_avail = True
+
         if w_avail and in_avail:
             l_ready.append(_p)
 
     for _p in l_ready:
         # cache the context of the upstream weight node and src node
         _p.update_ctx('weight', buffer=buffer)
-        _p.update_ctx('upstream', buffer=buffer, glb_n_task_dict=glb_n_task_dict)
+        # _p.update_ctx('upstream', buffer=buffer, glb_n_task_dict=glb_n_task_dict)
+        if len(_p.pred_ctrl)>0 and len(_p.pred_data)>0:
+            _p.update_ctx('upstream', matched_pair=matched_pair)
         _str = f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) "
         if bin_name:
             _str = f"({bin_name})\n" + _str
@@ -672,7 +684,7 @@ def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe,
                             throttle_list, active_list, inactive_list, bin_event_flg, bin_name)
 
     # spill out the data of type "output", which is expired
-    buffer.pop_timeout("output", curr_t, True)
+    # buffer.pop_timeout("output", curr_t, True)
     # buffer.recyle_no_ref("output", True)
 
     # tackle the event in message pipe, set the valid flag in pred_data of each process
@@ -687,7 +699,14 @@ def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe,
     # check release
     # check the dependencies of the tasks in inactive list
     # if the dependencies are satisfied, move the task to the wait queue
-    bin_event_flg = chk_release(sched, event_range, curr_t, inactive_list, active_list, _SchedTab, timestep, bin_event_flg, bin_name) 
+    # bin_event_flg = chk_release(sched, event_range, curr_t, inactive_list, active_list, _SchedTab, timestep, bin_event_flg, bin_name) 
+    bin_event_flg = WatermarkStrategy.chk_release(curr_t, inactive_list, active_list, bin_event_flg, bin_name)
+    # for _p in active_list:
+    #     if _p.pid not in _SchedTab.index_occupy_by_id(tab_pointer, tab_pointer+int(_p.task.period/timestep)):
+    #         active_list.remove(_p)
+    #         inactive_list.append(_p)
+    #         _p.set_state("inactive")
+
 
     # # instruction prefetching
     # cfg_slot_s, cached_cfg, cfg_slot_num  = _SchedTab.sparse_list[_SchedTab.sparse_idx_next]         
@@ -1141,6 +1160,7 @@ def data_pipe_read(curr_t, glb_name_p_dict, process_dict, buffer, bin_name, bin_
         _p = process_dict[tgt_pid]
         for key, attr in _p.pred_data.items():
             if data.pid == glb_name_p_dict[key].pid:
+                attr["event_queue"].put(data)
                 attr["valid"] = True
                 attr["time"] = curr_t
                 attr["data"] = data
@@ -1149,7 +1169,7 @@ def data_pipe_read(curr_t, glb_name_p_dict, process_dict, buffer, bin_name, bin_
                 if bin_name and not bin_event_flg:
                     bin_event_flg = True
                     print(f"({bin_name})")
-                print(f"		{_p.task.name} received event {key:s} @ {curr_t:.6f}")
+                print(f"		{_p.task.name} received event {key:s} @ {curr_t:.6f}/{data.ctx.get_timestamp():.6f}")
     return bin_event_flg
 
 # =================== intergrated into scheduler class ===================
@@ -1196,7 +1216,7 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data
                             throttle_list, active_list, inactive_list, buffer, bin_event_flg, bin_name)
 
     # spill out the data of type "output", which is expired
-    buffer.pop_timeout("output", curr_t, True)
+    # buffer.pop_timeout("output", curr_t, True)
 
     # tackle the event in message pipe, set the valid flag in pred_data of each process
     # update barrier status
@@ -1218,7 +1238,8 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data
     # check release
     # check the dependencies of the tasks in inactive list
     # if the dependencies are satisfied, move the task to the wait queue
-    bin_event_flg = chk_release(sched, event_range, curr_t, inactive_list, active_list, _SchedTab, timestep, bin_event_flg, bin_name) 
+    # bin_event_flg = chk_release(sched, event_range, curr_t, inactive_list, active_list, _SchedTab, timestep, bin_event_flg, bin_name) 
+    bin_event_flg = WatermarkStrategy.chk_release(curr_t, inactive_list, active_list, bin_event_flg, bin_name)
 
     # check data availability: some tasks may be prefetched
     # TODO: model the runtime weight and feature map transfering 
@@ -1483,20 +1504,30 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data
     else:
         monitor.add_a_placehold_record()
 
-def pendingToReady(active_list, ready_queue, buffer:Buffer, curr_t, glb_n_task_dict:Dict[str, ProcessInt], bin_name=""):
+def pendingToReady(active_list:List[ProcessInt], ready_queue, buffer:Buffer, curr_t, glb_n_task_dict:Dict[str, ProcessInt], bin_name=""):
     # waitingQueue[i]->waitTime != 0 && waitingQueue[i]->waitTime % waitingQueue[i]->io == 0
     l_ready = []
     for _p in active_list:
         # check data availability
         # w_avail = _p.pid in buffer.buffer_w
-        in_avail = _p.check_depends_data(buffer, glb_n_task_dict=glb_n_task_dict)
+        # in_avail = _p.check_depends_data(buffer, glb_n_task_dict=glb_n_task_dict)
+
+        if len(_p.pred_ctrl)>0 and len(_p.pred_data)>0: 
+            matched_pair, in_avail, event_time = WatermarkStrategy.check_data_depends(_p, buffer, glb_n_task_dict, _p.msg_cache[0].get_timestamp())
+            if in_avail:
+                _p.msg_cache[0].msg_context["time_stamp"] = event_time
+        else:
+            in_avail = True
+
         # if w_avail and in_avail:
         if in_avail:
             l_ready.append(_p)
 
     for _p in l_ready:
         # cache the context of the upstream weight node and src node
-        _p.update_ctx('upstream', buffer=buffer, glb_n_task_dict=glb_n_task_dict)
+        # _p.update_ctx('upstream', buffer=buffer, glb_n_task_dict=glb_n_task_dict)
+        if len(_p.pred_ctrl)>0 and len(_p.pred_data)>0:
+            _p.update_ctx('upstream', matched_pair=matched_pair)
         _str = f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) "
         if bin_name:
             _str = f"({bin_name})\n" + _str

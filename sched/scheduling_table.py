@@ -13,6 +13,8 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 import os
+from model.resource_agent import RscMapInt
+import networkx as nx
 
 class SchedulingTableInt(object): 
     """
@@ -445,6 +447,39 @@ class SchedulingTableInt(object):
         req_rsc_size = int(np.ceil(_p.remburst/(time_slot_e-time_slot_s)/timestep/FLOPS_PER_CORE))
         return req_rsc_size
 
+    # def generate_dependency_table(bin_list, job_graph_nx:nx.DiGraph, pname2pid, pid2pname): 
+    #     num_processors = len(bin_list)
+    #     num_timesteps = len(bin_list[0])
+    #     dependency_table = np.empty_like(bin_list, dtype=object)
+    #     dependency_table.fill([])  # Initialize all items with an empty list
+        
+    #     num_processors = bin_list.shape[1]
+
+    #     for _Sched_tab in bin_list:
+    #         for cfg_slot_s, next_cfg, cfg_slot_num in _Sched_tab.sparse_list: 
+    #             next_cfg:RscMapInt
+    #             for pid in next_cfg.keys():
+    #                 job_n = pid2pname[pid]
+    #                 for succ_n, datadict in job_graph_nx.succ[job_n].items(): 
+    #                     succ_pid = pname2pid[succ_n]
+        
+    #     # Iterate over each timestep and processor in the scheduling table
+    #     for timestep, processor in np.ndindex(bin_list.shape):
+    #         jobs_executed = bin_list[timestep, processor]
+            
+    #         # Iterate over each job executed by the current processor
+    #         for job_id in jobs_executed:
+    #             dependencies = job_graph.get_dependencies(job_id)  # Get the dependencies of the current job
+                
+    #             # Iterate over each dependency of the current job
+    #             for dependency in dependencies:
+    #                 # Find the processors that executed the predecessor jobs
+    #                 predecessor_processors = np.where(bin_list[:, :] == dependency)[1]
+                    
+    #                 # Append the predecessor processors to the dependency table
+    #                 dependency_table[timestep, processor].extend(predecessor_processors)
+        
+    #     return dependency_table
 
 
 def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[ProcessInt], time_step:float = 1e-6,

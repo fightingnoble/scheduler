@@ -37,6 +37,7 @@ from model.data_pipe import DataPipe
 from scheduler_agent import Scheduler, check_miss, check_complete, chk_release
 from scheduler_agent import data_pipe_read, pendingToReady
 from model.message_handler import message_trigger_event_new
+from model.streaming_processing.wartermark_strategy import WatermarkStrategy
 
 import warnings
 from pre_alloc import get_target_bin_score, glb_alloc_new, get_rsc_2b_released
@@ -489,7 +490,7 @@ def push_step_new(sched: Scheduler, msg_dispatcher: MsgDispatcher,
                                mode="future", bin_list=bin_list, n_slot=n_slot, rsc_recoder=rsc_recoder)
 
     # spill out the data of type "output", which is expired
-    buffer.pop_timeout("output", curr_t, True)
+    # buffer.pop_timeout("output", curr_t, True)
 
     # tackle the event in message pipe, set the valid flag in pred_data of each process
     # update barrier status
@@ -512,7 +513,8 @@ def push_step_new(sched: Scheduler, msg_dispatcher: MsgDispatcher,
     # check release
     # check the dependencies of the tasks in inactive list
     # if the dependencies are satisfied, move the task to the wait queue
-    bin_event_flg = chk_release(sched, event_range, curr_t, inactive_list, active_list, _SchedTab, timestep, bin_event_flg, bin_name) 
+    # bin_event_flg = chk_release(sched, event_range, curr_t, inactive_list, active_list, _SchedTab, timestep, bin_event_flg, bin_name) 
+    bin_event_flg = WatermarkStrategy.chk_release(curr_t, inactive_list, active_list, bin_event_flg, bin_name)
 
     # check data availability: some tasks may be prefetched
     # TODO: model the runtime weight and feature map transfering 
