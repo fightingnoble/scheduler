@@ -223,3 +223,28 @@ watermark strategy 写完:
     2. event trigger: 从给定的event timestamp 开始往前找，以data的period为搜索步长（对于event 频率大于数据和小于数据的情况都适用）
     event time 现在在matched_pair中取最大的
 graph_scaling: 修复scaling node 并行度的时候数据流不正确的问题
+_p.event_time的设置时刻，执行完才设置。在此之前先缓存在ctx里面
+
+## 20230601
+错误进入active状态依然是问题（一方面导致rem_flops 多次启动出错，另一方面是导致生成多份ctx 在msg_cache中）
+    为了防止生成多份ctx
+    1. 仅允许msg_cache被设置一次：
+    ```
+        if len(_p.msg_cache) == 0:
+            _p.build_ctx()
+    ```
+    2. 保证其他队列执行任务时（新的任务不是继续中断的任务）基于新的ctx：
+    （假设第一次执行在A上完成后会msg_cache.pop(0)，仅仅采用1，会导致其他队列中的任务，访问ctx的时候出现msg_cache为空的错误）
+    a. 通过msg_dispatcher 发布消息，当任务完成的时候广播complete消息
+    b. partition收到消息之后，过滤消息，确认active，ready，throttle队列中有目标任务之后移除这些任务
+    
+    为了防止rem_flops 多次启动出错
+    ```
+            if _p.remburst == 0:
+                _p.remburst += _p.task.flops
+    ```
+对于状态切换时，指示属性的设置进行修补：
+    _p.released
+    _p.ready
+    _p.set_state
+

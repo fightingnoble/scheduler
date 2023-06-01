@@ -211,9 +211,9 @@ class WatermarkStrategy(object):
                 if not _p.pred_ctrl[key]["valid"]:
                     return False
             # to avoid the duplicated context in the condition of job migration
-            # if len(_p.msg_cache) == 0:
-            #     _p.build_ctx()
-            _p.build_ctx()
+            if len(_p.msg_cache) == 0:
+                _p.build_ctx()
+            # _p.build_ctx()
             _p.update_ctx("trigger")
             # clear the pred_ctrl valid flag
             _p.reset_depends(type="ctrl")
@@ -223,9 +223,9 @@ class WatermarkStrategy(object):
             matched_pair, status, event_time = cls.chk_data_trigger(_p)
             if status:
                 # to avoid the duplicated context in the condition of job migration
-                # if len(_p.msg_cache) == 0:
-                #     _p.build_ctx()
-                _p.build_ctx()
+                if len(_p.msg_cache) == 0:
+                    _p.build_ctx()
+                # _p.build_ctx()
                 _p.msg_cache[0].msg_context["time_stamp"] = event_time
                 _p.msg_cache[0].msg_context["stream_domain"] = "multi_stream" if len(_p.pred_data)>1 else "single_stream"
 
@@ -259,7 +259,8 @@ class WatermarkStrategy(object):
             inactive_list.remove(_p)
             _p.release_time = curr_t
             _p.released = True
-            _p.remburst += _p.task.flops
+            if _p.remburst == 0:
+                _p.remburst += _p.task.flops
             _str = f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) is activated @ {curr_t:.6f}!!"
             print(_str)
         return bin_event_flg       

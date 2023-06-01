@@ -13,3 +13,10 @@
     provide resource reference: budget_recoder
 TODO marks:
 1. check again: has multiple choises, and one choise is adopted temporally.
+
+指示属性：
+_p.release_time = curr_t
+_p.released = True
+_p.ready_time = curr_t
+_p.ready = True
+_p.set_state("ready")

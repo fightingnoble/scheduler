@@ -33,7 +33,8 @@ criticality = {
 task_lifetime = {
     "terminated": 0, # terminated
     "suspend": 1, # inactive, wait for activation
-    "runnable": 2, # ready to be executed
+    # "runnable": 2, # ready to be executed
+    "active": 2, # active, but not ready to be executed
     "running": 3,
     "throttled": 4, # ready by has no budget
     "wait": 5, # waiting for I/O

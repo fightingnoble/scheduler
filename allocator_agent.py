@@ -237,8 +237,9 @@ from model.Context_message import ContextMsg
 #                 #         else: 
 #                 #             print("		Arriving lateness of task {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
 
-def sched_step(task_spec:Spec, # msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
+def sched_step(task_spec:Spec, 
                 event_iter_dict:Dict, 
+                msg_dispatcher:MsgDispatcher, # msg_pipe:Message=Message(),
                 a_data_pipe:DataPipe, 
                 w_data_pipe:DataPipe,
                 scheduler_list: List[Scheduler], monitor_list:List[Monitor],
@@ -276,17 +277,18 @@ def sched_step(task_spec:Spec, # msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
 
     # spatial management
     # Each partition maintains a scheduling table, a task monitor, and a scheduler. 
-    for res_cfg, sched, monitor,  msg_queue, in zip(rsc_list, scheduler_list, monitor_list, a_data_pipe.queues, ):
+    for res_cfg, sched, monitor,  msg_queue, a_msg_queue in zip(rsc_list, scheduler_list, monitor_list, msg_dispatcher.queues, a_data_pipe.queues, ):
 
         # print(f"	Bin {_SchedTab.id:d}:")
         # extract scheudler, including queues and lists from scheduler_list
         glb_name_p_dict: Dict[str, ProcessInt]
         msg_queue:Queue
+        sched:Scheduler
         DEBUG_FG = False
         inactive_list:List[ProcessInt] = sched.inactive_list 
 
         message_trigger_event_new(event_iter_dict, inactive_list, glb_p_list, timestep, curr_t, True) 
-        sched.scheduler_step(a_data_pipe, w_data_pipe, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, monitor, DEBUG_FG)
+        sched.scheduler_step(msg_dispatcher, a_data_pipe, w_data_pipe, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, a_msg_queue, monitor, DEBUG_FG)
     # update the wait task
     w_data_pipe.update_wait_time(timestep)
     a_data_pipe.update_wait_time(timestep)
@@ -299,7 +301,7 @@ def cyclic_sched(task_spec:Spec, affinity,
                 total_cores:int, 
                 glb_p_list:List[ProcessInt],
                 timestep, hyper_p, n_p=1, 
-                # msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
+                msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
                 a_data_pipe:DataPipe=None,
                 w_data_pipe:DataPipe=None, 
                 verbose=False, *, warmup=False, drain=False,):
@@ -404,6 +406,7 @@ def cyclic_sched(task_spec:Spec, affinity,
         # print(f"Slot {n_slot:d}, time {curr_t:.6f}")
         sched_step(task_spec, 
                     event_iter_dict,
+                    msg_dispatcher,
                     a_data_pipe,
                     w_data_pipe,
                     scheduler_list, monitor_list,
@@ -582,7 +585,7 @@ if __name__ == "__main__":
         rsc_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
         # curr_cfg_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
         # msg_pipe = Message()
-        # msg_dispatcher = MsgDispatcher(len(bin_list))
+        msg_dispatcher = MsgDispatcher(len(bin_list))
         a_data_pipe = DataPipe("activation", len(bin_list))
         w_data_pipe = DataPipe("weight", len(bin_list))
         scheduler_list = [Scheduler(_SchedTab, glb_p_list, jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
@@ -596,6 +599,7 @@ if __name__ == "__main__":
                 num_cores, 
                 glb_p_list,
                 sim_step, hyper_p, num_periods, 
+                msg_dispatcher,
                 a_data_pipe, w_data_pipe, 
                 args.verbose, warmup=True, drain=True)
 

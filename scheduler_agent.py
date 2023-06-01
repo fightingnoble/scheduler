@@ -26,6 +26,7 @@ from model.message_handler import message_trigger, message_trigger_event
 from model.Context_message import ContextMsg
 from model.data_pipe import DataPipe
 from pre_alloc import get_rsc_2b_released
+import re
 
 from model.streaming_processing.wartermark_strategy import WatermarkStrategy
 
@@ -244,15 +245,16 @@ class Scheduler(object):
         # pendingToReady(active_list, ready_queue, buffer, budget_recoder, throttle_list, curr_t, glb_name_p_dict, bin_name, ) 
         return pendingToReady_cbs(self.buffer, self.budget_recoder, self.active_list, self.ready_queue, self.throttle_list, curr_t, glb_n_task_dict, self._SchedTab.name)
 
-    def scheduler_step(self, a_data_pipe: DataPipe, data_pipe: DataPipe,
+    def scheduler_step(self, msg_dispatcher:MsgDispatcher, a_data_pipe: DataPipe, data_pipe: DataPipe,
                        n_slot: int, timestep: int, event_range: List[int], 
                         sim_slot_num: int, curr_t: int, glb_name_p_dict: Dict[str, List[int]], 
                         res_cfg: Dict[str, int], 
-                        msg_queue:Queue, monitor:Monitor,
+                        msg_queue:Queue, a_msg_queue:TaskQueue,
+                        monitor:Monitor,
                         DEBUG_FG: bool) -> None:
 
         # scheduler_step(sched, msg_dispatcher, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, DEBUG_FG)
-        return scheduler_step(self, a_data_pipe, data_pipe, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, monitor, DEBUG_FG)
+        return scheduler_step(self, msg_dispatcher, a_data_pipe, data_pipe, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, a_msg_queue, monitor, DEBUG_FG)
     
 # =================== intergrated into scheduler class ===================
 def throttleToReady(curr_t, budget_recoder, ready_queue, throttle_list, bin_name:str="", bin_event_flg:bool=False):
@@ -315,7 +317,7 @@ def chk_release(sched, event_range, curr_t, inactive_list:List[ProcessInt], acti
         _p.release_time = curr_t
         _p.released = True
         _p.remburst += _p.task.flops
-        # _p.set_state("runnable")
+        _p.set_state("active")
         # _p.release_time = curr_t 
         # _p.deadline = curr_t + _p.task.ddl
         # _p.deadline += _p.task.period
@@ -339,7 +341,6 @@ def check_miss(sched: Scheduler,
         # !!!!!!!!!!!! Bug Here !!!!!!!!!!!!!
         if _p.deadline < curr_t and _p.task.criticality == "hard":
             miss_list.append(_p)
-            _p.set_state("suspend")
 
     if bin_name and len(miss_list) and not bin_event_flg:
         bin_event_flg = True
@@ -384,6 +385,8 @@ def check_miss(sched: Scheduler,
         _p.cumulative_executed_time = 0
 
         # _p.required_resource_size = np.ceil(_p.remburst/_p.exp_comp_t/FLOPS_PER_CORE)
+        _p.ready = False
+        _p.released = False
         _p.set_state("suspend")
         inactive_list.append(_p)
         # _p.reset_depends()
@@ -424,10 +427,6 @@ def check_throttle(sched:Scheduler,
         # update statistics 
         _p.task.throttle_count += 1
 
-        # _p.release_time += _p.task.period
-        # _p.deadline += _p.task.period
-        # _p.remburst += _p.task.flops
-
         # suppose kill strategy
         # current tile should be reloaded and re-executed
         # other wise, modify the io time
@@ -466,7 +465,6 @@ def check_complete(sched:Scheduler, budget_recoder, timestep,
         # check whether the task is completed
         if (_p.totburst >= _p.totcpu):
             completed_list.append(_p)
-            _p.set_state("suspend")
 
     if bin_name and len(completed_list) and not bin_event_flg:
         bin_event_flg = True
@@ -548,11 +546,12 @@ def check_complete(sched:Scheduler, budget_recoder, timestep,
             else:
                 budget_recoder.pop(_p.pid)
                 _p.rem_flop_budget.pop(bin_id)
-
-
-
         if rsc_recoder is not None:
             rsc_recoder.pop(_p.pid)
+
+        _p.ready = False
+        _p.released = False
+        _p.set_state("suspend")
         running_queue.remove(_p)
         inactive_list.append(_p)
         # _p.reset_depends()
@@ -563,7 +562,7 @@ def check_complete(sched:Scheduler, budget_recoder, timestep,
     if msg_dispatcher is not None:
         for _p in completed_list:
             # msg_pipe.send(f"{_p.task.name}_completed", prefix="		")
-            msg_dispatcher.broadcast_message(f"{_p.task.name} completed", prefix="		")
+            msg_dispatcher.broadcast_message(f"TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) COMPLETED @ {curr_t:.6f}/{_p.event_time:.6f}({bin_name})!!")
     
     completed_list.clear()
     return bin_event_flg
@@ -637,13 +636,14 @@ def pendingToReady_cbs(buffer:Buffer, budget_recoder,
         else:
             active_list.remove(_p)
             throttle_list.append(_p)
+            _p.set_state("throttled")
             _str += "data ready, but throttled!!"
             warnings.warn(_str)
 
-def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe, 
+def scheduler_step(sched, msg_dispatcher:MsgDispatcher, a_data_pipe:DataPipe, w_data_pipe:DataPipe, 
                     n_slot, timestep, 
                     event_range, sim_slot_num, curr_t, 
-                    glb_name_p_dict, res_cfg, msg_queue, 
+                    glb_name_p_dict, res_cfg, msg_queue, a_msg_queue, 
                     monitor:Monitor, DEBUG_FG, quantum_check_en:bool = False, quantumSize=None):
     weight_wait_queue, ready_queue, running_queue, \
         miss_list, preempt_list, issue_list, completed_list, throttle_list,\
@@ -670,7 +670,7 @@ def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe,
 
     # (running_queue)
     # check running tasks
-    bin_event_flg = check_complete(sched, budget_recoder, timestep, None, a_data_pipe, curr_t, 
+    bin_event_flg = check_complete(sched, budget_recoder, timestep, msg_dispatcher, a_data_pipe, curr_t, 
                                    res_cfg, running_queue, completed_list, 
                                    inactive_list, buffer, bin_event_flg, bin_name, n_slot=n_slot)
 
@@ -701,11 +701,6 @@ def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe,
     # if the dependencies are satisfied, move the task to the wait queue
     # bin_event_flg = chk_release(sched, event_range, curr_t, inactive_list, active_list, _SchedTab, timestep, bin_event_flg, bin_name) 
     bin_event_flg = WatermarkStrategy.chk_release(curr_t, inactive_list, active_list, bin_event_flg, bin_name)
-    # for _p in active_list:
-    #     if _p.pid not in _SchedTab.index_occupy_by_id(tab_pointer, tab_pointer+int(_p.task.period/timestep)):
-    #         active_list.remove(_p)
-    #         inactive_list.append(_p)
-    #         _p.set_state("inactive")
 
 
     # # instruction prefetching
@@ -738,7 +733,9 @@ def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe,
             print(f"bin {bin_name:s} {curr_cfg.slot_s*timestep:.6f}~{curr_cfg.slot_e*timestep:.6f}")
             print(str(next_cfg))
 
+    new_cfg_ld = False
     if curr_cfg.slot_s == n_slot:
+        new_cfg_ld = True
         # cfg_slot_s, next_cfg, cfg_slot_num = _SchedTab.sparse_list[_SchedTab.sparse_idx]
         cfg_slot_s, next_cfg, cfg_slot_num = curr_cfg.slot_s, curr_cfg.rsc_map, curr_cfg.slot_num
         # replenish the budget
@@ -773,6 +770,39 @@ def scheduler_step(sched, a_data_pipe:DataPipe, w_data_pipe:DataPipe,
     for data in w_msg_queue:
         buffer.put(data)
     w_msg_queue.clear()
+
+    # 定义正则表达式模式
+    pattern = r'TASK (\d+):([\w_]+)\((\d+)\) COMPLETED @ ([\d.]+)/([\d.]+)\(([\w_]+)\)!!'
+    
+    msg_list = []
+    # read out all message and clear the message pipe
+    while not msg_queue.empty():
+        msg_list.append(msg_queue.get())
+    if msg_list:
+        for msg in msg_list:
+        # 使用正则表达式进行匹配
+            match = re.match(pattern, msg)
+            if match:
+                # 提取匹配结果
+                pid = int(match.group(3))
+                name = match.group(2)
+                event_time = float(match.group(5))
+                bin_name_t = match.group(6)
+                if pid not in process_dict or bin_name_t == bin_name:
+                    continue
+                _p = process_dict[pid]
+
+                # pop the task from ready queue, active list, and throttle list
+                if _p in active_list:
+                    active_list.remove(_p)
+                    print(f"		{_p.task.name:s}({pid:d}) is removed from active list @ {bin_name:s} {curr_t:.6f}")
+                if _p in ready_queue:
+                    ready_queue.remove(_p)
+                    print(f"		{_p.task.name:s}({pid:d}) is removed from ready queue @ {bin_name:s} {curr_t:.6f}")
+                if _p in throttle_list:
+                    throttle_list.remove(_p)
+                    print(f"		{_p.task.name:s}({pid:d}) is removed from throttle list @ {bin_name:s} {curr_t:.6f}")
+                inactive_list.append(_p)
 
     # check data availability: some tasks may be prefetched
     # TODO: model the runtime weight and feature map transfering 
