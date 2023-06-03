@@ -33,7 +33,7 @@ class DataPipe:
         self.data_type = data_type
         self.sort_fn = sort_fn if sort_fn else lambda x: x.data_id
         if queues_list is None:
-            self.queues = [TaskQueue(sort_f=self.sort_fn) for _ in range(num_reciever)]
+            self.queues = [TaskQueue(sort_f=self.sort_fn, descending=False) for _ in range(num_reciever)]
         else:
             self.queues = queues_list
     

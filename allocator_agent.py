@@ -335,8 +335,6 @@ def cyclic_sched(task_spec:Spec, affinity,
         print("	ready tasks:")
         for pid in init_cfg.rsc_map: 
             _p = process_dict[pid]
-            # _p.build_ctx()
-            # _p.update_ctx("trigger")
 
             # simulate the prefetching of the weight
             msg:ContextMsg = ContextMsg.create_weight_ctx()

@@ -248,3 +248,27 @@ _p.event_time的设置时刻，执行完才设置。在此之前先缓存在ctx�
     _p.ready
     _p.set_state
 
+## 20230601 ++
+```python
+# if issue the task to runnning list
+        for _p in issue_list:
+            running_queue.put(_p)
+            ready_queue.remove(_p)   # <- pop()
+```
+
+这个地方在glb_dyn 里面改了，但是在dynamic 里面却没有改
+
+发现一个隐患，Taskqueue默认是降序排列，因此在顺序访问和实例化的时候应该注意顺序是否和预期匹配
+
+```python
+# detect the data trigger
+        for key in _p.pred_data:
+            stream = stream_dict[key]
+            if len(stream)>0:
+                # get the minimum event time
+                if stream[0].ctx.get_timestamp() < min_event_time_t:
+                    min_event_time_t = stream[0].ctx.get_timestamp()
+                    period = stream[0].period
+```
+
+这段代码搜索最小值的时候，队列实际上是降序的，第一个是最大值

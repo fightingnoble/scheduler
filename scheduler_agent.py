@@ -112,7 +112,6 @@ class Scheduler(object):
                  budget_recoder:Dict[int, List]=None, rsc_recoder_his:Dict[int, LRUCache]=None, 
                  jitter_sim_en:bool=False, jitter_sim_para:Dict=None, barrier_en:bool=True,
                  ) -> None:
-        self.ready_queue: TaskQueue = TaskQueue()
         self.expired_queue: List = []
         self.blocked_queue: List = []
 
@@ -915,7 +914,7 @@ def scheduler_step(sched, msg_dispatcher:MsgDispatcher, a_data_pipe:DataPipe, w_
         # if issue the task to runnning list
         for _p in issue_list:
             running_queue.put(_p)
-            ready_queue.get()
+            ready_queue.remove(_p)
             _p.set_state("running")
             res_cfg.allocate(_p.pid, _p.required_resource_size)
             _p.waitTime = 0 

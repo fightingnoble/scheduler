@@ -14,6 +14,20 @@ miss_list = []  # 用于存储未完成任务及其计数
 filename_list = []  # 用于存储文件名
 trigger_list = []
 
+# (lateness detected)TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) COMPLETED @ {curr_t:.6f}/{_p.event_time:.6f}!!
+# \t\tTASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) COMPLETED @ {curr_t:.6f}/{_p.event_time:.6f}!!
+
+completed_pattern1 = r'\t\tTASK (\d+):([\w_]+)\((\d+)\) COMPLETED @ ([\d.]+)/([\d.]+)!!'
+completed_pattern2 = r'(lateness detected)TASK (\d+):([\w_]+)\((\d+)\) COMPLETED @ ([\d.]+)/([\d.]+)!!'
+
+
+# TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!
+miss_pattern = r'\t\tTASK (\d+):([\w_]+)\((\d+)\) MISSED DEADLINE @ ([\d.]+)/([\d.]+)!!'
+
+# f"		{_p.task.name} triggered @ {ingestion_time:.6f}"
+trigger_pattern = r'\t\t([\w_]+) triggered @ ([\d.]+)'
+pattern = r'(?P<task>\w+)\s+triggered\s+@\s+(?P<time>\d+\.\d+)'
+
 # 遍历指定文件夹下的所有 .log.txt 文件, 按照文件名排序
 # for filename in os.listdir(folder):
 for filename in sorted(os.listdir(folder)):
@@ -25,41 +39,37 @@ for filename in sorted(os.listdir(folder)):
             for line in file:
                 if "COMPLETED" in line:
                     # 找到任务名称和时间
-                    task_start = line.find(":") + 1
-                    task_end = line.rfind("(")
-                    task_name = line[task_start:task_end]
-                    time_start = line.rfind("@") + 1
-                    time_end = line.rfind("/")
-                    time_value = float(line[time_start:time_end])
-                    # 添加到 completed_dict 中
-                    if task_name not in completed_dict: 
-                        completed_dict[task_name] = [time_value]
-                    else:
-                        completed_dict[task_name].append(time_value)
+                    if match:= re.search(completed_pattern1, line):
+                        task_name = match.group(2)
+                        time_value = float(match.group(4))
+                    elif match := re.search(completed_pattern2, line):
+                        task_name = match.group(3)
+                        time_value = float(match.group(5))
+                    if match:
+                        if task_name not in completed_dict: 
+                            completed_dict[task_name] = [time_value]
+                        else:
+                            completed_dict[task_name].append(time_value)
                 elif "MISSED DEADLINE" in line:
                     # 找到任务名称和时间
-                    task_start = line.find(":") + 1
-                    task_end = line.rfind("(")
-                    task_name = line[task_start:task_end]
-                    time_start = line.rfind("@") + 1
-                    time_end = line.rfind("/")
-                    time_value = float(line[time_start:time_end])
-                    # 添加到 miss_dict 中
-                    if task_name not in miss_dict:
-                        miss_dict[task_name] = [time_value]
-                    else:
-                        miss_dict[task_name].append(time_value)
-                elif "triggered" in line:
-                    pattern = r'(?P<task>\w+)\s+triggered\s+@\s+(?P<time>\d+\.\d+)'
+                    if match:= re.search(miss_pattern, line):
+                        task_name = match.group(2)
+                        time_value = float(match.group(4))
 
-                    match = re.search(pattern, line)
                     if match:
-                        task_name = match.group('task')
-                        trigger_time = float(match.group('time'))
-                        if task_name not in trigger_dict:
-                            trigger_dict[task_name] = [trigger_time]
+                        if task_name not in miss_dict:
+                            miss_dict[task_name] = [time_value]
                         else:
-                            trigger_dict[task_name].append(trigger_time)
+                            miss_dict[task_name].append(time_value)
+                elif "triggered" in line:
+                    if match:= re.search(trigger_pattern, line):
+                        task_name = match.group(1)
+                        time_value = float(match.group(2))
+                    if match:
+                        if task_name not in trigger_dict:
+                            trigger_dict[task_name] = [time_value]
+                        else:
+                            trigger_dict[task_name].append(time_value)
 
         # 添加到列表中
         completed_list.append(completed_dict)
