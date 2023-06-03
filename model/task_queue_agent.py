@@ -59,6 +59,9 @@ class TaskQueue(Queue):
     def clear(self):
         self.queue.clear()
 
+    def __deepcopy__(self, memo):
+        return TaskQueue(self.queue.copy(), self.maxsize, self.reverse, self.sort_f)
+
         
 
 

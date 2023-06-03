@@ -65,8 +65,8 @@ class ContextMsg(object):
     #     #     elif len(self.msg_context["src"]) > 1:
     #     #         self.msg_context["stream_domain"] = "multi-stream"
     
-    def cache_trigger(self, process:ProcessInt) -> None:
-        trigger_dict = process.get_trigger_ctx()
+    def cache_trigger(self, process:ProcessInt, pred_ctrl:Dict[int, Dict]=None) -> None:
+        trigger_dict = process.get_trigger_ctx(pred_ctrl)
         assert len(trigger_dict) <= 1
         self.msg_context["trigger"].update(trigger_dict)
         if len(trigger_dict) == 1:

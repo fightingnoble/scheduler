@@ -3,7 +3,7 @@ from typing import Dict, List, Tuple, Union, Any, OrderedDict
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from model.buffer import Buffer
+    from model.buffer import Buffer, EventCache, TriggerCache
     from model.buffer import Data
 from model.Context_message import ContextMsg
 
@@ -92,34 +92,54 @@ class ProcessBase(object):
         assert state in task_lifetime.keys()
         self.state = state
     
-    def check_depends(self):
+    def check_depends(self, event_cache:EventCache=None, 
+                      trigger_cache:TriggerCache=None, event_triggers:List[Tuple]=None):
         """
         if all the predecessor tasks are completed, return True
         """
-        # if not len(self.pred_data):
-        #     return np.allclose(time%self.task.period, self.task.ERT+self.task.i_offset, atol=time_step)
-        # else:
-        #     return np.array(list(self.pred_ctrl.values())+ list(self.pred_data.values())).all()
-        # reDistPattn="downscaling"
         if len(self.pred_ctrl):
-            for key in self.pred_ctrl.keys():
-                if not self.pred_ctrl[key]["valid"]:
+            if trigger_cache is None:
+                pred_ctrl = self.pred_ctrl
+            else:
+                pred_ctrl = trigger_cache[self.pid]
+
+            if event_triggers is None:
+                event_triggers = self.event_triggers
+
+            for key in pred_ctrl.keys():
+                if not pred_ctrl[key]["valid"]:
                     return False
+            if len(self.msg_cache) == 0:
+                self.build_ctx()
+            self.update_ctx("trigger")
             # clear the pred_ctrl valid flag
-            self.reset_depends(type="ctrl")
+            self.reset_depends(type="ctrl", pred_ctrl=pred_ctrl)
+            event_triggers.pop(0)
             return True
         else:
-            if self.check_depends_data(None, True):
-                self.reset_depends()
+            if event_cache is None:
+                pred_data = self.pred_data
+            else:
+                pred_data = event_cache[self.pid]
+
+            if self.check_depends_data(None, True, event_cache=event_cache):
+                self.reset_depends(pred_ctrl=pred_ctrl, pred_data=pred_data)
+                if len(self.msg_cache) == 0:
+                    self.build_ctx()
                 return True
             else:
                 return False
 
-    def check_depends_data(self, buffer=None, barrier=False, glb_n_task_dict=None):
+    def check_depends_data(self, buffer=None, barrier=False, glb_n_task_dict=None, event_cache:EventCache=None):
         assert buffer is not None if not barrier else True
         dict_t = {}
-        for key in self.pred_data:
-            attr_dict = self.pred_data[key]
+        if event_cache is None:
+            pred_data = self.pred_data
+        else:
+            pred_data = event_cache[self.pid]
+
+        for key in pred_data:
+            attr_dict = pred_data[key]
             if barrier:
                 valid = attr_dict["valid"]
             else:
@@ -134,13 +154,13 @@ class ProcessBase(object):
                 return False
         return np.array(list(dict_t.values())).all()
 
-    def get_upstream_ctx(self, glb_n_task_dict:Dict, buffer:Buffer):
+    def get_upstream_ctx(self, glb_n_task_dict:Dict, buffer:Buffer, pred_data:Dict[int, Dict]):
         """
         extract the serialized context of the upstream tasks
         """
         src_dict = {}
         for key in self.pred_data:
-            attr_dict = self.pred_data[key]
+            attr_dict = pred_data[key]
             pid = glb_n_task_dict[key].pid
             tgt_buffer = buffer.buffer_mux("output")
             valid = pid in tgt_buffer
@@ -157,12 +177,12 @@ class ProcessBase(object):
         """
         return list(self.succ_data.keys())
 
-    def get_trigger_ctx(self):
+    def get_trigger_ctx(self, pred_ctrl:Dict[int, Dict]=None):
         trigger_dict = {}
         for key in self.pred_ctrl: 
-            msg:ContextMsg = ContextMsg.create_sensor_ctx(self.pred_ctrl[key]["ingestion_time"], 
-                                                          self.pred_ctrl[key]["event_time"],
-                                                          self.pred_ctrl[key]["period"])
+            msg:ContextMsg = ContextMsg.create_sensor_ctx(pred_ctrl[key]["ingestion_time"], 
+                                                          pred_ctrl[key]["event_time"],
+                                                          pred_ctrl[key]["period"])
             trigger_dict.update({key:msg.serialize()})
         return trigger_dict
     
@@ -187,31 +207,33 @@ class ProcessBase(object):
             self.msg_cache[0].cache_weight(self, **kwargs)
         elif ctx_type == "trigger":
             if len(self.pred_ctrl):
-                self.msg_cache[0].cache_trigger(self)
+                self.msg_cache[0].cache_trigger(self, **kwargs)
 
-    def sim_trigger(self, time=None, time_step=1e-6):
+    def sim_trigger(self, time=None, time_step=1e-6, pred_ctrl:Dict[int, Dict]=None, event_triggers:List[Tuple]=None):
         """
         if the task is activated, return True
         """
+        if pred_ctrl is None:
+            pred_ctrl = self.pred_ctrl
         if self.task.trigger_mode == "timer":
             if math.isclose(time%self.task.period, self.i_offset, abs_tol=time_step*0.99):
-                for key in self.pred_ctrl.keys():
-                    self.pred_ctrl[key]["valid"] = True
-                    self.pred_ctrl[key]["ingestion_time"] = time
+                for key in pred_ctrl.keys():
+                    pred_ctrl[key]["valid"] = True
+                    pred_ctrl[key]["ingestion_time"] = time
                 return True
         elif self.trigger_mode == "event":
-            if self.event_triggers:
+            if event_triggers:
                 # self.event_triggers.pop(0)
-                next_ingestion_time, next_event_time = self.event_triggers[0]
-                for key in self.pred_ctrl.keys():
-                    self.pred_ctrl[key]["valid"] = True
-                    self.pred_ctrl[key]["ingestion_time"] = next_ingestion_time
-                    self.pred_ctrl[key]["event_time"] = next_event_time
-                    self.pred_ctrl[key]["period"] = self.task.period
+                next_ingestion_time, next_event_time = event_triggers[0]
+                for key in pred_ctrl.keys():
+                    pred_ctrl[key]["valid"] = True
+                    pred_ctrl[key]["ingestion_time"] = next_ingestion_time
+                    pred_ctrl[key]["event_time"] = next_event_time
+                    pred_ctrl[key]["period"] = self.task.period
                 return True
         return False
     
-    def reset_depends(self, type="all"):
+    def reset_depends(self, type="all", pred_ctrl:Dict[int, Dict]=None, pred_data:Dict[int, Dict]=None):
         """
         reset the values of the predecessors to False
         """
@@ -225,11 +247,15 @@ class ProcessBase(object):
         elif type == "data":
             clear_pred_data = True
         if clear_pred_ctrl:
-            for key in self.pred_ctrl.keys():
-                self.pred_ctrl[key]["valid"] = False
+            if pred_ctrl is None:
+                pred_ctrl = self.pred_ctrl
+            for key in pred_ctrl.keys():
+                pred_ctrl[key]["valid"] = False
         if clear_pred_data:
-            for key in self.pred_data.keys():
-                self.pred_data[key]["valid"] = False
+            if pred_data is None:
+                pred_data = self.pred_data
+            for key in pred_data.keys():
+                pred_data[key]["valid"] = False
 
 def rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE):
     # release time round up: task should not be released earlier than the release time

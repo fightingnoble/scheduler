@@ -97,4 +97,18 @@ class DataPipe:
             print(prefix+f"Sending message: {data.pid:d}:{data.data_id}({data.data_type}/{data.size}M) to {reciever_id}")
         self.queues[reciever_id].put(data)
 
+class TriggerPipe():
+    def __init__(self, num_reciever:int, ):
+        self.queues = [[] for _ in range(num_reciever)]
+
+    def broadcast_message(self, data:List, prefix="", DEBUG=False):
+        for buffer in self.queues:
+            buffer.append(data)
+    
+    def one_to_one_message(self, data:List, reciever_id:int, prefix="", DEBUG=False):
+        self.queues[reciever_id].append(data)
+
+    def get(self, queue_id:int=0):
+        return self.queues[queue_id].pop(0)
+
 # data.dest = [dest_table[tgt_pid] for tgt_pid in data.ctx.msg_context["process_info"]["downstream_node"]] 

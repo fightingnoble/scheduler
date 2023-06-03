@@ -3,9 +3,10 @@ from typing import List
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from task.task_agent import ProcessBase
+    from model.buffer import EventCache, TriggerCache
 import math
 import numpy as np
-from collections import OrderedDict
+from typing import Dict, Tuple
 from global_var import numerical_tol_bit
 
 class WatermarkStrategy(object):
@@ -26,13 +27,16 @@ class WatermarkStrategy(object):
     """
 
     @staticmethod
-    def extract_stream_from_buffer(_p, buffer, glb_n_task_dict):
+    def extract_stream_from_buffer(_p, buffer, glb_n_task_dict, pred_data:Dict[int, Dict]=None):
         """
         extract the stream of the predecessor operator's output from the buffer
         """
         stream_dict = {}
         period = None
-        for key in _p.pred_data:
+        if pred_data is None:
+            pred_data = _p.pred_data
+
+        for key in pred_data:
             pid = glb_n_task_dict[key].pid
             stream_t = buffer.buffer_mux("output").get(pid, [])
             if len(stream_t)>0:
@@ -46,10 +50,13 @@ class WatermarkStrategy(object):
         return stream_dict, period
 
     @staticmethod
-    def join_downscaling_streams(_p, stream_dict):
+    def join_downscaling_streams(_p, stream_dict, pred_data:Dict[int, Dict]=None):
         joint_stream_dict = {}
+        if pred_data is None:
+            pred_data = _p.pred_data
+
         for key in joint_stream_dict:
-            attr_dict = _p.pred_data[key]
+            attr_dict = pred_data[key]
             if attr_dict["reDistPattn"] == "downscaling":
                 # name parse
                 # remove the thread number at the end of the name
@@ -63,14 +70,16 @@ class WatermarkStrategy(object):
         return joint_stream_dict
 
     @staticmethod
-    def join_valid(_p:ProcessBase, matched_pair:dict):
+    def join_valid(_p:ProcessBase, matched_pair:dict, pred_data:Dict[int, Dict]=None):
         """
         check the joint valid
         """
         # check the joint valid
         joint_valid = {}
-        for key in _p.pred_data:
-            attr_dict = _p.pred_data[key]
+        if pred_data is None:
+            pred_data = _p.pred_data
+        for key in pred_data:
+            attr_dict = pred_data[key]
             valid = key in matched_pair
             if attr_dict["reDistPattn"] == "downscaling":
                 # name parse
@@ -85,7 +94,7 @@ class WatermarkStrategy(object):
         return np.array(list(joint_valid.values())).all()
 
     @classmethod
-    def check_data_depends(cls, _p, buffer=None, glb_n_task_dict=None, min_event_time=None):
+    def check_data_depends(cls, _p, buffer=None, glb_n_task_dict=None, min_event_time=None, event_cache:EventCache=None):
         """
         The computation of an operator with multiple input streams is triggered 
         whenever all of its input streams have emitted at least one element with a timestamp 
@@ -101,10 +110,14 @@ class WatermarkStrategy(object):
             return {}, False, None
 
         matched_pair = {}
+        if event_cache is None:
+            pred_data = _p.pred_data
+        else:
+            pred_data = event_cache[_p.pid]
         if min_event_time < float("inf"):
             # iterate the stream dict reversely, event time is in the descending order
-            for key in _p.pred_data:
-                attr_dict = _p.pred_data[key]
+            for key in pred_data:
+                attr_dict = pred_data[key]
                 if attr_dict["reDistPattn"] == "downscaling":
                     interval = period / attr_dict["factor"]
                 else:
@@ -123,12 +136,12 @@ class WatermarkStrategy(object):
         else:
             return {}, False, None
         # check the data trigger
-        if cls.join_valid(_p, matched_pair):
+        if cls.join_valid(_p, matched_pair, pred_data):
             # event time is advanced
             # _p.event_time = min_event_time
             event_time = max([matched_pair[key].ctx.get_timestamp() for key in matched_pair]+[min_event_time])
             # pop matched event
-            for key in _p.pred_data:
+            for key in pred_data:
                 if key in matched_pair:
                     stream_dict[key].pop()
             return matched_pair, True, event_time
@@ -138,12 +151,15 @@ class WatermarkStrategy(object):
             return {}, False, None
 
     @classmethod
-    def chk_data_trigger(cls, _p:ProcessBase, stream_dict:dict=None, min_event_time=None):
+    def chk_data_trigger(cls, _p:ProcessBase, stream_dict:dict=None, min_event_time=None, pred_data:Dict[int, Dict]=None):
+        if pred_data is None:
+            pred_data = _p.pred_data
+
         if stream_dict is None:
-            # stream_dict = {key:_p.pred_data[key]['event_queue'].queue for key in _p.pred_data}
-            stream_dict = {key:_p.pred_data[key]['event_queue'] for key in _p.pred_data}
-        
-        for key in _p.pred_data:
+            # stream_dict = {key:pred_data[key]['event_queue'].queue for key in pred_data}
+            stream_dict = {key:pred_data[key]['event_queue'] for key in pred_data}
+
+        for key in pred_data:
             stream = stream_dict[key]
             while len(stream)>0:
                 if stream[0].ctx.get_timestamp() <= _p.event_time:
@@ -157,7 +173,7 @@ class WatermarkStrategy(object):
         min_event_time_t = float("inf")
 
         # detect the data trigger
-        for key in _p.pred_data:
+        for key in pred_data:
             stream = stream_dict[key]
             if len(stream)>0:
                 # get the minimum event time
@@ -170,7 +186,7 @@ class WatermarkStrategy(object):
         matched_pair = {}
         if min_event_time < float("inf"):
             # iterate the stream dict reversely, event time is in the descending order
-            for key in _p.pred_data:
+            for key in pred_data:
                 stream = stream_dict[key]
                 if len(stream)>0:
                     # find the closest event \textbf{after} the min_event_time
@@ -186,12 +202,12 @@ class WatermarkStrategy(object):
             return {}, False, None
         
         # check the data trigger
-        if cls.join_valid(_p, matched_pair):
+        if cls.join_valid(_p, matched_pair, pred_data):
             # event time is advanced
             # _p.event_time = min_event_time
             event_time = max([matched_pair[key].ctx.get_timestamp() for key in matched_pair])
             # pop matched event
-            for key in _p.pred_data:
+            for key in pred_data:
                 if key in matched_pair:
                     # stream_dict[key].pop()
                     stream_dict[key].remove(matched_pair[key])
@@ -202,25 +218,37 @@ class WatermarkStrategy(object):
             return {}, False, None
     
     @classmethod
-    def check_trigger(cls, _p:ProcessBase):
+    def check_trigger(cls, _p:ProcessBase, event_cache:EventCache=None, 
+                      trigger_cache:TriggerCache=None):
         """
         if all the predecessor tasks are completed, return True
         """
         if len(_p.pred_ctrl):
-            for key in _p.pred_ctrl.keys():
-                if not _p.pred_ctrl[key]["valid"]:
+            if trigger_cache is None:
+                pred_ctrl = _p.pred_ctrl
+                event_triggers = _p.event_triggers
+            else:
+                pred_ctrl = trigger_cache[_p.pid]
+                event_triggers = trigger_cache.sensor_cache[_p.pid]
+
+            for key in pred_ctrl.keys():
+                if not pred_ctrl[key]["valid"]:
                     return False
             # to avoid the duplicated context in the condition of job migration
             if len(_p.msg_cache) == 0:
                 _p.build_ctx()
-            # _p.build_ctx()
-            _p.update_ctx("trigger")
+            _p.update_ctx("trigger", pred_ctrl=pred_ctrl)
             # clear the pred_ctrl valid flag
-            _p.reset_depends(type="ctrl")
-            _p.event_triggers.pop(0)
+            _p.reset_depends(type="ctrl", pred_ctrl=pred_ctrl)
+            event_triggers.pop(0)
             return True
         else:
-            matched_pair, status, event_time = cls.chk_data_trigger(_p)
+            if event_cache is None:
+                pred_data = _p.pred_data
+            else:
+                pred_data = event_cache[_p.pid]
+
+            matched_pair, status, event_time = cls.chk_data_trigger(_p, pred_data=pred_data)
             if status:
                 # to avoid the duplicated context in the condition of job migration
                 if len(_p.msg_cache) == 0:
@@ -235,6 +263,7 @@ class WatermarkStrategy(object):
 
     @classmethod
     def chk_release(cls, curr_t, inactive_list:List[ProcessBase], active_list, 
+                    event_cache:EventCache=None, trigger_cache:TriggerCache=None,
                     bin_event_flg:bool=False, 
                     bin_name:str="", DEBUG_FG:bool=False,):
         """
@@ -246,7 +275,7 @@ class WatermarkStrategy(object):
         l_active:List[ProcessBase] = []
 
         for _p in inactive_list:
-            if cls.check_trigger(_p):
+            if cls.check_trigger(_p, event_cache=event_cache, trigger_cache=trigger_cache):
                 l_active.append(_p)
 
 

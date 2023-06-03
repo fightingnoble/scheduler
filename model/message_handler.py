@@ -7,6 +7,7 @@ import numpy as np
 
 if TYPE_CHECKING:
     from task.task_agent import ProcessBase
+    from model.data_pipe import TriggerPipe
 
 def message_trigger(sim_triggered_list:List[ProcessBase], jitter_sim_en, jitter_sim_para, 
                     timestep, curr_t, DEBUG_FG):
@@ -144,8 +145,9 @@ def extract_sensor_event_endless(_p, jitter_sim_en=False, jitter_sim_para=None, 
         i += 1
     
 
-def message_trigger_event_new(event_iter_dict:Dict, inactive_list, glb_p_list,
-                    timestep, curr_t, DEBUG_FG):
+def message_trigger_event_new(event_iter_dict:Dict, inactive_list, glb_p_list, 
+                              sensor_pipe:TriggerPipe, 
+                              timestep, curr_t, DEBUG_FG):
     
     name2p = {p.task.name:p for p in glb_p_list}
     for name, (ingestion_time_iter, event_time_iter) in event_iter_dict.items():
@@ -156,7 +158,10 @@ def message_trigger_event_new(event_iter_dict:Dict, inactive_list, glb_p_list,
         
         assert _p.trigger_mode == "event", "trigger mode is not event"
         if curr_t - _p.next_ingestion_time >= -timestep*numerical_error_tol_rel:
-            _p.event_triggers.append([_p.next_ingestion_time, _p.next_event_time])
+            if sensor_pipe is None:
+                _p.event_triggers.append([_p.next_ingestion_time, _p.next_event_time])
+            else:
+                sensor_pipe.broadcast_message([_p.pid, _p.next_ingestion_time, _p.next_event_time])
             try:
                 _p.next_event_time = next(event_time_iter)
                 _p.next_ingestion_time = next(ingestion_time_iter)
@@ -164,10 +169,9 @@ def message_trigger_event_new(event_iter_dict:Dict, inactive_list, glb_p_list,
                 _p.next_event_time = np.inf
                 _p.next_ingestion_time = np.inf
         
-        if _p in inactive_list:
+        if _p in inactive_list and sensor_pipe is None:
             _p:ProcessBase
             trigger_state = _p.sim_trigger(curr_t, timestep)
             if DEBUG_FG and trigger_state:
                 ingestion_time, event_time = _p.event_triggers[0]
                 print(f"		{_p.task.name} triggered @ {ingestion_time:.6f}")
-

@@ -3,10 +3,14 @@ This file contains the Buffer class.
 This class models the buffer with the following attributes:
     - buffer: a dict, key is the task id, value is the data.
 """
+from __future__ import annotations
 import collections
 import typing
+import copy
 from queue import Queue
 from model.Context_message import ContextMsg
+if typing.TYPE_CHECKING:
+    from task.task_agent import ProcessBase
 
 class Data(object):
     def __init__(self, pid:int, size:int, data_id:typing.Tuple, data_type:str, 
@@ -205,6 +209,64 @@ class LifeTimeModel(object):
             tgt_buffer[pid].sort(key=buffer.sort_fn)
             if len(tgt_buffer[pid]) == 0:
                 del tgt_buffer[pid] 
+
+class EventCache(object):
+    def __init__(self, capacity: int=-1, type: str="data"):
+        self.capacity = capacity
+        self.buffer:typing.Dict[int, typing.Dict[int, typing.Dict]] = {}
+        self.remain_cap = capacity
+        self.sort_fn = lambda x: x.ctx.get_timestamp()
+        self.type = type
+    
+    def new_process(self, _p:ProcessBase):
+        if self.type == "data":
+            self.buffer[_p.pid] = copy.deepcopy(_p.pred_data)
+        elif self.type == "ctrl":
+            self.buffer[_p.pid] = copy.deepcopy(_p.pred_ctrl)
+    
+    def get_pred_data(self, pid):
+        return self.buffer[pid] 
+
+    def put(self, pid, data: Data):
+        self.buffer[pid][data.data_id]["event_queue"].put(data)
+        if self.capacity > 0:
+            self.remain_cap -= data.size
+    
+    def __getitem__(self, pid):
+        return self.buffer[pid]
+
+    # def new_event_queue(self, pid):
+    #     self.buffer[pid] = TaskQueue(sort_f=lambda x: x.ctx.get_timestamp(), descending=False)
+    
+    # def put(self, data: Data):
+    #     if data.pid not in self.buffer:
+    #         self.new_event_queue(data.pid)
+    #     self.buffer[data.pid].put(data)
+    #     if self.capacity > 0:
+    #         self.remain_cap -= data.size
+    
+    # def pop(self, pid, curr_t:float=None, verbose:bool=False):
+    #     if pid not in self.buffer:
+    #         return None
+    #     data = self.buffer[pid].pop()
+    #     if len(self.buffer[pid]) == 0:
+    #         del self.buffer[pid]
+    #     if data is not None and self.capacity > 0:
+    #         self.remain_cap += data.size
+    #     return data
+
+class TriggerCache(EventCache):
+    def __init__(self, capacity: int = -1, type: str = "ctrl"):
+        super().__init__(capacity, type)
+        self.sensor_cache = {}
+    
+    def new_process(self, _p:ProcessBase):
+        super().new_process(_p)
+        self.sensor_cache[_p.pid] = []
+    
+
+# class SensorCache():
+#     def __init__(self, capacity: int=-1, type: str="data"):
 
 if __name__ == "__main__":
     buffer_in = Buffer(100)

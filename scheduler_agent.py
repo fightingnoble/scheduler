@@ -6,7 +6,7 @@ from typing import Dict, List
 from model.task_queue_agent import TaskQueue
 from sched.scheduling_table import SchedulingTableInt
 from task.task_agent import ProcessInt
-from model.buffer import Buffer
+from model.buffer import Buffer, EventCache, TriggerCache
 import warnings
 from collections import OrderedDict
 
@@ -146,6 +146,14 @@ class Scheduler(object):
         self.curr_cfg = Resource_model_int(size=_SchedTab.num_resources)
         self.process_dict: Dict[int, ProcessInt] = {pid:glb_p_list[pid] for pid in _SchedTab.index_occupy_by_id()}
 
+        # event queue
+        self.event_cache = EventCache(type='data')
+        self.trigger_cache = TriggerCache(type='ctrl')
+        for pid in self.process_dict:
+            _p = glb_p_list[pid] 
+            self.event_cache.new_process(_p)
+            self.trigger_cache.new_process(_p)
+
         # create res_cfg, monitor, msg_queue, 
         # self.res_cfg = res_cfg
         # self.monitor = monitor
@@ -242,18 +250,22 @@ class Scheduler(object):
     
     def pendingToReady(self, curr_t, glb_n_task_dict:Dict[str, ProcessInt]):
         # pendingToReady(active_list, ready_queue, buffer, budget_recoder, throttle_list, curr_t, glb_name_p_dict, bin_name, ) 
-        return pendingToReady_cbs(self.buffer, self.budget_recoder, self.active_list, self.ready_queue, self.throttle_list, curr_t, glb_n_task_dict, self._SchedTab.name)
+        return pendingToReady_cbs(self.buffer, self.budget_recoder, self.active_list, 
+                                  self.ready_queue, self.throttle_list, curr_t, 
+                                  glb_n_task_dict, self.event_cache, self._SchedTab.name)
 
     def scheduler_step(self, msg_dispatcher:MsgDispatcher, a_data_pipe: DataPipe, data_pipe: DataPipe,
                        n_slot: int, timestep: int, event_range: List[int], 
                         sim_slot_num: int, curr_t: int, glb_name_p_dict: Dict[str, List[int]], 
                         res_cfg: Dict[str, int], 
                         msg_queue:Queue, a_msg_queue:TaskQueue,
+                        sensor_msg_queue:Queue,
                         monitor:Monitor,
                         DEBUG_FG: bool) -> None:
 
         # scheduler_step(sched, msg_dispatcher, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, DEBUG_FG)
-        return scheduler_step(self, msg_dispatcher, a_data_pipe, data_pipe, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, a_msg_queue, monitor, DEBUG_FG)
+        return scheduler_step(self, msg_dispatcher, a_data_pipe, data_pipe, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, 
+                              res_cfg, msg_queue, a_msg_queue, sensor_msg_queue, monitor, DEBUG_FG)
     
 # =================== intergrated into scheduler class ===================
 def throttleToReady(curr_t, budget_recoder, ready_queue, throttle_list, bin_name:str="", bin_event_flg:bool=False):
@@ -278,7 +290,7 @@ def throttleToReady(curr_t, budget_recoder, ready_queue, throttle_list, bin_name
         # position candidate 
 
 def chk_release(sched, event_range, curr_t, inactive_list:List[ProcessInt], active_list, 
-                _SchedTab, timestep, 
+                _SchedTab, timestep, event_cache:EventCache=None, trigger_cache:TriggerCache=None,
                 bin_event_flg:bool=False, 
                 bin_name:str="", DEBUG_FG:bool=False,):
     """
@@ -297,13 +309,7 @@ def chk_release(sched, event_range, curr_t, inactive_list:List[ProcessInt], acti
     #         print(f"({bin_name})")
 
     for _p in inactive_list:
-        if _p.check_depends():
-            # if curr_t >= _p.task.ERT and _p.trigger_mode != "N": # constraint the fisrt release time of the event triggered task
-            _p.build_ctx()
-            # advance the trigger time
-            if len(_p.pred_ctrl):
-                _p.event_triggers.pop(0)
-            _p.update_ctx("trigger")
+        if _p.check_depends(event_cache=event_cache, trigger_cache=trigger_cache):
             l_active.append(_p)
 
     if bin_name and len(l_active) and not bin_event_flg:
@@ -596,16 +602,18 @@ def updateRunningQueue(timestep, running_queue, res_cfg):
 
 def pendingToReady_cbs(buffer:Buffer, budget_recoder, 
                        active_list:List[ProcessInt], ready_queue, throttle_list, 
-                       curr_t, glb_n_task_dict:Dict[str, ProcessInt], bin_name=""):
+                       curr_t, glb_n_task_dict:Dict[str, ProcessInt], event_cache:EventCache=None,
+                       bin_name=""):
     # waitingQueue[i]->waitTime != 0 && waitingQueue[i]->waitTime % waitingQueue[i]->io == 0
     l_ready:List[ProcessInt] = []
     for _p in active_list:
         # check data availability
         w_avail = _p.pid in buffer.buffer_w
-        # in_avail = _p.check_depends_data(buffer, glb_n_task_dict=glb_n_task_dict)
+        # in_avail = _p.check_depends_data(buffer, glb_n_task_dict=glb_n_task_dict, event_cache)
 
         if len(_p.pred_ctrl)>0 and len(_p.pred_data)>0: 
-            matched_pair, in_avail, event_time = WatermarkStrategy.check_data_depends(_p, buffer, glb_n_task_dict, _p.msg_cache[0].get_timestamp())
+            matched_pair, in_avail, event_time = WatermarkStrategy.check_data_depends(_p, buffer, glb_n_task_dict, 
+                                                                                      _p.msg_cache[0].get_timestamp(), event_cache)
             if in_avail:
                 _p.msg_cache[0].msg_context["time_stamp"] = event_time
         else:
@@ -642,7 +650,7 @@ def pendingToReady_cbs(buffer:Buffer, budget_recoder,
 def scheduler_step(sched, msg_dispatcher:MsgDispatcher, a_data_pipe:DataPipe, w_data_pipe:DataPipe, 
                     n_slot, timestep, 
                     event_range, sim_slot_num, curr_t, 
-                    glb_name_p_dict, res_cfg, msg_queue, a_msg_queue, 
+                    glb_name_p_dict, res_cfg, msg_queue, a_msg_queue, sensor_msg_queue, 
                     monitor:Monitor, DEBUG_FG, quantum_check_en:bool = False, quantumSize=None):
     weight_wait_queue, ready_queue, running_queue, \
         miss_list, preempt_list, issue_list, completed_list, throttle_list,\
@@ -653,7 +661,9 @@ def scheduler_step(sched, msg_dispatcher:MsgDispatcher, a_data_pipe:DataPipe, w_
 
     curr_cfg, _SchedTab, budget_recoder, rsc_recoder_his, process_dict = sched.get_state()
     buffer:Buffer = sched.get_buffer()
-        
+    event_cache:EventCache = sched.event_cache
+    trigger_cache:TriggerCache = sched.trigger_cache
+
     # extract the scheduling table
     tab_temp_size = len(_SchedTab.scheduling_table)
     tab_pointer = n_slot % tab_temp_size
@@ -693,13 +703,18 @@ def scheduler_step(sched, msg_dispatcher:MsgDispatcher, a_data_pipe:DataPipe, w_
 
     a_data_pipe.data_tranfer_sim(curr_t)
     # out of order originated from data transfering 
-    bin_event_flg = data_pipe_read(curr_t, glb_name_p_dict, process_dict, buffer, bin_name, bin_event_flg, a_msg_queue)
+    bin_event_flg = data_pipe_read(curr_t, glb_name_p_dict, process_dict, buffer, bin_name, bin_event_flg, a_msg_queue, event_cache)
+
+    trigger_read(inactive_list, sensor_msg_queue, trigger_cache, process_dict, timestep, curr_t, True)
 
     # check release
     # check the dependencies of the tasks in inactive list
     # if the dependencies are satisfied, move the task to the wait queue
-    # bin_event_flg = chk_release(sched, event_range, curr_t, inactive_list, active_list, _SchedTab, timestep, bin_event_flg, bin_name) 
-    bin_event_flg = WatermarkStrategy.chk_release(curr_t, inactive_list, active_list, bin_event_flg, bin_name)
+    # bin_event_flg = chk_release(sched, event_range, curr_t, inactive_list, active_list, _SchedTab, timestep, 
+    #                             event_cache, trigger_cache,
+    #                             bin_event_flg, bin_name) 
+    bin_event_flg = WatermarkStrategy.chk_release(curr_t, inactive_list, active_list, event_cache, trigger_cache,
+                                                  bin_event_flg, bin_name)
 
 
     # # instruction prefetching
@@ -805,7 +820,7 @@ def scheduler_step(sched, msg_dispatcher:MsgDispatcher, a_data_pipe:DataPipe, w_
 
     # check data availability: some tasks may be prefetched
     # TODO: model the runtime weight and feature map transfering 
-    pendingToReady_cbs(buffer, budget_recoder, active_list, ready_queue, throttle_list, curr_t, glb_name_p_dict, bin_name, ) 
+    pendingToReady_cbs(buffer, budget_recoder, active_list, ready_queue, throttle_list, curr_t, glb_name_p_dict, event_cache, bin_name, ) 
     # move the task to the ready queue
     bin_event_flg = throttleToReady(curr_t, budget_recoder, ready_queue, throttle_list, bin_name, bin_event_flg)
 
@@ -1170,7 +1185,33 @@ def scheduler_step(sched, msg_dispatcher:MsgDispatcher, a_data_pipe:DataPipe, w_
             if np.logical_xor(curr_cfg_ref != next_cfg, curr_cfg.slot_s == n_slot+1 or curr_cfg.slot_e == n_slot):
                 print("ERROR: cfg not match")
 
-def data_pipe_read(curr_t, glb_name_p_dict, process_dict, buffer, bin_name, bin_event_flg, a_msg_queue: List[Data]):
+def trigger_read(inactive_list:List[ProcessInt], sensor_msg_queue:List, 
+                trigger_cache:TriggerCache, process_dict:Dict,
+                timestep, curr_t, DEBUG_FG):
+
+    for pid, next_ingestion_time, next_event_time in sensor_msg_queue:
+        if pid in process_dict:
+            trigger_cache.sensor_cache[pid].append([next_ingestion_time, next_event_time])
+    sensor_msg_queue.clear()
+
+    # read the trigger cache
+    for _p in inactive_list:
+        if trigger_cache is None:
+            pred_ctrl = _p.pred_ctrl
+            event_triggers = _p.event_triggers
+        else:
+            pred_ctrl = trigger_cache[_p.pid]
+            event_triggers = trigger_cache.sensor_cache[_p.pid]
+        
+        trigger_state = _p.sim_trigger(curr_t, timestep, pred_ctrl, event_triggers)
+        if event_triggers is None:
+            event_triggers = _p.event_triggers
+        if DEBUG_FG and trigger_state:
+            ingestion_time, event_time = event_triggers[0]
+            print(f"		{_p.task.name} triggered @ {ingestion_time:.6f}")
+
+def data_pipe_read(curr_t, glb_name_p_dict, process_dict, buffer, bin_name, bin_event_flg, a_msg_queue: List[Data], 
+                   event_cache:EventCache=None):
     msg_dict:Dict[int, Data] = {}
     # read out all message and clear the message pipe
     for data in a_msg_queue:
@@ -1187,7 +1228,11 @@ def data_pipe_read(curr_t, glb_name_p_dict, process_dict, buffer, bin_name, bin_
 
     for tgt_pid, data in msg_dict.items():
         _p = process_dict[tgt_pid]
-        for key, attr in _p.pred_data.items():
+        if event_cache is None:
+            pred_data = _p.pred_data
+        else:
+            pred_data = event_cache[tgt_pid]
+        for key, attr in pred_data.items():
             if data.pid == glb_name_p_dict[key].pid:
                 attr["event_queue"].put(data)
                 attr["valid"] = True
