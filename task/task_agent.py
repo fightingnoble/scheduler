@@ -62,13 +62,14 @@ class ProcessBase(object):
         self.io_time = task.io_time       # I/O time
         self.totcpu = task.totcpu         # total cpu time, ++ when cpu burst
 
-        self.released = False
         self.i_offset = task.i_offset     # offset of the trigger time
+        self.exp_comp_t = task.exp_comp_t # total cpu time, ++ when cpu burst
+        self.cbs_en = task.cbs_en         # whether the task has a constant bandwidth, i.e., applys resource reservation algorithm
+
+        self.released = False
         self.release_time = release_t     # recored when the process is released
         self.deadline = deadline_abs      # recored when the process is generated  
-        self.exp_comp_t = task.exp_comp_t # total cpu time, ++ when cpu burst
         self.remburst = 0                 # Record the remaining cpu time for current I/O op, -- when cpu burst, set when moved from waiting to running
-        self.cbs_en = task.cbs_en         # whether the task has a constant bandwidth, i.e., applys resource reservation algorithm
         self.rem_flop_budget = {}          # the predefined budget of execution time, -- when cpu burst excceds the budget, moved from running to throttled, set when process is activated
 
         self.ready_time = -1 
@@ -87,6 +88,20 @@ class ProcessBase(object):
         self.event_time = -1    # record the event_time of the last process 
         self.next_event_time = None
         self.next_ingestion_time = None
+
+    def reset_state_vars(self,):
+        self.released = False
+        self.ready_time = float("inf")
+        self.ready = False
+
+        # kill & drop the total execution 
+        self.remburst = 0
+        self.currentburst = 0
+        self.burst = 0
+        self.totburst = 0
+        self.waitTime = 0
+        self.cumulative_executed_time = 0
+        self.set_state("suspend")
 
     def set_state(self, state):
         assert state in task_lifetime.keys()
@@ -215,6 +230,8 @@ class ProcessBase(object):
         """
         if pred_ctrl is None:
             pred_ctrl = self.pred_ctrl
+        if event_triggers is None:
+            event_triggers = self.event_triggers
         if self.task.trigger_mode == "timer":
             if math.isclose(time%self.task.period, self.i_offset, abs_tol=time_step*0.99):
                 for key in pred_ctrl.keys():
@@ -284,6 +301,18 @@ class ProcessInt(ProcessBase):
         self.core_min = task.core_min
         self.core_list = task.core_list
         self.parallel_mode = task.parallel_mode
+
+        self.is_starving = False
+
+    def reset_state_vars(self):
+        super().reset_state_vars()
+        self.allocated_resource.clear()
+        self.required_resource_size = self.task.required_resource_size
+        self.input_ready = False
+        self.output_ready = False
+        self.weight_ready = False
+        self.is_starving = False
+        
 
     def rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE):
         # release time round up: task should not be released earlier than the release time

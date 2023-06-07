@@ -259,13 +259,13 @@ _p.event_time的设置时刻，执行完才设置。在此之前先缓存在ctx�
 错误进入active状态依然是问题（一方面导致rem_flops 多次启动出错，另一方面是导致生成多份ctx 在msg_cache中）
     为了防止生成多份ctx
     1. 仅允许msg_cache被设置一次：
-    ``       if len(_p.msg_cache) == 0:             _p.build_ctx()   ``
+    ``      if len(_p.msg_cache) == 0:             _p.build_ctx()  ``
     2. 保证其他队列执行任务时（新的任务不是继续中断的任务）基于新的ctx：
     （假设第一次执行在A上完成后会msg_cache.pop(0)，仅仅采用1，会导致其他队列中的任务，访问ctx的时候出现msg_cache为空的错误）
     a. 通过msg_dispatcher 发布消息，当任务完成的时候广播complete消息
     b. partition收到消息之后，过滤消息，确认active，ready，throttle队列中有目标任务之后移除这些任务
 
-    为了防止rem_flops 多次启动出错``           if _p.remburst == 0:                 _p.remburst += _p.task.flops   ``
+    为了防止rem_flops 多次启动出错``          if _p.remburst == 0:                 _p.remburst += _p.task.flops  ``
 对于状态切换时，指示属性的设置进行修补：
     _p.released
     _p.ready
@@ -298,6 +298,7 @@ _p.event_time的设置时刻，执行完才设置。在此之前先缓存在ctx�
 这段代码搜索最小值的时候，队列实际上是降序的，第一个是最大值
 
 ## 20230604
+
 Issue: trigger 不能正常触发多个位于不用队列中的副本：
 
     ![trigger issue across multiple-queues](/home/zhangchg/git_repo/scheduler/doc/imgs/trigger_issue.png)
@@ -306,5 +307,48 @@ Issue: trigger 不能正常触发多个位于不用队列中的副本：
 
     对data 做了广播，但是却共享了消息队列，每个副本都将收到的msg放到了该队列里面（也就是说，一个队列里一个消息实际上有好多份）
     trigger 没有广播，也没有复制，所以只有最早满足条件的可以进入激活状态
-  
+
   方案：解决在每个partition中单独设置，dependency的queue
+
+ 
+## 20230605
+
+fix bug: chk_release input parameters miss match
+
+```
+bin_event_flg = WatermarkStrategy.chk_release(curr_t, inactive_list, active_list, bin_event_flg, bin_name)
+```
+
+## 20230606
+
+fix bug: 
+1. glb_sched has no output
+
+```
+    def sim_trigger(self, time=None, time_step=1e-6, pred_ctrl:Dict[int, Dict]=None, event_triggers:List[Tuple]=None):
+        """
+        if the task is activated, return True
+        """
+        ...
+        if event_triggers is None:
+            event_triggers = self.event_triggers
+```
+glb_sched: Planning_2 is matched in two queues:
+a lost fix of the bug commited at 20230601 ++ 
+> 发现一个隐患，Taskqueue默认是降序排列，因此在顺序访问和实例化的时候应该注意顺序是否和预期匹配
+> 这段代码搜索最小值的时候，队列实际上是降序的，第一个是最大值
+
+## 20230607
+detect the lateness of the current chunk of the task rather than the whole task: 
+ - use chunk_s to replace _p.release_time, 
+ - use _p.rem_flop_budget to replace _p.totburst
+
+fix scheduler trigger condition and reallocation condition:
+The cases are classified in to 5 condition 
+preemption, ressignment-in-turn (o3/order), curveup, replenishment
+TODO: refine the monitor condition, (monitor the ready tasks and the head of the queue)
+
+add cfg constraint to the dynamic scheduler, (TODO: add constraints to the static global scheduler)
+
+fix issue: 
+the constraints used in timeline generation and rectifying at scheduling table generation is not aligned

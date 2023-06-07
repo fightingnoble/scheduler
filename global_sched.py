@@ -514,11 +514,11 @@ def push_step_new(sched: Scheduler, msg_dispatcher: MsgDispatcher,
     # check the dependencies of the tasks in inactive list
     # if the dependencies are satisfied, move the task to the wait queue
     # bin_event_flg = chk_release(sched, event_range, curr_t, inactive_list, active_list, _SchedTab, timestep, bin_event_flg, bin_name) 
-    bin_event_flg = WatermarkStrategy.chk_release(curr_t, inactive_list, active_list, bin_event_flg, bin_name)
+    bin_event_flg = WatermarkStrategy.chk_release(curr_t, inactive_list, active_list, )
 
     # check data availability: some tasks may be prefetched
     # TODO: model the runtime weight and feature map transfering 
-    pendingToReady(active_list, ready_queue, buffer, curr_t, glb_name_p_dict, bin_name, ) 
+    pendingToReady(sched, active_list, ready_queue, buffer, curr_t, glb_name_p_dict, bin_name, ) 
 
     # sort the tasks in the ready queue and the running queue
     sort_fn = lambda x: x.deadline
