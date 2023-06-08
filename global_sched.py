@@ -336,7 +336,7 @@ def push_task_into_bins_new(
 
                             glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,
                             total_cores:int, quantum_check_en, quantumSize, 
-                            timestep, hyper_p, 
+                            timestep, hyper_p, spatial_rda_ratio, temporal_rda_ratio,
 
                             scheduler_list: List[Scheduler], monitor_list:List[Monitor],
                             msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
@@ -396,6 +396,7 @@ def push_task_into_bins_new(
     for _p in glb_p_list:
         if _p.task.pre_assigned_resource_flag:
             size_l.append(_p.task.pre_assigned_resource.main_size + _p.task.pre_assigned_resource.RDA_size)
+            # size_l.append(_p.task.pre_assigned_resource.main_size + math.ceil(_p.task.pre_assigned_resource.RDA_size*spatial_rda_ratio))
             name_l.append(_p.task.name)
 
     # iter_next_bin_obj = bin_iter_list(_new_bin, size_l, name_l)
@@ -420,7 +421,7 @@ def push_task_into_bins_new(
         # push_step(init_p_list, quantum_check_en, quantumSize, timestep, animation, event_range, sim_slot_num, pid_max, wait_queue, ready_queue, running_queue, rsc_recoder, rsc_recoder_his, issue_sort_fn, issue_list, completed_list, miss_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, frame_list, ax, plot_window, n_slot, curr_t)
         message_trigger_event_new(event_iter_dict, inactive_list, glb_p_list, None, timestep, curr_t, True) 
         push_step_new(sched, msg_dispatcher, a_data_pipe, w_data_pipe, 
-                           n_slot, timestep, 
+                           n_slot, timestep, temporal_rda_ratio, 
                            event_range, sim_slot_num, curr_t, 
                            glb_name_p_dict, None, 
                              issue_sort_fn, issue_list, 
@@ -448,7 +449,7 @@ def push_task_into_bins_new(
 
 def push_step_new(sched: Scheduler, msg_dispatcher: MsgDispatcher,
                   a_data_pipe: DataPipe, w_data_pipe: DataPipe,
-                  n_slot: int, timestep: float,
+                  n_slot: int, timestep: float, temporal_rda_ratio, 
                   event_range: float, sim_slot_num: int, curr_t: float,
                   glb_name_p_dict, res_cfg: Resource_model_int,
                   issue_sort_fn, issue_list,
@@ -484,7 +485,7 @@ def push_step_new(sched: Scheduler, msg_dispatcher: MsgDispatcher,
     # check whether the task is miss
     # TODO: other ready tasks shoud be checked
     # TODO: cache eviction
-    bin_event_flg = check_miss(sched, None, curr_t, None, weight_wait_queue, ready_queue, 
+    bin_event_flg = check_miss(sched, None, None, curr_t, None, weight_wait_queue, ready_queue, 
                                running_queue, miss_list, throttle_list, active_list, 
                                inactive_list, buffer, bin_event_flg, bin_name, 
                                mode="future", bin_list=bin_list, n_slot=n_slot, rsc_recoder=rsc_recoder)
@@ -523,7 +524,7 @@ def push_step_new(sched: Scheduler, msg_dispatcher: MsgDispatcher,
     # sort the tasks in the ready queue and the running queue
     sort_fn = lambda x: x.deadline
 
-    glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, ready_queue, running_queue, rsc_recoder, 
+    glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, temporal_rda_ratio, ready_queue, running_queue, rsc_recoder, 
                 rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, n_slot, curr_t)
 
     # issue the task

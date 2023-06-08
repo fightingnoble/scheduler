@@ -13,7 +13,7 @@ from model.task_queue_agent import TaskQueue
 from task.task_agent import ProcessInt
 import warnings
 
-def glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, ready_queue, running_queue, rsc_recoder, 
+def glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, temporal_rda_ratio, ready_queue, running_queue, rsc_recoder, 
                   rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list:TaskQueue, bin_name_list, n_slot, curr_t):
     # =================================================
     # push the ready task into the idle slot
@@ -56,7 +56,7 @@ def glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, ready_q
         #         we should not issue the task or compensate the resource latter. 
 
         # issue the task
-        allocate_rsc_4_process_new(_p, n_slot, process_dict, timestep, FLOPS_PER_CORE, quantumSize,  
+        allocate_rsc_4_process_new(_p, n_slot, process_dict, timestep, temporal_rda_ratio, FLOPS_PER_CORE, quantumSize,  
                 rsc_recoder, rsc_recoder_his, ready_queue, running_queue, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, 
                 quantum_check_en, strategy='first_fit', glb_key=sort_fn, verbose=False, DEBUG=False)
 
@@ -71,7 +71,7 @@ def glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, ready_q
 def allocate_rsc_4_process_new(_p:ProcessInt, n_slot:int, 
                 # init_p_list:List[ProcessInt], 
                 process_dict:Dict[int, ProcessInt],
-                timestep, FLOPS_PER_CORE, quantumSize, 
+                timestep, temporal_rda_ratio, FLOPS_PER_CORE, quantumSize, 
                 rsc_recoder:dict, rsc_recoder_his:Dict[int, LRUCache], 
                 ready_queue:TaskQueue, running_queue:TaskQueue, 
                 issue_list:TaskQueue, preempt_list:List[ProcessInt], 
@@ -81,7 +81,9 @@ def allocate_rsc_4_process_new(_p:ProcessInt, n_slot:int,
 
     # expected rsc_size and slot number
     time_slot_s, time_slot_e, req_rsc_size = _p.rsc_req_estm(n_slot, timestep, FLOPS_PER_CORE)
-    expected_slot_num = time_slot_e - time_slot_s
+    expected_slot_num = math.ceil(_p.totcpu / (req_rsc_size * timestep * FLOPS_PER_CORE))
+    # expected_slot_num = time_slot_e - time_slot_s
+    time_slot_e = min(time_slot_s + int(np.ceil(expected_slot_num * (temporal_rda_ratio + 1))), time_slot_e)
 
     # try to push the task into the bins in the bin_list
     state, bin_id, succ_info, fail_info = bin_select(_p, time_slot_s, time_slot_e, req_rsc_size, 

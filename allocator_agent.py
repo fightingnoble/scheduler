@@ -506,6 +506,8 @@ if __name__ == "__main__":
     parser.add_argument("--seed", default=0, type=int, help="random seed")
     parser.add_argument("--barrier_dis", default=False, action="store_true", help="disable barrier")
     parser.add_argument("--data_lifetime_mode", default="static", type=str, help="lifetime mode: most_recent, ref_count, timeout, watermark") 
+    parser.add_argument("--spatial_rda_ratio", default=0.2, type=float, help="spatial ratio")
+    parser.add_argument("--temporal_rda_ratio", default=0.05, type=float, help="temporal ratio")
 
     args = parser.parse_args() 
     glb_n_task_dict = load_taskint(args.verbose)
@@ -726,7 +728,7 @@ if __name__ == "__main__":
 
             glb_p_list, affinity_cfg, event_iter_dict,
             num_cores, args.quantum_check_en, quantumSize, 
-            sim_step, hyper_p, 
+            sim_step, hyper_p, args.spatial_rda_ratio, args.temporal_rda_ratio,
 
             scheduler_list, monitor_list,
             msg_dispatcher,

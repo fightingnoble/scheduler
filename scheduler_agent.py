@@ -197,13 +197,13 @@ class Scheduler(object):
         return chk_release(self, event_range, curr_t, self.inactive_list, self.active_list, self._SchedTab, timestep, 
                            bin_event_flg, self._SchedTab.name)
 
-    def check_miss(self,
+    def check_miss(self, msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
                             curr_t, res_cfg, 
                             bin_event_flg:bool=False):
 
         # check_miss(budget_recoder, curr_t, res_cfg, weight_wait_queue, ready_queue, running_queue, miss_list, 
                             # throttle_list, active_list, inactive_list, buffer, bin_event_flg, bin_name)
-        return check_miss(self, self.budget_recoder, curr_t, res_cfg, self.weight_wait_queue, self.ready_queue, self.running_queue, self.miss_list,
+        return check_miss(self, self.budget_recoder, msg_dispatcher, curr_t, res_cfg, self.weight_wait_queue, self.ready_queue, self.running_queue, self.miss_list,
                             self.throttle_list, self.active_list, self.inactive_list, self.buffer, bin_event_flg, self._SchedTab.name)
 
     def check_throttle(self,
@@ -214,7 +214,7 @@ class Scheduler(object):
         return check_throttle(self, self.budget_recoder, curr_t, res_cfg, self.weight_wait_queue, self.ready_queue, self.running_queue, self.miss_list,
                             self.throttle_list, self.active_list, self.inactive_list, bin_event_flg, self._SchedTab.name)
 
-    def check_complete(self, timestep, # msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
+    def check_complete(self, timestep, msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
                        a_data_pipe:DataPipe,
                         curr_t, res_cfg, 
                         bin_event_flg:bool=False,
@@ -223,7 +223,7 @@ class Scheduler(object):
                         bin_list:List[SchedulingTableInt]=None, 
                         n_slot:int=0, rsc_recoder=None,):
         # check_complete(budget_recoder, timestep, msg_dispatcher, curr_t, res_cfg, running_queue, completed_list, inactive_list, buffer, bin_event_flg, bin_name)
-        return check_complete(self, self.budget_recoder, timestep, None, a_data_pipe, curr_t, res_cfg, 
+        return check_complete(self, self.budget_recoder, timestep, msg_dispatcher, a_data_pipe, curr_t, res_cfg, 
                               self.running_queue, self.completed_list, self.inactive_list, self.buffer, 
                               bin_event_flg, self._SchedTab.name, save_trace, mode, bin_list, n_slot, rsc_recoder) 
 
@@ -336,7 +336,8 @@ def chk_release(sched, event_range, curr_t, inactive_list:List[ProcessInt], acti
 
 
 def check_miss(sched: Scheduler,
-               budget_recoder, curr_t, res_cfg, wait_queue, ready_queue,
+               budget_recoder, msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
+               curr_t, res_cfg, wait_queue, ready_queue,
                running_queue, miss_list, throttle_list, active_list, inactive_list, buffer,
                bin_event_flg: bool = False,
                bin_name: str = "", mode: str = "current",
@@ -378,6 +379,10 @@ def check_miss(sched: Scheduler,
 
             running_queue.remove(_p)
         print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!")
+
+        if msg_dispatcher is not None:
+            msg_dispatcher.broadcast_message(f"TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}({bin_name})!!")
+
         _p.task.missed_deadline_count += 1
         # _p.release_time += _p.task.period
         _p.deadline += _p.task.period
@@ -668,7 +673,7 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
     # check whether the task is miss
     # TODO: other ready tasks shoud be checked
     # TODO: cache eviction
-    bin_event_flg = check_miss(sched, budget_recoder, curr_t, res_cfg, weight_wait_queue, ready_queue, running_queue, miss_list, 
+    bin_event_flg = check_miss(sched, budget_recoder, msg_dispatcher, curr_t, res_cfg, weight_wait_queue, ready_queue, running_queue, miss_list, 
                             throttle_list, active_list, inactive_list, buffer, bin_event_flg, bin_name)
 
     bin_event_flg = check_throttle(sched, budget_recoder, curr_t, res_cfg, weight_wait_queue, ready_queue, running_queue, miss_list, 
@@ -771,8 +776,7 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
     w_msg_queue.clear()
 
     # 定义正则表达式模式
-    pattern = r'TASK (\d+):([\w_]+)\((\d+)\) COMPLETED @ ([\d.]+)/([\d.]+)\(([\w_]+)\)!!'
-    
+    pattern = r'TASK (\d+):([\w_]+)\((\d+)\) (?:COMPLETED|MISSED DEADLINE) @ ([\d.]+)/([\d.]+)\(([\w_]+)\)!!'
     msg_list = []
     # read out all message and clear the message pipe
     while not msg_queue.empty():
@@ -997,6 +1001,8 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
                 _p.required_resource_size = req_rsc_size
 
             sched.new_ready_flg = False
+            for pid in budget_recoder:
+                budget_recoder[pid][3] = False
 
             if rsc_map != pre_rsc:
                 new_pid = set(rsc_map.keys()) - set(pre_rsc.keys())
@@ -1029,8 +1035,6 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
                     print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) ctx switch at {curr_t:.6f}({pre_rsc[_p.pid]} -> {rsc_map[_p.pid]});")
                     res_cfg.release(_p.pid)
                     res_cfg.allocate(_p.pid, rsc_map[_p.pid])
-                    if trigger_condC:
-                        budget_recoder[_p.pid][3] = False
                 ctx_switch_list.clear()
 
                 # if issue the task to runnning list
@@ -1393,7 +1397,7 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data
     # check whether the task is miss
     # TODO: other ready tasks shoud be checked
     # TODO: cache eviction
-    bin_event_flg = check_miss(sched, None, curr_t, res_cfg, weight_wait_queue, ready_queue, running_queue, miss_list, 
+    bin_event_flg = check_miss(sched, None, None, curr_t, res_cfg, weight_wait_queue, ready_queue, running_queue, miss_list, 
                             throttle_list, active_list, inactive_list, buffer, bin_event_flg, bin_name)
 
     # spill out the data of type "output", which is expired
