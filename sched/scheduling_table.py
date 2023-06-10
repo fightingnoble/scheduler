@@ -135,7 +135,7 @@ class SchedulingTableInt(object):
     def insert_task(self, task:ProcessInt, req_rsc_size:int, time_slot_s:int, time_slot_e:int, expected_slot_num:int, 
                     verbose=False, DEBUG=False)->Tuple[bool, Union[int,List[int]], Union[int,List[int]], Union[int,List[int]]]: 
         """
-        play a insert-based scheduling: 
+        play insert-based scheduling: 
         1. search available tensor cores at each slot
         2. insert the task into the scheduling table at a proper interval (here we adapt First-Fit)
             return success or not, the start time slot, the allocated resources, the allocated time slots
@@ -143,8 +143,8 @@ class SchedulingTableInt(object):
         """ 
         rsc_avl = self.idx_free_by_slot(time_slot_s, time_slot_e, key=task.pid)
         rsc_avl = np.array(rsc_avl)
-        # check if the task can be scheduled with expected resources
-        # the task can be scheduled at any time slot
+        # check if the task can be scheduled with the expected resources
+        # The task can be scheduled at any time slot
         # bug
         if np.all(rsc_avl >= req_rsc_size) and (time_slot_e - time_slot_s) >= expected_slot_num:
             # allocate resources 
@@ -166,13 +166,13 @@ class SchedulingTableInt(object):
                     return True, alloc_slot_s, req_rsc_size, expected_slot_num
 
             # redistribute the resources to the intervals
-            # based on the priciple of as soon as possible
+            # based on the principle of as soon as possible
             
             # current allocation (C)
             curr_alloc = np.zeros(len(s), dtype=int)
             curr_slot = np.zeros(len(s), dtype=int)
 
-            # avalable (A)
+            # available (A)
             rsc_avl_tmp = np.zeros(len(s), dtype=int) 
 
             # required (R)
@@ -246,7 +246,7 @@ class SchedulingTableInt(object):
             # allocate resources
             idx = curr_alloc.nonzero()[0]
             for i in range(len(idx)):
-                alloc_slot_s = time_slot_s+s[idx[i]]
+                alloc_slot_s = time_slot_s + s[idx[i]]
                 for rsc_map in self.scheduling_table[alloc_slot_s:alloc_slot_s+int(curr_slot[idx[i]])]:
                     rsc_map.allocate(task.pid, curr_alloc[idx[i]], verbose)
             
@@ -641,7 +641,7 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[
 
                 size_plus = []
                 size_minus = []
-                for pid in old_pid:
+                for pid in sorted(old_pid):
                     old_size = pre_rsc[pid]
                     new_size = rsc_map[pid]
                     if new_size > old_size:
@@ -661,7 +661,7 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[
                         aval_pos.sort()
                         # get the start position of the old task
                         cum_pos = position_dict[pid][0][0]
-                        # divide the avaliable position into two parts
+                        # divide the available position into two parts
                         left_pos = aval_pos[:aval_pos.index(cum_pos)]
                         right_pos = aval_pos[aval_pos.index(cum_pos):]
                         # select the leftmost position from cum_pos
@@ -685,20 +685,41 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[
                 # pick a proper position for the new task in the available position
                 for pid in new_pid:
                     p_size = rsc_map[pid]
-                    # select the leftmost position
-                    interval_picked = aval_pos[:p_size]
-                    # check if the position is continuous
-                    interval_picked.sort()
-                    # remove selected position from aval_pos
-                    aval_pos = [i for i in aval_pos if i not in interval_picked]
-                    start = [interval_picked[0]]
-                    size = []
-                    for i in range(p_size-1):
-                        if interval_picked[i] != interval_picked[i+1]-1:
-                            size.append(interval_picked[i]-start[-1]+1)
-                            start.append(interval_picked[i+1])
-                    size.append(interval_picked[-1]-start[-1]+1)
-                    position_dict[pid] = [start, size, True]
+                    # search for a gap in the available positions that can accommodate the task's new size
+                    gap_start = None
+                    gap_size = 0
+                    for pos in aval_pos:
+                        if gap_start is None:
+                            gap_start = pos
+                        gap_size += 1
+                        if gap_size == p_size:
+                            break
+                        if pos + 1 not in aval_pos:
+                            gap_start = None
+                            gap_size = 0
+
+                    if gap_start is not None and gap_size == p_size:
+                        # allocate the task to the found gap
+                        start = [gap_start]
+                        size = [gap_size]
+                        position_dict[pid] = [start, size, True]
+                        # remove the selected positions from aval_pos
+                        aval_pos = [i for i in aval_pos if not gap_start <= i < gap_start + gap_size]
+                    else:
+                        # select the leftmost position
+                        interval_picked = aval_pos[:p_size]
+                        # check if the position is continuous
+                        interval_picked.sort()
+                        # remove selected position from aval_pos
+                        aval_pos = [i for i in aval_pos if i not in interval_picked]
+                        start = [interval_picked[0]]
+                        size = []
+                        for i in range(p_size-1):
+                            if interval_picked[i] != interval_picked[i+1]-1:
+                                size.append(interval_picked[i]-start[-1]+1)
+                                start.append(interval_picked[i+1])
+                        size.append(interval_picked[-1]-start[-1]+1)
+                        position_dict[pid] = [start, size, True]
                 
                 # update the pre_rsc                                                
                 pre_idx = rsc_map_idx

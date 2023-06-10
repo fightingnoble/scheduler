@@ -349,8 +349,11 @@ def check_miss(sched: Scheduler,
     for _p in (active_list + ready_queue.queue + running_queue.queue):
     # for _p in (running_queue.queue):
         # !!!!!!!!!!!! Bug Here !!!!!!!!!!!!!
-        if _p.deadline < curr_t and _p.task.criticality == "hard":
-            miss_list.append(_p)
+        if _p.deadline < curr_t: 
+            if _p.task.criticality == "hard":
+                miss_list.append(_p)
+            else:
+                warnings.warn(f"Task {_p.task.id}:{_p.task.name}({_p.pid}) violate timing constraint @ {_p.deadline:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!")
 
     if bin_name and len(miss_list) and not bin_event_flg:
         bin_event_flg = True
@@ -916,6 +919,7 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
                 chunk_flops = chunk_alloc * chunk_slot_num * timestep * FLOPS_PER_CORE
                 chunk_e = chunk_s + chunk_slot_num
                 # late_slot_num = fn_trig(_p) 
+                planned_flops = sum([v for v in _p.rem_flop_budget.values() if v > flop_error_tol_abs])
 
                 # - We discuss this issue in two scenarios:
                 #     1. with data arriving on time: allocate the resources according to the budget
@@ -929,16 +933,22 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
 
                 assert chunk_s <= n_slot, "chunk_s {:d} > n_slot {:d}".format(chunk_s, n_slot)
                 if chunk_s < n_slot < chunk_e:
-                    # case 1: newest assigned budget is still available                    
-                    #   tries to finish the remaining work assigned by the configuration chunk until the now
+                    # case 1: release late
                     assert chunk_e == curr_cfg.slot_e + 1
-                    planned_flops = sum(_p.rem_flop_budget.values())
-                    req_rsc_size = math.ceil(planned_flops/(chunk_e + 1 - n_slot)/timestep /FLOPS_PER_CORE) 
+                    req_rsc_size = math.ceil(planned_flops/(chunk_e - n_slot)/timestep /FLOPS_PER_CORE) 
                 elif n_slot >= chunk_e:
-                    # case 2: newest assigned budget is skipped
+                    # case 3: current chunk is late
+                    #   newest assigned budget is skipped
                     req_rsc_size = curr_aval_rsc
                 else:
-                    req_rsc_size = chunk_alloc
+                    if round(planned_flops, flop_error_tol_bit) > round(chunk_flops, flop_error_tol_bit):
+                        # case 2: previous chunk is late
+                        #   newest assigned budget is still available but not enough
+                        req_rsc_size = math.ceil(planned_flops/(chunk_e + 1 - n_slot)/timestep /FLOPS_PER_CORE)
+                    else:
+                        # newest assigned budget is still available                    
+                        # tries to finish the remaining work assigned by the configuration chunk until the now
+                        req_rsc_size = chunk_alloc
 
 
                 # **************************************************************
@@ -947,7 +957,7 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
                 # **************************************************************
 
                 if req_rsc_size > curr_aval_rsc:
-                    warnings.warn(f"TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) is starving {req_rsc_size-aval_rsc:d} cores")
+                    warnings.warn(f"TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) is starving {req_rsc_size-curr_aval_rsc:d} cores")
                     req_rsc_size = curr_aval_rsc
                     _p.is_starving = True
 
@@ -957,7 +967,7 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
                 elif _p.parallel_mode in ["lwb", "range"]:
                     if req_rsc_size < _p.core_min:
                         if _p.core_min > curr_aval_rsc:
-                            # no avaliable solution
+                            # no available solution
                             if o3_boost_util_en:
                                 skiped_task.append(_p)
                                 sorted_queue.pop(0)
@@ -968,10 +978,10 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
                             req_rsc_size = _p.core_min
                 elif _p.parallel_mode == "list":
                     # select the nearest one
-                    # filter the core_list by the current avaliable resource
+                    # filter the core_list by the current available resource
                     core_list = [x for x in _p.core_list if x <= curr_aval_rsc]
                     if len(core_list) == 0:
-                        # no avaliable solution
+                        # no available solution
                         if o3_boost_util_en:
                             skiped_task.append(_p)
                             sorted_queue.pop(0)
@@ -1204,7 +1214,7 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
     #                 aval_pos.sort()
     #                 # get the start position of the old task
     #                 cum_pos = position_dict[pid][0][0]
-    #                 # divide the avaliable position into two parts
+    #                 # divide the available position into two parts
     #                 left_pos = aval_pos[:aval_pos.index(cum_pos)]
     #                 right_pos = aval_pos[aval_pos.index(cum_pos):]
     #                 # select the leftmost position from cum_pos
@@ -1551,6 +1561,11 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data
         sched.new_ready_flg = False
         
         if rsc_map != pre_rsc:
+            # layout strategy: 
+            #   Currently, we only consider 1D layout, with a huristic algorithm: 
+            #   reallocating the position from the original base position, i.e., cum_pos, 
+            #   looking left and right, and select the leftmost position from left_pos, then, rightmost position from right_pos. 
+            #   the task decrease the size is handled at first. 
             new_pid = set(rsc_map.keys()) - set(pre_rsc.keys())
             expired_pid = set(pre_rsc.keys()) - set(rsc_map.keys())
             old_pid = set(pre_rsc.keys()) - expired_pid
@@ -1577,10 +1592,6 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data
             # if so, release the old position and allocate the new one
             # to release the data transfering overhead, we try to allocate the new position as close as possible to the old one
             # TODO: consider the data transfering overhead
-            # Currently, we only consider 1D layout, with a huristic algorithm: 
-            # reallocating the position from the original base position, i.e., cum_pos, 
-            # looking left and right, and select the leftmost position from left_pos, then, rightmost position from right_pos. 
-            # the task decrease the size is handled at first. 
             size_plus = []
             size_minus = []
             for pid in old_pid:
@@ -1602,7 +1613,7 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data
                     aval_pos.sort()
                     # get the start position of the old task
                     cum_pos = position_dict[pid][0][0]
-                    # divide the avaliable position into two parts
+                    # divide the available position into two parts
                     left_pos = aval_pos[:aval_pos.index(cum_pos)]
                     right_pos = aval_pos[aval_pos.index(cum_pos):]
                     # select the leftmost position from cum_pos

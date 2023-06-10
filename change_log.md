@@ -366,3 +366,50 @@ the constraints used in timeline generation and rectifying at scheduling table g
 解决了拐角的问题：
 
     ![L-shape-space](/home/zhangchg/git_repo/scheduler/doc/imgs/L-shape-space.png)
+
+## 20230609
+
+有一些任务在加了20% 扰动之后会出现miss：
+如果资源分配的时候出现了starving的情况 那么一定会late; hard deadline一定会miss，后续任务也无法执行。
+1. 取消了所有任务hard deadline约束，只限制最后一个任务为hard ddl，control，traffic light
+2. 现在soft miss 标记为 violate constraint
+TODO:探索task之间的slack sharing
+related files: profiling.csv, allocator_agent.py, scheduler_agent.py
+
+优化了整体的测试流程：
+related files: allocation.py, one_click.py
+
+The layout of the cores are optimized, but still unsatisfied!!
+scheduling_table.py, assumptions.md
+
+Fix bug: 
+1. chunk_e + 1 ---> chunk_e
+```python
+if chunk_s < n_slot < chunk_e:
+    # case 1: newest assigned budget is still available                    
+    #   tries to finish the remaining work assigned by the configuration chunk until the now
+    assert chunk_e == curr_cfg.slot_e + 1
+    planned_flops = sum(_p.rem_flop_budget.values())
+    req_rsc_size = math.ceil(planned_flops/(chunk_e + 1 - n_slot)/timestep /FLOPS_PER_CORE) 
+```
+2. add a condition: previous chunk is late, and newest assigned budget is still available but not enough
+3. add error tolerance to the flop comparison
+```python
+planned_flops = sum([v for v in _p.rem_flop_budget.values() if v > flop_error_tol_abs])
+	.....
+else:
+    if round(planned_flops, flop_error_tol_bit) > round(chunk_flops, flop_error_tol_bit):
+        # case 2: previous chunk is late
+        #   newest assigned budget is not enough
+        #   newest assigned budget is still available but not enough
+        req_rsc_size = math.ceil(planned_flops/(chunk_e + 1 - n_slot)/timestep /FLOPS_PER_CORE)
+    else:
+        # newest assigned budget is still available                    
+        # tries to finish the remaining work assigned by the configuration chunk until the now
+        req_rsc_size = chunk_alloc
+```
+基本上调通了，在< =257的情况里存在planning 预设3个core，超过了runtime ==2的约束
+TODO: 1. 优化core的temporal分配，2. 优化task的layout (spatial)
+
+
+

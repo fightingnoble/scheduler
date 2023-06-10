@@ -524,15 +524,15 @@ if __name__ == "__main__":
     glb_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
 
     # assert all the process has hard deadline
-    for _p in glb_p_list:
-        _p.task.criticality = "hard"
+    # for _p in glb_p_list:
+    #     _p.task.criticality = "hard"
 
     np.random.seed(args.seed)
     from model.message_handler import gen_sensor_event
     event_iter_dict = gen_sensor_event(glb_p_list, hyper_p, num_periods, True, args.jitter_sim_en, args.jitter_sim_para, args.seed)
     # convert to list then convert to iterator
     event_iter_dict = {task: [list(event_iter_dict[task][0]), list(event_iter_dict[task][1])] for task in event_iter_dict}
-    pickle.dump(event_iter_dict, open(f"event_iter_dict_{args.test_case}_{args.jitter_sim_en}.pkl", "wb"))
+    pickle.dump(event_iter_dict, open(f"cache/event_iter_dict_{args.test_case}_{args.jitter_sim_en}.pkl", "wb"))
     event_iter_dict = {task: [iter(event_iter_dict[task][0]), iter(event_iter_dict[task][1])] for task in event_iter_dict}
 
     if args.test_case == "bin_pack" or args.test_all:

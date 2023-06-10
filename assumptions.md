@@ -32,3 +32,11 @@ ressignment-in-turn: (new task entering the ready queue and ready queue is not e
 curveup: (free cores exist and No other new tasks can colocate with the current running  tasks) free resources are taken over by the running tasks greedly, even through they can catch up their deadlines;
 
 replenishment: (free cores exist and some task are starving) free resources are replenished to the starving running tasks.
+
+8. layout & placement
+
+Currently, we only consider 1D layout, with a huristic algorithm: 
+reallocating the position from the original base position, i.e., cum_pos, 
+looking left and right, and select the leftmost position from left_pos, then, rightmost position from right_pos. 
+the task decrease the size is handled at first. 
+
