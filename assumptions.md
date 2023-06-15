@@ -64,3 +64,9 @@ the task decrease the size is handled at first.
 
 应对轻微抖动，轻微抖动可能导致少量slot的late，具体表现为，time budget 减少。相对于调整core数量而言，保留少量的（若干slot）时间上的冗余更加划算。具体表现为，exp_comp_t 略微高于 ops/算力，但是这种冗余反应为端到端的时间增长。那么就只能让一些任务的计算时间更短一些，同样是用资源换取时间。
 对于那些只有一种配置的任务，或者已经在预分配阶段就达到上限的任务，只在时间上保留冗余。
+
+mechanism: 
+   Partial allocation is not allowed, i.e., the task is allocated to the whole cores or none.
+   Each task only try once; the tasks already allocated are skipped;
+   the tasks are preempted are given an extra opportunities.
+   TODO: Allow partial allocation and add the logic to ensure the task have allocated enough resource, otherwise, we should not issue the task or compensate the resource latter. 

@@ -452,3 +452,13 @@ Apply the size constraint based on parallelism cfg files :
   related files: allocator_agent.py, pre_alloc.py
 
   更新了batch脚本的默认值
+
+## 20230615
+fix bug: some tasks are lost after preemption, and the scheduling table can not converge as the iteration number increases
+  The process moved to preempt_list are not put back to the ready_queue
+  update scheudling mechanism: 
+    - Partial allocation is not allowed, i.e., the task is allocated to the whole cores or none.
+    - Each task only try once; the tasks already allocated are skipped;
+    - the tasks are preempted are given an extra opportunities.
+   TODO: Allow partial allocation and add the logic to ensure the task have allocated enough resource, otherwise, we should not issue the task or compensate the resource latter. 
+
