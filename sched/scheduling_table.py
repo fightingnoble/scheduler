@@ -1,5 +1,7 @@
+import math
 import numpy as np
 import pandas as pd
+from scipy.optimize import lsq_linear
 from typing import List, Dict, Tuple, Union, Optional, Iterable, Iterator
 from collections import OrderedDict
 from model.resource_agent import Resource_model_int
@@ -139,10 +141,17 @@ class SchedulingTableInt(object):
         1. search available tensor cores at each slot
         2. insert the task into the scheduling table at a proper interval (here we adapt First-Fit)
             return success or not, the start time slot, the allocated resources, the allocated time slots
-        3. release the resources given the list of allocated resources and the list of allocated time slots
+
+        mechanism:
+        1. Try to match the number of resources originally requested by the job,
+            which can avoid complex calculation of parallelism rules; 
+        2. else, if there is enough rsc in [0, expected_slot_num] + time_slot_s
+            try to distribute the resources to the intervals as evenly as possible; 
+        3. else, try to allocate the resources to the intervals as soon as possible;
         """ 
         rsc_avl = self.idx_free_by_slot(time_slot_s, time_slot_e, key=task.pid)
         rsc_avl = np.array(rsc_avl)
+        
         # check if the task can be scheduled with the expected resources
         # The task can be scheduled at any time slot
         # bug
@@ -151,97 +160,135 @@ class SchedulingTableInt(object):
             for rsc_map in self.scheduling_table[time_slot_s:time_slot_s+expected_slot_num]:
                 rsc_map.allocate(task.pid, req_rsc_size, verbose)
             return True, time_slot_s, req_rsc_size, expected_slot_num
+        
         else: 
             # divide the rsc_avl into intervals
             boader = (rsc_avl[0:-1] != rsc_avl[1:]).nonzero()[0] + 1
             s = [0] + boader.tolist() 
             e = boader.tolist() + [len(rsc_avl)] 
-            # check if the task can be executed on the current interval
-            for i in range(len(s)):
-                if (e[i] - s[i]) >= expected_slot_num and np.all(rsc_avl[s[i]:e[i]] > req_rsc_size):
-                    # allocate resources 
-                    alloc_slot_s = time_slot_s+s[i]
-                    for rsc_map in self.scheduling_table[alloc_slot_s:alloc_slot_s+expected_slot_num]:
-                        rsc_map.allocate(task.pid, req_rsc_size, verbose)
-                    return True, alloc_slot_s, req_rsc_size, expected_slot_num
+            slot_n = [rsc_avl[s[i]] for i in range(len(s))]
 
-            # redistribute the resources to the intervals
-            # based on the principle of as soon as possible
-            
             # current allocation (C)
             curr_alloc = np.zeros(len(s), dtype=int)
             curr_slot = np.zeros(len(s), dtype=int)
 
-            # available (A)
-            rsc_avl_tmp = np.zeros(len(s), dtype=int) 
-
             # required (R)
             expected_req_rsc_size = req_rsc_size * expected_slot_num
-            cum_rsc_alloc = 0
-            cum_slot_length = 0
 
-            # warning: expected_slot_num may be larger than the available slots
-            if rsc_avl[:expected_slot_num].sum() < expected_req_rsc_size: 
-                # as soon as possible
-                if DEBUG:
-                    print("Not enough resources: as soon as possible")
+            if (rsc_avl > req_rsc_size).sum() * req_rsc_size > expected_req_rsc_size:
+
+                # check if the task can be executed on the single interval
+                for i in range(len(s)):
+                    if (e[i] - s[i]) >= expected_slot_num and slot_n[i] > req_rsc_size:
+                        # allocate resources 
+                        alloc_slot_s = time_slot_s+s[i]
+                        for rsc_map in self.scheduling_table[alloc_slot_s:alloc_slot_s+expected_slot_num]:
+                            rsc_map.allocate(task.pid, req_rsc_size, verbose)
+                        return True, [alloc_slot_s,], [req_rsc_size,], [expected_slot_num,]
+
+                cum_rsc_alloc = 0
+                # divide the rsc_avl into intervals
                 for i in range(len(s)): 
-                    if rsc_avl[s[i]] > 0:
-                        cond2 = rsc_avl[:e[i]].sum() >= expected_req_rsc_size
-                        # rsc size 
-                        curr_alloc[i] = rsc_avl[s[i]]
+                    # rsc size
+                    if slot_n[i] > req_rsc_size:
+                        curr_alloc[i] = req_rsc_size
                         # slot length
-                        if cond2:
-                            curr_slot[i] = np.ceil((expected_req_rsc_size - rsc_avl[:e[i-1]].sum())/rsc_avl[s[i]]).astype(int)
+                        if cum_rsc_alloc + req_rsc_size * (e[i] - s[i]) >= expected_req_rsc_size:
+                            curr_slot[i] = math.ceil((expected_req_rsc_size - cum_rsc_alloc)/req_rsc_size)
                             break
                         else:
                             curr_slot[i] = int(e[i] - s[i])
+                            cum_rsc_alloc += req_rsc_size * curr_slot[i]
+            # warning: expected_slot_num may be larger than the available slots
+            elif rsc_avl[:expected_slot_num].sum() < expected_req_rsc_size: 
+                # as soon as possible
+                self.asap_insert(task, DEBUG, s, e, slot_n, curr_alloc, curr_slot, expected_req_rsc_size)
             else: 
-                # there is enough rsc in 
-                # [0, expected_slot_num] + time_slot_s
-                # try to distribute the rsc_lack to the intervals as evenly as possible
                 if DEBUG:
                     print("Enough resources: as evenly as possible")
-                # calculate the lacked resources in the interval: 
-                for i in range(len(s)): 
-                    if rsc_avl[s[i]] > 0:
-                        # rsc size 
-                        if rsc_avl[s[i]] < req_rsc_size:
-                            curr_alloc[i] = rsc_avl[s[i]]
-                            rsc_avl_tmp[i] = 0
-                        else:
-                            curr_alloc[i] = req_rsc_size
-                            rsc_avl_tmp[i] = rsc_avl[s[i]] - req_rsc_size
-                        # slot length
-                        
-                        cond1 = (e[i] - s[i]) >= (expected_slot_num - cum_slot_length)
-                        if cond1:
-                            curr_slot[i] = int(expected_slot_num - cum_slot_length)
-                        else: 
-                            curr_slot[i] = int(e[i] - s[i])
 
-                        cum_rsc_alloc += curr_alloc[i] * curr_slot[i]
+                # available (A)
+                rsc_avl_tmp = np.zeros(len(s), dtype=int) 
+                rsc_lack = expected_req_rsc_size
+                cum_slot_length = 0
+
+                for i in range(len(s)):
+                    rsc_avl_tmp[i] = slot_n[i]
+                    # slot length                        
+                    if cum_slot_length + (e[i] - s[i]) >= expected_slot_num:
+                        curr_slot[i] = int(expected_slot_num - cum_slot_length)
+                        break
+                    else:
+                        curr_slot[i] = int(e[i] - s[i])
                         cum_slot_length += curr_slot[i]
-                        # stop if the available resources are enough 
-                        # and the slot length is enough
-                        if cond1: 
-                            break
-                
-                rsc_lack = expected_req_rsc_size - cum_rsc_alloc
 
-                # try to distribute the rsc_lack to the intervals as evenly as possible
-                while cum_rsc_alloc < expected_req_rsc_size: 
-                    size_t = rsc_avl_tmp[rsc_avl_tmp>0].min()
-                    avl_slot_idx = np.where(rsc_avl_tmp >0)[0]
-                    slot_size_sum = np.sum(curr_slot[avl_slot_idx])
-                    if slot_size_sum * size_t >= rsc_lack:
-                        size_t = np.ceil(rsc_lack / slot_size_sum).astype(int)
-                        rsc_lack = 0
-                    else: 
-                        rsc_lack -= slot_size_sum * size_t
-                    curr_alloc[avl_slot_idx] += size_t
-                    rsc_avl_tmp[avl_slot_idx] -= size_t
-                    cum_rsc_alloc += size_t * slot_size_sum
+                # Try to distribute the rsc_lack to the intervals as evenly as possible
+                n_iter = 0
+                cum_size = 0
+                # find the available slots (a vector)
+                avl_slot_idx = np.where(rsc_avl_tmp> 0)[0]
+                # apply the size constraint based on parallelism cfg files
+                if task.parallel_mode in ["lwb", "range"]: 
+                    avl_slot_idx &= np.where(rsc_avl_tmp>task.core_min)[0] 
+                
+                while rsc_lack>0 and avl_slot_idx.size>0: 
+                    # the max step of the size ++
+                    max_step = rsc_avl_tmp[avl_slot_idx].min() 
+                    # the size of the current available slots
+                    cum_size_t = max_step + cum_size
+                    # apply the size constraint 
+                    cum_size_t, _constr = task.get_available_cfg(cum_size_t, cum_size_t)
+                    # judge whether the size_t is valid
+                    size_t = cum_size_t - cum_size                            
+                    if size_t > 0:
+                        slot_size_sum = np.sum(curr_slot[avl_slot_idx])
+                        if slot_size_sum * size_t >= rsc_lack:
+                            size_t = np.ceil(rsc_lack / slot_size_sum).astype(int)
+                            rsc_lack = 0
+                        else: 
+                            rsc_lack -= slot_size_sum * size_t
+                    
+                        cum_size += size_t
+
+                        curr_alloc[avl_slot_idx] += size_t
+                        rsc_avl_tmp[avl_slot_idx] -= size_t
+                    else:
+                        rsc_avl_tmp[rsc_avl_tmp == max_step] = 0
+
+                    upb_flg = _constr == "upb"
+                    list_upb_flg = _constr == "list" and cum_size_t == max(task.core_list)
+                    if upb_flg or list_upb_flg:
+                        break
+                    # subtract the slots idx that cannot be allocated from the available slots
+                    # Find indices where rsc_avl_tmp is greater than 0
+                    non_zero_indices = np.where(rsc_avl_tmp <= 0)[0]
+
+                    # Subtract the non-zero indices from avl_slot_idx
+                    avl_slot_idx = np.setdiff1d(avl_slot_idx, non_zero_indices)
+                    
+                    n_iter += 1
+                    if n_iter > 1000:
+                        assert False, "Infinite loop"
+                
+                if rsc_lack > 0:
+                    curr_alloc.fill(0)
+                    curr_slot.fill(0)
+                    # as soon as possible
+                    self.asap_insert(task, DEBUG, s, e, slot_n, curr_alloc, curr_slot, expected_req_rsc_size)
+                else:
+                    # Check whether the task allocate too much resources
+                    i=1
+                    while True:
+                        non_zero_indices = np.where(curr_alloc > 0)[0]
+                        non_zero_min_idx = curr_alloc[non_zero_indices].argmin()
+                        slot_idx = non_zero_indices[non_zero_min_idx]
+                        if rsc_lack + curr_alloc[slot_idx] <= 0:
+                            curr_slot[slot_idx] -= 1
+                            rsc_lack += curr_alloc[slot_idx] * 1
+                            if curr_slot[slot_idx] == 0:
+                                curr_alloc[slot_idx] = 0
+                        else:
+                            break
 
             # allocate resources
             idx = curr_alloc.nonzero()[0]
@@ -249,9 +296,45 @@ class SchedulingTableInt(object):
                 alloc_slot_s = time_slot_s + s[idx[i]]
                 for rsc_map in self.scheduling_table[alloc_slot_s:alloc_slot_s+int(curr_slot[idx[i]])]:
                     rsc_map.allocate(task.pid, curr_alloc[idx[i]], verbose)
-            
-        self.sparse_mode = False
-        return True, (time_slot_s+np.array(s)[idx]).tolist(), curr_alloc[idx].tolist(), curr_slot[idx].tolist()
+
+            self.sparse_mode = False
+            return True, (time_slot_s+np.array(s)[idx]).tolist(), curr_alloc[idx].tolist(), curr_slot[idx].tolist()
+
+    def asap_insert(self, task:ProcessInt, DEBUG, s, e, slot_n, curr_alloc, curr_slot, expected_req_rsc_size):
+        if DEBUG:
+            print("Not enough resources: as soon as possible")
+        cum_rsc_alloc = 0
+        for i in range(len(s)): 
+            if slot_n[i] > 0:
+                # rsc size 
+                curr_alloc[i], _constr = task.get_available_cfg(slot_n[i], slot_n[i])
+                if _constr != "N/A":
+                    # slot length
+                    if cum_rsc_alloc + curr_alloc[i] * (e[i] - s[i]) >= expected_req_rsc_size:
+                        curr_slot[i] = math.ceil((expected_req_rsc_size - cum_rsc_alloc)/curr_alloc[i])
+                        cum_rsc_alloc += curr_alloc[i] * curr_slot[i]
+                        break
+                    else:
+                        curr_slot[i] = int(e[i] - s[i])
+                        cum_rsc_alloc += curr_alloc[i] * curr_slot[i]
+                else:
+                    curr_alloc[i] = 0
+                    curr_slot[i] = 0
+
+        # Check whether the task allocate too much resources
+        i=1
+        if cum_rsc_alloc >= expected_req_rsc_size:
+            while True:
+                non_zero_indices = np.where(curr_alloc > 0)[0]
+                non_zero_min_idx = curr_alloc[non_zero_indices].argmin()
+                slot_idx = non_zero_indices[non_zero_min_idx]
+                if cum_rsc_alloc - curr_alloc[slot_idx] >= expected_req_rsc_size:
+                    curr_slot[slot_idx] -= 1
+                    cum_rsc_alloc -= curr_alloc[slot_idx] * 1
+                    if curr_slot[slot_idx] == 0:
+                        curr_alloc[slot_idx] = 0
+                else:
+                    break
 
     def release(self, task: ProcessInt, time_slot_s:Union[int,List[int]], curr_alloc:Union[int,List[int]], curr_slot:Union[int,List[int]], verbose: bool = False):
         if isinstance(curr_alloc, int) and isinstance(curr_slot, int) and isinstance(time_slot_s, int):
@@ -1006,6 +1089,10 @@ def new_bin(spatial_size:int, temporal_size:int, id:int = 0, name:str = "bin"):
 
 
 if __name__ == "__main__": 
+    import argparse
+    parser = argparse.ArgumentParser(description='Process some integers.') 
+    parser.add_argument('--test_case', type=str, default="no constrants", help='test case name')
+    args = parser.parse_args()
     # create a task set
     # first branch: have free cores and free slots at beginning
     # t1 [15, 19] 25 rsc and 2 slot
@@ -1016,8 +1103,9 @@ if __name__ == "__main__":
     # t4 [0, 7] 10 rsc and 4 slot
     # last branch: As soon as possible
     # t5 [0, 16] 10 rsc and 8 slot
+    # t6 [9, 20] 9 rsc and 9 slot
 
-
+    N_task = 6
     t1 = TaskInt(task_name="task1", task_id=1, task_flag="moveable", timing_flag="deadline",
                 ERT=15, ddl=19, period=30, exp_comp_t=2, 
                 i_offset=0, jitter_max=0,
@@ -1038,12 +1126,35 @@ if __name__ == "__main__":
                 ERT=0, ddl=16, period=30, exp_comp_t=8,
                 i_offset=0, jitter_max=0,
                 flops=100, pre_assigned_resource_flag=True, main_size=100, RDA_size=20)
+    t6 = TaskInt(task_name="task6", task_id=6, task_flag="moveable", timing_flag="deadline",
+                ERT=9, ddl=20, period=30, exp_comp_t=9,
+                i_offset=0, jitter_max=0,
+                flops=100, pre_assigned_resource_flag=True, main_size=100, RDA_size=20)
 
     task_list:List[TaskInt] = [None for i in range(10)]
     alloc_info = [None for i in range(10)]
     require_rsc_size = [0 for i in range(10)]
-    task_list[0:5] = [t1, t2, t3, t4, t5]
-    require_rsc_size[0:5] = [25, 24, 10, 10, 10]
+    task_list[0:N_task] = [t1, t2, t3, t4, t5, t6]
+    require_rsc_size[0:N_task] = [25, 24, 10, 10, 10, 9]
+
+    if args.test_case == "no constrants":
+        pass
+    elif args.test_case == "upb":
+        for i in range(N_task):
+            task_list[i].parallel_mode = "upb"
+            task_list[i].core_max = int(require_rsc_size[i] * 1.2)
+    elif args.test_case == "list":
+        for i in range(N_task):
+            task_list[i].parallel_mode = "list"
+            task_list[i].core_list = [i for i in range(0, require_rsc_size[i], 4)]
+            task_list[i].core_list.append(require_rsc_size[i])
+            task_list[i].core_list.append(int(require_rsc_size[i] * 1.5))
+    elif args.test_case == "lwb":
+        for i in range(N_task):
+            task_list[i].parallel_mode = "lwb"
+            task_list[i].core_min = int(require_rsc_size[i] * 0.8)
+
+
 
     # create a scheduling table
     scheduling_table = SchedulingTableInt(30, 20)
@@ -1063,7 +1174,7 @@ if __name__ == "__main__":
 
     pid2name = []
     pid = 0
-    for task in task_list[0:5]: 
+    for task in task_list[0:N_task]: 
         # for r, d in zip(task.get_release_event(event_range), task.get_deadline_event(event_range)):
         r = task.get_release_time()
         d = task.get_deadline_time()
@@ -1071,7 +1182,7 @@ if __name__ == "__main__":
         pid += 1
         pid2name.append(p)
 
-    for i in range(5):
+    for i in range(N_task):
         print(f"task {i} allocation\n")
         alloc_info[i] = scheduling_table.insert_task(pid2name[i], require_rsc_size[i], 
                                                      pid2name[i].release_time, pid2name[i].deadline, 
@@ -1082,7 +1193,7 @@ if __name__ == "__main__":
     print("occupy by id:", scheduling_table.index_occupy_by_id())
     
     # release resources
-    for i in range(5):
+    for i in range(N_task):
         print("before release")
         scheduling_table.print_scheduling_table()
         if alloc_info[i] is not None:

@@ -481,7 +481,7 @@ if __name__ == "__main__":
 
     from task.task_cfg import load_taskint, create_init_p_list
     from task.task_cfg import affinity_cfg, task_graph_srcs, task_graph_ops, task_graph_sinks
-    from task.task_cfg import creat_physical_graph, creat_logical_graph, init_depen
+    from task.task_cfg import creat_physical_graph, creat_logical_graph, init_depen, redist_ert_dll
     from global_sched import push_task_into_bins, push_task_into_bins_new
 
     parser = argparse.ArgumentParser()
@@ -521,6 +521,10 @@ if __name__ == "__main__":
     sim_step = min([glb_n_task_dict[task].exp_comp_t for task in glb_n_task_dict])/32
     quantumSize = sim_step*args.quantumSize
     num_periods = args.n_p
+    logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
+    physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd))
+    redist_ert_dll(glb_n_task_dict, logical_graph_nx, spatial_rda_ratio=args.temporal_rda_ratio, verbose=args.verbose)
+    init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
     glb_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
 
     # assert all the process has hard deadline
@@ -580,10 +584,6 @@ if __name__ == "__main__":
             # print(f"cache/bin_list_{num_cores}{args.i_file_suffix}.pkl or init_p_list_{num_cores}{args.i_file_suffix}.pkl not found")
             bin_list, _ = push_task_into_bins(glb_p_list, affinity_cfg, num_cores, args.quantum_check_en, quantumSize, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
 
-        logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
-        physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd))
-        
-        init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
         # from message_agent import Message
         
         task_spec = Spec(0.1, [1 for _ in glb_p_list]) 
@@ -639,10 +639,6 @@ if __name__ == "__main__":
 
     elif args.test_case == "glb_dynamic":
         bin_list = [SchedulingTableInt(num_cores, 1, 0, "bin_glb_dynamic")]
-        logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
-        physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd))
-        
-        init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
         # from message_agent import Message
         
         task_spec = Spec(0.1, [1 for _ in glb_p_list]) 
@@ -706,10 +702,6 @@ if __name__ == "__main__":
 
     elif args.test_case == "bin_pack_new":
         bin_list = [SchedulingTableInt(num_cores, 1, 0, "bin_glb_dynamic")]
-        logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
-        physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd))
-        
-        init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
         # from message_agent import Message
         
         task_spec = Spec(0.1, [1 for _ in glb_p_list]) 
@@ -724,8 +716,9 @@ if __name__ == "__main__":
         monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
 
         print("sim_step: ", sim_step)
+        bin_list.clear()
         bin_list = push_task_into_bins_new(
-
+            bin_list,
             glb_p_list, affinity_cfg, event_iter_dict,
             num_cores, args.quantum_check_en, quantumSize, 
             sim_step, hyper_p, args.spatial_rda_ratio, args.temporal_rda_ratio,

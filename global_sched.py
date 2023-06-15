@@ -333,7 +333,7 @@ def push_step(
 
 
 def push_task_into_bins_new(
-
+                            bin_list: List[SchedulingTableInt], 
                             glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,
                             total_cores:int, quantum_check_en, quantumSize, 
                             timestep, hyper_p, spatial_rda_ratio, temporal_rda_ratio,
@@ -402,7 +402,7 @@ def push_task_into_bins_new(
     # iter_next_bin_obj = bin_iter_list(_new_bin, size_l, name_l)
     iter_next_bin_obj = bin_iter_uniform_dist(_new_bin, total_cores, size_l, name_l)
     # iter_next_bin_obj = _next_bin_obj_1(max_core_size=256, size_list=size_l, name_list=name_l)
-    bin_list:List[SchedulingTableInt] = list(iter_next_bin_obj)
+    bin_list.extend(list(iter_next_bin_obj)) 
     bin_name_list = [bin.name for bin in bin_list]
     # bin_list:List[SchedulingTableInt] = [next(iter_next_bin_obj)]
     # bin_name_list = [bin_list[0].name]

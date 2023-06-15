@@ -274,21 +274,8 @@ class ProcessBase(object):
             for key in pred_data.keys():
                 pred_data[key]["valid"] = False
 
-def rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE):
-    # release time round up: task should not be released earlier than the release time
-    time_slot_s = int(np.ceil(_p.release_time/timestep))
-    if time_slot_s < n_slot:
-        time_slot_s = n_slot
-    # deadline round down: task should not be finised later than the deadline
-    time_slot_e = int(_p.deadline//timestep)
-    if time_slot_e <= time_slot_s:
-        req_rsc_size = 0
-    else:
-        req_rsc_size = int(np.ceil(_p.remburst/(time_slot_e-time_slot_s)/timestep/FLOPS_PER_CORE))
-    return time_slot_s,time_slot_e,req_rsc_size
-
 class ProcessInt(ProcessBase):
-    def __init__(self, task, release_t, deadline_abs, pid):
+    def __init__(self, task:TaskBase, release_t, deadline_abs, pid):
         super().__init__(task, release_t, deadline_abs, pid)
         # task_id -> (main_num, RDA_num)
         self.allocated_resource:OrderedDict[int, Tuple[int, int]] = OrderedDict()
@@ -314,18 +301,97 @@ class ProcessInt(ProcessBase):
         self.is_starving = False
         
 
-    def rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE):
+    def rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE, mode='rt-wsc'):
         # release time round up: task should not be released earlier than the release time
         time_slot_s = int(np.ceil(_p.release_time/timestep))
         if time_slot_s < n_slot:
             time_slot_s = n_slot
         # deadline round down: task should not be finised later than the deadline
         time_slot_e = int(_p.deadline//timestep)
-        if time_slot_e <= time_slot_s:
-            req_rsc_size = 0
+        if mode == 'expected':
+            num_slot = int(_p.exp_comp_t/timestep)
+            req_rsc_size = int(np.ceil(_p.remburst/num_slot/timestep/FLOPS_PER_CORE))
         else:
-            req_rsc_size = int(np.ceil(_p.remburst/(time_slot_e-time_slot_s)/timestep/FLOPS_PER_CORE))
+            if time_slot_e <= time_slot_s:
+                req_rsc_size = 0
+            else:
+                req_rsc_size = int(np.ceil(_p.remburst/(time_slot_e-time_slot_s)/timestep/FLOPS_PER_CORE))
         return time_slot_s,time_slot_e,req_rsc_size
+
+    def get_available_cfg(self, req_rsc_size:int, curr_aval_rsc:int=None): 
+        applied_constraint = "none"         
+        # apply constraints based on parallel_mode
+        if self.parallel_mode in ["upb","range"]:
+            if req_rsc_size > self.core_max:
+                req_rsc_size = self.core_max
+                applied_constraint = "upb"
+        elif self.parallel_mode in ["lwb", "range"]:
+            if self.core_min > curr_aval_rsc:
+                # no available solution
+                req_rsc_size = 0
+                applied_constraint = "N/A"
+            elif self.core_min > req_rsc_size: 
+                req_rsc_size = self.core_min
+                applied_constraint = "lwb"
+        elif self.parallel_mode == "list":
+            # select the nearest one
+            # filter the core_list by the current available resource
+            if curr_aval_rsc is not None:
+                core_list = [x for x in self.core_list if 0 < x <= curr_aval_rsc] 
+                if len(core_list) == 0:
+                    # no available solution
+                    req_rsc_size = 0
+                    applied_constraint = "N/A"
+                    return req_rsc_size, applied_constraint
+            else:
+                core_list = self.core_list
+            req_rsc_size = min(core_list, key=lambda x:abs(x-req_rsc_size))
+            applied_constraint = "list"
+        
+        if req_rsc_size == 0: 
+            applied_constraint = "N/A"
+        return req_rsc_size, applied_constraint
+
+    def get_available_cfg_vector(self, req_rsc_size_arr: np.ndarray, curr_aval_rsc_arr: np.ndarray = None):
+        assert req_rsc_size_arr.ndim == 1
+        assert curr_aval_rsc_arr.ndim == 1
+        applied_constraint_arr = np.array(["none"] * len(req_rsc_size_arr))
+
+        # Apply constraints based on parallel_mode
+        if self.parallel_mode in ["upb", "range"]:
+            req_rsc_size_arr = np.minimum(req_rsc_size_arr, self.core_max)
+            applied_constraint_arr[req_rsc_size_arr == self.core_max] = "upb"
+        elif self.parallel_mode in ["lwb", "range"]:
+            # No available solution
+            idx = (self.core_min > curr_aval_rsc_arr)
+            req_rsc_size_arr[idx] = 0
+            applied_constraint_arr[idx] = "N/A"
+            idx = (self.core_min > req_rsc_size_arr)
+            req_rsc_size_arr[idx] = self.core_min
+            applied_constraint_arr[idx] = "lwb"
+        elif self.parallel_mode == "list":
+            # Select the nearest one
+            # Filter the core_list by the current available resource
+            # if curr_aval_rsc_arr is not None:
+            #     core_list = np.array([x for x in self.core_list if x <= curr_aval_rsc_arr.max()])
+            # else:
+            #     core_list = np.array(self.core_list)
+            # core_list = np.min(req_rsc_size_arr, curr_aval_rsc_arr)
+            # not_aval_pos = np.nonzero(curr_aval_rsc_arr >= core_list)
+            curr_aval_rsc_arr_T = curr_aval_rsc_arr.reshape(-1, 1)
+            core_list = np.array(self.core_list).reshape(1, -1)
+
+            diff_arr = np.abs(curr_aval_rsc_arr_T - core_list)
+            if curr_aval_rsc_arr is not None:
+                diff_arr[curr_aval_rsc_arr_T < core_list] = np.inf
+            # exclude the case diff_arr[i, j] == np.inf 
+            min_diff_idx = np.argmin(diff_arr, axis=1)
+            req_rsc_size_arr = core_list[min_diff_idx]
+            not_available_pos = np.nonzero(diff_arr[np.arange(len(diff_arr)), min_diff_idx] == np.inf)
+            not_applied_pos = np.nonzero(diff_arr[np.arange(len(diff_arr)), min_diff_idx] == 0)
+            applied_constraint_arr[~not_applied_pos and ~not_available_pos] = "list"
+            applied_constraint_arr[not_available_pos] = "N/A"
+        return req_rsc_size_arr, applied_constraint_arr
 
 class TaskBase(object):
     def __init__(self, task_name:str, task_id:int, timing_flag:str,
@@ -346,8 +412,8 @@ class TaskBase(object):
         assert self.criticality in criticality.keys()
         assert self.timing_flag in task_timing_type.keys()
         self.trigger_mode = trigger_mode # event-triggered or periodic
-        self.core_max = parallel_cfg["max"] if "max" in parallel_cfg else None
-        self.core_min = parallel_cfg["min"] if "min" in parallel_cfg else None
+        self.core_max = parallel_cfg["max"] if "max" in parallel_cfg else 1e3
+        self.core_min = parallel_cfg["min"] if "min" in parallel_cfg else 0
         self.core_list = parallel_cfg["list"] if "list" in parallel_cfg else None
         self.parallel_mode = parallel_cfg["mode"] if "mode" in parallel_cfg else None
 

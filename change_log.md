@@ -412,4 +412,43 @@ else:
 TODO: 1. 优化core的temporal分配，2. 优化task的layout (spatial)
 
 
+## 20230614
+Apply the size constraint based on parallelism cfg files : 
+  Rewrite insert_task in SchedulingTable class
+    测试了无约束情况，和upb和list两种类约束
+    测试完task_insert的所有case，画了示意图保留了测试结果
+    Related files: scheduling_table.py, doc/verification/bin_insert_demo.csv, doc/verification/bin_insert_demo.drawio
+  add method for parallel constraints checking in TaskInt class
+    Related files: task_agent.py
 
+
+调整表格：
+  更正了利用率的计算方式，等价core，
+  更正了组合路径的计算公式，MAX 或者 SUM
+  添加了Parallel type Parallel range
+  校准Tread 和 throughtput的分解
+  标明了列的单位，在代码中更新了相关的索引名称
+  related files: task_cfg.py, 
+
+更新slack预分配机制：
+  slcak 分为spatial slack 和 temporal slack
+    - spatial slack: 任务的spatial slack是指任务的最大可用资源和最小可用资源之间的差值（为一些关键任务预留一些冗余资源，这些的任务对冗余资源保留最高优先级的使用权）
+    - temporal slack: 任务的temporal slack是指任务的最大可用时间和最小可用时间之间的差值, 给一些任务预分配更多的资源，以得到跟多的时间slack，然后把这些slack均分给所有的任务以应对调度导致的轻微的抖动（若干个slot）
+  根据task graph 和预设的slack比例，计算出每个任务的ERT 和相对的ddl（redist_ert_dll， estim_release_dll_time）
+  related files: scheduling_table.py, assumptions.md, task_cfg.py, pre_alloc.py
+
+  fix a bug that the bin_list can not be plotted correctly during the debug process. 
+  ```
+  def push_task_into_bins_new(
+        bin_list: List[SchedulingTableInt], 
+      ......
+  ```
+  ```
+        bin_list.clear()
+        bin_list = push_task_into_bins_new(
+            bin_list,
+            ......
+  ```
+  related files: allocator_agent.py, pre_alloc.py
+
+  更新了batch脚本的默认值

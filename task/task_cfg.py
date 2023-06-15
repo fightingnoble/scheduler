@@ -17,8 +17,8 @@ from model.task_queue_agent import TaskQueue
 from task.task_agent import ProcessInt
 from task.graph_scaling import build_node_relationship
 
-# 'ID', 'Task (chain) names', 'Flops on path', 'Expected Latency (ms)', 'T release', 'Freq.', 'DDL', 'Cores/Req.', 
-# 'Throuput factor (S)', 'Thread factor (S)', 'Min required cores', 'Timing_flag', 'Max required Cores', 'RDA./Req.', 'Resource Type', 'Pre-assigned', 'Priority'
+# 'ID', 'Task (chain) names', 'Flops on path (G)', 'Expected Latency (ms)', 'T release (ms)', 'Freq.', 'DDL (ms)', 'Cores/Req.', 
+# 'Throuput factor (Spat.)', 'Thread factor (S)', 'Min required cores', 'Timing_flag', 'Max required Cores', 'RDA./Req.', 'Resource Type', 'Pre-assigned', 'Priority'
 
 task_graph_srcs = {
     # "Entry": ["surr_view_camera_pub", "streo_camera_pub", "LiDAR_pub"],
@@ -303,7 +303,7 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int):
     node_parall_dict = {}
     for node_n in df.index:
         node_attr = df.loc[node_n].to_dict()
-        factor = node_attr["Throuput factor (S)"]
+        factor = node_attr["Throuput factor (Spat.)"]
         freq = int(node_attr["Freq."]/f_gcd)
         node_parall_dict[node_n] = [factor, freq]
 
@@ -311,7 +311,7 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int):
     for node_n, t in logical_graph_nx.nodes(data="type"):
         if node_n in df.index:
             node_attr = df.loc[node_n].to_dict()
-            factor = node_attr["Throuput factor (S)"]
+            factor = node_attr["Throuput factor (Spat.)"]
             for i in range(factor):
                 node_name = node_n+"_"+str(i)
                 physical_graph_nx.add_node(node_name, type=t)
@@ -398,7 +398,7 @@ def creat_jobTask_graph(task_graph:Dict[str, List[str]], f_gcd, plot:bool=False)
     for task_n in task_graph: 
         if task_n in df.index:
             task_attr = df.loc[task_n].to_dict()
-            factor = task_attr["Throuput factor (S)"]
+            factor = task_attr["Throuput factor (Spat.)"]
             freq  = task_attr["Freq."]/f_gcd
             num_per_group = int(np.ceil(freq / factor))
             for i in range(factor):
@@ -418,7 +418,7 @@ def creat_jobTask_graph(task_graph:Dict[str, List[str]], f_gcd, plot:bool=False)
                 if succ_n == "Exit":
                     job_graph_nx.add_edge(task_name, "Exit", type="control")
                     continue
-                succ_factor = df.loc[succ_n]["Throuput factor (S)"]
+                succ_factor = df.loc[succ_n]["Throuput factor (Spat.)"]
                 succ_freq  = int(df.loc[succ_n]["Freq."]/f_gcd)
                 succ_num_per_group = int(np.ceil(succ_freq/succ_factor))
                 for i_s in range(succ_freq):
@@ -449,7 +449,7 @@ def creat_jobTask_graph(task_graph:Dict[str, List[str]], f_gcd, plot:bool=False)
             for succ_n in task_graph[task_n]:
                 if succ_n in df.index:
                     task_attr = df.loc[succ_n].to_dict()
-                    factor = task_attr["Throuput factor (S)"]
+                    factor = task_attr["Throuput factor (Spat.)"]
                     for i in range(factor):
                         succ_job_name = succ_n+"_"+str(i)
                         job_graph_nx.add_edge(task_n, succ_job_name, type=edge_type)
@@ -515,8 +515,8 @@ def load_taskint(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]
         task_attr["Timing_flag"] = "deadline" if task_attr["Timing_flag"]=="DDL" else "realtime"
         task_attr["Resource Type"] = "stationary" if task_attr["Resource Type"]=="S" else "moveable"
         task_attr["Pre-assigned"] = False if task_attr["Pre-assigned"]=="N" else True
-        for i in range(task_attr["Throuput factor (S)"]):
-            T = task_attr["Throuput factor (S)"]/task_attr["Freq."]
+        for i in range(task_attr["Throuput factor (Spat.)"]):
+            T = task_attr["Throuput factor (Spat.)"]/task_attr["Freq."]
             phase = i/task_attr["Freq."]
             parallel_cfg = {}
             if task_attr["Parallel_type"] == "Upb":
@@ -534,12 +534,12 @@ def load_taskint(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]
                 parallel_cfg["list"] = map(int, task_attr["Parallel_range"].split(","))
             task = TaskInt(
                 task_name=task_n+"_"+str(i), task_id=task_id, timing_flag=task_attr["Timing_flag"], 
-                ERT=task_attr["T release"]/1000, ddl=(task_attr['DDL']-task_attr["T release"])/1000, period=T, 
+                ERT=task_attr["T release (ms)"]/1000, ddl=(task_attr['DDL (ms)']-task_attr["T release (ms)"])/1000, period=T, 
                 exp_comp_t=task_attr['Expected Latency (ms)']/1000, i_offset=phase, jitter_max=0,
-                flops=task_attr["Flops on path"]/1e3, task_flag=task_attr["Resource Type"], 
+                flops=task_attr["Flops on path (G)"]/1e3, task_flag=task_attr["Resource Type"], 
                 pre_assigned_resource_flag=task_attr["Pre-assigned"]>0, 
-                RDA_size=task_attr['RDA./Req.'], main_size=task_attr['Cores/Req.'], seq_cpu_time=task_attr["Flops on path"]/1e3,
-                op_cpu_time=task_attr["Flops on path"]/1e3, op_io_time=1e-6,
+                RDA_size=task_attr['RDA./Req.'], main_size=task_attr['Cores/Req.'], seq_cpu_time=task_attr["Flops on path (G)"]/1e3,
+                op_cpu_time=task_attr["Flops on path (G)"]/1e3, op_io_time=1e-6,
                 criti_flag="soft" if task_attr["Criti_flag"]=='S' else "hard", 
                 cbs_en=True, # if task_attr["Cbs_en"]=='Y' else False, 
                 trigger_mode=task_attr["Trigger_mode"], 
@@ -626,6 +626,58 @@ def init_depen(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[T
         if verbose:
             print(job_n, job.pred_data, job.pred_ctrl, job.succ_data, job.succ_ctrl)
 
+def redist_ert_dll(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[TaskInt,ProcessInt]]],
+        logical_graph_nx:nx.DiGraph=None, spatial_rda_ratio=0, sched_step_comp=0, 
+        comm_compen_en=False,  verbose=False):
+    ert, ddl = estim_release_dll_time(logical_graph_nx, spatial_rda_ratio, sched_step_comp, comm_compen_en, verbose)
+    # if taskJobs is a list, convert it to a dict
+    if isinstance(taskJobs, list):
+        if taskJobs[0].__class__.__name__ == "ProcessInt":
+            taskJobs = {i.task.name:i for i in taskJobs}
+        elif taskJobs[0].__class__.__name__ == "TaskInt":
+            taskJobs = {i.name:i for i in taskJobs}
+    
+    for job_n, job in taskJobs.items():
+        # parse the sub task number from the job name
+        thread_n = job_n.split('_')[-1]
+        task_n = job_n.replace("_"+thread_n, "")
+        job.ERT = ert[task_n]
+        job.ddl = ddl[task_n] - ert[task_n]
+
+def estim_release_dll_time(task_graph_nx:nx.DiGraph, 
+                           spatial_rda_ratio=0, sched_step_comp=0, 
+                           comm_compen_en=False,
+                           verbose=False):
+    """
+    set the ERT and ddl property of each task: 
+    traverse the job graph, 
+    for each task, 
+    ERT = max(ddl of all pred tasks) + io_time; 
+    ddl = ERT + exp_comp_t; 
+    """
+    ert: Dict[str, float] = {}
+    ddl: Dict[str, float] = {}
+
+    df:pd.DataFrame = pd.read_csv("profiling.csv", sep=",", index_col=0) 
+    comp_time: Dict[str, float] = {task_n:df.loc[task_n, "Expected Latency (ms)"]/1000 for task_n in df.T}
+    io_time: Dict[str, float] = {task_n:1e-6 for task_n in df.T}
+
+    for node in nx.topological_sort(task_graph_nx):  # 拓扑排序遍历节点
+        preds = task_graph_nx.pred[node]  # 获取当前节点的前驱节点
+        if node not in comp_time:
+            ert[node] = 0 if len(preds) == 0 else max([ddl[pred] for pred in preds])
+            ddl[node] = ert[node]
+        else:
+            if len(preds) > 0:
+                if comm_compen_en:
+                    ert[node] = max([ddl[pred] + io_time[node] for pred in preds])
+                else:
+                    ert[node] = max([ddl[pred] for pred in preds])
+            else:
+                ert[node] = 0
+            ddl[node] = ert[node] + comp_time[node] *1e7 / (1 - spatial_rda_ratio)/ 1e7 + sched_step_comp # 计算当前节点的最早截止时间
+    return ert, ddl
+
 def create_init_p_list(tasks: Union[List[TaskInt], Dict[str, TaskInt]], verbose:bool):
     if isinstance(tasks, list):
         task_list = tasks
@@ -670,7 +722,16 @@ if __name__ == "__main__":
     hyper_p = 1/f_gcd
     sim_step = min([glb_n_task_dict[task].exp_comp_t for task in glb_n_task_dict])/32
 
-    if args.test_case == "timeline" or args.test_all:
+    if args.test_case == "ert_ddl" or args.test_all:
+        logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
+        ert, ddl = estim_release_dll_time(logical_graph_nx, spatial_rda_ratio=0.05, verbose=args.verbose)
+        df = pd.read_csv("profiling.csv", sep=",", index_col=0) 
+        for task_n in ert: 
+            print(f"W/ T_comm: {task_n}: {ert[task_n]:.8f} - {ddl[task_n]:.8f}({ddl[task_n]-ert[task_n]:.8f})")
+            if task_n in df.T:
+                print(f"w/o T_comm: {task_n}: {df.loc[task_n, 'T release (ms)']/1000:.8f} - {df.loc[task_n, 'DDL (ms)']/1000:.8f}({df.loc[task_n, 'DDL (ms)']/1000-df.loc[task_n, 'T release (ms)']/1000:.8f})") 
+            print("------------------")
+    elif args.test_case == "timeline" or args.test_all:
         vis_task_static_timeline(list(glb_n_task_dict.values()), save=True, save_path="plot/task_static_timeline_cyclic.pdf", hyper_p=hyper_p, n_p=1, warmup=False, drain=True, )
     elif args.test_case == "liveness" or args.test_all:
         vis_task_static_timeline(list(glb_n_task_dict.values()), save=True, save_path="plot/task_liveness_timeline_cyclic.svg", 

@@ -58,7 +58,7 @@ def glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, tempora
         # issue the task
         allocate_rsc_4_process_new(_p, n_slot, process_dict, timestep, temporal_rda_ratio, FLOPS_PER_CORE, quantumSize,  
                 rsc_recoder, rsc_recoder_his, ready_queue, running_queue, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, 
-                quantum_check_en, strategy='first_fit', glb_key=sort_fn, verbose=False, DEBUG=False)
+                quantum_check_en, strategy='first_fit', glb_key=sort_fn, verbose=False, DEBUG=True)
 
     # update the running task
     if len(preempt_list):
@@ -81,9 +81,9 @@ def allocate_rsc_4_process_new(_p:ProcessInt, n_slot:int,
 
     # expected rsc_size and slot number
     time_slot_s, time_slot_e, req_rsc_size = _p.rsc_req_estm(n_slot, timestep, FLOPS_PER_CORE)
-    expected_slot_num = math.ceil(_p.totcpu / (req_rsc_size * timestep * FLOPS_PER_CORE))
-    # expected_slot_num = time_slot_e - time_slot_s
-    time_slot_e = min(time_slot_s + int(np.ceil(expected_slot_num * (temporal_rda_ratio + 1))), time_slot_e)
+    # expected_slot_num = math.ceil(_p.totcpu / (req_rsc_size * timestep * FLOPS_PER_CORE))
+    expected_slot_num = time_slot_e - time_slot_s
+    # time_slot_e = min(time_slot_s + int(np.ceil(expected_slot_num * (temporal_rda_ratio + 1))), time_slot_e)
 
     # try to push the task into the bins in the bin_list
     state, bin_id, succ_info, fail_info = bin_select(_p, time_slot_s, time_slot_e, req_rsc_size, 
