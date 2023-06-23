@@ -852,6 +852,8 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
     # calculate the criticity of the task
     # the most critical one is the first one, with the smallest value, use the ascending order
     fn_crit = lambda x: x.deadline
+    # fn_crit = lambda _p: budget_recoder[_p.pid][0] + budget_recoder[_p.pid][2]
+
     fn_task_flag = lambda x: 0 if x.task.task_flag=="stationary" else 1
 
     if curr_cfg.slot_s <= n_slot and n_slot <= curr_cfg.slot_e:
@@ -902,7 +904,15 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
                     curr_aval_rsc = res_cfg.size
                     preemptable_list = running_queue.queue
 
-            sorted_queue = sorted(ready_queue.queue+preemptable_list, key=lambda x: (fn_crit(x), fn_task_flag(x)))
+            score_fn = lambda x: (fn_crit(x), fn_task_flag(x), x not in preemptable_list)
+            # if len(preemptable_list) > 0:
+            #     threshold_item = min(preemptable_list, key=lambda x: score_fn(x))
+            #     threshold_score = score_fn(threshold_item)
+            # else:
+            #     threshold_score = (np.inf, 1)
+            threshold_score = (np.inf, 1, True)
+            filtered_ready_queue = [_p for _p in ready_queue.queue if score_fn(_p) < threshold_score]
+            sorted_queue = sorted(filtered_ready_queue+preemptable_list, key=score_fn,)
 
             rsc_map = OrderedDict()
             skiped_task = []
@@ -1327,9 +1337,6 @@ def trigger_read(inactive_list:List[ProcessInt], sensor_msg_queue:List,
         trigger_state = _p.sim_trigger(curr_t, timestep, pred_ctrl, event_triggers)
         if event_triggers is None:
             event_triggers = _p.event_triggers
-        if DEBUG_FG and trigger_state:
-            ingestion_time, event_time = event_triggers[0]
-            print(f"		{_p.task.name} triggered @ {ingestion_time:.6f}")
 
 def data_pipe_read(curr_t, glb_name_p_dict, process_dict, buffer, bin_name, bin_event_flg, a_msg_queue: List[Data], 
                    event_cache:EventCache=None):

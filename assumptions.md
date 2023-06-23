@@ -62,11 +62,30 @@ the task decrease the size is handled at first.
 
 首先过滤掉资源数量小于core_min的位置，这样后面只需要考虑，core_max 和 core_list 的约束
 
-应对轻微抖动，轻微抖动可能导致少量slot的late，具体表现为，time budget 减少。相对于调整core数量而言，保留少量的（若干slot）时间上的冗余更加划算。具体表现为，exp_comp_t 略微高于 ops/算力，但是这种冗余反应为端到端的时间增长。那么就只能让一些任务的计算时间更短一些，同样是用资源换取时间。
+slcak 分为spatial slack 和 temporal slack
+   - spatial slack: 任务的spatial slack是指任务的最大可用资源和最小可用资源之间的差值（为一些关键任务预留一些冗余资源，这些的任务对冗余资源保留最高优先级的使用权）
+   - temporal slack: 任务的temporal slack是指任务的最大可用时间和最小可用时间之间的差值, 给一些任务预分配更多的资源，以得到跟多的时间slack，然后把这些slack均分给所有的任务以应对调度导致的轻微的抖动（若干个slot）
+在运行时，应对轻微抖动可能导致少量slot的late，具体表现为，time budget 减少。面对少量且频繁抖动，相对于实时的调整core的分配方案，在预分配阶段在时间上保留少量的的冗余（若干slot）显得更加划算——具体表现为：
+exp_comp_t 略微高于 （ops/分配的算力），但是这种冗余反应为端到端的时间增长。那么就只能让一些任务的计算时间更短一些，同样是用资源换取时间。
 对于那些只有一种配置的任务，或者已经在预分配阶段就达到上限的任务，只在时间上保留冗余。
+
 
 mechanism: 
    Partial allocation is not allowed, i.e., the task is allocated to the whole cores or none.
    Each task only try once; the tasks already allocated are skipped;
    the tasks are preempted are given an extra opportunities.
    TODO: Allow partial allocation and add the logic to ensure the task have allocated enough resource, otherwise, we should not issue the task or compensate the resource latter. 
+
+10. compared items
+A. Context switching
+ - planned 
+ - preempted
+
+B. deadline assignment 
+   - shared
+   - fixed
+
+11. graph scalling
+   根据上下游节点的频率和并行度讨论图变换的模式。
+   对于上游频率高于下游的情况：采用间隔均匀采点模式（等间距分割）
+   下游高于上游情况：目前提供两种模式接口（interleave，repea），但是采用的是等间距分割模式

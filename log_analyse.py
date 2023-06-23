@@ -24,8 +24,8 @@ completed_pattern2 = r'(lateness detected)TASK (\d+):([\w_]+)\((\d+)\) COMPLETED
 # TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!
 miss_pattern = r'\t\tTASK (\d+):([\w_]+)\((\d+)\) MISSED DEADLINE @ ([\d.]+)/([\d.]+)!!'
 
-# f"		{_p.task.name} triggered @ {ingestion_time:.6f}"
-trigger_pattern = r'\t\t([\w_]+) triggered @ ([\d.]+)'
+# f"		{_p.task.name} triggered @ {ingestion_time:.6f}/{event_time:.6f}"
+trigger_pattern = r'\t\t([\w_]+) triggered @ ([\d.]+)/([\d.]+)'
 pattern = r'(?P<task>\w+)\s+triggered\s+@\s+(?P<time>\d+\.\d+)'
 
 # 遍历指定文件夹下的所有 .log.txt 文件, 按照文件名排序

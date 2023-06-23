@@ -687,6 +687,8 @@ def allocate_rsc_4_process(_p:ProcessInt, n_slot:int,
         # # remove the thread number at the end of the name
         # # name parse
         # thread_n = _p.task.name.split('_')[-1]
+        # troughput_n = _p.task.name.split('_')[-2]
+        # task_n = _p.task.name.replace("_"+thread_n, "").replace("_"+troughput_n, "")
         # p_name = _p.task.name
         # task_base_name = p_name.replace("_"+thread_n, "")
         # thread_n = int(thread_n)

@@ -152,26 +152,30 @@ def message_trigger_event_new(event_iter_dict:Dict, inactive_list, glb_p_list,
     name2p = {p.task.name:p for p in glb_p_list}
     for name, (ingestion_time_iter, event_time_iter) in event_iter_dict.items():
         _p = name2p[name]
+        # initialize the next event time and ingestion time
         if curr_t == 0 and _p.next_event_time is None:
             _p.next_event_time = next(event_time_iter)
             _p.next_ingestion_time = next(ingestion_time_iter)
         
+        # judge whether the event is triggered  
         assert _p.trigger_mode == "event", "trigger mode is not event"
         if curr_t - _p.next_ingestion_time >= -timestep*numerical_error_tol_rel:
+            # cahce the trigger evnet
             if sensor_pipe is None:
                 _p.event_triggers.append([_p.next_ingestion_time, _p.next_event_time])
             else:
                 sensor_pipe.broadcast_message([_p.pid, _p.next_ingestion_time, _p.next_event_time])
+            if DEBUG_FG:
+                print(f"		{_p.task.name} triggered @ {_p.next_ingestion_time:.6f}/{_p.next_event_time:.6f}")
+
+            # fetch the next event time
             try:
                 _p.next_event_time = next(event_time_iter)
                 _p.next_ingestion_time = next(ingestion_time_iter)
             except StopIteration:
                 _p.next_event_time = np.inf
                 _p.next_ingestion_time = np.inf
-        
+
         if _p in inactive_list and sensor_pipe is None:
             _p:ProcessBase
             trigger_state = _p.sim_trigger(curr_t, timestep)
-            if DEBUG_FG and trigger_state:
-                ingestion_time, event_time = _p.event_triggers[0]
-                print(f"		{_p.task.name} triggered @ {ingestion_time:.6f}")

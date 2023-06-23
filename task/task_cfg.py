@@ -304,39 +304,45 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int):
     for node_n in df.index:
         node_attr = df.loc[node_n].to_dict()
         factor = node_attr["Throuput factor (Spat.)"]
+        copy_n = node_attr['Thread factor (Spat.)']
         freq = int(node_attr["Freq."]/f_gcd)
-        node_parall_dict[node_n] = [factor, freq]
+        node_parall_dict[node_n] = [copy_n, factor, freq]
 
 
+    # add nodes
     for node_n, t in logical_graph_nx.nodes(data="type"):
         if node_n in df.index:
-            node_attr = df.loc[node_n].to_dict()
-            factor = node_attr["Throuput factor (Spat.)"]
-            for i in range(factor):
-                node_name = node_n+"_"+str(i)
-                physical_graph_nx.add_node(node_name, type=t)
-                # add control dependency
-                if i < factor-1:
-                    # physical_graph_nx.add_edge(node_name, node_n+"_"+str(i+1))
-                    pass
+            copy_n, factor, freq = node_parall_dict[node_n]
+            for copy_j in range(copy_n):
+                for exe_k in range(factor):
+                    node_name = node_n+"_"+str(copy_j)+"_"+str(exe_k)
+                    physical_graph_nx.add_node(node_name, type=t)
+                    # add control dependency
+                    if exe_k < factor-1:
+                        # physical_graph_nx.add_edge(node_name, node_n+"_"+str(copy_j)+"_"+str(exe_k+1))
+                        pass
         else:
             physical_graph_nx.add_node(node_n, type=t)
 
     # add data dependency, rescale the parallelism
     for pred_n, succ_n, edge_attr in logical_graph_nx.edges(data=True):
         if pred_n in df.index and succ_n in df.index:
-            pred_factor, pred_freq = node_parall_dict[pred_n]
-            succ_factor, succ_freq = node_parall_dict[succ_n]
-            build_node_relationship(physical_graph_nx, 
-                                    pred_freq, succ_freq, 
-                                    pred_factor, succ_factor,
-                                    pred_n, succ_n,)
+            pred_copy_n, pred_factor, pred_freq = node_parall_dict[pred_n]
+            succ_copy_n, succ_factor, succ_freq = node_parall_dict[succ_n]
+            for pred_copy_j in range(pred_copy_n):
+                for succ_copy_j in range(succ_copy_n):   
+                    build_node_relationship(physical_graph_nx, 
+                                            pred_freq, succ_freq, 
+                                            pred_factor, succ_factor,
+                                            # pred_n+"_"+pred_copy_j, 
+                                            f"{pred_n}_{pred_copy_j}",
+                                            f"{succ_n}_{succ_copy_j}", 'repeat')
             # count the number of edges from pred to each succ
-            for i in range(succ_factor):
+            for succ_exe_k in range(succ_factor):
                 count = 0
-                succ_node_name = succ_n+"_"+str(i)
-                for j in range(pred_factor):
-                    pred_node_name = pred_n+"_"+str(j)
+                succ_node_name = succ_n+"_"+str(0)+"_"+str(succ_exe_k)
+                for pred_exe_k in range(pred_factor):
+                    pred_node_name = pred_n+"_"+str(0)+"_"+str(pred_exe_k)
                     if physical_graph_nx.has_edge(pred_node_name, succ_node_name):
                         count += 1
                 # add attribute to the edge, type: data, factor: count
@@ -346,18 +352,21 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int):
                     reDistPattn = "one2one"
                 else:
                     reDistPattn = "downscaling"
-                for j in range(pred_factor):
-                    pred_node_name = pred_n+"_"+str(j)
-                    if physical_graph_nx.has_edge(pred_node_name, succ_node_name):
-                        physical_graph_nx.edges[pred_node_name, succ_node_name]["reDistPattn"] = reDistPattn
-                        physical_graph_nx.edges[pred_node_name, succ_node_name]["type"] = "data"
-                        physical_graph_nx.edges[pred_node_name, succ_node_name]["factor"] = count
+                for pred_copy_j in range(pred_copy_n):
+                    for succ_copy_j in range(succ_copy_n): 
+                        for pred_exe_k in range(pred_factor):
+                            succ_node_name = succ_n+"_"+str(succ_copy_j)+"_"+str(succ_exe_k)
+                            pred_node_name = pred_n+"_"+str(pred_copy_j)+"_"+str(pred_exe_k)
+                            if physical_graph_nx.has_edge(pred_node_name, succ_node_name):
+                                physical_graph_nx.edges[pred_node_name, succ_node_name]["reDistPattn"] = reDistPattn
+                                physical_graph_nx.edges[pred_node_name, succ_node_name]["type"] = "data"
+                                physical_graph_nx.edges[pred_node_name, succ_node_name]["factor"] = count
             
-            for i in range(pred_factor):
+            for pred_exe_k in range(pred_factor):
                 count = 0
-                pred_node_name = pred_n+"_"+str(i)
-                for j in range(succ_factor):
-                    succ_node_name = succ_n+"_"+str(j)
+                pred_node_name = pred_n+"_"+str(0)+"_"+str(pred_exe_k)
+                for succ_exe_k in range(succ_factor):
+                    succ_node_name = succ_n+"_"+str(0)+"_"+str(succ_exe_k)
                     if physical_graph_nx.has_edge(pred_node_name, succ_node_name):
                         count += 1
                         if count > 1:
@@ -366,23 +375,28 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int):
                 # reDistPattn: upscaling (count>1)
                 if count > 1:
                     reDistPattn = "upscaling"
-                    for j in range(succ_factor):
-                        succ_node_name = succ_n+"_"+str(j)
-                        if physical_graph_nx.has_edge(pred_node_name, succ_node_name):
-                            physical_graph_nx.edges[pred_node_name, succ_node_name]["reDistPattn"] = reDistPattn
-                            physical_graph_nx.edges[pred_node_name, succ_node_name]["type"] = "data"
-                            physical_graph_nx.edges[pred_node_name, succ_node_name]["factor"] = count
+                    for pred_copy_j in range(pred_copy_n):
+                        for succ_copy_j in range(succ_copy_n): 
+                            for succ_exe_k in range(succ_factor):
+                                succ_node_name = succ_n+"_"+str(succ_copy_j)+"_"+str(succ_exe_k)
+                                pred_node_name = pred_n+"_"+str(pred_copy_j)+"_"+str(pred_exe_k)
+                                if physical_graph_nx.has_edge(pred_node_name, succ_node_name):
+                                    physical_graph_nx.edges[pred_node_name, succ_node_name]["reDistPattn"] = reDistPattn
+                                    physical_graph_nx.edges[pred_node_name, succ_node_name]["type"] = "data"
+                                    physical_graph_nx.edges[pred_node_name, succ_node_name]["factor"] = count
 
         elif pred_n in df.index and succ_n not in df.index:
-            pred_factor, pred_freq = node_parall_dict[pred_n]
-            for i in range(pred_factor):
-                pred_node_name = pred_n+"_"+str(i)
-                physical_graph_nx.add_edge(pred_node_name, succ_n, type="control", reDistPattn="none")
+            pred_copy_n, pred_factor, pred_freq = node_parall_dict[pred_n]
+            for pred_copy_j in range(pred_copy_n):
+                for exe_k in range(pred_factor):
+                    pred_node_name = pred_n+"_"+str(pred_copy_j)+"_"+str(exe_k)
+                    physical_graph_nx.add_edge(pred_node_name, succ_n, type="control", reDistPattn="none")
         elif pred_n not in df.index and succ_n in df.index:
-            succ_factor, succ_freq = node_parall_dict[succ_n]
-            for i in range(succ_factor):
-                succ_node_name = succ_n+"_"+str(i)
-                physical_graph_nx.add_edge(pred_n, succ_node_name, type="control", reDistPattn="none")
+            succ_copy_n, succ_factor, succ_freq = node_parall_dict[succ_n]
+            for succ_copy_j in range(succ_copy_n): 
+                for exe_k in range(succ_factor):
+                    succ_node_name = succ_n+"_"+str(succ_copy_j)+"_"+str(exe_k)
+                    physical_graph_nx.add_edge(pred_n, succ_node_name, type="control", reDistPattn="none")
         else:
             physical_graph_nx.add_edge(pred_n, succ_n, type="control", reDistPattn="none")
     
@@ -399,15 +413,17 @@ def creat_jobTask_graph(task_graph:Dict[str, List[str]], f_gcd, plot:bool=False)
         if task_n in df.index:
             task_attr = df.loc[task_n].to_dict()
             factor = task_attr["Throuput factor (Spat.)"]
+            copy_n = task_attr['Thread factor (Spat.)']
             freq  = task_attr["Freq."]/f_gcd
             num_per_group = int(np.ceil(freq / factor))
-            for i in range(factor):
-                task_name = task_n+"_"+str(i)
-                job_graph_nx.add_node(task_name)
-                # add control dependency
-                if i < factor-1:
-                    # job_graph_nx.add_edge(task_name, task_n+"_"+str(i+1), type="control")
-                    pass
+            for copy_j in range(copy_n):
+                for exe_k in range(factor):
+                    task_name = task_n+"_"+str(copy_j)+"_"+str(exe_k)
+                    job_graph_nx.add_node(task_name)
+                    # add control dependency
+                    if exe_k < factor-1:
+                        # job_graph_nx.add_edge(task_name, task_n+"_"+str(copy_j)+"_"+str(exe_k+1), type="control")
+                        pass
 
             # add dependency
             for succ_n in task_graph[task_n]:
@@ -419,30 +435,33 @@ def creat_jobTask_graph(task_graph:Dict[str, List[str]], f_gcd, plot:bool=False)
                     job_graph_nx.add_edge(task_name, "Exit", type="control")
                     continue
                 succ_factor = df.loc[succ_n]["Throuput factor (Spat.)"]
+                succ_copy_n = df.loc[succ_n]['Thread factor (Spat.)']
                 succ_freq  = int(df.loc[succ_n]["Freq."]/f_gcd)
                 succ_num_per_group = int(np.ceil(succ_freq/succ_factor))
-                for i_s in range(succ_freq):
-                    no_succ = int(i_s // succ_num_per_group)
-                    succ_job_name = succ_n+"_"+str(no_succ)
-                    
-                    # just like quantization
-                    succ_t = i_s/succ_freq
-                    pred_t = int(succ_t*freq)
+                for copy_j in range(succ_copy_n):
+                    for exe_k in range(succ_freq):
+                        no_succ = int(exe_k // succ_num_per_group)
+                        succ_job_name = succ_n+"_"+str(copy_j)+"_"+str(no_succ)
+                        
+                        # just like quantization
+                        succ_t = exe_k/succ_freq
+                        pred_t = int(succ_t*freq)
 
-                    no_ = int(pred_t // num_per_group)
-                    pre_job_name = task_n+"_"+str(no_)
-                    job_graph_nx.add_edge(pre_job_name, succ_job_name, type="data")
-                    # add attribute "reDistPattn", to classify the redistributing pattern
-                    # downstream <- upstream
-                    if succ_factor < factor:
-                        # set reDistPattn as "downscaling"
-                        job_graph_nx[pre_job_name][succ_job_name]["reDistPattn"] = "downscaling"
-                    elif succ_factor > factor:
-                        # set reDistPattn as "upscalling"
-                        job_graph_nx[pre_job_name][succ_job_name]["reDistPattn"] = "upscaling"
-                    else:
-                        # set reDistPattn as "one2one" 
-                        job_graph_nx[pre_job_name][succ_job_name]["reDistPattn"] = "one2one"
+                        no_ = int(pred_t // num_per_group)
+                        for copy_i in range(copy_n):
+                            pre_job_name = task_n+"_"+str(copy_i)+"_"+str(no_)
+                            job_graph_nx.add_edge(pre_job_name, succ_job_name, type="data")
+                            # add attribute "reDistPattn", to classify the redistributing pattern
+                            # downstream <- upstream
+                            if succ_factor < factor:
+                                # set reDistPattn as "downscaling"
+                                job_graph_nx[pre_job_name][succ_job_name]["reDistPattn"] = "downscaling"
+                            elif succ_factor > factor:
+                                # set reDistPattn as "upscalling"
+                                job_graph_nx[pre_job_name][succ_job_name]["reDistPattn"] = "upscaling"
+                            else:
+                                # set reDistPattn as "one2one" 
+                                job_graph_nx[pre_job_name][succ_job_name]["reDistPattn"] = "one2one"
         else:
             job_graph_nx.add_node(task_n)
             edge_type = "control" if task_n == "Entry" else "data"
@@ -450,9 +469,11 @@ def creat_jobTask_graph(task_graph:Dict[str, List[str]], f_gcd, plot:bool=False)
                 if succ_n in df.index:
                     task_attr = df.loc[succ_n].to_dict()
                     factor = task_attr["Throuput factor (Spat.)"]
-                    for i in range(factor):
-                        succ_job_name = succ_n+"_"+str(i)
-                        job_graph_nx.add_edge(task_n, succ_job_name, type=edge_type)
+                    copy_n = task_attr['Thread factor (Spat.)']
+                    for copy_j in range(copy_n):
+                        for exe_k in range(factor):
+                            succ_job_name = succ_n+"_"+str(copy_j)+"_"+str(exe_k)
+                            job_graph_nx.add_edge(task_n, succ_job_name, type=edge_type)
                 else:
                     job_graph_nx.add_edge(task_n, succ_n, type=edge_type)
 
@@ -515,63 +536,57 @@ def load_taskint(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]
         task_attr["Timing_flag"] = "deadline" if task_attr["Timing_flag"]=="DDL" else "realtime"
         task_attr["Resource Type"] = "stationary" if task_attr["Resource Type"]=="S" else "moveable"
         task_attr["Pre-assigned"] = False if task_attr["Pre-assigned"]=="N" else True
-        for i in range(task_attr["Throuput factor (Spat.)"]):
-            T = task_attr["Throuput factor (Spat.)"]/task_attr["Freq."]
-            phase = i/task_attr["Freq."]
-            parallel_cfg = {}
-            if task_attr["Parallel_type"] == "Upb":
-                parallel_cfg["mode"] = "upb"
-                parallel_cfg["max"] = int(task_attr["Parallel_range"])
-            elif task_attr["Parallel_type"] == "Lwb":
-                parallel_cfg["mode"] = "lwb"
-                parallel_cfg["min"] = int(task_attr["Parallel_range"])
-            elif task_attr["Parallel_type"] == "Range":
-                parallel_cfg["mode"] = "range"
-                # split the range into two parts
-                parallel_cfg["min"], parallel_cfg["max"] = map(int, task_attr["Parallel_range"].split(","))
-            elif task_attr["Parallel_type"] == "list":
-                parallel_cfg["mode"] = "list"
-                parallel_cfg["list"] = map(int, task_attr["Parallel_range"].split(","))
-            task = TaskInt(
-                task_name=task_n+"_"+str(i), task_id=task_id, timing_flag=task_attr["Timing_flag"], 
-                ERT=task_attr["T release (ms)"]/1000, ddl=(task_attr['DDL (ms)']-task_attr["T release (ms)"])/1000, period=T, 
-                exp_comp_t=task_attr['Expected Latency (ms)']/1000, i_offset=phase, jitter_max=0,
-                flops=task_attr["Flops on path (G)"]/1e3, task_flag=task_attr["Resource Type"], 
-                pre_assigned_resource_flag=task_attr["Pre-assigned"]>0, 
-                RDA_size=task_attr['RDA./Req.'], main_size=task_attr['Cores/Req.'], seq_cpu_time=task_attr["Flops on path (G)"]/1e3,
-                op_cpu_time=task_attr["Flops on path (G)"]/1e3, op_io_time=1e-6,
-                criti_flag="soft" if task_attr["Criti_flag"]=='S' else "hard", 
-                cbs_en=True, # if task_attr["Cbs_en"]=='Y' else False, 
-                trigger_mode=task_attr["Trigger_mode"], 
-                parallel_cfg=parallel_cfg,
+        for thread_j in range(task_attr["Thread factor (Spat.)"]):
+            for exe_k in range(task_attr["Throuput factor (Spat.)"]):
+                T = task_attr["Throuput factor (Spat.)"]/task_attr["Freq."]
+                phase = exe_k/task_attr["Freq."]
+                parallel_cfg = {}
+                if task_attr["Parallel_type"] == "Upb":
+                    parallel_cfg["mode"] = "upb"
+                    parallel_cfg["max"] = int(task_attr["Parallel_range"])
+                elif task_attr["Parallel_type"] == "Lwb":
+                    parallel_cfg["mode"] = "lwb"
+                    parallel_cfg["min"] = int(task_attr["Parallel_range"])
+                elif task_attr["Parallel_type"] == "Range":
+                    parallel_cfg["mode"] = "range"
+                    # split the range into two parts
+                    parallel_cfg["min"], parallel_cfg["max"] = map(int, task_attr["Parallel_range"].split(","))
+                elif task_attr["Parallel_type"] == "list":
+                    parallel_cfg["mode"] = "list"
+                    parallel_cfg["list"] = map(int, task_attr["Parallel_range"].split(","))
+                task = TaskInt(
+                    task_name=task_n+"_"+str(thread_j)+"_"+str(exe_k), task_id=task_id, timing_flag=task_attr["Timing_flag"], 
+                    ERT=task_attr["T release (ms)"]/1000, ddl=(task_attr['DDL (ms)']-task_attr["T release (ms)"])/1000, period=T, 
+                    exp_comp_t=task_attr['Expected Latency (ms)']/1000, i_offset=phase, jitter_max=0,
+                    flops=task_attr["Flops on path (G)"]/1e3, task_flag=task_attr["Resource Type"], 
+                    pre_assigned_resource_flag=task_attr["Pre-assigned"]>0, 
+                    RDA_size=task_attr['RDA./Req.'], main_size=task_attr['Cores/Req.'], seq_cpu_time=task_attr["Flops on path (G)"]/1e3,
+                    op_cpu_time=task_attr["Flops on path (G)"]/1e3, op_io_time=1e-6,
+                    criti_flag="soft" if task_attr["Criti_flag"]=='S' else "hard", 
+                    cbs_en=True, # if task_attr["Cbs_en"]=='Y' else False, 
+                    trigger_mode=task_attr["Trigger_mode"], 
+                    parallel_cfg=parallel_cfg,
 
-            )
-            task.freq = task_attr["Freq."]
-            # initialize task affinity list
-            thread_n = int(i)
-            affinity_tgt_n_list = affinity_cfg[task_n]        
-            affinity_tgt_n_list = [n+'_'+str(thread_n) for n in affinity_tgt_n_list]
-            task.affinity_n = affinity_tgt_n_list
-            # initialize dependency list
+                )
+                task.freq = task_attr["Freq."]
 
-
-            if plot:
-                s = task.get_release_time()
-                e = task.get_deadline_time()
-                horizen_grid.add(s)
-                horizen_grid.add(e)
-                ax.hlines(y=vertical_offset*vertical_grid_size, xmin=s,
-                        xmax=e, lw=2, color=mcolors.XKCD_COLORS[colors[vertical_offset]]
-                        )  # label=task_list[i].name)
-                ax.text(s, vertical_offset*vertical_grid_size+0.001,
-                        task.name, fontsize=7)
-                vertical_offset+=1
+                if plot:
+                    s = task.get_release_time()
+                    e = task.get_deadline_time()
+                    horizen_grid.add(s)
+                    horizen_grid.add(e)
+                    ax.hlines(y=vertical_offset*vertical_grid_size, xmin=s,
+                            xmax=e, lw=2, color=mcolors.XKCD_COLORS[colors[vertical_offset]]
+                            )  # label=task_list[i].name)
+                    ax.text(s, vertical_offset*vertical_grid_size+0.001,
+                            task.name, fontsize=7)
+                    vertical_offset+=1
 
 
-            task.required_resource_size = task_attr['Cores/Req.']
-            # print(str(task))
-            task_id += 1
-            task_dict.update({task.name: task})
+                task.required_resource_size = task_attr['Cores/Req.']
+                # print(str(task))
+                task_id += 1
+                task_dict.update({task.name: task})
         if plot:
             save_path="task_static_timeline.pdf"
             # np.arange(0, sim_time+time_grid_size, time_grid_size)
@@ -582,14 +597,9 @@ def load_taskint(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]
             ax.plot(X, Y, 'k', lw=0.5, alpha=0.5)
             plt.savefig(save_path, format="pdf")
 
-    for task_n, task in task_dict.items(): 
-        # get affinity target id
-        # TODO: bug here， key error when the affinity target is not in the pid_idx
-        affinity_tgt_id_list = [task_dict[n].id for n in task.affinity_n if n in task_dict]
-        task.affinity = affinity_tgt_id_list
-
     return task_dict
 
+# initialize dependency list
 def init_depen(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[TaskInt,ProcessInt]]], job_graph_nx:nx.DiGraph, verbose=False):
     # if taskJobs is a list, convert it to a dict
     if isinstance(taskJobs, list):
@@ -626,6 +636,75 @@ def init_depen(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[T
         if verbose:
             print(job_n, job.pred_data, job.pred_ctrl, job.succ_data, job.succ_ctrl)
 
+def init_affinity(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[TaskInt,ProcessInt]]]=None, 
+                  mode="task",
+                  job_graph_nx:nx.DiGraph=None, 
+                  task_graph_nx:nx.DiGraph=None,
+                  task_custom_affinity_cfg:Dict[str, List[str]]=None, 
+                  job_custom_affinity_cfg:Dict[str, List[str]]=None,
+                  verbose=False):
+    # affinity task/job(s) selection machanism:
+    #   Basic principle: 
+    #       Besides the custom affinity configuration, prioritize the tasks/jobs with the highest probability 
+    #       of running simultaneously.
+    #   Positive affinity:
+    #       1. the predecesor of the task/job
+    #       2. the successor of the task/job
+    #   negative affinity:
+    #       1. the slibling of the task/job
+    pos_affinity_cfg = {}
+    neg_affinity_cfg = {}
+    if mode == "task":
+        assert task_graph_nx is not None
+        for node_n in task_graph_nx.nodes():
+            # get predecesor, successor and slibling
+            pred_n_list = [pred for pred in task_graph_nx.pred[node_n].keys() if pred not in task_graph_srcs.keys()]
+            succ_n_list = [succ for succ in task_graph_nx.succ[node_n].keys() if succ not in task_graph_sinks.keys()]
+            slib_n_list = [sibling for pred_n in pred_n_list for sibling in task_graph_nx.succ[pred_n].keys() if sibling != node_n and sibling not in task_graph_sinks.keys()]
+            
+            # 0. custom affinity configuration
+            pos_affinity_cfg.update({node_n:task_custom_affinity_cfg[node_n]})
+            # 1. the predecesor of the task/job
+            pos_affinity_cfg.update({node_n:pred_n_list})
+            # 2. the successor of the task/job
+            pos_affinity_cfg[node_n].extend(succ_n_list)
+            # 3. the slibling of the task/job
+            neg_affinity_cfg.update({node_n:slib_n_list})
+    elif mode == "job":
+        assert taskJobs is not None
+        if isinstance(taskJobs, list):
+            if taskJobs[0].__class__.__name__ == "ProcessInt":
+                taskJobs = {i.task.name:i for i in taskJobs}
+            elif taskJobs[0].__class__.__name__ == "TaskInt":
+                taskJobs = {i.name:i for i in taskJobs}
+        assert job_graph_nx is not None
+        for job_n, job in taskJobs.items():
+            # get predecesor, successor and slibling
+            pred_n_list = [pred_n for pred_n in job_graph_nx.pred[job_n].keys() if pred_n not in task_graph_srcs.keys()]
+            succ_n_list = [succ_n for succ_n in job_graph_nx.succ[job_n].keys() if succ_n not in task_graph_sinks.keys()]
+            slib_n_list = [sibling for pred_n in pred_n_list for sibling in job_graph_nx.succ[pred_n].keys() if sibling != job_n and sibling not in task_graph_sinks.keys()]
+            
+            # 0. custom affinity configuration
+            if job_custom_affinity_cfg is not None:
+                pos_affinity_cfg.update({job_n:job_custom_affinity_cfg[job_n]})
+            # 1. the predecesor of the task/job
+            pos_affinity_cfg.update({job_n:pred_n_list})
+            # 2. the successor of the task/job
+            pos_affinity_cfg[job_n].extend(succ_n_list)
+            # 3. the slibling of the task/job
+            neg_affinity_cfg.update({job_n:slib_n_list})
+
+            # initialize task affinity list
+            job.task.affinity_n = pos_affinity_cfg[job_n]
+
+            # get affinity target id
+            # TODO: bug here， key error when the affinity target is not in the pid_idx
+            job.task.affinity = [taskJobs[n].task.id for n in pos_affinity_cfg[job_n] if n in taskJobs]
+
+    else:
+        raise Exception("Unknown mode")
+    return pos_affinity_cfg, neg_affinity_cfg
+
 def redist_ert_dll(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[TaskInt,ProcessInt]]],
         logical_graph_nx:nx.DiGraph=None, spatial_rda_ratio=0, sched_step_comp=0, 
         comm_compen_en=False,  verbose=False):
@@ -640,7 +719,8 @@ def redist_ert_dll(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Uni
     for job_n, job in taskJobs.items():
         # parse the sub task number from the job name
         thread_n = job_n.split('_')[-1]
-        task_n = job_n.replace("_"+thread_n, "")
+        troughput_n = job_n.split('_')[-2]
+        task_n = job_n.replace("_"+thread_n, "").replace("_"+troughput_n, "")
         job.ERT = ert[task_n]
         job.ddl = ddl[task_n] - ert[task_n]
 
@@ -661,6 +741,7 @@ def estim_release_dll_time(task_graph_nx:nx.DiGraph,
     df:pd.DataFrame = pd.read_csv("profiling.csv", sep=",", index_col=0) 
     comp_time: Dict[str, float] = {task_n:df.loc[task_n, "Expected Latency (ms)"]/1000 for task_n in df.T}
     io_time: Dict[str, float] = {task_n:1e-6 for task_n in df.T}
+    # task_type: Dict[str, str] = {task_n:df.loc[task_n, "Timing_flag"] for task_n in df.T}
 
     for node in nx.topological_sort(task_graph_nx):  # 拓扑排序遍历节点
         preds = task_graph_nx.pred[node]  # 获取当前节点的前驱节点
@@ -675,7 +756,11 @@ def estim_release_dll_time(task_graph_nx:nx.DiGraph,
                     ert[node] = max([ddl[pred] for pred in preds])
             else:
                 ert[node] = 0
-            ddl[node] = ert[node] + comp_time[node] *1e7 / (1 - spatial_rda_ratio)/ 1e7 + sched_step_comp # 计算当前节点的最早截止时间
+            # compute the ddl
+            # if task_type[node] == "RT": 
+            #     ddl[node] = ert[node] + comp_time[node] + sched_step_comp 
+            # else:
+            ddl[node] = ert[node] + comp_time[node] *1e7 / (1 - spatial_rda_ratio)/ 1e7
     return ert, ddl
 
 def create_init_p_list(tasks: Union[List[TaskInt], Dict[str, TaskInt]], verbose:bool):
@@ -724,7 +809,7 @@ if __name__ == "__main__":
 
     if args.test_case == "ert_ddl" or args.test_all:
         logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
-        ert, ddl = estim_release_dll_time(logical_graph_nx, spatial_rda_ratio=0.05, verbose=args.verbose)
+        ert, ddl = estim_release_dll_time(logical_graph_nx, spatial_rda_ratio=0.05, sched_step_comp=sim_step, verbose=args.verbose)
         df = pd.read_csv("profiling.csv", sep=",", index_col=0) 
         for task_n in ert: 
             print(f"W/ T_comm: {task_n}: {ert[task_n]:.8f} - {ddl[task_n]:.8f}({ddl[task_n]-ert[task_n]:.8f})")
@@ -759,7 +844,7 @@ if __name__ == "__main__":
         nx.draw(logical_graph_nx, pos, with_labels=False, node_size=100, node_color=node_colors, edge_color=edge_colors, font_size=10, ax=ax1)
         text = nx.draw_networkx_labels(logical_graph_nx, pos, font_size=10, ax=ax1)
         for _, t in text.items():
-            t.set_rotation(30)
+            t.set_rotation(60)
         fig.tight_layout()
 
 
@@ -774,6 +859,6 @@ if __name__ == "__main__":
         nx.draw(physical_graph_nx, pos, with_labels=False, node_size=100, node_color=node_colors, edge_color=edge_colors, font_size=10, ax=ax2)
         text = nx.draw_networkx_labels(physical_graph_nx, pos, font_size=10, ax=ax2)
         for _, t in text.items():
-            t.set_rotation(30)
+            t.set_rotation(60)
         fig.tight_layout()
         plt.savefig("plot/jobTask_graph.pdf", format="pdf")

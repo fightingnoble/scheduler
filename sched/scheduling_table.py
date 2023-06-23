@@ -612,8 +612,10 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[
     bin_vertical_offset = base_vertical_offset
 
     for bin_idx, _SchedTab in enumerate(bin_list): 
-        bin_temp_size = len(_SchedTab.scheduling_table)
-        bin_spatial_size = _SchedTab.scheduling_table[0].size
+        # bin_temp_size = len(_SchedTab.scheduling_table)
+        # bin_spatial_size = _SchedTab.scheduling_table[0].size
+        bin_spatial_size = _SchedTab.num_resources
+        bin_temp_size = _SchedTab.temp_size
 
         if tool == "matplotlib":
             ax = fig.add_subplot(len(bin_list), 1, len(bin_list)-_SchedTab.id)
@@ -627,8 +629,13 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[
         empty_boader_s = []
         empty_boader_e = []
         title_line = False
-
-        pre_rsc = _SchedTab.scheduling_table[0].rsc_map
+        try:
+            pre_rsc = _SchedTab.scheduling_table[0].rsc_map
+        except IndexError:
+            print(_SchedTab.name, _SchedTab.id, _SchedTab.num_resources, _SchedTab.temp_size)
+            print(bin_list.index(_SchedTab))
+            print(len(bin_list), id(bin_list))
+            assert False
         # build a position dict
         position_dict = {}
         cum_pos = 0

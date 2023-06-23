@@ -481,7 +481,7 @@ if __name__ == "__main__":
 
     from task.task_cfg import load_taskint, create_init_p_list
     from task.task_cfg import affinity_cfg, task_graph_srcs, task_graph_ops, task_graph_sinks
-    from task.task_cfg import creat_physical_graph, creat_logical_graph, init_depen, redist_ert_dll
+    from task.task_cfg import creat_physical_graph, creat_logical_graph, init_depen, init_affinity, redist_ert_dll
     from global_sched import push_task_into_bins, push_task_into_bins_new
 
     parser = argparse.ArgumentParser()
@@ -526,6 +526,7 @@ if __name__ == "__main__":
     redist_ert_dll(glb_n_task_dict, logical_graph_nx, spatial_rda_ratio=args.temporal_rda_ratio, verbose=args.verbose)
     init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
     glb_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
+    init_affinity(glb_p_list, mode='job', job_graph_nx=physical_graph_nx, verbose=args.verbose)
 
     # assert all the process has hard deadline
     # for _p in glb_p_list:

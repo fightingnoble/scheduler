@@ -29,7 +29,7 @@ import math
 import networkx as nx
 import matplotlib.pyplot as plt
 
-def build_data_node_relationship(G:nx.DiGraph, freq_A:int, freq_B:int, S_A:int, S_B:int, A_n:str, B_n:str):
+def build_data_node_relationship(G:nx.DiGraph, freq_A:int, freq_B:int, S_A:int, S_B:int, A_n:str, B_n:str, dispatch_mode:str='interleave'):
     for i in range(S_A):
         A_node = f"{A_n}_{i}"
         G.add_node(A_node)
@@ -52,11 +52,16 @@ def build_data_node_relationship(G:nx.DiGraph, freq_A:int, freq_B:int, S_A:int, 
                             G.add_edge(A_node, B_node)
                     else:
                         # j == i+freq_A*t
-                        if A_data_idx == B_data_idx % freq_A:
-                            G.add_edge(A_node, B_node)
+                        assert dispatch_mode in ['interleave', 'repeat']
+                        if dispatch_mode == 'interleave':
+                            if A_data_idx == B_data_idx % freq_A:
+                                G.add_edge(A_node, B_node)
+                        elif dispatch_mode == 'repeat':
+                            if A_data_idx == int(B_data_idx / freq_B * freq_A):
+                                G.add_edge(A_node, B_node)
     return G
 
-def build_node_relationship(G:nx.DiGraph, freq_A:int, freq_B:int, S_A:int, S_B:int, A_n:str, B_n:str):
+def build_node_relationship(G:nx.DiGraph, freq_A:int, freq_B:int, S_A:int, S_B:int, A_n:str, B_n:str, dispatch_mode:str='interleave'):
     for i in range(S_A):
         A_node = f"{A_n}_{i}"
         G.add_node(A_node)
@@ -79,8 +84,13 @@ def build_node_relationship(G:nx.DiGraph, freq_A:int, freq_B:int, S_A:int, S_B:i
                             G.add_edge(A_node, B_node)
                     else:
                         # j == i+freq_A*t
-                        if A_data_idx == B_data_idx % freq_A:
-                            G.add_edge(A_node, B_node)
+                        assert dispatch_mode in ['interleave', 'repeat']
+                        if dispatch_mode == 'interleave':
+                            if A_data_idx == B_data_idx % freq_A:
+                                G.add_edge(A_node, B_node)
+                        elif dispatch_mode == 'repeat':
+                            if A_data_idx == int(B_data_idx / freq_B * freq_A):
+                                G.add_edge(A_node, B_node)
     return G
 
 

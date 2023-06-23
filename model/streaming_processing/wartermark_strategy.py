@@ -61,7 +61,8 @@ class WatermarkStrategy(object):
                 # name parse
                 # remove the thread number at the end of the name
                 thread_n = key.split('_')[-1]
-                task_n = key.replace("_"+thread_n, "")
+                troughput_n = key.split('_')[-2]
+                task_n = key.replace("_"+thread_n, "").replace("_"+troughput_n, "")
                 if task_n not in joint_stream_dict:
                     joint_stream_dict[task_n] = []
                 joint_stream_dict[task_n].extend(stream_dict[key])
@@ -85,7 +86,8 @@ class WatermarkStrategy(object):
                 # name parse
                 # remove the thread number at the end of the name
                 thread_n = key.split('_')[-1]
-                task_n = key.replace("_"+thread_n, "")
+                troughput_n = key.split('_')[-2]
+                task_n = key.replace("_"+thread_n, "").replace("_"+troughput_n, "")
                 joint_valid.update({task_n:joint_valid.get(task_n, False) + valid})
             elif not valid:
                 return False
@@ -290,9 +292,9 @@ class WatermarkStrategy(object):
             _p.released = True
             if _p.remburst == 0:
                 _p.remburst += _p.task.flops
-            _str = f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) is activated @ {curr_t:.6f}!!"
+            _str = f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) is activated @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!"
             print(_str)
-        return bin_event_flg       
+        return bin_event_flg 
 
 if __name__ == "__main__":
     from model.buffer import Buffer

@@ -67,14 +67,9 @@ def glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, tempora
         state = allocate_rsc_4_process_new(_p, n_slot, process_dict, timestep, temporal_rda_ratio, FLOPS_PER_CORE, quantumSize,  
                                                             rsc_recoder, rsc_recoder_his, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, 
                                                             quantum_check_en, strategy='first_fit', glb_key=sort_fn, verbose=False, DEBUG=True)
-        # issue the task allocated successfully
-        if state:
-            issue_list.put(_p)
-            assert _p in ready_queue.queue
-            ready_queue.queue.remove(_p)
-        
         # the tasks are preempted are given an extra opportunities
         for _p_2b_preempt in preempt_list:
+            pid = _p_2b_preempt.pid
             # remove the task from the ready_queue.queue, preemptable_list, issue_list.queue
             if _p_2b_preempt in issue_list:
                 issue_list.remove(_p_2b_preempt)
@@ -89,6 +84,9 @@ def glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, tempora
             else:
                 raise ValueError("A unexpected situation happens, preempted task is not in the running queue or issue list")
 
+            # update the rsc_recoder
+            rsc_recoder.pop(_p_2b_preempt.pid)
+
             if _p_2b_preempt.currentburst != 0:
                 # task is in the running queue
                 # update the task status
@@ -99,6 +97,12 @@ def glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, tempora
             if _p_2b_preempt not in sorted_ready_queue.queue:
                 sorted_ready_queue.put(_p_2b_preempt)
         preempt_list.clear()
+
+        # issue the task allocated successfully
+        if state:
+            issue_list.put(_p)
+            assert _p in ready_queue.queue
+            ready_queue.queue.remove(_p)
 
 def allocate_rsc_4_process_new(_p:ProcessInt, n_slot:int, 
                 # init_p_list:List[ProcessInt], 
@@ -130,7 +134,7 @@ def allocate_rsc_4_process_new(_p:ProcessInt, n_slot:int,
     # - state is False and fail_info is None, but fail_info is not None
     # - state is True 
     # case 2: allocateable on free resources, state is True
-    # case 3: allocateable by preempting some tasks, state is False, but fail_info is not None
+    # case 3: allocateable by preempting tasks with **enough resources and lower priority**, state is False, but fail_info is not None
     # case 4: create a new bin, state is False and fail_info is None, but bin_id is not -1
     # case 5: no resource is available
     if bin_id != -1:
@@ -151,8 +155,6 @@ def allocate_rsc_4_process_new(_p:ProcessInt, n_slot:int,
                     alloc_slot_s_t, alloc_size_t, allo_slot_t = ordered_occupant_dict[pid]
                     bin_id_t, alloc_slot_s_t, alloc_size_t, allo_slot_t = get_rsc_2b_released(rsc_recoder, n_slot, _p_2b_preempt) 
                     bin.release(_p_2b_preempt, alloc_slot_s_t, alloc_size_t, allo_slot_t, verbose=False)
-                    # update the rsc_recoder
-                    rsc_recoder.pop(_p_2b_preempt.pid)
 
                     if strategy == "best_fit":
                         # alloc_slot_s_t, alloc_size_t, allo_slot_t = ordered_occupant_dict[pid]
@@ -347,7 +349,7 @@ def check_and_alloc_at_queue(_p, bin:SchedulingTableInt, timestep, FLOPS_PER_COR
         if flops_2b_preempt-total_FLOPS_occupied > 1e-2*timestep*FLOPS_PER_CORE: 
             # if partial allocation is allowed and the preempted candidates can provide more than
             # 1 unit of the resource, i.e. timestep*FLOPS_PER_CORE, then the task can be allocated
-            if not partial_preempt_en and timestep*FLOPS_PER_CORE - total_FLOPS_occupied > 1e-2*timestep*FLOPS_PER_CORE:
+            if not partial_preempt_en or timestep*FLOPS_PER_CORE - total_FLOPS_occupied > 1e-2*timestep*FLOPS_PER_CORE:
                 fail_info = None
     else:
         fail_info = None

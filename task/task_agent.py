@@ -5,12 +5,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from model.buffer import Buffer, EventCache, TriggerCache
     from model.buffer import Data
-from model.Context_message import ContextMsg
 
+import copy
 import numpy as np
 import math
-# from hw_rsc import FLOPS_PER_CORE
-# from scheduler_global_cfg import *
+
+from model.Context_message import ContextMsg
 from model.resource_agent import DDL_reservation, RT_reservation, dummy_reservation
 # preemptable?/able to preempt others
 scheduling_attr = {
@@ -163,7 +163,8 @@ class ProcessBase(object):
                 # name parse
                 # remove the thread number at the end of the name
                 thread_n = key.split('_')[-1]
-                task_n = key.replace("_"+thread_n, "")
+                troughput_n = key.split('_')[-2]
+                task_n = key.replace("_"+thread_n, "").replace("_"+troughput_n, "")
                 dict_t.update({task_n:dict_t.get(task_n, False) or valid})
             elif not valid:
                 return False

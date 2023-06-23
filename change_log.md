@@ -462,3 +462,80 @@ fix bug: some tasks are lost after preemption, and the scheduling table can not 
     - the tasks are preempted are given an extra opportunities.
    TODO: Allow partial allocation and add the logic to ensure the task have allocated enough resource, otherwise, we should not issue the task or compensate the resource latter. 
 
+## 20220619
+1. extract affinity initialization into a function: init_affinity
+```python
+    # initialize task affinity list
+    thread_n = int(exe_k)
+    affinity_tgt_n_list = affinity_cfg[task_n]        
+    affinity_tgt_n_list = [n+'_'+str(thread_n) for n in affinity_tgt_n_list]
+    task.affinity_n = affinity_tgt_n_list
+    # initialize dependency list
+```
+related files: task_cfg.py
+
+2. extend process name with thread parallel number
+```
+  for exe_k in range(task_attr["Throuput factor (Spat.)"]):
+  ......
+  node_name = node_n+"_"+str(copy_j)+"_"+str(exe_k)
+```
+related files: task_cfg.py
+
+3. Un-finished: when estimating the ddl and ert, tackle the chain with mixed critical level tasks seperatly. 
+related files: task_cfg.py
+
+4. add a extra dispatch mode for graph node scalling:
+   根据上下游节点的频率和并行度讨论图变换的模式。
+   对于上游频率高于下游的情况：采用间隔均匀采点模式（等间距分割）
+   下游高于上游情况：目前提供两种模式接口（interleave，repea），但是采用的是等间距分割模式
+```python
+    # j == i+freq_A*t
+    assert dispatch_mode in ['interleave', 'repeat']
+    if dispatch_mode == 'interleave':
+        if A_data_idx == B_data_idx % freq_A:
+            G.add_edge(A_node, B_node)
+    elif dispatch_mode == 'repeat':
+        if A_data_idx == int(B_data_idx / freq_B * freq_A):
+            G.add_edge(A_node, B_node)
+```
+related filele:;  graph_scaling.py
+
+5. failed task with enough preemption candidate will directly pop out the searching progress.
+```python
+  if state: 
+      break
+  elif fail_info is not None:
+      if strategy == "first_fit": 
+          break
+      elif strategy == "best_fit":
+          fail_info_list.append(fail_info)
+```
+
+6. optimize the log output and task_graph plot
+related files: log_analyse.py, task_cfg.py, wartermark_strategy.py, scheduler_agent.py, message_handler.py
+
+7. solve a bug: task with same priority compete for the same resource in an endless loop
+    add an addtional priority level
+    ```python
+        score_fn = lambda x: (fn_crit(x), fn_task_flag(x), x not in preemptable_list)
+        threshold_score = (np.inf, 1, True)
+        filtered_ready_queue = [_p for _p in ready_queue.queue if score_fn(_p) < threshold_score]
+        sorted_queue = sorted(filtered_ready_queue+preemptable_list, key=score_fn,)
+    ```
+related files: scheduler_agent.py
+
+8. code clean up
+related files: scheduling_table.py, task_agent.py
+
+9. fix bug: when push or pop tasks from issue_list, rsc_recoder report key error
+    adjust the position of the push and pop operation
+    ```python
+    rsc_recoder.pop(_p_2b_preempt.pid)
+    ```
+    fix bug: wrong condition for partial preemption (illegal fail_info is not cleaned), the condition should be:
+    ```python
+    if not partial_preempt_en or timestep*FLOPS_PER_CORE - total_FLOPS_occupied > 1e-2*timestep*FLOPS_PER_CORE:
+    fail_info = None
+    ```
+10. scale thread of the aux task 4x, change spatial tread parallelism of the steering control as 24x
