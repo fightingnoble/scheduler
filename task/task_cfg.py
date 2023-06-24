@@ -290,7 +290,7 @@ def creat_logical_graph(srcs:Dict[str, List[str]], ops:Dict[str, List[str]], sin
             logical_graph_nx.add_edge(op_n, sink_n, type="data")
     return logical_graph_nx
 
-def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int):
+def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filename:str="profiling.csv"):
     """
     Physical Graph:
         A physical graph is the result of translating a Logical Graph for execution in a distributed runtime. 
@@ -299,7 +299,7 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int):
     physical_graph_nx = nx.DiGraph()
 
     # extract the parallelism of each node
-    df = pd.read_csv("profiling.csv", sep=",", index_col=0)
+    df = pd.read_csv(profiling_filename, sep=",", index_col=0)
     node_parall_dict = {}
     for node_n in df.index:
         node_attr = df.loc[node_n].to_dict()
@@ -402,12 +402,12 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int):
     
     return physical_graph_nx
 
-def creat_jobTask_graph(task_graph:Dict[str, List[str]], f_gcd, plot:bool=False):
+def creat_jobTask_graph(task_graph:Dict[str, List[str]], f_gcd, plot:bool=False, profiling_filename:str="profiling.csv"):
     # create task graph from task_graph
     task_graph_nx = nx.DiGraph(task_graph)
 
     job_graph_nx = nx.DiGraph()
-    df = pd.read_csv("profiling.csv", sep=",", index_col=0) 
+    df = pd.read_csv(profiling_filename, sep=",", index_col=0) 
 
     for task_n in task_graph: 
         if task_n in df.index:
@@ -506,9 +506,9 @@ def creat_jobTask_graph(task_graph:Dict[str, List[str]], f_gcd, plot:bool=False)
 
     return task_graph_nx, job_graph_nx
 
-def load_taskint(verbose: bool = False, plot:bool = False) -> Dict[str, TaskInt]:
+def load_taskint(verbose: bool = False, plot:bool = False, profiling_filename:str="profiling.csv") -> Dict[str, TaskInt]:
 
-    df = pd.read_csv("profiling.csv", sep=",", index_col=0) 
+    df = pd.read_csv(profiling_filename, sep=",", index_col=0) 
     if verbose:
         print(df)
     task_dict = {}
@@ -707,8 +707,8 @@ def init_affinity(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Unio
 
 def redist_ert_dll(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[TaskInt,ProcessInt]]],
         logical_graph_nx:nx.DiGraph=None, spatial_rda_ratio=0, sched_step_comp=0, 
-        comm_compen_en=False,  verbose=False):
-    ert, ddl = estim_release_dll_time(logical_graph_nx, spatial_rda_ratio, sched_step_comp, comm_compen_en, verbose)
+        comm_compen_en=False, profiling_filename:str="profiling.csv", verbose=False):
+    ert, ddl = estim_release_dll_time(logical_graph_nx, spatial_rda_ratio, sched_step_comp, comm_compen_en, profiling_filename, verbose)
     # if taskJobs is a list, convert it to a dict
     if isinstance(taskJobs, list):
         if taskJobs[0].__class__.__name__ == "ProcessInt":
@@ -726,7 +726,7 @@ def redist_ert_dll(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Uni
 
 def estim_release_dll_time(task_graph_nx:nx.DiGraph, 
                            spatial_rda_ratio=0, sched_step_comp=0, 
-                           comm_compen_en=False,
+                           comm_compen_en=False, profiling_filename:str="profiling.csv",
                            verbose=False):
     """
     set the ERT and ddl property of each task: 
@@ -738,7 +738,7 @@ def estim_release_dll_time(task_graph_nx:nx.DiGraph,
     ert: Dict[str, float] = {}
     ddl: Dict[str, float] = {}
 
-    df:pd.DataFrame = pd.read_csv("profiling.csv", sep=",", index_col=0) 
+    df:pd.DataFrame = pd.read_csv(profiling_filename, sep=",", index_col=0) 
     comp_time: Dict[str, float] = {task_n:df.loc[task_n, "Expected Latency (ms)"]/1000 for task_n in df.T}
     io_time: Dict[str, float] = {task_n:1e-6 for task_n in df.T}
     # task_type: Dict[str, str] = {task_n:df.loc[task_n, "Timing_flag"] for task_n in df.T}
@@ -797,8 +797,9 @@ if __name__ == "__main__":
     parser.add_argument("--plot", action="store_true", help="plot the task timeline")
     parser.add_argument("--bin_pack", action="store_true", help="plot the task timeline")
     parser.add_argument("--test_all", default=False, help="test all the task")
+    parser.add_argument("--profiling_filename", type=str, default="profiling.csv", help="profiling filename")
     args = parser.parse_args() 
-    glb_n_task_dict = load_taskint(args.verbose)
+    glb_n_task_dict = load_taskint(args.verbose, profiling_filename=args.profiling_filename)
 
     if args.test_case == "all":
         args.test_all = True
@@ -809,8 +810,8 @@ if __name__ == "__main__":
 
     if args.test_case == "ert_ddl" or args.test_all:
         logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
-        ert, ddl = estim_release_dll_time(logical_graph_nx, spatial_rda_ratio=0.05, sched_step_comp=sim_step, verbose=args.verbose)
-        df = pd.read_csv("profiling.csv", sep=",", index_col=0) 
+        ert, ddl = estim_release_dll_time(logical_graph_nx, spatial_rda_ratio=0.05, sched_step_comp=sim_step, profiling_filename=args.profiling_filename, verbose=args.verbose)
+        df = pd.read_csv(args.profiling_filename, sep=",", index_col=0) 
         for task_n in ert: 
             print(f"W/ T_comm: {task_n}: {ert[task_n]:.8f} - {ddl[task_n]:.8f}({ddl[task_n]-ert[task_n]:.8f})")
             if task_n in df.T:
@@ -826,7 +827,7 @@ if __name__ == "__main__":
         # task_graph_nx, job_graph_nx = creat_jobTask_graph(task_graph, int(f_gcd), plot=True)
         # init_depen(task_dict, job_graph_nx, verbose=args.verbose)
         logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
-        physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd))
+        physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), args.profiling_filename)
         init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
 
         node_color_map = {"op": "red", "sink": "blue", "src": "green"}

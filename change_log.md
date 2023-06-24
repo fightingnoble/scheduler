@@ -539,3 +539,7 @@ related files: scheduling_table.py, task_agent.py
     fail_info = None
     ```
 10. scale thread of the aux task 4x, change spatial tread parallelism of the steering control as 24x
+
+## 20230623 
+ optimize the shell script for batch run, add option to select the config file
+ related files: run/static_optm_test.sh, compare_dyn.sh, run/compare_glb.sh, run/one_click.sh, allocator_agent.py

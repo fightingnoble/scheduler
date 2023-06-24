@@ -508,9 +508,10 @@ if __name__ == "__main__":
     parser.add_argument("--data_lifetime_mode", default="static", type=str, help="lifetime mode: most_recent, ref_count, timeout, watermark") 
     parser.add_argument("--spatial_rda_ratio", default=0.2, type=float, help="spatial ratio")
     parser.add_argument("--temporal_rda_ratio", default=0.05, type=float, help="temporal ratio")
+    parser.add_argument("--profiling_filename", type=str, default="profiling.csv", help="profiling filename")
 
     args = parser.parse_args() 
-    glb_n_task_dict = load_taskint(args.verbose)
+    glb_n_task_dict = load_taskint(args.verbose, profiling_filename=args.profiling_filename)
     num_cores = args.num_cores
 
     if args.test_case == "all":
@@ -522,8 +523,8 @@ if __name__ == "__main__":
     quantumSize = sim_step*args.quantumSize
     num_periods = args.n_p
     logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
-    physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd))
-    redist_ert_dll(glb_n_task_dict, logical_graph_nx, spatial_rda_ratio=args.temporal_rda_ratio, verbose=args.verbose)
+    physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), args.profiling_filename)
+    redist_ert_dll(glb_n_task_dict, logical_graph_nx, spatial_rda_ratio=args.temporal_rda_ratio, profiling_filename=args.profiling_filename, verbose=args.verbose)
     init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
     glb_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
     init_affinity(glb_p_list, mode='job', job_graph_nx=physical_graph_nx, verbose=args.verbose)
