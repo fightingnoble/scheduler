@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from task.task_agent import ProcessBase
     from model.buffer import EventCache, TriggerCache
-import math
+import warnings
 import numpy as np
 from typing import Dict, Tuple
 from global_var import numerical_tol_bit
@@ -286,14 +286,22 @@ class WatermarkStrategy(object):
             print(f"({bin_name})")
             
         for _p in l_active:
-            active_list.append(_p)
             inactive_list.remove(_p)
-            _p.release_time = curr_t
-            _p.released = True
-            if _p.remburst == 0:
-                _p.remburst += _p.task.flops
-            _str = f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) is activated @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!"
-            print(_str)
+            _p.update_deadline_from_timestamp()
+            if _p.deadline < curr_t: 
+                if _p.task.criticality == "hard":
+                    print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!")
+                    _p.task.missed_deadline_count += 1
+                else:
+                    warnings.warn(f"Task {_p.task.id}:{_p.task.name}({_p.pid}) violate timing constraint @ {_p.deadline:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!")
+            else:
+                active_list.append(_p)
+                _p.release_time = curr_t
+                _p.released = True
+                if _p.remburst == 0:
+                    _p.remburst += _p.task.flops
+                _str = f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) is activated @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!"
+                print(_str)
         return bin_event_flg 
 
 if __name__ == "__main__":

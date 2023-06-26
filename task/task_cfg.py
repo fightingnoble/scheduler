@@ -153,7 +153,7 @@ pre_assign_priority = {
 #         kwargs["format"] = "pdf"
 #     plt.savefig(save_path, **kwargs)
 
-def vis_task_static_timeline(task_list, show=False, save=False, save_path="task_static_timeline_cyclic.pdf", 
+def vis_task_static_timeline(task_list:List[TaskInt], show=False, save=False, save_path="task_static_timeline_cyclic.pdf", 
                             hyper_p=0.1, n_p=1, warmup=False, drain=False, plot_legend=False,
                             plot_start=None, plot_end=None, 
                             tick_dens = 1, txt_size = 30,
@@ -169,14 +169,20 @@ def vis_task_static_timeline(task_list, show=False, save=False, save_path="task_
     time_grid_size = 0.004
 
     # build event list
+    stimu_list = []
     req_list = []
     ddl_list = []
     finish_list = []
-
+    
     for task in task_list:
-        req_list.append(task.get_release_event(event_range))
-        ddl_list.append(task.get_deadline_event(event_range))
-        finish_list.append(task.get_finish_event(event_range))
+        stimu_tab = task.extract_sensor_event(event_range)
+        start_tab = [t+task.ERT for t in stimu_tab]
+        ddl_tab = [t+task.ERT+task.ddl for t in stimu_tab]
+        finish_tab = [t+task.ERT+task.exp_comp_t for t in stimu_tab]
+        stimu_list.append(stimu_tab)
+        req_list.append(start_tab)
+        ddl_list.append(ddl_tab)
+        finish_list.append(finish_tab)
 
     # print(req_list, ddl_list)
 
@@ -188,35 +194,49 @@ def vis_task_static_timeline(task_list, show=False, save=False, save_path="task_
     # plot timeline and task name 
     # and select color for the task automatically
     horizen_grid = set()
+    vertical_grid = set()
     fig, ax = plt.subplots(figsize=(50, 15))
     vertical_offset = 0
     for i in range(len(task_list)):
-        for s, e in zip(req_list[i], finish_list[i]):
+        for stimu, s, f, ddl in zip(stimu_list[i], req_list[i], finish_list[i], ddl_list[i]):
             # set start and end time for each task: 
             #   if part of the task is in the warmup cycle or drain cycle, 
                 # set the start and end time to the start and end time of the plot
-            if s < plot_start and e > plot_start:
+            if s < plot_start and f > plot_start:
                 s = plot_start
-            if e > plot_end and s < plot_end:
-                e = plot_end
-            if s > plot_end or e < plot_start: 
+            if f > plot_end and s < plot_end:
+                f = plot_end
+            if s > plot_end or f < plot_start: 
                 continue
-            print("{}:{}-{}".format(task_list[i].name, s, e))
+            print("{}:{}-{}".format(task_list[i].name, s, f))
             horizen_grid.add(s)
-            horizen_grid.add(e)
+            horizen_grid.add(f)
+            vertical_grid.add(vertical_offset*vertical_grid_size)
             # plot task
-            ax.broken_barh([(s, e-s)], (vertical_offset*vertical_grid_size, vertical_grid_size), facecolors=mcolors.XKCD_COLORS[colors[i]])
+            ax.broken_barh([(s, f-s)], (vertical_offset*vertical_grid_size, vertical_grid_size), facecolors=mcolors.XKCD_COLORS[colors[i]])
+            # add up arrow and down arrow for stimu and ddl event respectively, with same color as the task
+            # arrow length is 1.4 times of the vertical grid size,
+            arrowprops=dict(arrowstyle="->")
+            top_ = (vertical_offset-0.2)*vertical_grid_size
+            bottom_ = (vertical_offset+1.2)*vertical_grid_size
+            ax.annotate("", xy=(stimu, top_), xytext=(stimu, bottom_), arrowprops=arrowprops)
+            ax.annotate("", xy=(ddl, bottom_), xytext=(ddl, top_), arrowprops=arrowprops)
             # add task name
             if not plot_legend:
                 ax.text(s, vertical_offset*vertical_grid_size+0.001, task_list[i].name, ha='center', va='center', fontsize=7)
         vertical_offset += 1
 
     # np.arange(0, sim_time+time_grid_size, time_grid_size)
+    # draw horizontal grid
     X, Y = np.meshgrid(np.array(list(horizen_grid)), np.arange(
         0, (vertical_offset+1)*vertical_grid_size, vertical_grid_size))
     # set x range
     ax.set(xlim=(plot_start, plot_end), xticks=np.arange(plot_start, plot_end+time_grid_size, time_grid_size*tick_dens),)
     ax.plot(X, Y, 'k', lw=0.5, alpha=0.5)
+    # draw vertical grid
+    X, Y = np.meshgrid(np.arange(plot_start, plot_end+time_grid_size, time_grid_size), np.array(list(vertical_grid)))
+    ax.plot(X.T, Y.T, 'k', lw=0.5, alpha=0.5)
+    
     # add legend at the top as wide as the plot, text size 30
     if plot_legend:
         from matplotlib.lines import Line2D
@@ -506,7 +526,8 @@ def creat_jobTask_graph(task_graph:Dict[str, List[str]], f_gcd, plot:bool=False,
 
     return task_graph_nx, job_graph_nx
 
-def load_taskint(verbose: bool = False, plot:bool = False, profiling_filename:str="profiling.csv") -> Dict[str, TaskInt]:
+def load_taskint(profiling_filename:str="profiling.csv", 
+                 plot:bool = False, verbose: bool = False) -> Dict[str, TaskInt]:
 
     df = pd.read_csv(profiling_filename, sep=",", index_col=0) 
     if verbose:
@@ -530,6 +551,10 @@ def load_taskint(verbose: bool = False, plot:bool = False, profiling_filename:st
         vertical_grid_size = 0.4
         time_grid_size = 0.004
 
+    # calculate the gcd of all the task's frequency
+    f_gcd = np.gcd.reduce(df["Freq."].to_list())
+    hyper_p = 1/f_gcd
+
     for task_n in df.T:
         # print(task_n)
         task_attr = df.loc[task_n].to_dict()
@@ -537,9 +562,11 @@ def load_taskint(verbose: bool = False, plot:bool = False, profiling_filename:st
         task_attr["Resource Type"] = "stationary" if task_attr["Resource Type"]=="S" else "moveable"
         task_attr["Pre-assigned"] = False if task_attr["Pre-assigned"]=="N" else True
         for thread_j in range(task_attr["Thread factor (Spat.)"]):
-            for exe_k in range(task_attr["Throuput factor (Spat.)"]):
-                T = task_attr["Throuput factor (Spat.)"]/task_attr["Freq."]
-                phase = exe_k/task_attr["Freq."]
+            # for exe_k in range(task_attr["Throuput factor (Spat.)"]):
+                # T = task_attr["Throuput factor (Spat.)"]/task_attr["Freq."]
+                # phase = exe_k/task_attr["Freq."]
+                T = 1/task_attr["Freq."]
+                phase = 0
                 parallel_cfg = {}
                 if task_attr["Parallel_type"] == "Upb":
                     parallel_cfg["mode"] = "upb"
@@ -555,8 +582,10 @@ def load_taskint(verbose: bool = False, plot:bool = False, profiling_filename:st
                     parallel_cfg["mode"] = "list"
                     parallel_cfg["list"] = map(int, task_attr["Parallel_range"].split(","))
                 task = TaskInt(
-                    task_name=task_n+"_"+str(thread_j)+"_"+str(exe_k), task_id=task_id, timing_flag=task_attr["Timing_flag"], 
-                    ERT=task_attr["T release (ms)"]/1000, ddl=(task_attr['DDL (ms)']-task_attr["T release (ms)"])/1000, period=T, 
+                    task_name=task_n+"_"+str(thread_j), # +"_"+str(exe_k), 
+                    task_id=task_id, timing_flag=task_attr["Timing_flag"], 
+                    ERT=task_attr["T release (ms)"]/1000, ddl=(task_attr['DDL (ms)']-task_attr["T release (ms)"])/1000, 
+                    period=T, 
                     exp_comp_t=task_attr['Expected Latency (ms)']/1000, i_offset=phase, jitter_max=0,
                     flops=task_attr["Flops on path (G)"]/1e3, task_flag=task_attr["Resource Type"], 
                     pre_assigned_resource_flag=task_attr["Pre-assigned"]>0, 
@@ -569,6 +598,9 @@ def load_taskint(verbose: bool = False, plot:bool = False, profiling_filename:st
 
                 )
                 task.freq = task_attr["Freq."]
+                division_factor = task_attr["Throuput factor (Spat.)"]
+                freq_div_mode = 'interleave' if task_attr["Freq."]/f_gcd <= task_attr["Throuput factor (Spat.)"] else 'repeat'
+                task_list = task.freq_division(division_factor, hyper_p, mode=freq_div_mode)
 
                 if plot:
                     s = task.get_release_time()
@@ -585,8 +617,10 @@ def load_taskint(verbose: bool = False, plot:bool = False, profiling_filename:st
 
                 task.required_resource_size = task_attr['Cores/Req.']
                 # print(str(task))
-                task_id += 1
-                task_dict.update({task.name: task})
+                # task_id += 1
+                task_id += division_factor
+                # task_dict.update({task.name: task})
+                task_dict.update({task.name:task for task in task_list})
         if plot:
             save_path="task_static_timeline.pdf"
             # np.arange(0, sim_time+time_grid_size, time_grid_size)
@@ -597,7 +631,7 @@ def load_taskint(verbose: bool = False, plot:bool = False, profiling_filename:st
             ax.plot(X, Y, 'k', lw=0.5, alpha=0.5)
             plt.savefig(save_path, format="pdf")
 
-    return task_dict
+    return task_dict, f_gcd
 
 # initialize dependency list
 def init_depen(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[TaskInt,ProcessInt]]], job_graph_nx:nx.DiGraph, verbose=False):
@@ -799,13 +833,17 @@ if __name__ == "__main__":
     parser.add_argument("--test_all", default=False, help="test all the task")
     parser.add_argument("--profiling_filename", type=str, default="profiling.csv", help="profiling filename")
     args = parser.parse_args() 
-    glb_n_task_dict = load_taskint(args.verbose, profiling_filename=args.profiling_filename)
+
+    if args.profiling_filename == "profiling.csv":
+        cfg_n = "heavy"
+    else:
+        cfg_n = args.profiling_filename.split(".")[-2].split("_")[-1]
+
+    glb_n_task_dict, f_gcd = load_taskint(args.profiling_filename, verbose=args.verbose) 
+    hyper_p = 1/f_gcd
 
     if args.test_case == "all":
         args.test_all = True
-    f_gcd = np.gcd.reduce([glb_n_task_dict[task].freq for task in glb_n_task_dict])
-    f_max = max([glb_n_task_dict[task].freq for task in glb_n_task_dict])
-    hyper_p = 1/f_gcd
     sim_step = min([glb_n_task_dict[task].exp_comp_t for task in glb_n_task_dict])/32
 
     if args.test_case == "ert_ddl" or args.test_all:
@@ -818,9 +856,9 @@ if __name__ == "__main__":
                 print(f"w/o T_comm: {task_n}: {df.loc[task_n, 'T release (ms)']/1000:.8f} - {df.loc[task_n, 'DDL (ms)']/1000:.8f}({df.loc[task_n, 'DDL (ms)']/1000-df.loc[task_n, 'T release (ms)']/1000:.8f})") 
             print("------------------")
     elif args.test_case == "timeline" or args.test_all:
-        vis_task_static_timeline(list(glb_n_task_dict.values()), save=True, save_path="plot/task_static_timeline_cyclic.pdf", hyper_p=hyper_p, n_p=1, warmup=False, drain=True, )
+        vis_task_static_timeline(list(glb_n_task_dict.values()), save=True, save_path="plot/{cfg_n}/task_static_timeline_cyclic.pdf", hyper_p=hyper_p, n_p=2, warmup=False, drain=True, )
     elif args.test_case == "liveness" or args.test_all:
-        vis_task_static_timeline(list(glb_n_task_dict.values()), save=True, save_path="plot/task_liveness_timeline_cyclic.svg", 
+        vis_task_static_timeline(list(glb_n_task_dict.values()), save=True, save_path="plot/{cfg_n}/task_liveness_timeline_cyclic.svg", 
         hyper_p=hyper_p, n_p=1, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
         txt_size=40, tick_dens=4)
     elif args.test_case == "graph" or args.test_all:
@@ -862,4 +900,4 @@ if __name__ == "__main__":
         for _, t in text.items():
             t.set_rotation(60)
         fig.tight_layout()
-        plt.savefig("plot/jobTask_graph.pdf", format="pdf")
+        plt.savefig("plot/{cfg_n}/jobTask_graph.pdf", format="pdf")

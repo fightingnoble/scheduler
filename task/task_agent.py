@@ -9,7 +9,9 @@ if TYPE_CHECKING:
 import copy
 import numpy as np
 import math
+from scipy.stats import truncnorm
 
+from global_var import *
 from model.Context_message import ContextMsg
 from model.resource_agent import DDL_reservation, RT_reservation, dummy_reservation
 # preemptable?/able to preempt others
@@ -25,6 +27,10 @@ task_timing_type = {
     "realtime": 0,
     "deadline": 1,
     }
+task_freq_type = {
+    "periodic": 0,
+    "aperiodic": 1,
+}
 criticality = {
     "soft": 0,
     "hard": 1,
@@ -88,6 +94,7 @@ class ProcessBase(object):
         self.event_time = -1    # record the event_time of the last process 
         self.next_event_time = None
         self.next_ingestion_time = None
+        self.ddl_sharing_cross_chain = False
 
     def reset_state_vars(self,):
         self.released = False
@@ -102,6 +109,22 @@ class ProcessBase(object):
         self.waitTime = 0
         self.cumulative_executed_time = 0
         self.set_state("suspend")
+
+    def update_deadline(self): 
+        if not self.ddl_sharing_cross_chain:
+            if self.trigger_mode == "event":
+                self.deadline = self.next_ingestion_time + self.task.ERT + self.task.ddl
+            else:
+                self.deadline += self.task.period
+        else:
+            raise NotImplementedError
+    
+    def update_deadline_from_timestamp(self):
+        if not self.ddl_sharing_cross_chain:
+            self.deadline = self.msg_cache[0].get_timestamp() + self.task.ERT + self.task.ddl
+        else:
+            raise NotImplementedError
+
 
     def set_state(self, state):
         assert state in task_lifetime.keys()
@@ -303,6 +326,7 @@ class ProcessInt(ProcessBase):
         
 
     def rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE, mode='rt-wsc'):
+        assert mode in ['rt-wsc', 'expected']
         # release time round up: task should not be released earlier than the release time
         time_slot_s = int(np.ceil(_p.release_time/timestep))
         if time_slot_s < n_slot:
@@ -427,6 +451,9 @@ class TaskBase(object):
         self.exp_comp_t = exp_comp_t
         self.period = period
         self.jitter_max = jitter_max # max jitter
+        self.aval_sub_period = []
+        self.hyper_period_size = None 
+        self.sub_cycle_cnt = 0     
 
         self.pred_ctrl = {} # used
         self.succ_data = {} # used
@@ -494,6 +521,179 @@ class TaskBase(object):
         # _str += f"context_switch_count: {self.context_switch_count}, preemption_count: {self.preemption_count}, migration_count: {self.migration_count}\n"
         return _str
 
+    def freq_division(self, factor, hyper_p, mode) -> List[TaskBase]:
+        """
+        generate a series of sub-tasks that hold the different parts of execution in a hyper-period
+        example: 
+        Task 240Hz,hyper_p=0.1s, factor=3
+        mode A: [0-7], [8-15],[15-23]
+        mode B: [0, 3, 6, ..., 21] [1, 4, 7, ..., 22], [2, 5, 8, ..., 23]
+        """
+        if factor == 1:
+            self.name  = f"{self.name}_{0}"
+            return [self]
+        assert factor >= 1
+
+        assert self.period <= hyper_p
+        assert round(hyper_p % self.period, numerical_tol_bit) == 0
+        n_cycle = int(hyper_p / self.period)
+
+        assert round(n_cycle % factor, numerical_tol_bit) == 0
+        interval = int(n_cycle / factor)
+        
+        sub_tasks:List[TaskBase] = [copy.deepcopy(self) for _ in range(factor)]
+        assert mode in ['interleave', 'repeat']
+        if mode == "interleave":
+            for i in range(factor):
+                new_period = self.period * factor
+                new_i_offset = self.period * i
+                sub_tasks[i].period = new_period
+                sub_tasks[i].i_offset = new_i_offset
+                sub_tasks[i].id = self.id + i
+                sub_tasks[i].name  = f"{self.name}_{i}"
+        elif mode == "repeat":
+            for i in range(factor):
+                sub_tasks[i].aval_sub_period = [i * interval + j for j in range(interval)]
+                sub_tasks[i].hyper_period_size = n_cycle
+                sub_tasks[i].id = self.id + i
+                sub_tasks[i].name  = f"{self.name}_{i}"
+
+        return sub_tasks
+    def gen_event_modA_endless(self, ):
+        i = 0
+        event_time = self.i_offset
+        jitter = 0
+        jitter = yield 
+        while True:
+            jitter = yield event_time + jitter
+            if jitter is None: 
+                return i
+            event_time += self.period
+            i += 1
+        
+    
+    def gen_event_modB_endless(self, ):
+        i = 0
+        event_time = self.i_offset
+        sub_period_offset = -np.inf
+        jitter = yield event_time + sub_period_offset 
+        while True:
+            for j in self.aval_sub_period:
+                jitter = yield event_time + self.period * j + jitter
+                if jitter is None: 
+                    return i*len(self.aval_sub_period)+j
+            event_time += self.hyper_period_size * self.period
+            i += 1
+    
+    def extract_sensor_event(_p, event_range, jitter_sim_en=False, jitter_sim_para=None, seed=0):
+        n_event = int(event_range//_p.task.period)
+        if jitter_sim_en:
+            jitter = _p.jitter_sim_event(jitter_sim_para, size=n_event, seed=seed)
+        event_gen = _p.event_generator()
+        next(event_gen)
+        for i in range(n_event):
+            if jitter_sim_en:
+                event_gen.send(jitter[i])
+            else:
+                event_gen.send(0)
+        event_gen.send(None)
+
+    def gen_event_modA(self, event_range, jitter_sim_en=False, jitter_sim_para=None, seed=0):
+        n_event = int(event_range//self.period)
+        if jitter_sim_en:
+            jitter = self.jitter_sim_event(jitter_sim_para, size=n_event, seed=seed)
+
+        i = 0
+        event_time = self.i_offset
+        while True:
+            if jitter_sim_en:
+                yield event_time + jitter[i]
+            else:
+                yield event_time
+            i += 1
+            if i >= n_event:
+                yield np.inf
+                return i
+            event_time += self.period
+    
+    def gen_event_modB(self, event_range, jitter_sim_en=False, jitter_sim_para=None, seed=0):
+        n_p = round(event_range//self.period)
+        n_event = int(n_p//self.hyper_period_size) * len(self.aval_sub_period) + len([i for i in range(n_p%len(self.aval_sub_period)) if i in self.aval_sub_period])
+        if jitter_sim_en:
+            jitter = self.jitter_sim_event(jitter_sim_para, size=n_event, seed=seed)
+
+        event_no = 0
+        event_time = self.i_offset
+        while True:
+            for j in self.aval_sub_period:
+                if jitter_sim_en:
+                    yield event_time + self.period * j + jitter[event_no]
+                else:
+                    yield event_time + self.period * j
+                event_no += 1
+                if event_no >= n_event:
+                    yield np.inf
+                    return event_no
+            event_time += self.hyper_period_size * self.period
+
+    def event_generator(self, event_range=None, jitter_sim_en=False, jitter_sim_para=None, seed=0):
+        """
+        return a generator that generates the events of the task
+        """
+        if event_range is None:
+            if self.hyper_period_size is not None:
+                return self.gen_event_modB_endless()
+            else:
+                return self.gen_event_modA_endless()
+        else:
+            if self.hyper_period_size is not None:
+                return self.gen_event_modB(event_range, jitter_sim_en, jitter_sim_para, seed)
+            else:
+                return self.gen_event_modA(event_range, jitter_sim_en, jitter_sim_para, seed)
+
+    def delegate_event_generator(self, **kwargs):
+        while True:
+            n_event = yield from self.event_generator(**kwargs)
+            print(f"{n_event} events of {self.name} are generated")
+
+
+    def jitter_sim_event(self, jitter_sim_para:Dict, size=1, seed:Union[None, int, np.random.Generator, np.random.RandomState]=None):
+        """
+            test case: 
+            sensor data arrival time varies by injecting jitter
+            inject noise to self.task.period, self.task.i_offset
+        """
+        # jitter parameters: a, b, loc, scale
+        a, b, loc, scale = jitter_sim_para["a"], jitter_sim_para["b"], jitter_sim_para["loc"], jitter_sim_para["scale"]
+        # 0.2 # truncnorm.rvs(-0.2, 0.2, size=1, scale=1)[0]
+        jitter_gen = lambda: self.exp_comp_t * truncnorm.rvs(a, b, loc=loc, scale=scale, size=size, random_state=seed)
+        jitter = jitter_gen()
+        assert abs(jitter.max()) < 0.5*self.period, "jitter is too large"
+        return jitter if size>1 else jitter[0]
+
+    @classmethod
+    def get_event_generator(cls, glb_n_task_dict:Dict[str, TaskBase], hyper_p, n_p, warmup, **kwargs): 
+        event_range = hyper_p * (n_p+warmup)
+        event_iter_dict = {}
+        for task_n, _task in glb_n_task_dict.items():
+            if _task.trigger_mode!='N':
+                # filter the processes with trigger_mode is not "N"
+                event_time_iter = _task.delegate_event_generator(event_range=event_range)
+                ingestion_time_iter = _task.delegate_event_generator(event_range=event_range, **kwargs)
+                event_iter_dict[task_n] = [ingestion_time_iter, event_time_iter]
+        return event_iter_dict
+
+    def extract_sensor_event(_task, event_range):
+        event_gen = _task.delegate_event_generator()
+        next(event_gen)
+        l = []
+        while True:
+            event_time = event_gen.send(0)
+            if event_time >= event_range:
+                break
+            l.append(event_time) 
+        event_gen.send(None)
+        return l
 
 class TaskInt(TaskBase): 
     def __init__(

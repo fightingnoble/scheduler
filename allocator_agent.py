@@ -511,14 +511,18 @@ if __name__ == "__main__":
     parser.add_argument("--profiling_filename", type=str, default="profiling.csv", help="profiling filename")
 
     args = parser.parse_args() 
-    glb_n_task_dict = load_taskint(args.verbose, profiling_filename=args.profiling_filename)
+    if args.profiling_filename == "profiling.csv":
+        cfg_n = "heavy"
+    else:
+        cfg_n = args.profiling_filename.split(".")[-2].split("_")[-1]
+
+    glb_n_task_dict, f_gcd = load_taskint(args.profiling_filename, verbose=args.verbose)
+    hyper_p = 1/f_gcd
     num_cores = args.num_cores
 
     if args.test_case == "all":
         args.test_all = True
-    f_gcd = np.gcd.reduce([glb_n_task_dict[task].freq for task in glb_n_task_dict])
-    f_max = max([glb_n_task_dict[task].freq for task in glb_n_task_dict])
-    hyper_p = 1/f_gcd
+
     sim_step = min([glb_n_task_dict[task].exp_comp_t for task in glb_n_task_dict])/32
     quantumSize = sim_step*args.quantumSize
     num_periods = args.n_p
@@ -534,12 +538,14 @@ if __name__ == "__main__":
     #     _p.task.criticality = "hard"
 
     np.random.seed(args.seed)
-    from model.message_handler import gen_sensor_event
-    event_iter_dict = gen_sensor_event(glb_p_list, hyper_p, num_periods, True, args.jitter_sim_en, args.jitter_sim_para, args.seed)
+    # from model.message_handler import gen_sensor_event
+    # event_iter_dict = gen_sensor_event(glb_p_list, hyper_p, num_periods, True, args.jitter_sim_en, args.jitter_sim_para, args.seed)
+    jitter_para_dict = dict(jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para, seed=args.seed)
+    event_iter_dict = TaskInt.get_event_generator(glb_n_task_dict, hyper_p, num_periods, True, **jitter_para_dict)
     # convert to list then convert to iterator
-    event_iter_dict = {task: [list(event_iter_dict[task][0]), list(event_iter_dict[task][1])] for task in event_iter_dict}
-    pickle.dump(event_iter_dict, open(f"cache/event_iter_dict_{args.test_case}_{args.jitter_sim_en}.pkl", "wb"))
-    event_iter_dict = {task: [iter(event_iter_dict[task][0]), iter(event_iter_dict[task][1])] for task in event_iter_dict}
+    # event_iter_dict = {task: [list(event_iter_dict[task][0]), list(event_iter_dict[task][1])] for task in event_iter_dict}
+    # pickle.dump(event_iter_dict, open(f"cache/event_iter_dict_{args.test_case}_{args.jitter_sim_en}.pkl", "wb"))
+    # event_iter_dict = {task: [iter(event_iter_dict[task][0]), iter(event_iter_dict[task][1])] for task in event_iter_dict}
 
     if args.test_case == "bin_pack" or args.test_all:
         # push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, num_cores, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
@@ -547,11 +553,11 @@ if __name__ == "__main__":
         from sched.scheduling_table import get_task_layout_compact
         get_task_layout_compact(bin_list, glb_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
-        txt_size=40, tick_dens=2, save_path=f"plot/{num_cores}/task_bin_pack_cyclic_{num_cores}{args.file_suffix}.pdf") 
+        txt_size=40, tick_dens=2, save_path=f"plot/{cfg_n}/{num_cores}/task_bin_pack_cyclic_{num_cores}{args.file_suffix}.pdf") 
 
         get_task_layout_compact(bin_list, glb_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
-        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/{num_cores}/task_bin_pack_full_{num_cores}{args.file_suffix}.pdf")
+        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/{cfg_n}/{num_cores}/task_bin_pack_full_{num_cores}{args.file_suffix}.pdf")
 
         # select a period to save 
         assert num_periods >= 1
@@ -625,7 +631,7 @@ if __name__ == "__main__":
         from sched.scheduling_table import get_task_layout_compact
         get_task_layout_compact(actual_sched_record, glb_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
-        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/{num_cores}/dyn_full_{num_cores}{args.file_suffix}.pdf")
+        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/{cfg_n}/{num_cores}/dyn_full_{num_cores}{args.file_suffix}.pdf")
 
         # save trace_list to trace_file
         with open(f"trace/dynamic_e2e_trace_{num_cores}{args.file_suffix}.pkl", "wb") as f:
@@ -680,7 +686,7 @@ if __name__ == "__main__":
             _SchedTab.print_alloc_detail(pid2name, sim_step)
 
         from sched.scheduling_table import get_task_layout_compact
-        file_name = f"plot/{num_cores}/glb_dyn_full_{num_cores}{args.file_suffix}.pdf" if not args.barrier_dis else f"plot/{num_cores}/glb_dyn_full_{num_cores}_ideal{args.file_suffix}.pdf"
+        file_name = f"plot/{cfg_n}/{num_cores}/glb_dyn_full_{num_cores}{args.file_suffix}.pdf" if not args.barrier_dis else f"plot/{cfg_n}/{num_cores}/glb_dyn_full_{num_cores}_ideal{args.file_suffix}.pdf"
         get_task_layout_compact(actual_sched_record, glb_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
         txt_size=40, tick_dens=4, plot_start=0, save_path=file_name)
@@ -700,7 +706,7 @@ if __name__ == "__main__":
         # get_task_layout_compact(actual_sched_record, init_p_list, save= True, time_step= sim_step,
         # hyper_p=hyper_p, n_p=1, warmup=True, drain=True, plot_legend=False, 
         # txt_size=40, tick_dens=4, plot_start=0, tool="bokeh", 
-        # save_path=f"plot/glb_dyn_full_bokeh_{num_cores}{args.file_suffix}")
+        # save_path=f"plot/{cfg_n}/glb_dyn_full_bokeh_{num_cores}{args.file_suffix}")
 
     elif args.test_case == "bin_pack_new":
         bin_list = [SchedulingTableInt(num_cores, 1, 0, "bin_glb_dynamic")]
@@ -736,11 +742,11 @@ if __name__ == "__main__":
         from sched.scheduling_table import get_task_layout_compact
         get_task_layout_compact(bin_list, glb_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
-        txt_size=40, tick_dens=2, save_path=f"plot/{num_cores}/new_task_bin_pack_cyclic_{num_cores}{args.file_suffix}.pdf") 
+        txt_size=40, tick_dens=2, save_path=f"plot/{cfg_n}/{num_cores}/new_task_bin_pack_cyclic_{num_cores}{args.file_suffix}.pdf") 
 
         get_task_layout_compact(bin_list, glb_p_list, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
-        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/{num_cores}/new_task_bin_pack_full_{num_cores}{args.file_suffix}.pdf")
+        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/{cfg_n}/{num_cores}/new_task_bin_pack_full_{num_cores}{args.file_suffix}.pdf")
 
         # select a period to save 
         assert num_periods >= 1
@@ -769,5 +775,5 @@ if __name__ == "__main__":
         # get_task_layout_compact(actual_sched_record, init_p_list, save= True, time_step= sim_step,
         # hyper_p=hyper_p, n_p=1, warmup=True, drain=True, plot_legend=False, 
         # txt_size=40, tick_dens=4, plot_start=0, tool="bokeh", 
-        # save_path=f"plot/glb_dyn_full_bokeh_{num_cores}{args.file_suffix}")
+        # save_path=f"plot/{cfg_n}/glb_dyn_full_bokeh_{num_cores}{args.file_suffix}")
 

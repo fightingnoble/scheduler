@@ -543,3 +543,11 @@ related files: scheduling_table.py, task_agent.py
 ## 20230623 
  optimize the shell script for batch run, add option to select the config file
  related files: run/static_optm_test.sh, compare_dyn.sh, run/compare_glb.sh, run/one_click.sh, allocator_agent.py
+
+## 20230625
+ 1. integrate calculation of hyper_p in to load_taskint;
+ 2. The sensor event generator was modified as well as the deadline update logic
+    related files: task_agent.py, scheduler_agent.py, wartermark_strategy.py
+ 3. The timeline drawing was modified: the release time and the deadline is represented by arrows
+ 4. A heavy set of tasks was added
+    related files: task_cfg.py, allocator_agent.py, profiling.csv, profiling_medium.csv

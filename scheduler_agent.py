@@ -338,7 +338,7 @@ def chk_release(sched, event_range, curr_t, inactive_list:List[ProcessInt], acti
 def check_miss(sched: Scheduler,
                budget_recoder, msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
                curr_t, res_cfg, wait_queue, ready_queue,
-               running_queue, miss_list, throttle_list, active_list, inactive_list, buffer,
+               running_queue, miss_list:List[ProcessInt], throttle_list, active_list, inactive_list, buffer,
                bin_event_flg: bool = False,
                bin_name: str = "", mode: str = "current",
                bin_list: List[SchedulingTableInt] = None,
@@ -388,7 +388,7 @@ def check_miss(sched: Scheduler,
 
         _p.task.missed_deadline_count += 1
         # _p.release_time += _p.task.period
-        _p.deadline += _p.task.period
+        # _p.deadline += _p.task.period
 
         _p.reset_state_vars()            
         inactive_list.append(_p)
@@ -519,7 +519,7 @@ def check_complete(sched:Scheduler, budget_recoder, timestep,
         print(_str)
         
         _p.release_time += _p.task.period
-        _p.deadline += _p.task.period
+        # _p.deadline += _p.task.period
 
         # _p.required_resource_size = np.ceil(_p.remburst/_p.exp_comp_t/FLOPS_PER_CORE)
         if budget_recoder is not None:

@@ -9,6 +9,6 @@ Steering_speed,7,Steering and speed,240,0.24,0.48,85.02,85.50,1,3,1,1,24,DDL,48,
 Stereo_feature_enc,8,Stereo-feature encoder,20,178.67,55.06,0.00,55.06,7,2,1,1,14,DDL,18,2,S,N,8,S,N,event,Any,None
 Semantic_segm,9,Semantic segmentation ,20,65.11,20.07,55.06,75.13,7,2,1,1,14,DDL,18,2,S,Y,16,S,N,N,Any,None
 Lidar_based_3dDet,10,Lidar-based-detection,10,21.01,6.47,75.13,81.60,7,1,1,1,7,DDL,9,2,M,N,32,S,N,event,Any,None
-Lane_drivable_area_det,11+12,Lane/drivable area(Aux),20,128.5636,39.93587321,55.06412679,95,7,2,6,1,56,RT,56,0,M,Y,0,S,Y,N,Any,None
-Optical_Flow,13,Optical Flow(Aux),20,79.514,39.93587321,55.06412679,95,4,2,6,1,32,RT,32,0,M,N,0,S,Y,N,Any,None
-Depth_estimation,14,Depth estimation(Aux),20,64.2818,39.93587321,55.06412679,95,4,2,6,1,32,RT,32,0,M,N,0,S,Y,N,Any,None
+Lane_drivable_area_det,11+12,Lane/drivable area(Aux),20,128.5636,39.93587321,55.06412679,95,7,2,4,1,56,RT,56,0,M,Y,0,S,Y,N,Any,None
+Optical_Flow,13,Optical Flow(Aux),20,79.514,39.93587321,55.06412679,95,4,2,4,1,32,RT,32,0,M,N,0,S,Y,N,Any,None
+Depth_estimation,14,Depth estimation(Aux),20,64.2818,39.93587321,55.06412679,95,4,2,4,1,32,RT,32,0,M,N,0,S,Y,N,Any,None
