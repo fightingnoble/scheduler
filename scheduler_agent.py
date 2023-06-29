@@ -676,6 +676,8 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
     # check whether the task is miss
     # TODO: other ready tasks shoud be checked
     # TODO: cache eviction
+    read_msg_queue(curr_t, msg_queue, ready_queue, throttle_list, inactive_list, active_list, process_dict, bin_name)
+
     bin_event_flg = check_miss(sched, budget_recoder, msg_dispatcher, curr_t, res_cfg, weight_wait_queue, ready_queue, running_queue, miss_list, 
                             throttle_list, active_list, inactive_list, buffer, bin_event_flg, bin_name)
 
@@ -777,38 +779,6 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
     for data in w_msg_queue:
         buffer.put(data)
     w_msg_queue.clear()
-
-    # 定义正则表达式模式
-    pattern = r'TASK (\d+):([\w_]+)\((\d+)\) (?:COMPLETED|MISSED DEADLINE) @ ([\d.]+)/([\d.]+)\(([\w_]+)\)!!'
-    msg_list = []
-    # read out all message and clear the message pipe
-    while not msg_queue.empty():
-        msg_list.append(msg_queue.get())
-    if msg_list:
-        for msg in msg_list:
-        # 使用正则表达式进行匹配
-            match = re.match(pattern, msg)
-            if match:
-                # 提取匹配结果
-                pid = int(match.group(3))
-                name = match.group(2)
-                event_time = float(match.group(5))
-                bin_name_t = match.group(6)
-                if pid not in process_dict or bin_name_t == bin_name:
-                    continue
-                _p = process_dict[pid]
-
-                # pop the task from ready queue, active list, and throttle list
-                if _p in active_list:
-                    active_list.remove(_p)
-                    print(f"		{_p.task.name:s}({pid:d}) is removed from active list @ {bin_name:s} {curr_t:.6f}")
-                if _p in ready_queue:
-                    ready_queue.remove(_p)
-                    print(f"		{_p.task.name:s}({pid:d}) is removed from ready queue @ {bin_name:s} {curr_t:.6f}")
-                if _p in throttle_list:
-                    throttle_list.remove(_p)
-                    print(f"		{_p.task.name:s}({pid:d}) is removed from throttle list @ {bin_name:s} {curr_t:.6f}")
-                inactive_list.append(_p)
 
     # check data availability: some tasks may be prefetched
     # TODO: model the runtime weight and feature map transfering 
@@ -1315,6 +1285,39 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
                 print(f"		cfg of bin {bin_name:s} will be updated @ {curr_t+timestep:.6f},")
             if np.logical_xor(curr_cfg_ref != next_cfg, curr_cfg.slot_s == n_slot+1 or curr_cfg.slot_e == n_slot):
                 print("ERROR: cfg not match")
+
+def read_msg_queue(curr_t, msg_queue, ready_queue, throttle_list, inactive_list, active_list, process_dict, bin_name):
+    # 定义正则表达式模式
+    pattern = r'TASK (\d+):([\w_]+)\((\d+)\) (?:COMPLETED|MISSED DEADLINE) @ ([\d.]+)/([\d.]+)\(([\w_]+)\)!!'
+    msg_list = []
+    # read out all message and clear the message pipe
+    while not msg_queue.empty():
+        msg_list.append(msg_queue.get())
+    if msg_list:
+        for msg in msg_list:
+        # 使用正则表达式进行匹配
+            match = re.match(pattern, msg)
+            if match:
+                # 提取匹配结果
+                pid = int(match.group(3))
+                name = match.group(2)
+                event_time = float(match.group(5))
+                bin_name_t = match.group(6)
+                if pid not in process_dict or bin_name_t == bin_name:
+                    continue
+                _p = process_dict[pid]
+
+                # pop the task from ready queue, active list, and throttle list
+                if _p in active_list:
+                    active_list.remove(_p)
+                    print(f"		{_p.task.name:s}({pid:d}) is removed from active list @ {bin_name:s} {curr_t:.6f}")
+                if _p in ready_queue:
+                    ready_queue.remove(_p)
+                    print(f"		{_p.task.name:s}({pid:d}) is removed from ready queue @ {bin_name:s} {curr_t:.6f}")
+                if _p in throttle_list:
+                    throttle_list.remove(_p)
+                    print(f"		{_p.task.name:s}({pid:d}) is removed from throttle list @ {bin_name:s} {curr_t:.6f}")
+                inactive_list.append(_p)
 
 def trigger_read(inactive_list:List[ProcessInt], sensor_msg_queue:List, 
                 trigger_cache:TriggerCache, process_dict:Dict,

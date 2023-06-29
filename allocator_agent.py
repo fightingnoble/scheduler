@@ -1,5 +1,5 @@
 from typing import Union, List, Dict, Iterator, Callable
-import warnings
+import warnings, os
 import numpy as np
 from task.task_agent import TaskInt
 from task.spec import Spec
@@ -509,6 +509,7 @@ if __name__ == "__main__":
     parser.add_argument("--spatial_rda_ratio", default=0.2, type=float, help="spatial ratio")
     parser.add_argument("--temporal_rda_ratio", default=0.05, type=float, help="temporal ratio")
     parser.add_argument("--profiling_filename", type=str, default="profiling.csv", help="profiling filename")
+    parser.add_argument("--lateness_mode", type=str, default="ignore", help="lateness mode")
 
     args = parser.parse_args() 
     if args.profiling_filename == "profiling.csv":
@@ -519,6 +520,7 @@ if __name__ == "__main__":
     glb_n_task_dict, f_gcd = load_taskint(args.profiling_filename, verbose=args.verbose)
     hyper_p = 1/f_gcd
     num_cores = args.num_cores
+    save_path = f"cache/{cfg_n}/bin_list_{num_cores}{args.i_file_suffix}.pkl"
 
     if args.test_case == "all":
         args.test_all = True
@@ -534,9 +536,14 @@ if __name__ == "__main__":
     init_affinity(glb_p_list, mode='job', job_graph_nx=physical_graph_nx, verbose=args.verbose)
 
     # assert all the process has hard deadline
-    # for _p in glb_p_list:
-    #     _p.task.criticality = "hard"
-
+    if args.lateness_mode == "all_hard":
+        for _p in glb_p_list:
+            _p.task.criticality = "hard"
+    elif args.lateness_mode == "all_soft":
+        for _p in glb_p_list:
+            _p.task.criticality = "soft"
+    elif args.lateness_mode == "ignore":
+        pass
     np.random.seed(args.seed)
     # from model.message_handler import gen_sensor_event
     # event_iter_dict = gen_sensor_event(glb_p_list, hyper_p, num_periods, True, args.jitter_sim_en, args.jitter_sim_para, args.seed)
@@ -544,7 +551,7 @@ if __name__ == "__main__":
     event_iter_dict = TaskInt.get_event_generator(glb_n_task_dict, hyper_p, num_periods, True, **jitter_para_dict)
     # convert to list then convert to iterator
     # event_iter_dict = {task: [list(event_iter_dict[task][0]), list(event_iter_dict[task][1])] for task in event_iter_dict}
-    # pickle.dump(event_iter_dict, open(f"cache/event_iter_dict_{args.test_case}_{args.jitter_sim_en}.pkl", "wb"))
+    # pickle.dump(event_iter_dict, open(f"cache/{cfg_n}/event_iter_dict_{args.test_case}_{args.jitter_sim_en}.pkl", "wb"))
     # event_iter_dict = {task: [iter(event_iter_dict[task][0]), iter(event_iter_dict[task][1])] for task in event_iter_dict}
 
     if args.test_case == "bin_pack" or args.test_all:
@@ -564,32 +571,32 @@ if __name__ == "__main__":
         bin_list2save = []
 
         # save the bin_list and the init_p_list
-        with open(f"cache/bin_list_{num_cores}{args.i_file_suffix}.pkl", "wb") as f:
+        with open(save_path, "wb") as f:
             pickle.dump(bin_list, f)
-        # with open(f"init_p_list_{num_cores}{args.i_file_suffix}.pkl", "wb") as f:
+        # with open(f"init_p_list_{num_cores}{args.file_suffix}.pkl", "wb") as f:
         #     pickle.dump(init_p_list, f)
         try:
             # load the bin_list and the init_p_list
-            with open(f"cache/bin_list_{num_cores}{args.i_file_suffix}.pkl", "rb") as f:
+            with open(save_path, "rb") as f:
                 bin_list = pickle.load(f)
-            print(f"cache/bin_list_{num_cores}{args.i_file_suffix}.pkl saved and loaded successfully")
-            # with open(f"init_p_list_{num_cores}{args.i_file_suffix}.pkl", "rb") as f:
+            print(f"{save_path} saved and loaded successfully")
+            # with open(f"init_p_list_{num_cores}{args.file_suffix}.pkl", "rb") as f:
             #     init_p_list = pickle.load(f)
             # print(f"init_p_list_{num_cores}{args.file_suffix}.pkl saved and loaded successfully")
         except:
-            print(f"cache/bin_list_{num_cores}{args.i_file_suffix}.pkl or init_p_list_{num_cores}{args.i_file_suffix}.pkl not found")
+            print(f"{save_path} not found")
             exit()
 
     elif args.test_case == "dynamic" or args.test_all:
         try:
             # load the bin_list and the init_p_list
-            with open(f"cache/bin_list_{num_cores}{args.i_file_suffix}.pkl", "rb") as f:
+            with open(save_path, "rb") as f:
                 bin_list = pickle.load(f)
-            # with open(f"init_p_list_{num_cores}{args.i_file_suffix}.pkl", "rb") as f:
+            # with open(f"init_p_list_{num_cores}{args.file_suffix}.pkl", "rb") as f:
             #     init_p_list = pickle.load(f)
         except:
-            print(f"cache/bin_list_{num_cores}{args.i_file_suffix}.pkl not found")
-            # print(f"cache/bin_list_{num_cores}{args.i_file_suffix}.pkl or init_p_list_{num_cores}{args.i_file_suffix}.pkl not found")
+            print(f"{save_path} not found")
+            # print(f"{save_path} not found")
             bin_list, _ = push_task_into_bins(glb_p_list, affinity_cfg, num_cores, args.quantum_check_en, quantumSize, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
 
         # from message_agent import Message
@@ -633,12 +640,13 @@ if __name__ == "__main__":
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
         txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/{cfg_n}/{num_cores}/dyn_full_{num_cores}{args.file_suffix}.pdf")
 
+        trace_path = f"trace/{cfg_n}/dynamic_e2e_trace_{num_cores}{args.file_suffix}.pkl"
         # save trace_list to trace_file
-        with open(f"trace/dynamic_e2e_trace_{num_cores}{args.file_suffix}.pkl", "wb") as f:
+        with open(trace_path, "wb") as f:
             pickle.dump(trace_list, f)
         
         try:
-            with open(f"trace/dynamic_e2e_trace_{num_cores}{args.file_suffix}.pkl", "rb") as f:
+            with open(trace_path, "rb") as f:
                 trace_list = pickle.load(f)
             print("trace saved successfully")
         except:
@@ -691,11 +699,17 @@ if __name__ == "__main__":
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
         txt_size=40, tick_dens=4, plot_start=0, save_path=file_name)
 
+        trace_path = f"trace/{cfg_n}/dyn_glb_e2e_trace_{num_cores}{args.file_suffix}.pkl"
         # save trace_list to trace_file
-        with open(f"trace/dyn_glb_e2e_trace_{num_cores}{args.file_suffix}.pkl", "wb") as f:
+        dir_path = os.path.dirname(trace_path)
+
+        if not os.path.exists(dir_path):
+            os.makedirs(trace_path)
+
+        with open(trace_path, "wb") as f:
             pickle.dump(trace_list, f)
         try:
-            with open(f"trace/dyn_glb_e2e_trace_{num_cores}{args.file_suffix}.pkl", "rb") as f:
+            with open(trace_path, "rb") as f:
                 trace_list = pickle.load(f)
             print("trace saved successfully")
         except:
@@ -753,22 +767,26 @@ if __name__ == "__main__":
         bin_list2save = []
         # for _sched_tab in bin_list:
 
+        dir_path = os.path.dirname(save_path)
+
+        if not os.path.exists(dir_path):
+            os.makedirs(dir_path)
 
         # save the bin_list and the init_p_list
-        with open(f"cache/bin_list_{num_cores}{args.i_file_suffix}.pkl", "wb") as f:
+        with open(save_path, "wb") as f:
             pickle.dump(bin_list, f)
-        # with open(f"init_p_list_{num_cores}{args.i_file_suffix}.pkl", "wb") as f:
+        # with open(f"init_p_list_{num_cores}{args.file_suffix}.pkl", "wb") as f:
         #     pickle.dump(init_p_list, f)
         try:
             # load the bin_list and the init_p_list
-            with open(f"cache/bin_list_{num_cores}{args.i_file_suffix}.pkl", "rb") as f:
+            with open(save_path, "rb") as f:
                 bin_list = pickle.load(f)
-            print(f"cache/bin_list_{num_cores}{args.i_file_suffix}.pkl saved and loaded successfully")
-            # with open(f"init_p_list_{num_cores}{args.i_file_suffix}.pkl", "rb") as f:
+            print(f"{save_path} saved and loaded successfully")
+            # with open(f"init_p_list_{num_cores}{args.file_suffix}.pkl", "rb") as f:
             #     init_p_list = pickle.load(f)
             # print(f"init_p_list_{num_cores}{args.file_suffix}.pkl saved and loaded successfully")
         except:
-            print(f"cache/bin_list_{num_cores}{args.i_file_suffix}.pkl or init_p_list_{num_cores}{args.i_file_suffix}.pkl not found")
+            print(f"{save_path} not found")
             exit()
 
         # plot with bokhe

@@ -551,3 +551,17 @@ related files: scheduling_table.py, task_agent.py
  3. The timeline drawing was modified: the release time and the deadline is represented by arrows
  4. A heavy set of tasks was added
     related files: task_cfg.py, allocator_agent.py, profiling.csv, profiling_medium.csv
+
+## 20230628
+fix bug: 
+  the copy triggered on the unintetional partition is reported missing deadline, 
+  even through it is already finished on the target partition. 
+  resean: 
+    the "compelete" message sent to the msg queue is not handled immediately.
+  solution:
+    extract read_msg_queue into a function, 
+    and move the msg queue reading logic before the completeness and deadline checking 
+  related files: scheduler_agent.py
+
+regulate the cache and trace saving path 
+  related files: allocator_agent.py

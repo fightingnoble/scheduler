@@ -10,6 +10,8 @@ cfg=${4:-"heavy"}
 
 if [ "$cfg" = "light" ]; then
     fn="profiling_light.csv"
+elif [ "$cfg" = "medium" ]; then
+    fn="profiling_medium.csv"
 elif [ "$cfg" = "heavy" ]; then
     fn="profiling.csv"
 else
