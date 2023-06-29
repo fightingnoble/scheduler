@@ -424,7 +424,7 @@ class TaskBase(object):
                  op_io_time:int=0, op_cpu_time:int=0, seq_cpu_time:int=0, priority:int=0, 
                  criti_flag:str="soft", cbs_en:bool=False, 
                  trigger_mode:bool=False, 
-                 parallel_cfg:dict={},
+                 parallel_cfg:dict={}, parallel_cfg_compile:dict={}
                  ):
         self.id = task_id
         self.name = task_name
@@ -441,6 +441,14 @@ class TaskBase(object):
         self.core_min = parallel_cfg["min"] if "min" in parallel_cfg else 0
         self.core_list = parallel_cfg["list"] if "list" in parallel_cfg else None
         self.parallel_mode = parallel_cfg["mode"] if "mode" in parallel_cfg else None
+
+        self.core_max_compile = parallel_cfg_compile["max"] if "max" in parallel_cfg else 1e3
+        self.core_min_compile = parallel_cfg_compile["min"] if "min" in parallel_cfg else 0
+        self.core_list_compile = parallel_cfg_compile["list"] if "list" in parallel_cfg else None
+
+        self.thread_scaling_factor = 1
+        self.freq_division_factor = 1
+        self.var_factor = 1
 
         # deadline in each hyper-period (task that have multiple sub-periods in a hyper-period)
         # e.g. the task with 30hz but be divided into 3 tasks with 10hz and 1/30s offset
@@ -705,7 +713,7 @@ class TaskInt(TaskBase):
                     op_io_time:int=0, op_cpu_time:int=0, seq_cpu_time:int=0, priority:int=0, 
                     criti_flag:str="soft", cbs_en:bool=False, 
                     trigger_mode:str="N",
-                    parallel_cfg:dict={},
+                    parallel_cfg:dict={}, parallel_cfg_compile:dict={},
                     **kwargs
                 ) -> None:
         super().__init__(
@@ -714,6 +722,7 @@ class TaskInt(TaskBase):
                             op_cpu_time=op_cpu_time, op_io_time=op_io_time, seq_cpu_time=seq_cpu_time, priority=priority, 
                             criti_flag=criti_flag, cbs_en=cbs_en,
                             trigger_mode=trigger_mode, parallel_cfg=parallel_cfg,
+                            parallel_cfg_compile=parallel_cfg_compile,
                         )
         
         # =============== 1. task properties ===============

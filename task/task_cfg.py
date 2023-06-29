@@ -526,7 +526,51 @@ def creat_jobTask_graph(task_graph:Dict[str, List[str]], f_gcd, plot:bool=False,
 
     return task_graph_nx, job_graph_nx
 
+    """
+    Basic properties of each tasks:
+        1. id
+        2. name
+        3. flops_atomic
+        4. freq
+        5. thread
+        6. parallel_type
+        7. parallel_range
+        8. timing_flag
+        9. paramter_size
+        8. forward_size
+        9. input_size
+        10. criticality
+
+        ID,Task (chain) names,Flops (G),Freq.,Thread,Parallel type,Parallel range,Timing_flag,
+        Pre-assigned,Priority,Criti_flag,Cbs_en,Trigger_mode,
+        Parallel_type,Parallel_range,Parallel_range_prealloc
+    Hand-crafted properties of each tasks:
+        1. freq_division_factor 
+        2. thread_scaling_factor 
+        3. var_factor
+        
+        Thread factor (Tmp.),Throuput factor (Tmp.),Throuput factor (Spat.),Thread factor (Spat.),Var. factor (Tmp.),
+
+    Deduced properties (compute with complex formula): 
+        1. N_exec
+        2. flops
+        3. required_resource_size
+        4. pre_assigned_resource.main_size 
+        5. pre_assigned_resource.RDA_size 
+
+        Number of execution,Flops on path (G),Total Ops(typical)(T),Total Ops(Max)(T),Cores/Req.,Max required Cores,RDA./Req.,
+        Dynamic loading overhead,Forward Data Size
+
+    Trival properties:
+        1. ERT
+        2. ddl
+        3. period
+
+        T release (ms),DDL (ms),Cores/Req.,No-stall latency (ms),Util.,Min required cores,Equavalent used cores,No-stall Bandwidth
+
+    """
 def load_taskint(profiling_filename:str="profiling.csv", 
+                 freq_div_en:bool=True, thread_scaling_en:bool=True, 
                  plot:bool = False, verbose: bool = False) -> Dict[str, TaskInt]:
 
     df = pd.read_csv(profiling_filename, sep=",", index_col=0) 
@@ -561,47 +605,48 @@ def load_taskint(profiling_filename:str="profiling.csv",
         task_attr["Timing_flag"] = "deadline" if task_attr["Timing_flag"]=="DDL" else "realtime"
         task_attr["Resource Type"] = "stationary" if task_attr["Resource Type"]=="S" else "moveable"
         task_attr["Pre-assigned"] = False if task_attr["Pre-assigned"]=="N" else True
-        for thread_j in range(task_attr["Thread factor (Spat.)"]):
+        if thread_scaling_en:
+            thread_scaling_factor = task_attr["Thread factor (Spat.)"]
+        else:
+            thread_scaling_factor = 1
+        parallel_cfg = extract_parallel_cfg(task_attr, "runtime")
+        parallel_cfg_compile = extract_parallel_cfg(task_attr, "compile")
+        for thread_j in range(thread_scaling_factor):
             # for exe_k in range(task_attr["Throuput factor (Spat.)"]):
                 # T = task_attr["Throuput factor (Spat.)"]/task_attr["Freq."]
                 # phase = exe_k/task_attr["Freq."]
                 T = 1/task_attr["Freq."]
                 phase = 0
-                parallel_cfg = {}
-                if task_attr["Parallel_type"] == "Upb":
-                    parallel_cfg["mode"] = "upb"
-                    parallel_cfg["max"] = int(task_attr["Parallel_range"])
-                elif task_attr["Parallel_type"] == "Lwb":
-                    parallel_cfg["mode"] = "lwb"
-                    parallel_cfg["min"] = int(task_attr["Parallel_range"])
-                elif task_attr["Parallel_type"] == "Range":
-                    parallel_cfg["mode"] = "range"
-                    # split the range into two parts
-                    parallel_cfg["min"], parallel_cfg["max"] = map(int, task_attr["Parallel_range"].split(","))
-                elif task_attr["Parallel_type"] == "list":
-                    parallel_cfg["mode"] = "list"
-                    parallel_cfg["list"] = map(int, task_attr["Parallel_range"].split(","))
+                flops_on_path = task_attr["Flops on path (G)"]/1e3
+                # flops_on_path = task_attr["Flops (G)"]*task_attr["Thread factor (Tmp.)"]/1e3
                 task = TaskInt(
-                    task_name=task_n+"_"+str(thread_j), # +"_"+str(exe_k), 
+                    task_name=task_n + (f"_{thread_j}" if thread_scaling_en else ''),
                     task_id=task_id, timing_flag=task_attr["Timing_flag"], 
                     ERT=task_attr["T release (ms)"]/1000, ddl=(task_attr['DDL (ms)']-task_attr["T release (ms)"])/1000, 
                     period=T, 
                     exp_comp_t=task_attr['Expected Latency (ms)']/1000, i_offset=phase, jitter_max=0,
-                    flops=task_attr["Flops on path (G)"]/1e3, task_flag=task_attr["Resource Type"], 
+                    flops=flops_on_path, task_flag=task_attr["Resource Type"], 
                     pre_assigned_resource_flag=task_attr["Pre-assigned"]>0, 
-                    RDA_size=task_attr['RDA./Req.'], main_size=task_attr['Cores/Req.'], seq_cpu_time=task_attr["Flops on path (G)"]/1e3,
-                    op_cpu_time=task_attr["Flops on path (G)"]/1e3, op_io_time=1e-6,
+                    RDA_size=task_attr['RDA./Req.'], main_size=task_attr['Cores/Req.'], seq_cpu_time=flops_on_path,
+                    op_cpu_time=flops_on_path, op_io_time=1e-6,
                     criti_flag="soft" if task_attr["Criti_flag"]=='S' else "hard", 
                     cbs_en=True, # if task_attr["Cbs_en"]=='Y' else False, 
                     trigger_mode=task_attr["Trigger_mode"], 
                     parallel_cfg=parallel_cfg,
+                    parallel_cfg_compile=parallel_cfg_compile,
 
                 )
                 task.freq = task_attr["Freq."]
-                division_factor = task_attr["Throuput factor (Spat.)"]
-                freq_div_mode = 'interleave' if task_attr["Freq."]/f_gcd <= task_attr["Throuput factor (Spat.)"] else 'repeat'
-                task_list = task.freq_division(division_factor, hyper_p, mode=freq_div_mode)
-
+                task.thread_scaling_factor = task_attr["Thread factor (Spat.)"]
+                if freq_div_en:
+                    division_factor = task_attr["Throuput factor (Spat.)"]
+                    freq_div_mode = 'interleave' if task_attr["Freq."]/f_gcd <= task_attr["Throuput factor (Spat.)"] else 'repeat'
+                    task_list = task.freq_division(division_factor, hyper_p, mode=freq_div_mode)
+                else:
+                    division_factor = 1
+                    task_list = [task]
+                task.freq_division_factor = task_attr["Throuput factor (Spat.)"] 
+                task.var_factor = task_attr["Var. factor (Tmp.)"] 
                 if plot:
                     s = task.get_release_time()
                     e = task.get_deadline_time()
@@ -632,6 +677,27 @@ def load_taskint(profiling_filename:str="profiling.csv",
             plt.savefig(save_path, format="pdf")
 
     return task_dict, f_gcd
+
+def extract_parallel_cfg(task_attr, mode="runtime"):
+    parallel_cfg = {}
+    if mode == "runtime":
+        tgt_title = "Parallel_range"
+    elif mode == "compile":
+        tgt_title = "Parallel_range_prealloc"
+    if task_attr["Parallel_type"] == "Upb":
+        parallel_cfg["mode"] = "upb"
+        parallel_cfg["max"] = int(task_attr[tgt_title])
+    elif task_attr["Parallel_type"] == "Lwb":
+        parallel_cfg["mode"] = "lwb"
+        parallel_cfg["min"] = int(task_attr[tgt_title])
+    elif task_attr["Parallel_type"] == "Range":
+        parallel_cfg["mode"] = "range"
+                    # split the range into two parts
+        parallel_cfg["min"], parallel_cfg["max"] = map(int, task_attr[tgt_title].split(","))
+    elif task_attr["Parallel_type"] == "list":
+        parallel_cfg["mode"] = "list"
+        parallel_cfg["list"] = map(int, task_attr[tgt_title].split(","))
+    return parallel_cfg
 
 # initialize dependency list
 def init_depen(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[TaskInt,ProcessInt]]], job_graph_nx:nx.DiGraph, verbose=False):
@@ -759,7 +825,7 @@ def redist_ert_dll(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Uni
         job.ddl = ddl[task_n] - ert[task_n]
 
 def estim_release_dll_time(task_graph_nx:nx.DiGraph, 
-                           spatial_rda_ratio=0, sched_step_comp=0, 
+                           temporal_rda_ratio=0, sched_step_comp=0, 
                            comm_compen_en=False, profiling_filename:str="profiling.csv",
                            verbose=False):
     """
@@ -794,7 +860,7 @@ def estim_release_dll_time(task_graph_nx:nx.DiGraph,
             # if task_type[node] == "RT": 
             #     ddl[node] = ert[node] + comp_time[node] + sched_step_comp 
             # else:
-            ddl[node] = ert[node] + comp_time[node] *1e7 / (1 - spatial_rda_ratio)/ 1e7
+            ddl[node] = ert[node] + comp_time[node] *1e7 / (1 - temporal_rda_ratio)/ 1e7
     return ert, ddl
 
 def create_init_p_list(tasks: Union[List[TaskInt], Dict[str, TaskInt]], verbose:bool):
@@ -848,7 +914,7 @@ if __name__ == "__main__":
 
     if args.test_case == "ert_ddl" or args.test_all:
         logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
-        ert, ddl = estim_release_dll_time(logical_graph_nx, spatial_rda_ratio=0.05, sched_step_comp=sim_step, profiling_filename=args.profiling_filename, verbose=args.verbose)
+        ert, ddl = estim_release_dll_time(logical_graph_nx, temporal_rda_ratio=0.05, sched_step_comp=sim_step, profiling_filename=args.profiling_filename, verbose=args.verbose)
         df = pd.read_csv(args.profiling_filename, sep=",", index_col=0) 
         for task_n in ert: 
             print(f"W/ T_comm: {task_n}: {ert[task_n]:.8f} - {ddl[task_n]:.8f}({ddl[task_n]-ert[task_n]:.8f})")

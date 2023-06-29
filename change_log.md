@@ -565,3 +565,14 @@ fix bug:
 
 regulate the cache and trace saving path 
   related files: allocator_agent.py
+
+add lateness_mode option to assert all the process as hard/soft/mixed deadline
+  related files: allocator_agent.py
+
+## 20230629
+slack and resources estimation performed by excel tool now is integrated into the code
+  graph_breakdown decompose the graph into chains
+  slack_estim distribute the slack to the nodes in the chain, and estimate the resource requirement
+  an additional parallelism constraint used at compile time is add to the profiling csv files, 
+  read by task_cfg.py and set as the property of the task
+  related files: task_cfg.py, task_agent.py, slack_estim.py, graph_breakdown.py
