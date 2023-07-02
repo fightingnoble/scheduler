@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Union, List, Dict, Iterator, Callable, Union
+from typing import Union, List, Dict, Iterator, Callable, Union, NamedTuple
 import copy
 import math
 import numpy as np
@@ -12,10 +12,12 @@ from global_var import *
 from model.lru import LRUCache
 from sched.scheduling_table import SchedulingTableInt
 from model.resource_agent import Resource_model_int
-from task.task_agent import TaskInt
+from task.task_agent import TaskInt, TaskAttr, TaskIntAttr
 from model.task_queue_agent import TaskQueue 
 from task.task_agent import ProcessInt
 from task.graph_scaling import build_node_relationship
+from collections import namedtuple
+from sched.slack_estim import estim_release_dll_time, duduce_cfg
 
 # 'ID', 'Task (chain) names', 'Flops on path (G)', 'Expected Latency (ms)', 'T release (ms)', 'Freq.', 'DDL (ms)', 'Cores/Req.', 
 # 'Throuput factor (Spat.)', 'Thread factor (S)', 'Min required cores', 'Timing_flag', 'Max required Cores', 'RDA./Req.', 'Resource Type', 'Pre-assigned', 'Priority'
@@ -638,6 +640,9 @@ def load_taskint(profiling_filename:str="profiling.csv",
                 )
                 task.freq = task_attr["Freq."]
                 task.thread_scaling_factor = task_attr["Thread factor (Spat.)"]
+                task.freq_division_factor = task_attr["Throuput factor (Spat.)"] 
+                task.var_factor = task_attr["Var. factor (Tmp.)"] 
+                task.required_resource_size = task_attr['Cores/Req.']
                 if freq_div_en:
                     division_factor = task_attr["Throuput factor (Spat.)"]
                     freq_div_mode = 'interleave' if task_attr["Freq."]/f_gcd <= task_attr["Throuput factor (Spat.)"] else 'repeat'
@@ -645,8 +650,6 @@ def load_taskint(profiling_filename:str="profiling.csv",
                 else:
                     division_factor = 1
                     task_list = [task]
-                task.freq_division_factor = task_attr["Throuput factor (Spat.)"] 
-                task.var_factor = task_attr["Var. factor (Tmp.)"] 
                 if plot:
                     s = task.get_release_time()
                     e = task.get_deadline_time()
@@ -660,7 +663,6 @@ def load_taskint(profiling_filename:str="profiling.csv",
                     vertical_offset+=1
 
 
-                task.required_resource_size = task_attr['Cores/Req.']
                 # print(str(task))
                 # task_id += 1
                 task_id += division_factor
@@ -677,6 +679,202 @@ def load_taskint(profiling_filename:str="profiling.csv",
             plt.savefig(save_path, format="pdf")
 
     return task_dict, f_gcd
+
+
+def load_taskattrib(profiling_filename:str="profiling.csv", verbose: bool = False) -> Dict[str, TaskIntAttr]:
+
+    df = pd.read_csv(profiling_filename, sep=",", index_col=0) 
+    if verbose:
+        print(df)
+    task_dict = {}
+    task_id = 0
+    # print(task_attr_dict)
+
+    # calculate the gcd of all the task's frequency
+    f_gcd = np.gcd.reduce(df["Freq."].to_list())
+
+    for task_n in df.T:
+        # print(task_n)
+        task_attr = df.loc[task_n].to_dict()
+        task_attr["Timing_flag"] = "deadline" if task_attr["Timing_flag"]=="DDL" else "realtime"
+        task_attr["Resource Type"] = "stationary" if task_attr["Resource Type"]=="S" else "moveable"
+        task_attr["Pre-assigned"] = False if task_attr["Pre-assigned"]=="N" else True
+        thread_scaling_factor = task_attr["Thread factor (Spat.)"]
+        parallel_cfg = extract_parallel_cfg(task_attr, "runtime")
+        parallel_cfg_compile = extract_parallel_cfg(task_attr, "compile")
+        period = 1/task_attr["Freq."]
+        flops_on_path = task_attr["Flops on path (G)"]/1e3
+        # flops_on_path = task_attr["Flops (G)"]*task_attr["Thread factor (Tmp.)"]/1e3
+        # T = task_attr["Throuput factor (Spat.)"]/task_attr["Freq."]
+        # phase = exe_k/task_attr["Freq."]
+
+        task_name=task_n
+
+        timing_flag=task_attr["Timing_flag"]        
+        ERT=task_attr["T release (ms)"]/1000
+        ddl=(task_attr['DDL (ms)']-task_attr["T release (ms)"])/1000
+        RDA_size=task_attr['RDA./Req.']
+        main_size=task_attr['Cores/Req.']
+        exp_comp_t=task_attr['Expected Latency (ms)']/1000
+        required_resource_size = task_attr['Cores/Req.']
+        i_offset=0
+        task_flag=task_attr["Resource Type"]
+        pre_assigned_resource_flag=task_attr["Pre-assigned"]>0
+                
+        # flops=flops_on_path        
+        # seq_cpu_time=flops_on_path
+        # op_cpu_time=flops_on_path
+        op_io_time=1e-6
+        jitter_max=0
+        criti_flag="soft" if task_attr["Criti_flag"]=='S' else "hard"
+        
+        cbs_en=True
+        # if task_attr["Cbs_en"]=='Y' else False
+        
+        trigger_mode=task_attr["Trigger_mode"] # event-triggered or periodic
+        freq = task_attr["Freq."]
+        thread_scaling_factor = task_attr["Thread factor (Spat.)"]
+        freq_division_factor = task_attr["Throuput factor (Spat.)"] 
+        var_factor = task_attr["Var. factor (Tmp.)"] 
+        
+        task = TaskIntAttr(name=task_name, 
+                        freq=freq, 
+                        timing_flag=timing_flag, 
+                        criticality = criti_flag, # unused
+                        trigger_mode=trigger_mode, # unused
+                        
+                        core_max = parallel_cfg["max"] if "max" in parallel_cfg else 1e3,
+                        core_min = parallel_cfg["min"] if "min" in parallel_cfg else 0,
+                        core_list = parallel_cfg["list"] if "list" in parallel_cfg else None,
+                        parallel_mode = parallel_cfg["mode"] if "mode" in parallel_cfg else None,
+
+                        core_max_compile = parallel_cfg_compile["max"] if "max" in parallel_cfg else 1e3,
+                        core_min_compile = parallel_cfg_compile["min"] if "min" in parallel_cfg else 0,
+                        core_list_compile = parallel_cfg_compile["list"] if "list" in parallel_cfg else None,
+
+                        thread_scaling_factor=thread_scaling_factor, # unused
+                        freq_division_factor=freq_division_factor, 
+                        var_factor=var_factor, # unused
+
+                        jitter_max=jitter_max, # unused
+                        flops=flops_on_path, 
+                        task_flag=task_flag, # unused
+                        pre_assigned_resource_flag=pre_assigned_resource_flag, # unused
+                        )
+        # print(str(task))
+        task_id += 1
+        task_dict.update({task.name: task})
+
+    return task_dict, f_gcd
+
+def gen_taskint_from_cfg(taskattr_dict:Dict[str, TaskIntAttr], f_gcd: int,
+                 plot:bool = False, verbose: bool = False) -> Dict[str, TaskInt]:
+
+    task_dict = {}
+    task_id = 0
+    # print(task_attr_dict)
+
+    import matplotlib.colors as mcolors
+    import matplotlib as mpl
+    cmap = mpl.colormaps['viridis']
+    colors=list(mcolors.XKCD_COLORS.keys())
+    
+    if plot:
+        # plot timeline and task name 
+        # and select color for the task automatically
+        horizen_grid = set()
+        fig, ax = plt.subplots(figsize=(50, 10))
+        vertical_offset = 0
+        sim_time = 0.2
+        vertical_grid_size = 0.4
+        time_grid_size = 0.004
+
+    hyper_p = 1/f_gcd
+    for task_n,task_attr in taskattr_dict.items():
+        # print(task_n)
+        task_attr:TaskIntAttr
+        thread_scaling_factor = task_attr.thread_scaling_factor
+        for thread_j in range(thread_scaling_factor):
+            # for exe_k in range(task_attr["Throuput factor (Spat.)"]):
+                # T = task_attr["Throuput factor (Spat.)"]/task_attr["Freq."]
+                # phase = exe_k/task_attr["Freq."]
+                T = 1/task_attr.freq
+                phase = 0
+                flops_on_path = task_attr.flops
+                task = TaskInt(
+                    task_name=task_attr.name + f"_{thread_j}", 
+                    task_id=task_id, timing_flag=task_attr.timing_flag,
+                    ERT=task_attr.ERT, 
+                    ddl=task_attr.ddl, 
+                    period=T, 
+                    exp_comp_t=task_attr.exp_comp_t, 
+                    i_offset=phase, jitter_max=0,
+                    flops=task_attr.flops, 
+                    task_flag=task_attr.task_flag, 
+                    pre_assigned_resource_flag=task_attr.pre_assigned_resource_flag, 
+                    RDA_size=task_attr.rda_size, 
+                    main_size=task_attr.main_size, 
+                    seq_cpu_time=flops_on_path,
+                    op_cpu_time=task_attr.flops, op_io_time=1e-6,
+                    criti_flag=task_attr.criticality, 
+                    cbs_en=True, # if task_attr["Cbs_en"]=='Y' else False, 
+                    trigger_mode=task_attr.trigger_mode, 
+                    parallel_cfg={"max":task_attr.core_max, "min":task_attr.core_min, "list":task_attr.core_list, "mode":task_attr.parallel_mode},
+                    parallel_cfg_compile={"max":task_attr.core_max_compile, "min":task_attr.core_min_compile, "list":task_attr.core_list_compile},
+                )
+                task.freq = task_attr.freq
+                task.thread_scaling_factor = task_attr.thread_scaling_factor
+                task.required_resource_size = task_attr.main_size
+
+                task.freq_division_factor = task_attr.freq_division_factor
+                task.var_factor = task_attr.var_factor
+                task.required_resource_size = task_attr.main_size
+
+                division_factor = task_attr.freq_division_factor
+                freq_div_mode = 'interleave' if task_attr.freq/f_gcd <= task_attr.freq_division_factor else 'repeat'
+                task_list = task.freq_division(division_factor, hyper_p, mode=freq_div_mode)
+
+                if plot:
+                    s = task.get_release_time()
+                    e = task.get_deadline_time()
+                    horizen_grid.add(s)
+                    horizen_grid.add(e)
+                    ax.hlines(y=vertical_offset*vertical_grid_size, xmin=s,
+                            xmax=e, lw=2, color=mcolors.XKCD_COLORS[colors[vertical_offset]]
+                            )  # label=task_list[i].name)
+                    ax.text(s, vertical_offset*vertical_grid_size+0.001,
+                            task.name, fontsize=7)
+                    vertical_offset+=1
+
+                # print(str(task))
+                # task_id += 1
+                task_id += division_factor
+                # task_dict.update({task.name: task})
+                task_dict.update({task.name:task for task in task_list})
+        if plot:
+            save_path="task_static_timeline.pdf"
+            # np.arange(0, sim_time+time_grid_size, time_grid_size)
+            X, Y = np.meshgrid(np.array(list(horizen_grid)), np.arange(
+                0, (vertical_offset+1)*vertical_grid_size, vertical_grid_size))
+            t_max = max(horizen_grid)+time_grid_size
+            ax.set(xlim=(0, t_max), xticks=np.arange(0, t_max, time_grid_size),)
+            ax.plot(X, Y, 'k', lw=0.5, alpha=0.5)
+            plt.savefig(save_path, format="pdf")
+
+    return task_dict
+
+def gen_workloads(args):
+    taskattr_dict, f_gcd = load_taskattrib(args.profiling_filename, verbose=args.verbose) 
+    hyper_p = 1/f_gcd
+    if args.aux_scale_factor > 1:
+        for node, taskattr in taskattr_dict.items():
+            # scale up the thread scaling factor
+            taskattr.thread_scaling_factor *= args.aux_scale_factor
+    logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
+    slack_threshold = args.slack_threshold
+    duduce_cfg(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, task_graph_srcs, 
+                         task_graph_sinks, slack_threshold, args.e2e_latency, args.temporal_rda_ratio, args.wsc_slack_ratio)
+    return taskattr_dict, f_gcd
 
 def extract_parallel_cfg(task_attr, mode="runtime"):
     parallel_cfg = {}
@@ -806,9 +1004,16 @@ def init_affinity(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Unio
     return pos_affinity_cfg, neg_affinity_cfg
 
 def redist_ert_dll(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[TaskInt,ProcessInt]]],
-        logical_graph_nx:nx.DiGraph=None, spatial_rda_ratio=0, sched_step_comp=0, 
+        logical_graph_nx:nx.DiGraph=None, temporal_rda_ratio=0, sched_step_comp=0, 
         comm_compen_en=False, profiling_filename:str="profiling.csv", verbose=False):
-    ert, ddl = estim_release_dll_time(logical_graph_nx, spatial_rda_ratio, sched_step_comp, comm_compen_en, profiling_filename, verbose)
+
+    df:pd.DataFrame = pd.read_csv(profiling_filename, sep=",", index_col=0) 
+    comp_time: Dict[str, float] = {task_n:df.loc[task_n, "Expected Latency (ms)"]/1000 for task_n in df.T}
+    io_time: Dict[str, float] = {task_n:1e-6 for task_n in df.T}
+    task_type: Dict[str, str] = {task_n:df.loc[task_n, "Timing_flag"] for task_n in df.T}
+
+    ert, ddl = estim_release_dll_time(logical_graph_nx, comp_time, io_time, task_type,
+                                      temporal_rda_ratio, sched_step_comp, comm_compen_en, profiling_filename, verbose)
     # if taskJobs is a list, convert it to a dict
     if isinstance(taskJobs, list):
         if taskJobs[0].__class__.__name__ == "ProcessInt":
@@ -823,45 +1028,6 @@ def redist_ert_dll(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Uni
         task_n = job_n.replace("_"+thread_n, "").replace("_"+troughput_n, "")
         job.ERT = ert[task_n]
         job.ddl = ddl[task_n] - ert[task_n]
-
-def estim_release_dll_time(task_graph_nx:nx.DiGraph, 
-                           temporal_rda_ratio=0, sched_step_comp=0, 
-                           comm_compen_en=False, profiling_filename:str="profiling.csv",
-                           verbose=False):
-    """
-    set the ERT and ddl property of each task: 
-    traverse the job graph, 
-    for each task, 
-    ERT = max(ddl of all pred tasks) + io_time; 
-    ddl = ERT + exp_comp_t; 
-    """
-    ert: Dict[str, float] = {}
-    ddl: Dict[str, float] = {}
-
-    df:pd.DataFrame = pd.read_csv(profiling_filename, sep=",", index_col=0) 
-    comp_time: Dict[str, float] = {task_n:df.loc[task_n, "Expected Latency (ms)"]/1000 for task_n in df.T}
-    io_time: Dict[str, float] = {task_n:1e-6 for task_n in df.T}
-    # task_type: Dict[str, str] = {task_n:df.loc[task_n, "Timing_flag"] for task_n in df.T}
-
-    for node in nx.topological_sort(task_graph_nx):  # 拓扑排序遍历节点
-        preds = task_graph_nx.pred[node]  # 获取当前节点的前驱节点
-        if node not in comp_time:
-            ert[node] = 0 if len(preds) == 0 else max([ddl[pred] for pred in preds])
-            ddl[node] = ert[node]
-        else:
-            if len(preds) > 0:
-                if comm_compen_en:
-                    ert[node] = max([ddl[pred] + io_time[node] for pred in preds])
-                else:
-                    ert[node] = max([ddl[pred] for pred in preds])
-            else:
-                ert[node] = 0
-            # compute the ddl
-            # if task_type[node] == "RT": 
-            #     ddl[node] = ert[node] + comp_time[node] + sched_step_comp 
-            # else:
-            ddl[node] = ert[node] + comp_time[node] *1e7 / (1 - temporal_rda_ratio)/ 1e7
-    return ert, ddl
 
 def create_init_p_list(tasks: Union[List[TaskInt], Dict[str, TaskInt]], verbose:bool):
     if isinstance(tasks, list):
@@ -914,7 +1080,8 @@ if __name__ == "__main__":
 
     if args.test_case == "ert_ddl" or args.test_all:
         logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
-        ert, ddl = estim_release_dll_time(logical_graph_nx, temporal_rda_ratio=0.05, sched_step_comp=sim_step, profiling_filename=args.profiling_filename, verbose=args.verbose)
+        ert, ddl = estim_release_dll_time(logical_graph_nx, temporal_rda_ratio=0.05, sched_step_comp=sim_step, 
+                                          profiling_filename=args.profiling_filename, verbose=args.verbose)
         df = pd.read_csv(args.profiling_filename, sep=",", index_col=0) 
         for task_n in ert: 
             print(f"W/ T_comm: {task_n}: {ert[task_n]:.8f} - {ddl[task_n]:.8f}({ddl[task_n]-ert[task_n]:.8f})")

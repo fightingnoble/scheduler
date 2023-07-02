@@ -201,21 +201,56 @@ class ContextMsg(object):
 
 
 if __name__ == "__main__":
-    from trace_example import trace_example
-    import numpy as np
-
+    from model.trace_example import trace_example
     dict_o, end_time, nx_graph = ContextMsg.find_sensor(trace_example)
     print(dict_o)
     print("end time: ", end_time)
 
+    import numpy as np
+    import argparse
     # load the trace list from the file
     import pickle
     import pandas as pd
     import copy
-    for file_name in ['trace/dynamic_e2e_trace_256.pkl',  ]: 
-        with open(file_name, "rb") as f:
+    import os 
+    import torch
+    import plotly.graph_objects as go
+    import plotly.io as pio   
+    pio.kaleido.scope.mathjax = None
+    
+    parser = argparse.ArgumentParser(description="profiling")
+    parser.add_argument("--core_list", type=str, default="300,", help="core list")
+    parser.add_argument("--profiling_filename", type=str, default="profiling.csv", help="profiling filename")
+    parser.add_argument("--file_suffix", default="", type=str, help="file suffix")
+    parser.add_argument("--e2e_latency", type=float, default=0.09, help="e2e latency")
+    parser.add_argument("--test_case", type=str, default="dynamic", help="task name")
+
+    args = parser.parse_args()
+    e2e_latency = args.e2e_latency
+    if args.test_case == "glb_dynamic":
+        fn = "dyn_glb_e2e_trace"
+    elif args.test_case == "dynamic":
+        fn = "dynamic_e2e_trace"
+
+    core_list = [int(i) for i in args.core_list.split(",")]
+    if args.profiling_filename == "profiling.csv":
+        cfg_n = "heavy"
+    else:
+        cfg_n = args.profiling_filename.split(".")[-2].split("_")[-1]
+    
+    # load the criticality 
+    from task.task_cfg import load_taskattrib
+    glb_n_task_dict, f_gcd = load_taskattrib(args.profiling_filename, verbose=False) 
+    timing_flag_dict = {}
+    for task_name in glb_n_task_dict:
+        timing_flag_dict[task_name] = glb_n_task_dict[task_name].timing_flag
+
+    result_dict = {}
+    for num_cores in core_list:
+        trace_path = f"trace/{cfg_n}/{fn}_{num_cores}{args.file_suffix}.pkl"
+        with open(trace_path, "rb") as f:
             trace_list = pickle.load(f)
-        print("="*20, file_name, "="*20)
+        print("="*20, trace_path, "="*20)
         n_violation = 0
         row_list = ['sensor', 'time', 'T_e2e']
         sink_dict = {}
@@ -224,7 +259,8 @@ if __name__ == "__main__":
                 sink_dict[trace["process_info"]["name"]].append(trace)
             else:
                 sink_dict[trace["process_info"]["name"]] = [trace]
-
+        
+        e2e_latency_list = [[], []]
         for sink_key in sink_dict:
             hist_seri_ctx = None
             for trace in sorted(sink_dict[sink_key], key=lambda x: x["process_info"]["end_time"]): 
@@ -232,13 +268,21 @@ if __name__ == "__main__":
                 # print("name: ", trace["process_info"]["name"])
                 # print(dict_o)
                 # print(f"end time: {end_time:.6f}\n")
-                trigger_t_array = np.array([trigger["ingestion_time"] for trigger in dict_o.values()])
-                e2e_latency = end_time - trigger_t_array 
-                # index the item > 0.1
-                index = np.where(e2e_latency > 0.1)
+                matched_pair = np.array([trigger["event_time"] for trigger in dict_o.values()])
+                event_time = max(matched_pair)
+                active_path = matched_pair >= event_time
+                e2e_latency = end_time - matched_pair[active_path] 
+                task_name = "_".join(trace["process_info"]["name"].split("_")[0:-2])
+                if timing_flag_dict[task_name] == "realtime":
+                    e2e_latency_list[0].extend(e2e_latency.tolist())
+                else:
+                    e2e_latency_list[1].extend(e2e_latency.tolist())
+
+                # index the item > e2e_latency
+                index = np.where(e2e_latency > e2e_latency)
                 if len(index[0]):
                     name_array = np.array(list(dict_o.keys()))
-                    df = pd.DataFrame({'sensor': name_array, 'time': trigger_t_array, 'T_e2e': e2e_latency}, )
+                    df = pd.DataFrame({'sensor': name_array, 'time': matched_pair, 'T_e2e': e2e_latency}, )
                     print(df)
                     print(f"{trace['process_info']['name']} end time: {end_time:.6f}\n")
 
@@ -261,4 +305,66 @@ if __name__ == "__main__":
                     n_violation += len(index[0])
                 hist_seri_ctx = copy.deepcopy(trace)
         print(f"total violation: {n_violation}\n")
-        
+
+        # cache the result and the label
+        result_dict[num_cores] = e2e_latency_list
+
+        # aplly histogram analysis
+        rt_e2e_latency_list = np.array(e2e_latency_list[0])
+        ddl_e2e_latency_list = np.array(e2e_latency_list[1])
+        print(f"mean: {np.mean(rt_e2e_latency_list):.6f}, std: {np.std(rt_e2e_latency_list):.6f}, max: {np.max(rt_e2e_latency_list):.6f}, min: {np.min(rt_e2e_latency_list):.6f}")
+        print(f"mean: {np.mean(ddl_e2e_latency_list):.6f}, std: {np.std(ddl_e2e_latency_list):.6f}, max: {np.max(ddl_e2e_latency_list):.6f}, min: {np.min(ddl_e2e_latency_list):.6f}")
+        # calculate the percentile
+        rt_percentile = np.percentile(rt_e2e_latency_list, [90, 95, 99, 99.9, 99.99])
+        ddl_percentile = np.percentile(ddl_e2e_latency_list, [90, 95, 99, 99.9, 99.99])
+        print(f"rt_percentile: {rt_percentile}")
+        print(f"ddl_percentile: {ddl_percentile}")
+
+    # plot histogram
+    fig = go.Figure()
+    bins_num = 20
+    for rt_e2e_latency_list, ddl_e2e_latency_list in result_dict.values():
+        rt_e2e_latency_list = torch.tensor(rt_e2e_latency_list)
+        v_max = rt_e2e_latency_list.max()
+        v_min = rt_e2e_latency_list.min()
+        bins = [(2*k+1)*(v_max-v_min)/2/bins_num+v_min for k in range(bins_num+1)]
+        counts = torch.histc(rt_e2e_latency_list, bins=bins_num, max=v_max, min=v_min)
+        fig.add_trace(go.Bar(
+                x=bins,
+                y=counts.numpy(),
+                name=f"{num_cores}_rt", # name used in legend and hover labels
+                # marker_color='#EB89B5',
+                opacity=0.75
+            ))
+        ddl_e2e_latency_list = torch.tensor(ddl_e2e_latency_list)
+        v_max = ddl_e2e_latency_list.max()
+        v_min = ddl_e2e_latency_list.min()
+        bins = [(2*k+1)*(v_max-v_min)/2/bins_num+v_min for k in range(bins_num+1)]
+        counts = torch.histc(ddl_e2e_latency_list, bins=bins_num, max=v_max, min=v_min)
+        fig.add_trace(go.Bar(
+                x=bins,
+                y=counts.numpy(),
+                name=f"{num_cores}_ddl", # name used in legend and hover labels
+                # marker_color='#EB89B5',
+                opacity=0.75
+            ))
+
+    # set axis as log scale
+    # fig.update_yaxes(type="log")
+    # set axis as linear scale
+    fig.update_yaxes(type="linear")
+    fig.update_layout(
+        title_text=f"{cfg_n}/{fn}_{num_cores}{args.file_suffix}.pkl"+'Sampled Results', # title of plot
+        xaxis_title_text='Value', # xaxis label
+        yaxis_title_text='Count', # yaxis label
+        bargap=0.2, # gap between bars of adjacent location coordinates
+        bargroupgap=0.1 # gap between bars of the same location coordinates
+    )
+    save_path = f"plot/trace_hist/{cfg_n}/{fn}{args.file_suffix}.pdf"
+    dir_path = os.path.dirname(save_path)
+
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path)
+
+    fig.write_image(save_path)
+    print(f"save to {save_path}")

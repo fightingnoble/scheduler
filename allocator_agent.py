@@ -510,6 +510,8 @@ if __name__ == "__main__":
     parser.add_argument("--temporal_rda_ratio", default=0.05, type=float, help="temporal ratio")
     parser.add_argument("--profiling_filename", type=str, default="profiling.csv", help="profiling filename")
     parser.add_argument("--lateness_mode", type=str, default="ignore", help="lateness mode")
+    # parser.add_argument("--lateness_threshold", type=float, default=0.0, help="lateness threshold")
+    # parser.add_argument("--cbs_en", default=False, action="store_true", help="enable cbs")
 
     args = parser.parse_args() 
     if args.profiling_filename == "profiling.csv":
@@ -530,7 +532,7 @@ if __name__ == "__main__":
     num_periods = args.n_p
     logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
     physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), args.profiling_filename)
-    redist_ert_dll(glb_n_task_dict, logical_graph_nx, spatial_rda_ratio=args.temporal_rda_ratio, profiling_filename=args.profiling_filename, verbose=args.verbose)
+    redist_ert_dll(glb_n_task_dict, logical_graph_nx, temporal_rda_ratio=args.temporal_rda_ratio, profiling_filename=args.profiling_filename, verbose=args.verbose)
     init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
     glb_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
     init_affinity(glb_p_list, mode='job', job_graph_nx=physical_graph_nx, verbose=args.verbose)
@@ -704,7 +706,7 @@ if __name__ == "__main__":
         dir_path = os.path.dirname(trace_path)
 
         if not os.path.exists(dir_path):
-            os.makedirs(trace_path)
+            os.makedirs(dir_path)
 
         with open(trace_path, "wb") as f:
             pickle.dump(trace_list, f)

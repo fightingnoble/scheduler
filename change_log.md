@@ -576,3 +576,28 @@ slack and resources estimation performed by excel tool now is integrated into th
   an additional parallelism constraint used at compile time is add to the profiling csv files, 
   read by task_cfg.py and set as the property of the task
   related files: task_cfg.py, task_agent.py, slack_estim.py, graph_breakdown.py
+
+## 20230702
+add some interface for parameterized workload generation
+  related files: task_cfg.py, task_agent.py
+  use jitter_max to represent the max percentage of the jitter
+  improve the __str__ function of the task class
+  Crate new data type decorated by @dataclass: 
+    record the task properties that are not related to the task graph transformation.
+    The manual edit Excel + load_taskint -> gen_workloads(i.e., load_taskattrib + duduce_cfg + gen_taskint_from_cfg)
+  fix bug:
+    some properties are set after the task graph transformation, which results in the absence of the properties in the tasks generated during the transformation.  
+  move estim_release_dll_time to slack_estim.py
+
+Statistic the e2e latency from the trace files:
+  the e2e latency analysis now adhere to the setting of the timestamp matching: 
+    the event time is equal to the max value of the matched timestamps.
+    The e2e latency is calculated sensor by sensor; 
+    every path from the sink node to the source node is considered as an e2e latency sample.
+    sink node: node generated fedback to event at this moment
+    source node: where the sensor data is generated.
+    draw the e2e latency distribution of the sensor data
+
+Add a coroutine to statistic the throughput.
+  related file: throughput_cnt.py
+

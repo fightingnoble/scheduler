@@ -2,12 +2,17 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import math
 import numpy as np
+import networkx as nx
+import pandas as pd
+
 if TYPE_CHECKING:
-    from task.task_agent import TaskBase, ProcessBase
+    from task.task_agent import TaskBase, ProcessBase, TaskIntAttr
     from networkx import DiGraph
-from task.graph_breakdown import decompose_dag_into_chains, sort_chains_by_ddl_flops
 from typing import List, Any, Dict, Tuple, Union
 from global_var import *
+from task.graph_breakdown import decompose_dag_into_chains, sort_chains_by_ddl_flops
+from task.task_cfg import task_graph_srcs, task_graph_sinks, creat_logical_graph, task_graph_ops
+from task.task_cfg import load_taskattrib, gen_taskint_from_cfg
 
 def EstimCoreNums(task_dict:Dict[str, TaskBase], flops_dict, node, expected_slack, round_mode="round"):
     if round_mode == "ceil":
@@ -161,28 +166,139 @@ def rsc_slack_estim(taskJobs:Union[Dict[str, Union[TaskBase,ProcessBase]], List[
         chains += decompose_dag_into_chains(task_graph, start_node, end_nodes)
     return DistributeSlack(task_dict, e2e_latency, chains, temporal_rda_ratio, threshold)
 
-deduce_RDA = lambda size, temporal_rda_ratio, wsc_slack_ratio: math.ceil(size * (1-temporal_rda_ratio) / wsc_slack_ratio) - size
+def estim_release_dll_time(task_graph_nx:DiGraph, 
+                            comp_time: Dict[str, float]={},
+                            io_time: Dict[str, float]={}, 
+                            task_type: Dict[str, str]={}, 
+                           temporal_rda_ratio=0, sched_step_comp=0, 
+                           comm_compen_en=False, 
+                           profiling_filename:str="profiling.csv",
+                           verbose=False):
+    """
+    set the ERT and ddl property of each task: 
+    traverse the job graph, 
+    for each task, 
+    ERT = max(ddl of all pred tasks) + io_time; 
+    ddl = ERT + exp_comp_t; 
+    """
+    ert: Dict[str, float] = {}
+    ddl: Dict[str, float] = {}
 
+    if not comp_time:
+        df:pd.DataFrame = pd.read_csv(profiling_filename, sep=",", index_col=0) 
+        comp_time: Dict[str, float] = {task_n:df.loc[task_n, "Expected Latency (ms)"]/1000 for task_n in df.T}
+        io_time: Dict[str, float] = {task_n:1e-6 for task_n in df.T}
+        # task_type: Dict[str, str] = {task_n:df.loc[task_n, "Timing_flag"] for task_n in df.T}
+
+    for node in nx.topological_sort(task_graph_nx):  # 拓扑排序遍历节点
+        preds = task_graph_nx.pred[node]  # 获取当前节点的前驱节点
+        if node not in comp_time:
+            ert[node] = 0 if len(preds) == 0 else max([ddl[pred] for pred in preds])
+            ddl[node] = ert[node]
+        else:
+            if len(preds) > 0:
+                if comm_compen_en:
+                    ert[node] = max([ddl[pred] + io_time[node] for pred in preds])
+                else:
+                    ert[node] = max([ddl[pred] for pred in preds])
+            else:
+                ert[node] = 0
+            # compute the ddl
+            # if task_type[node] == "RT": 
+            #     ddl[node] = ert[node] + comp_time[node] + sched_step_comp 
+            # else:
+            ddl[node] = ert[node] + comp_time[node] *1e7 / (1 - temporal_rda_ratio)/ 1e7
+    return ert, ddl
+
+deduce_RDA = lambda size, temporal_rda_ratio, wsc_slack_ratio: math.ceil(size * (1-temporal_rda_ratio) / wsc_slack_ratio) - size
+deduce_num_exec = lambda freq, f_gcd, thread_scaling_factor: math.ceil(freq / f_gcd) * thread_scaling_factor
+deduce_no_stall_latency = lambda size, flops: flops / size / FLOPS_PER_CORE 
+deduce_min_tot_rsc = lambda req_rsc, thread_scaling_factor, freq_division_factor: req_rsc * thread_scaling_factor * freq_division_factor
+deduce_max_tot_rsc = lambda rda_size, size, thread_scaling_factor, freq_division_factor, var_factor: (rda_size + size) * thread_scaling_factor * freq_division_factor * var_factor
+deduce_flops_typical = lambda flops, thread_scaling_factor, freq, f_gcd : flops * thread_scaling_factor * freq / f_gcd
+deduce_flops_max = lambda flops_typical, var_factor: flops_typical * var_factor
+deduce_equiv_core = lambda ops, hyper_p: ops / hyper_p / FLOPS_PER_CORE
+deduce_util = lambda equiv_core, min_tot_rsc: equiv_core / min_tot_rsc
+
+def deduce_task_attrib(taskattr: TaskIntAttr,
+                        f_gcd: float,
+                        hyper_p: int,
+                        req_rsc_size: int,
+                        temporal_rda_ratio: float,
+                        wsc_slack_ratio: float,):
+
+    if taskattr.timing_flag == "deadline":
+        rda_size = min(deduce_RDA(req_rsc_size, temporal_rda_ratio, wsc_slack_ratio), taskattr.core_max-req_rsc_size)
+    else:
+        rda_size = 0
+    taskattr.rda_size = rda_size
+    taskattr.main_size = req_rsc_size
+    taskattr.num_exec = deduce_num_exec(taskattr.freq, f_gcd, taskattr.thread_scaling_factor)
+    taskattr.no_stall_latency = deduce_no_stall_latency(req_rsc_size, taskattr.flops)
+    min_tot_rsc = deduce_min_tot_rsc(req_rsc_size, taskattr.thread_scaling_factor, taskattr.freq_division_factor)
+    taskattr.min_tot_rsc = min_tot_rsc
+    taskattr.max_tot_rsc = deduce_max_tot_rsc(rda_size, req_rsc_size, taskattr.thread_scaling_factor, taskattr.freq_division_factor, taskattr.var_factor)
+    flops_typical = deduce_flops_typical(taskattr.flops, taskattr.thread_scaling_factor, taskattr.freq, f_gcd)
+    taskattr.flops_typical = flops_typical
+    taskattr.flops_max = deduce_flops_max(flops_typical, taskattr.var_factor)
+    equiv_core = deduce_equiv_core(flops_typical, hyper_p)
+    taskattr.equiv_core = equiv_core
+    taskattr.util = deduce_util(equiv_core, min_tot_rsc)
+
+def duduce_cfg(taskattr_dict, f_gcd, hyper_p, 
+               logical_graph_nx, task_graph_srcs, task_graph_sinks, 
+               slack_threshold, e2e_latency, temporal_rda_ratio, wsc_slack_ratio, verbose=False):
+    rsc_map_w = rsc_slack_estim(taskattr_dict, logical_graph_nx, task_graph_srcs, 
+                         task_graph_sinks, e2e_latency, temporal_rda_ratio, slack_threshold) 
+    if verbose:
+        print(rsc_map_w)
+    ert, ddl = estim_release_dll_time(logical_graph_nx, 
+                            comp_time={node:slack_estm for node, (_, slack_estm, _) in rsc_map_w.items()},
+                            io_time={node:1e-6 for node in taskattr_dict},
+                            task_type={node:taskattr_dict[node].timing_flag for node in taskattr_dict},
+                            temporal_rda_ratio=temporal_rda_ratio,)
+    if verbose:
+        print(ert, ddl) 
+    for node, (req_rsc_size, slack_estm, constr) in rsc_map_w.items():
+        taskattr:TaskIntAttr = taskattr_dict[node]
+        taskattr.ERT = ert[node]
+        taskattr.ddl = ddl[node] - ert[node]
+        taskattr.exp_comp_t = slack_estm
+        deduce_task_attrib(taskattr, f_gcd, hyper_p, req_rsc_size, temporal_rda_ratio, wsc_slack_ratio)
+    if verbose:
+        for node, taskattr in taskattr_dict.items():
+            print(node, taskattr)
+            print()
 
 def test():
-    from task.task_cfg import load_taskint, task_graph_srcs, task_graph_sinks, creat_logical_graph, task_graph_ops
     import argparse
     import numpy as np 
     parser = argparse.ArgumentParser()
     parser.add_argument("--verbose", action="store_true", help="verbose")
     parser.add_argument("--profiling_filename", type=str, default="profiling.csv", help="profiling filename") 
     parser.add_argument("--e2e_latency", type=float, default=0.09, help="e2e latency")
-    parser.add_argument("--freq", type=float, default=10, help="frequency")
+    # parser.add_argument("--freq", type=float, default=10, help="frequency")
     parser.add_argument("--temporal_rda_ratio", default=0.05, type=float, help="temporal ratio")
     parser.add_argument("--wsc_slack_ratio", default=0.8, type=float, help="wsc slack ratio")
+    parser.add_argument("--slack_threshold", default=5e-4, type=float, help="slack threshold")
+    parser.add_argument("--aux_scale_factor", default=1, type=int, help="aux scale factor")
     args = parser.parse_args() 
 
-    glb_n_task_dict, f_gcd = load_taskint(args.profiling_filename, False, False, verbose=args.verbose) 
+    taskattr_dict, f_gcd = load_taskattrib(args.profiling_filename, verbose=args.verbose) 
+    hyper_p = 1/f_gcd
+    if args.aux_scale_factor > 1:
+        for node, taskattr in taskattr_dict.items():
+            # scale up the thread scaling factor
+            taskattr.thread_scaling_factor *= args.aux_scale_factor
     logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
-    threshold = 5e-4
-    rsc_map_w = rsc_slack_estim(glb_n_task_dict, logical_graph_nx, task_graph_srcs, 
-                         task_graph_sinks, args.e2e_latency, args.temporal_rda_ratio, threshold) 
-    print(rsc_map_w)
+    slack_threshold = args.slack_threshold
+    duduce_cfg(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, task_graph_srcs, 
+                         task_graph_sinks, slack_threshold, args.e2e_latency, args.temporal_rda_ratio, args.wsc_slack_ratio)
+    glb_n_task_dict = gen_taskint_from_cfg(taskattr_dict, f_gcd)
+
+    for node, taskint in glb_n_task_dict.items():
+        print(node, taskint)
+        print()
 
 if __name__ == "__main__":
     test()

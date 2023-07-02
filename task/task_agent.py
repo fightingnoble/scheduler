@@ -6,6 +6,7 @@ if TYPE_CHECKING:
     from model.buffer import Buffer, EventCache, TriggerCache
     from model.buffer import Data
 
+from dataclasses import dataclass, field, InitVar, asdict
 import copy
 import numpy as np
 import math
@@ -418,6 +419,54 @@ class ProcessInt(ProcessBase):
             applied_constraint_arr[not_available_pos] = "N/A"
         return req_rsc_size_arr, applied_constraint_arr
 
+
+@dataclass
+class TaskAttr:
+    name: str
+    freq: float
+
+    timing_flag: str
+    criticality: str
+    trigger_mode: str
+    
+    core_max: int = 0  # Maximum core
+    core_min: int = 0  # Minimum core
+    core_list: List[int] = None  # Core list
+    parallel_mode: str = None  # Parallel mode
+    core_max_compile: int = 0  # Maximum core for compilation
+    core_min_compile: int = 0  # Minimum core for compilation
+    core_list_compile: List[int] = None  # Core list for compilation
+    thread_scaling_factor: int = 1  # Thread scaling factor
+    freq_division_factor: int = 1  # Frequency division factor
+    var_factor: int = 1  # Variable factor
+
+    jitter_max: int = 0  # Maximum jitter
+
+    ERT:Union[float, int] = field(init=False) # ERT (Earliest Release Time)
+    ddl:Union[float, int] = field(init=False) # Deadline
+    exp_comp_t:Union[float, int] = field(init=False) # Expected Completion Time
+
+@dataclass
+class TaskIntAttr(TaskAttr):
+    flops:Union[int, float]=0
+    task_flag:str="moveable"
+    pre_assigned_resource_flag:bool=False
+
+    num_exec: int = field(init=False)
+    no_stall_latency: float = field(init=False)
+    min_tot_rsc: int = field(init=False)
+    max_tot_rsc: int = field(init=False)
+    flops_typical: float = field(init=False)
+    flops_max: float = field(init=False)
+    equiv_core: float = field(init=False)
+    util: float = field(init=False)
+    main_size: float = field(init=False)
+    rda_size: float = field(init=False)
+    # database: InitVar[Dict] = {'f_gcd': 10, 'hyper_p': 0.1, 'temporal_rda_ratio': 0.05, 'wsc_slack_ratio': 0.8}
+
+    def __post_init__(self):
+        self.task_flag_num = scheduling_attr[self.task_flag]
+
 class TaskBase(object):
     def __init__(self, task_name:str, task_id:int, timing_flag:str,
                  ERT:int, ddl:int, period:int, exp_comp_t:int, i_offset:int, jitter_max:int,
@@ -431,12 +480,14 @@ class TaskBase(object):
 
         # =============== 1. task properties ===============
         # timing spec 
+        self.freq = 1
         self.timing_flag = timing_flag
         self.timing_flag_num = task_timing_type[timing_flag]
         self.criticality = criti_flag # soft or hard
         assert self.criticality in criticality.keys()
         assert self.timing_flag in task_timing_type.keys()
         self.trigger_mode = trigger_mode # event-triggered or periodic
+
         self.core_max = parallel_cfg["max"] if "max" in parallel_cfg else 1e3
         self.core_min = parallel_cfg["min"] if "min" in parallel_cfg else 0
         self.core_list = parallel_cfg["list"] if "list" in parallel_cfg else None
@@ -450,15 +501,16 @@ class TaskBase(object):
         self.freq_division_factor = 1
         self.var_factor = 1
 
+        self.jitter_max = jitter_max # max jitter
+
         # deadline in each hyper-period (task that have multiple sub-periods in a hyper-period)
         # e.g. the task with 30hz but be divided into 3 tasks with 10hz and 1/30s offset
-        self.i_offset = i_offset # offset of the sub-period
         self.ERT = ERT # relative earliest release time in each sub-period
         self.ddl = ddl # relative deadline in each sub-period
-
         self.exp_comp_t = exp_comp_t
+
+        self.i_offset = i_offset # offset of the sub-period
         self.period = period
-        self.jitter_max = jitter_max # max jitter
         self.aval_sub_period = []
         self.hyper_period_size = None 
         self.sub_cycle_cnt = 0     
@@ -518,16 +570,34 @@ class TaskBase(object):
 
     def __str__(self) -> str:
         _str = f"Task {self.id}: {self.name}\n"
-        _str += f"\ttiming_flag: {self.timing_flag}, prio: {self.prio}\n"
-        _str += f"\tperiod: {self.period:.2e}, i_offset: {self.i_offset:.2e}, ERT: {self.ERT:.2e}, ddl: {self.ddl:.2e}, exp_comp_t: {self.exp_comp_t:.2e}\n"
-        _str += f"\trelease_time: {self.release_time:.2e}, deadline: {self.deadline:.2e}, jitter_max: {self.jitter_max}\n"
+        _str += f"\ttiming_flag: {self.timing_flag}, criticality: {self.criticality}, trigger_mode: {self.trigger_mode}\n"
+        if self.parallel_mode == "upb":
+            _str += f"\tnum of cores (compile): 1 ~ {self.core_max_compile}\n"
+            _str += f"\tnum of cores (run): 1 ~ {self.core_max}\n"
+        elif self.parallel_mode == "list":
+            _str += f"\tnum of cores (compile): {self.core_list_compile}\n"
+            _str += f"\tnum of cores (run): {self.core_list}\n"
+        elif self.parallel_mode == "range":
+            _str += f"\tnum of cores (compile): {self.core_min_compile} ~ {self.core_max_compile}\n"
+            _str += f"\tnum of cores (run): {self.core_min} ~ {self.core_max}\n"
+        elif self.parallel_mode == "lwb":
+            _str += f"\tnum of cores (compile): {self.core_min_compile} ~ Max\n"
+            _str += f"\tnum of cores (run): {self.core_min} ~ Max\n"
+        else:
+            _str += f"\tnum of cores: no constraint\n"
+        _str += f"\tspatial factor: thread {self.thread_scaling_factor}, freq {self.freq_division_factor}, var {self.var_factor}\n"
+        _str += f"\tslack info: {self.ERT:.2e} ~ {(self.ERT+self.ddl):.2e} ({self.exp_comp_t:.2e})\n"
+        _str += f"\tperiod: {self.period:.2e}, i_offset: {self.i_offset:.2e}\n"
+        _str += f"\tjitter_max: {self.jitter_max}\n"
         _str += f"\tcpu_time: {self.cpu_time:.2e}, io_time: {self.io_time:.2e}, totcpu: {self.totcpu:.2e}\n"
-        # _str += f"state: {self.state}, "
-        # _str += f"start_time: {self.start_time}, end_time: {self.end_time}, currentburst: {self.currentburst}, burst: {self.burst}, totburst: {self.totburst}, waitTime: {self.waitTime}\n"
-        # _str += f"missed_deadline_count: {self.missed_deadline_count}\n"
-        # _str += f"cumulative_executed_time: {self.cumulative_executed_time}, cum_trunAroundTime: {self.cum_trunAroundTime}, completion_count: {self.completion_count}\n"
-        # _str += f"context_switch_count: {self.context_switch_count}, preemption_count: {self.preemption_count}, migration_count: {self.migration_count}\n"
         return _str
+
+    def print_stat(self):
+        _str += f"state: {self.state}, "
+        _str += f"start_time: {self.start_time}, end_time: {self.end_time}, currentburst: {self.currentburst}, burst: {self.burst}, totburst: {self.totburst}, waitTime: {self.waitTime}\n"
+        _str += f"missed_deadline_count: {self.missed_deadline_count}\n"
+        _str += f"cumulative_executed_time: {self.cumulative_executed_time}, cum_trunAroundTime: {self.cum_trunAroundTime}, completion_count: {self.completion_count}\n"
+        _str += f"context_switch_count: {self.context_switch_count}, preemption_count: {self.preemption_count}, migration_count: {self.migration_count}\n"
 
     def freq_division(self, factor, hyper_p, mode) -> List[TaskBase]:
         """
@@ -567,6 +637,7 @@ class TaskBase(object):
                 sub_tasks[i].name  = f"{self.name}_{i}"
 
         return sub_tasks
+
     def gen_event_modA_endless(self, ):
         i = 0
         event_time = self.i_offset
@@ -577,8 +648,7 @@ class TaskBase(object):
             if jitter is None: 
                 return i
             event_time += self.period
-            i += 1
-        
+            i += 1      
     
     def gen_event_modB_endless(self, ):
         i = 0
@@ -663,7 +733,6 @@ class TaskBase(object):
         while True:
             n_event = yield from self.event_generator(**kwargs)
             print(f"{n_event} events of {self.name} are generated")
-
 
     def jitter_sim_event(self, jitter_sim_para:Dict, size=1, seed:Union[None, int, np.random.Generator, np.random.RandomState]=None):
         """
@@ -831,7 +900,8 @@ class TaskInt(TaskBase):
 
     def __str__(self) -> str:
         _str = super().__str__()
-        _str += f"\tflops: {self.flops:.2e}, main_size: {self.pre_assigned_resource.main_size}, RDA_size: {self.pre_assigned_resource.RDA_size}, pre_assigned: {self.pre_assigned_resource_flag}" 
+        _str += f"\tflops: {self.flops:.2e}, req.: {self.required_resource_size}\n" 
+        _str += f"\tmain_size: {self.pre_assigned_resource.main_size}, RDA_size: {self.pre_assigned_resource.RDA_size}, pre_assigned: {self.pre_assigned_resource_flag}\n"
         return _str
 
     def make_process(self, release_t, deadline_abs, pid):

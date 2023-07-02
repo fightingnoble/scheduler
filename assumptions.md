@@ -89,3 +89,8 @@ B. deadline assignment
    根据上下游节点的频率和并行度讨论图变换的模式。
    对于上游频率高于下游的情况：采用间隔均匀采点模式（等间距分割）
    下游高于上游情况：目前提供两种模式接口（interleave，repea），但是采用的是等间距分割模式
+
+12. exp_comp_t
+   this property is now only used for calculating sim_step, injecting jitter
+   now, we use the estimated slack as the exp_comp_t, which is smaller than relative deadline, i.e., ddl.
+   
