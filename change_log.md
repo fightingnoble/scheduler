@@ -601,3 +601,42 @@ Statistic the e2e latency from the trace files:
 Add a coroutine to statistic the throughput.
   related file: throughput_cnt.py
 
+## 20230703
+
+optimize the code layout
+related file: allocator_agent.py
+
+Benchmark generation and comparison with the manually generated benchmark is completed
+  fix bug: 
+    the only the realtime task (aux task) is scaled, filtered by the timing_flag attribute
+  ```python
+      if taskattr.timing_flag == "realtime":
+          taskattr.thread_scaling_factor *= args.aux_scale_factor
+  ```
+Report: doc/heavy_scaling.md, doc/medium_scaling.md, slack_estim.py
+
+Tested benchmark generation and simulation is completed. 
+
+  Gen_workloads function is integrated with workload generation and graph transformation
+    creat_physical_graph now support to generate the physical graph either from the taskattr_dict or from the cfg file
+    related file: task_cfg.py
+  optimize the shell:
+    Change the way to execute the shell script:
+      sh xxx -> ./xxx
+    Add p_fn and PY_ARGS to the python script:
+      pass more arguments to the python script from the shell script
+      support slect the main file of the python script
+    ```
+    p_fn=${5:-"allocator_agent.py"}
+    PY_ARGS=${@:6}
+    ```
+    Select cfg dir:
+      Generated ver: 
+        The cfg dir is parsed by the python script, and then passed to the shell script
+      Predefined ver:
+        The the cfg files are selected by keywords, light/medium/heavy
+    related file: run/one_click_gen_bm.sh, run/one_click_fx_bm.sh, sim_main.py
+      compare_dyn.sh, compare_glb.sh, static_optm_test.sh
+  Optimize the log cleaning: replace shell cmd with python script
+    related file: file_path_prepare.py
+

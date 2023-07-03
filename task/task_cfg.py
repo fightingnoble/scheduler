@@ -1,22 +1,17 @@
 from __future__ import annotations
 
-from typing import Union, List, Dict, Iterator, Callable, Union, NamedTuple
+from typing import Union, List, Dict, Iterator, Callable, Tuple, Optional
 import copy
-import math
 import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
 import pandas as pd
 
 from global_var import *
-from model.lru import LRUCache
-from sched.scheduling_table import SchedulingTableInt
-from model.resource_agent import Resource_model_int
-from task.task_agent import TaskInt, TaskAttr, TaskIntAttr
+from task.task_agent import TaskInt, TaskIntAttr
 from model.task_queue_agent import TaskQueue 
 from task.task_agent import ProcessInt
 from task.graph_scaling import build_node_relationship
-from collections import namedtuple
 from sched.slack_estim import estim_release_dll_time, duduce_cfg
 
 # 'ID', 'Task (chain) names', 'Flops on path (G)', 'Expected Latency (ms)', 'T release (ms)', 'Freq.', 'DDL (ms)', 'Cores/Req.', 
@@ -312,7 +307,8 @@ def creat_logical_graph(srcs:Dict[str, List[str]], ops:Dict[str, List[str]], sin
             logical_graph_nx.add_edge(op_n, sink_n, type="data")
     return logical_graph_nx
 
-def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filename:str="profiling.csv"):
+def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filename:str="profiling.csv", 
+                         taskattr_dict:Dict[str, TaskIntAttr]=None):
     """
     Physical Graph:
         A physical graph is the result of translating a Logical Graph for execution in a distributed runtime. 
@@ -320,20 +316,28 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filen
     """
     physical_graph_nx = nx.DiGraph()
 
-    # extract the parallelism of each node
-    df = pd.read_csv(profiling_filename, sep=",", index_col=0)
     node_parall_dict = {}
-    for node_n in df.index:
-        node_attr = df.loc[node_n].to_dict()
-        factor = node_attr["Throuput factor (Spat.)"]
-        copy_n = node_attr['Thread factor (Spat.)']
-        freq = int(node_attr["Freq."]/f_gcd)
-        node_parall_dict[node_n] = [copy_n, factor, freq]
+    if taskattr_dict is not None:
+        for node_n, node_attr in taskattr_dict.items():
+            node_attr:TaskIntAttr
+            factor = node_attr.freq_division_factor
+            copy_n = node_attr.thread_scaling_factor
+            freq = int(node_attr.freq/f_gcd)
+            node_parall_dict[node_n] = [copy_n, factor, freq]
+    else:
+        # extract the parallelism of each node
+        df = pd.read_csv(profiling_filename, sep=",", index_col=0)
+        for node_n in df.index:
+            node_attr = df.loc[node_n].to_dict()
+            factor = node_attr["Throuput factor (Spat.)"]
+            copy_n = node_attr['Thread factor (Spat.)']
+            freq = int(node_attr["Freq."]/f_gcd)
+            node_parall_dict[node_n] = [copy_n, factor, freq]
 
 
     # add nodes
     for node_n, t in logical_graph_nx.nodes(data="type"):
-        if node_n in df.index:
+        if node_n in node_parall_dict:
             copy_n, factor, freq = node_parall_dict[node_n]
             for copy_j in range(copy_n):
                 for exe_k in range(factor):
@@ -348,7 +352,7 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filen
 
     # add data dependency, rescale the parallelism
     for pred_n, succ_n, edge_attr in logical_graph_nx.edges(data=True):
-        if pred_n in df.index and succ_n in df.index:
+        if pred_n in node_parall_dict and succ_n in node_parall_dict:
             pred_copy_n, pred_factor, pred_freq = node_parall_dict[pred_n]
             succ_copy_n, succ_factor, succ_freq = node_parall_dict[succ_n]
             for pred_copy_j in range(pred_copy_n):
@@ -407,13 +411,13 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filen
                                     physical_graph_nx.edges[pred_node_name, succ_node_name]["type"] = "data"
                                     physical_graph_nx.edges[pred_node_name, succ_node_name]["factor"] = count
 
-        elif pred_n in df.index and succ_n not in df.index:
+        elif pred_n in node_parall_dict and succ_n not in node_parall_dict:
             pred_copy_n, pred_factor, pred_freq = node_parall_dict[pred_n]
             for pred_copy_j in range(pred_copy_n):
                 for exe_k in range(pred_factor):
                     pred_node_name = pred_n+"_"+str(pred_copy_j)+"_"+str(exe_k)
                     physical_graph_nx.add_edge(pred_node_name, succ_n, type="control", reDistPattn="none")
-        elif pred_n not in df.index and succ_n in df.index:
+        elif pred_n not in node_parall_dict and succ_n in node_parall_dict:
             succ_copy_n, succ_factor, succ_freq = node_parall_dict[succ_n]
             for succ_copy_j in range(succ_copy_n): 
                 for exe_k in range(succ_factor):
@@ -863,18 +867,23 @@ def gen_taskint_from_cfg(taskattr_dict:Dict[str, TaskIntAttr], f_gcd: int,
 
     return task_dict
 
-def gen_workloads(args):
+def gen_workloads(args, slack_threshold):
     taskattr_dict, f_gcd = load_taskattrib(args.profiling_filename, verbose=args.verbose) 
     hyper_p = 1/f_gcd
     if args.aux_scale_factor > 1:
         for node, taskattr in taskattr_dict.items():
             # scale up the thread scaling factor
-            taskattr.thread_scaling_factor *= args.aux_scale_factor
+            if taskattr.timing_flag == "realtime":
+                taskattr.thread_scaling_factor *= args.aux_scale_factor
+
     logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
-    slack_threshold = args.slack_threshold
     duduce_cfg(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, task_graph_srcs, 
                          task_graph_sinks, slack_threshold, args.e2e_latency, args.temporal_rda_ratio, args.wsc_slack_ratio)
-    return taskattr_dict, f_gcd
+    glb_n_task_dict = gen_taskint_from_cfg(taskattr_dict, f_gcd)
+    physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), taskattr_dict=taskattr_dict)
+    init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
+    return hyper_p,glb_n_task_dict,physical_graph_nx
+
 
 def extract_parallel_cfg(task_attr, mode="runtime"):
     parallel_cfg = {}

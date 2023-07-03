@@ -1,179 +1,304 @@
-from __future__ import annotations
-
-from typing import Union, List, Dict, Iterator, Callable, Union
-import copy
-
-import math
-import numpy as np
-from scipy.stats import truncnorm
-import matplotlib.pyplot as plt
-
-from global_var import *
-from model.lru import LRUCache
+import os
+from task.task_cfg import create_init_p_list, gen_workloads
+from task.task_cfg import affinity_cfg
+from task.task_cfg import init_affinity
+from global_sched import push_task_into_bins, push_task_into_bins_new
+from task.task_agent import TaskInt 
+from task.task_agent import TaskInt
+from task.spec import Spec
+from model.msg_dispatcher import MsgDispatcher
+from model.data_pipe import DataPipe, TriggerPipe
 from sched.scheduling_table import SchedulingTableInt
 from model.resource_agent import Resource_model_int
-from task.task_agent import TaskInt
-from model.task_queue_agent import TaskQueue 
-from task.task_agent import ProcessInt, ProcessBase
-from scheduler_agent import Scheduler 
+from scheduler_agent import Scheduler
 from sched.monitor_agent import Monitor
-from model.msg_dispatcher import MsgDispatcher
-from model.buffer import Buffer, Data
+from allocator_agent import glb_sched, cyclic_sched
 
+def main():
+    import argparse
+    import numpy as np 
+    import pickle
+    from global_var import trace_list
 
-def DynRT_overall(affinity, 
-                scheduler_list: List[Scheduler], monitor_list:List[Monitor],
-                rsc_list:List[Resource_model_int], 
-                total_cores:int, 
-                glb_p_list:List[ProcessInt],
-                timestep, hyper_p, n_p=1, msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
-                verbose=False, *, warmup=False, drain=False,):
-    
-    # set/load the simulation parameters
-    event_range = hyper_p * (n_p+warmup)
-    sim_range = hyper_p * (n_p+warmup+drain)
-    tab_temp_size = int(sim_range/timestep)
-    tab_spatial_size = total_cores
-    
-    # init the global queues
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--verbose", action="store_true", help="verbose")
+    parser.add_argument("--test_case", type=str, default="all", help="task name")
+    parser.add_argument("--plot", action="store_true", help="plot the task timeline")
+    parser.add_argument("--test_all", default=False, help="test all the task")
+    parser.add_argument("--num_cores", default=266, type=int, help="number of cores")
+    parser.add_argument("--BinExtendRule", default="list", type=str, help="Rule for when and how to extend the bin")
+    parser.add_argument("--preemptable", default=False, action="store_true", help="enable preemption")
+    parser.add_argument("--quantum_check_en", default=False, action="store_true", help="enable quantum check")
+    parser.add_argument("--quantumSize", default=2, type=int, help="quantum size, # of simulation steps")
+    # parser.add_argument("--hyper_p", default=None, type=float, help="hyper period")
+    # parser.add_argument("--warmup", default=False, action="store_true", help="warmup")
+    # parser.add_argument("--drain", default=False, action="store_true", help="drain")
+    # parser.add_argument("--sim_step", default=None, type=float, help="simulation step")
+    parser.add_argument("--n_p", default=1, type=int, help="number of periods")
+    parser.add_argument("--jitter_sim_en", default=False, action="store_true", help="enable jitter simulation")
+    parser.add_argument("--jitter_sim_para", default={"a":-0.2, "b":0.2, "loc":0, "scale":1}, type=dict, help="jitter simulation parameters")
+    parser.add_argument("--file_suffix", default="", type=str, help="file suffix")
+    parser.add_argument("--i_file_suffix", default="", type=str, help="file suffix")
+    parser.add_argument("--seed", default=0, type=int, help="random seed")
+    parser.add_argument("--barrier_dis", default=False, action="store_true", help="disable barrier")
+    parser.add_argument("--data_lifetime_mode", default="static", type=str, help="lifetime mode: most_recent, ref_count, timeout, watermark") 
+    parser.add_argument("--spatial_rda_ratio", default=0.2, type=float, help="spatial ratio")
+    parser.add_argument("--temporal_rda_ratio", default=0.05, type=float, help="temporal ratio")
+    parser.add_argument("--profiling_filename", type=str, default="profiling_light.csv", help="profiling filename")
+    parser.add_argument("--lateness_mode", type=str, default="ignore", help="lateness mode")
+    # parser.add_argument("--lateness_threshold", type=float, default=0.0, help="lateness threshold")
+    # parser.add_argument("--cbs_en", default=False, action="store_true", help="enable cbs")
+    parser.add_argument("--e2e_latency", type=float, default=0.09, help="e2e latency")
+    # parser.add_argument("--freq", type=float, default=10, help="frequency")
+    parser.add_argument("--wsc_slack_ratio", default=0.8, type=float, help="wsc slack ratio")
+    parser.add_argument("--slack_threshold", default=5e-4, type=float, help="slack threshold")
+    parser.add_argument("--aux_scale_factor", default=1, type=int, help="aux scale factor")
+    parser.add_argument("--gen_benchmark", default=False, action="store_true", help="generate benchmark")
 
-    # init the tasks that require external triggering
-    sim_trigger_p_list = [p for p in glb_p_list if p.task.trigger_mode!='N']
+    args = parser.parse_args() 
+    if not args.gen_benchmark:
+        if args.profiling_filename == "profiling.csv":
+            cfg_n = "heavy"
+        else:
+            cfg_n = args.profiling_filename.split(".")[-2].split("_")[-1]
+    else:
+        cfg_n = f"x{args.aux_scale_factor}_{args.e2e_latency}s_rda-{(args.wsc_slack_ratio-args.temporal_rda_ratio):.2%}(T)_{args.temporal_rda_ratio:.2%}(S)"
+    num_cores = args.num_cores
+    num_periods = args.n_p
+    slack_threshold = args.slack_threshold
 
-    # init the global allocation preference, w.r.t. the time slot
-    pre_alloc_table = {}
-    for sched in scheduler_list:
-        _SchedTab = sched.scheduling_table
-        bin_pack_result = _SchedTab.index_occupy_by_id()
+    hyper_p, glb_n_task_dict, physical_graph_nx = gen_workloads(args, slack_threshold)
 
-        # sort the result by the start time
-        # item[1] is alloc_slot_s, alloc_size, allo_slot
-        # item[1][0] is alloc_slot_s
-        for k, v in bin_pack_result.items():
-            if k not in pre_alloc_table.keys():
-                pre_alloc_table[k] = [[v[0], v[1], v[2], _SchedTab.id]]
-            else:
-                pre_alloc_table[k].append([v[0], v[1], v[2], _SchedTab.id])
-    
-    partition_affinity = {}
-    for k in list(pre_alloc_table.keys()):
-        partition_affinity[k] = [[slot_n, bin_id] for slot_n, _, _, bin_id in sorted(pre_alloc_table[k], key=lambda item: item[0])]
+    # generate the process list
+    glb_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
+    init_affinity(glb_p_list, mode='job', job_graph_nx=physical_graph_nx, verbose=args.verbose)
 
+    # assert all the process has hard deadline
+    if args.lateness_mode == "all_hard":
+        for _p in glb_p_list:
+            _p.task.criticality = "hard"
+    elif args.lateness_mode == "all_soft":
+        for _p in glb_p_list:
+            _p.task.criticality = "soft"
+    elif args.lateness_mode == "ignore":
+        pass
 
-    # suppose the task set is fixed, and all the tasks are periodic
-    
-    # load the task set, task graph, and scheduling table 
+    # simlation settings
+    sim_step = min([glb_n_task_dict[task].exp_comp_t for task in glb_n_task_dict])/32
+    quantumSize = sim_step*args.quantumSize
+    save_path = f"cache/{cfg_n}/bin_list_{num_cores}{args.i_file_suffix}.pkl"
+    np.random.seed(args.seed)
+    # from model.message_handler import gen_sensor_event
+    # event_iter_dict = gen_sensor_event(glb_p_list, hyper_p, num_periods, True, args.jitter_sim_en, args.jitter_sim_para, args.seed)
+    jitter_para_dict = dict(jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para, seed=args.seed)
+    event_iter_dict = TaskInt.get_event_generator(glb_n_task_dict, hyper_p, num_periods, True, **jitter_para_dict)
+    # e2e_var_sim(jitter_sim_para=args.jitter_sim_para, seed=args.seed)
+    # num_dyn_obj_sim()
 
-    # map the initial tasks to each partition
-    for sched in scheduler_list:
-        # extract scheudler, including queues and lists from scheduler_list
-        ready_queue:TaskQueue = sched.ready_queue
-        wait_queue:TaskQueue = sched.weight_wait_queue
-        # inactive_list:List[ProcessInt] = sched.inactive_list
-        buffer = sched.get_buffer()
-        _SchedTab, curr_cfg, process_dict = sched._SchedTab, sched.curr_cfg, sched.process_dict
-        init_cfg = _SchedTab.scheduling_table[0]
-        task_pid_list = list(process_dict.keys())
+    if args.test_case == "all":
+        args.test_all = True
 
-        # init the tasks queue
-
-        _SchedTab.to_sparse_dict(-1)
-        curr_cfg.slot_e = -1 #cfg_slot_s + cfg_slot_num - 1
-        curr_cfg.slot_s = -1 # cfg_slot_s
-        curr_cfg.slot_num = 0 # cfg_slot_num
-
-        # put the initial tasks into the ready queue
-        print(f"Bin {_SchedTab.id:d} initial queue:")
-        print("	ready tasks:")
-        for pid in init_cfg.rsc_map: 
-            _p = process_dict[pid]
-            ready_queue.put(_p)
-            _p.set_state("ready")
-            _p.released = True 
-            print("		TASK {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
-        print("")
+    elif args.test_case == "bin_pack_new" or args.test_all:
+        bin_list = [SchedulingTableInt(num_cores, 1, 0, "bin_glb_dynamic")]
+        # from message_agent import Message
         
-        # instruction prefetching
-        cfg_slot_s, cached_map, cfg_slot_num  = _SchedTab.sparse_list[_SchedTab.sparse_idx_next]
+        task_spec = Spec(0.1, [1 for _ in glb_p_list]) 
+        # process_dict_list = [{pid:init_p_list[pid] for pid in _SchedTab.index_occupy_by_id()} for _SchedTab in bin_list]
+        rsc_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
+        # curr_cfg_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
+        # msg_pipe = Message()
+        msg_dispatcher = MsgDispatcher(len(bin_list))
+        a_data_pipe = DataPipe("activation", len(bin_list))
+        w_data_pipe = DataPipe("weight", len(bin_list))
+        scheduler_list = [Scheduler(_SchedTab, glb_p_list, jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
+        monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
 
-        # weight prefetching based on the scheduling table
-        # TODO: how to represent the tile prefetching: when to start, when to check
-        init_prefetch_obj = {k:v for k,v in cached_map.items() if k not in init_cfg.rsc_map}
-        # data_prefetching(init_p_list, wait_queue, cached_cfg=init_prefetch_obj)
+        print("sim_step: ", sim_step)
+        bin_list.clear()
+        bin_list = push_task_into_bins_new(
+            bin_list,
+            glb_p_list, affinity_cfg, event_iter_dict,
+            num_cores, args.quantum_check_en, quantumSize, 
+            sim_step, hyper_p, args.spatial_rda_ratio, args.temporal_rda_ratio,
 
-        print("	prefetched done:")
-        for pid in init_prefetch_obj:
-            _p = process_dict[pid]
-            # skip data prefetching; put the data into the buffer directly
-            data = Data(_p.pid, 1, (0,), "weight", _p.io_time)
-            data.valid = True
-            buffer.put(data)
-            print("		TASK {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
-        print("")
+            scheduler_list, monitor_list,
+            msg_dispatcher,
+            a_data_pipe, w_data_pipe,
 
+            num_periods, args.verbose, 
+            warmup=True, drain=True
+            )
+        
+        from sched.scheduling_table import get_task_layout_compact
+        get_task_layout_compact(bin_list, glb_p_list, save= True, time_step= sim_step,
+        hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
+        txt_size=40, tick_dens=2, save_path=f"plot/{cfg_n}/{num_cores}/new_task_bin_pack_cyclic_{num_cores}{args.file_suffix}.pdf") 
 
-    # start the simulation
-    sim_slot_num = math.ceil(sim_range/timestep)
-    for n_slot in range(sim_slot_num):
-        curr_t = n_slot * timestep
-        tab_pointer = n_slot % tab_temp_size
+        get_task_layout_compact(bin_list, glb_p_list, save= True, time_step= sim_step,
+        hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
+        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/{cfg_n}/{num_cores}/new_task_bin_pack_full_{num_cores}{args.file_suffix}.pdf")
 
-        if (n_slot - 1) * timestep < event_range and n_slot * timestep >= event_range: 
-            print("="*20, "DRAIN", "="*20, "\n")
-        elif n_slot == 0 and warmup:
-            print("="*20, "WARMUP", "="*20, "\n")
-        elif (n_slot * timestep)//hyper_p > (n_slot-1)*timestep//hyper_p:
-            print("="*20, "PERIOD {:d}".format(int((n_slot * timestep)//hyper_p)), "="*20, "\n")
+        # select a period to save 
+        assert num_periods >= 1
+        bin_list2save = []
+        # for _sched_tab in bin_list:
 
+        dir_path = os.path.dirname(save_path)
 
-    # Simulation: 
-    # recieve the datastream, route the data source to each partition and trigger the local scheudler
-    # enqueue the process that is released in this slot
-    # simulate the event trigger
-    for _p in sim_trigger_p_list:
-        trigger_state = _p.sim_trigger(curr_t, timestep)
-        if trigger_state or curr_t == 0:
-            # test case: 
-            # sensor data arrival time varies
-            # inject noise to self.task.period, self.task.i_offset
-            _p.i_offset = _p.task.i_offset + _p.task.exp_comp_t * truncnorm.rvs(-0.2, 0.2, size=1, scale=1)[0] # 0.2 # truncnorm.rvs(-0.2, 0.2, size=1, scale=1)[0]
-            if _p.i_offset < 0:
-                if curr_t == 0:
-                    for key in _p.pred_ctrl.keys():
-                        _p.pred_ctrl[key]["valid"] = True
-                        _p.pred_ctrl[key]["ingestion_time"] = _p.i_offset
-                        trigger_state = True
-                    _p.i_offset = _p.task.i_offset + _p.task.exp_comp_t * truncnorm.rvs(-0.2, 0.2, size=1, scale=1)[0] # 0.2 # truncnorm.rvs(-0.2, 0.2, size=1, scale=1)[0]
-                    if _p.i_offset < 0:
-                        _p.i_offset += _p.task.period
-                else:
-                    _p.i_offset += _p.task.period
-        # dispatch the process to the corresponding partition according to the partition affinity
-        affinity_list = partition_affinity[_p.pid]
-        if trigger_state:
-            for i in range(len(partition_affinity[_p.pid])):
-                if curr_t > affinity_list[i][0] and curr_t <= affinity_list[i+1][0]:
-                    target_bin = affinity_list[i][1]
-                    break
-            msg_dispatcher.send_message(target_bin, f"{_p.task.name}_completed", prefix="		")
-            
+        if not os.path.exists(dir_path):
+            os.makedirs(dir_path)
 
-        if trigger_state and not bin_event_flg and curr_t >= _p.task.ERT:
-            bin_event_flg = True
-            print(f"({bin_name})")
+        # save the bin_list and the init_p_list
+        with open(save_path, "wb") as f:
+            pickle.dump(bin_list, f)
+        # with open(f"init_p_list_{num_cores}{args.file_suffix}.pkl", "wb") as f:
+        #     pickle.dump(init_p_list, f)
+        try:
+            # load the bin_list and the init_p_list
+            with open(save_path, "rb") as f:
+                bin_list = pickle.load(f)
+            print(f"{save_path} saved and loaded successfully")
+            # with open(f"init_p_list_{num_cores}{args.file_suffix}.pkl", "rb") as f:
+            #     init_p_list = pickle.load(f)
+            # print(f"init_p_list_{num_cores}{args.file_suffix}.pkl saved and loaded successfully")
+        except:
+            print(f"{save_path} not found")
+            exit()
 
+    elif args.test_case == "dynamic" or args.test_all:
+        try:
+            # load the bin_list and the init_p_list
+            with open(save_path, "rb") as f:
+                bin_list = pickle.load(f)
+            # with open(f"init_p_list_{num_cores}{args.file_suffix}.pkl", "rb") as f:
+            #     init_p_list = pickle.load(f)
+        except:
+            print(f"{save_path} not found")
+            # print(f"{save_path} not found")
+            bin_list, _ = push_task_into_bins(glb_p_list, affinity_cfg, num_cores, args.quantum_check_en, quantumSize, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
 
+        # from message_agent import Message
+        
+        task_spec = Spec(0.1, [1 for _ in glb_p_list]) 
+        # process_dict_list = [{pid:init_p_list[pid] for pid in _SchedTab.index_occupy_by_id()} for _SchedTab in bin_list]
+        rsc_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
+        # curr_cfg_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
+        # msg_pipe = Message()
+        msg_dispatcher = MsgDispatcher(len(bin_list))
+        sensor_pipe = TriggerPipe(len(bin_list))
+        a_data_pipe = DataPipe("activation", len(bin_list))
+        w_data_pipe = DataPipe("weight", len(bin_list))
+        scheduler_list = [Scheduler(_SchedTab, glb_p_list, jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
+        monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
 
-    lt = []
-    for _p in wait_queue:
-        if _p.release_time <= n_slot * timestep and _p.release_time < event_range:
-            lt.append(_p)
-    for _p in lt:
-        print("TASK {:d}:{:s}({:d}) RELEASEED AT {}!!".format(_p.task.id, _p.task.name, _p.pid, curr_t))
-        ready_queue.put(_p)
-        wait_queue.remove(_p)
-    lt.clear()
+        print("sim_step: ", sim_step)
+        cyclic_sched(task_spec, affinity_cfg, 
+                scheduler_list, monitor_list,
+                event_iter_dict,
+                rsc_list, 
+                num_cores, 
+                glb_p_list,
+                sim_step, hyper_p, num_periods, 
+                msg_dispatcher,
+                sensor_pipe,
+                a_data_pipe, w_data_pipe, 
+                args.verbose, warmup=True, drain=True)
 
+        actual_sched_record = [monitor.trace_recoder for monitor in monitor_list]
 
-    pass
-    
+        pid2name = {_p.pid:_p.task.name for _p in glb_p_list}
+        print("=====================================\n")
+        print("bin_pack_result:")
+        print("=====================================\n")
+        for _SchedTab in actual_sched_record:
+            _SchedTab.print_alloc_detail(pid2name, sim_step)
+
+        from sched.scheduling_table import get_task_layout_compact
+        get_task_layout_compact(actual_sched_record, glb_p_list, save= True, time_step= sim_step,
+        hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
+        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/{cfg_n}/{num_cores}/dyn_full_{num_cores}{args.file_suffix}.pdf")
+
+        trace_path = f"trace/{cfg_n}/dynamic_e2e_trace_{num_cores}{args.file_suffix}.pkl"
+        # save trace_list to trace_file
+        with open(trace_path, "wb") as f:
+            pickle.dump(trace_list, f)
+        
+        try:
+            with open(trace_path, "rb") as f:
+                trace_list = pickle.load(f)
+            print("trace saved successfully")
+        except:
+            print("trace file not found")
+            exit(0)            
+
+    elif args.test_case == "glb_dynamic" or args.test_all:
+        bin_list = [SchedulingTableInt(num_cores, 1, 0, "bin_glb_dynamic")]
+        # from message_agent import Message
+        
+        task_spec = Spec(0.1, [1 for _ in glb_p_list]) 
+        # process_dict_list = [{pid:init_p_list[pid] for pid in _SchedTab.index_occupy_by_id()} for _SchedTab in bin_list]
+        rsc_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
+        # curr_cfg_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
+        # msg_pipe = Message()
+        msg_dispatcher = MsgDispatcher(len(bin_list))
+        a_data_pipe = DataPipe("activation", len(bin_list))
+        w_data_pipe = DataPipe("weight", len(bin_list))
+        scheduler_list = [Scheduler(_SchedTab, glb_p_list, jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
+        monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
+
+        print("sim_step: ", sim_step)
+        glb_sched(task_spec, affinity_cfg, 
+                scheduler_list, monitor_list,
+                event_iter_dict,
+                rsc_list, 
+                num_cores, 
+                glb_p_list,
+                sim_step, hyper_p, num_periods, 
+                msg_dispatcher,
+                a_data_pipe, w_data_pipe,
+                args.quantum_check_en, quantumSize, 
+                args.verbose, warmup=True, drain=True)
+        
+        print("number of context switch {}".format(scheduler_list[0].barrier.number_of_asserts))
+        print("cumulative context switch {}".format(scheduler_list[0].barrier.cumulative_time))
+
+        actual_sched_record = [monitor.trace_recoder for monitor in monitor_list]
+
+        pid2name = {_p.pid:_p.task.name for _p in glb_p_list}
+        print("=====================================\n")
+        print("bin_pack_result:")
+        print("=====================================\n")
+        for _SchedTab in actual_sched_record:
+            _SchedTab.print_alloc_detail(pid2name, sim_step)
+
+        from sched.scheduling_table import get_task_layout_compact
+        file_name = f"plot/{cfg_n}/{num_cores}/glb_dyn_full_{num_cores}{args.file_suffix}.pdf" if not args.barrier_dis else f"plot/{cfg_n}/{num_cores}/glb_dyn_full_{num_cores}_ideal{args.file_suffix}.pdf"
+        get_task_layout_compact(actual_sched_record, glb_p_list, save= True, time_step= sim_step,
+        hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
+        txt_size=40, tick_dens=4, plot_start=0, save_path=file_name)
+
+        trace_path = f"trace/{cfg_n}/dyn_glb_e2e_trace_{num_cores}{args.file_suffix}.pkl"
+        # save trace_list to trace_file
+        dir_path = os.path.dirname(trace_path)
+
+        if not os.path.exists(dir_path):
+            os.makedirs(dir_path)
+
+        with open(trace_path, "wb") as f:
+            pickle.dump(trace_list, f)
+        try:
+            with open(trace_path, "rb") as f:
+                trace_list = pickle.load(f)
+            print("trace saved successfully")
+        except:
+            print("trace file not found")
+            exit(0)
+
+        # plot with bokhe
+        # get_task_layout_compact(actual_sched_record, init_p_list, save= True, time_step= sim_step,
+        # hyper_p=hyper_p, n_p=1, warmup=True, drain=True, plot_legend=False, 
+        # txt_size=40, tick_dens=4, plot_start=0, tool="bokeh", 
+        # save_path=f"plot/{cfg_n}/glb_dyn_full_bokeh_{num_cores}{args.file_suffix}")
+
+if __name__ == "__main__":
+    main()

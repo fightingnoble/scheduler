@@ -513,27 +513,23 @@ if __name__ == "__main__":
     # parser.add_argument("--lateness_threshold", type=float, default=0.0, help="lateness threshold")
     # parser.add_argument("--cbs_en", default=False, action="store_true", help="enable cbs")
 
+    # load parameters
     args = parser.parse_args() 
     if args.profiling_filename == "profiling.csv":
         cfg_n = "heavy"
     else:
         cfg_n = args.profiling_filename.split(".")[-2].split("_")[-1]
+    num_cores = args.num_cores
+    num_periods = args.n_p
 
     glb_n_task_dict, f_gcd = load_taskint(args.profiling_filename, verbose=args.verbose)
     hyper_p = 1/f_gcd
-    num_cores = args.num_cores
-    save_path = f"cache/{cfg_n}/bin_list_{num_cores}{args.i_file_suffix}.pkl"
-
-    if args.test_case == "all":
-        args.test_all = True
-
-    sim_step = min([glb_n_task_dict[task].exp_comp_t for task in glb_n_task_dict])/32
-    quantumSize = sim_step*args.quantumSize
-    num_periods = args.n_p
     logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
-    physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), args.profiling_filename)
     redist_ert_dll(glb_n_task_dict, logical_graph_nx, temporal_rda_ratio=args.temporal_rda_ratio, profiling_filename=args.profiling_filename, verbose=args.verbose)
+    physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), args.profiling_filename)
     init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
+
+    # generate the process list
     glb_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
     init_affinity(glb_p_list, mode='job', job_graph_nx=physical_graph_nx, verbose=args.verbose)
 
@@ -546,6 +542,11 @@ if __name__ == "__main__":
             _p.task.criticality = "soft"
     elif args.lateness_mode == "ignore":
         pass
+
+    # simlation settings
+    sim_step = min([glb_n_task_dict[task].exp_comp_t for task in glb_n_task_dict])/32
+    quantumSize = sim_step*args.quantumSize
+    save_path = f"cache/{cfg_n}/bin_list_{num_cores}{args.i_file_suffix}.pkl"
     np.random.seed(args.seed)
     # from model.message_handler import gen_sensor_event
     # event_iter_dict = gen_sensor_event(glb_p_list, hyper_p, num_periods, True, args.jitter_sim_en, args.jitter_sim_para, args.seed)
@@ -556,6 +557,8 @@ if __name__ == "__main__":
     # pickle.dump(event_iter_dict, open(f"cache/{cfg_n}/event_iter_dict_{args.test_case}_{args.jitter_sim_en}.pkl", "wb"))
     # event_iter_dict = {task: [iter(event_iter_dict[task][0]), iter(event_iter_dict[task][1])] for task in event_iter_dict}
 
+    if args.test_case == "all":
+        args.test_all = True
     if args.test_case == "bin_pack" or args.test_all:
         # push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, num_cores, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
         bin_list, glb_p_list = push_task_into_bins(glb_p_list, affinity_cfg, num_cores, args.quantum_check_en, quantumSize, sim_step, hyper_p, num_periods, args.verbose, warmup=True, drain=True)

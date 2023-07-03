@@ -10,9 +10,7 @@ if TYPE_CHECKING:
     from networkx import DiGraph
 from typing import List, Any, Dict, Tuple, Union
 from global_var import *
-from task.graph_breakdown import decompose_dag_into_chains, sort_chains_by_ddl_flops
-from task.task_cfg import task_graph_srcs, task_graph_sinks, creat_logical_graph, task_graph_ops
-from task.task_cfg import load_taskattrib, gen_taskint_from_cfg
+from task.graph_breakdown import decompose_dag_into_chains
 
 def EstimCoreNums(task_dict:Dict[str, TaskBase], flops_dict, node, expected_slack, round_mode="round"):
     if round_mode == "ceil":
@@ -284,16 +282,21 @@ def test():
     parser.add_argument("--aux_scale_factor", default=1, type=int, help="aux scale factor")
     args = parser.parse_args() 
 
+    from task.task_cfg import task_graph_srcs, task_graph_sinks, creat_logical_graph, task_graph_ops
+    from task.task_cfg import load_taskattrib, gen_taskint_from_cfg
     taskattr_dict, f_gcd = load_taskattrib(args.profiling_filename, verbose=args.verbose) 
     hyper_p = 1/f_gcd
     if args.aux_scale_factor > 1:
         for node, taskattr in taskattr_dict.items():
             # scale up the thread scaling factor
-            taskattr.thread_scaling_factor *= args.aux_scale_factor
+            if taskattr.timing_flag == "realtime":
+                taskattr.thread_scaling_factor *= args.aux_scale_factor
     logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
     slack_threshold = args.slack_threshold
     duduce_cfg(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, task_graph_srcs, 
-                         task_graph_sinks, slack_threshold, args.e2e_latency, args.temporal_rda_ratio, args.wsc_slack_ratio)
+                         task_graph_sinks, slack_threshold, 
+                         args.e2e_latency, args.temporal_rda_ratio, args.wsc_slack_ratio, 
+                         True)
     glb_n_task_dict = gen_taskint_from_cfg(taskattr_dict, f_gcd)
 
     for node, taskint in glb_n_task_dict.items():
