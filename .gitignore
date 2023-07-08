@@ -148,7 +148,7 @@ cache/**
 .VSCodeCounter/**
 
 trace/**
-old/**
+**/old/**
 
 *.pkl
 

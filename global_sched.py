@@ -419,7 +419,7 @@ def push_task_into_bins_new(
         
         # enqueue the process that is released in this slot
         # push_step(init_p_list, quantum_check_en, quantumSize, timestep, animation, event_range, sim_slot_num, pid_max, wait_queue, ready_queue, running_queue, rsc_recoder, rsc_recoder_his, issue_sort_fn, issue_list, completed_list, miss_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, frame_list, ax, plot_window, n_slot, curr_t)
-        message_trigger_event_new(event_iter_dict, inactive_list, glb_p_list, None, timestep, curr_t, True) 
+        message_trigger_event_new(event_iter_dict, inactive_list, glb_p_list, None, None, None, timestep, curr_t, True) 
         push_step_new(sched, msg_dispatcher, a_data_pipe, w_data_pipe, 
                            n_slot, timestep, temporal_rda_ratio, 
                            event_range, sim_slot_num, curr_t, 

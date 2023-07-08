@@ -13,12 +13,15 @@ from model.resource_agent import Resource_model_int
 from scheduler_agent import Scheduler
 from sched.monitor_agent import Monitor
 from allocator_agent import glb_sched, cyclic_sched
+from model.event_gen.e2e_latency import dyn_obj_sim, e2e_var_sim
+from model.task_queue_agent import TaskQueue
 
 def main():
     import argparse
     import numpy as np 
     import pickle
     from global_var import trace_list
+    import json
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--verbose", action="store_true", help="verbose")
@@ -31,12 +34,21 @@ def main():
     parser.add_argument("--quantum_check_en", default=False, action="store_true", help="enable quantum check")
     parser.add_argument("--quantumSize", default=2, type=int, help="quantum size, # of simulation steps")
     # parser.add_argument("--hyper_p", default=None, type=float, help="hyper period")
-    # parser.add_argument("--warmup", default=False, action="store_true", help="warmup")
+    parser.add_argument("--warmup", default=False, action="store_true", help="warmup")
     # parser.add_argument("--drain", default=False, action="store_true", help="drain")
     # parser.add_argument("--sim_step", default=None, type=float, help="simulation step")
     parser.add_argument("--n_p", default=1, type=int, help="number of periods")
+    
     parser.add_argument("--jitter_sim_en", default=False, action="store_true", help="enable jitter simulation")
-    parser.add_argument("--jitter_sim_para", default={"a":-0.2, "b":0.2, "loc":0, "scale":1}, type=dict, help="jitter simulation parameters")
+    parser.add_argument("--jitter_sim_para", default={"loc":0, "scale":0.2}, type=dict, help="jitter simulation parameters")
+    
+    parser.add_argument("--load_var_sim_en", default=False, action="store_true", help="enable dynamic object simulation")
+    parser.add_argument("--load_var_sim_para", default={}, type=dict, help="dynamic object simulation parameters")
+    parser.add_argument("--load_var_para_file", default=None, type=str, help="dynamic object simulation parameters file")
+
+    parser.add_argument("--e2e_var_sim_en", default=False, action="store_true", help="enable e2e latency variation simulation")
+    parser.add_argument("--e2e_var_sim_para", default={"loc":0, "scale":0.2, "period":0.1}, type=dict, help="e2e latency variation simulation parameters")
+    
     parser.add_argument("--file_suffix", default="", type=str, help="file suffix")
     parser.add_argument("--i_file_suffix", default="", type=str, help="file suffix")
     parser.add_argument("--seed", default=0, type=int, help="random seed")
@@ -66,6 +78,11 @@ def main():
     num_cores = args.num_cores
     num_periods = args.n_p
     slack_threshold = args.slack_threshold
+    warmup = args.warmup
+    if args.load_var_sim_para == {}:
+        load_var_sim_para = json.load(open(args.load_var_para_file, "r"))
+    else:
+        load_var_sim_para = args.load_var_sim_para
 
     hyper_p, glb_n_task_dict, physical_graph_nx = gen_workloads(args, slack_threshold)
 
@@ -92,8 +109,28 @@ def main():
     # event_iter_dict = gen_sensor_event(glb_p_list, hyper_p, num_periods, True, args.jitter_sim_en, args.jitter_sim_para, args.seed)
     jitter_para_dict = dict(jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para, seed=args.seed)
     event_iter_dict = TaskInt.get_event_generator(glb_n_task_dict, hyper_p, num_periods, True, **jitter_para_dict)
-    # e2e_var_sim(jitter_sim_para=args.jitter_sim_para, seed=args.seed)
-    # num_dyn_obj_sim()
+
+    event_range = hyper_p * (num_periods+warmup)
+    # integrated in to virtual sensor related source operator
+    # if the handler find the var scaling factor is greater than 1, it spawns(wake up) x(factor-1) of new threads, 
+    # which is marked as "spawned"
+    # the "spawned" thread will be terminated as soon as they finish their job
+    if args.load_var_sim_en: 
+        for var_item, var_param in load_var_sim_para.items():
+            dyn_obj_iter = dyn_obj_sim(var_param, 1, var_param["period"], event_range, args.seed)
+            dyn_obj_stream = TaskQueue(sort_f=lambda x: x[0], descending=False)
+            load_var_sim_para[var_item]["stream"] = dyn_obj_stream
+            load_var_sim_para[var_item]["iter"] = dyn_obj_iter
+    else:
+        load_var_sim_para = None
+
+    # integrated in to every message from every sensor source operator
+    if args.e2e_var_sim_en:
+        ddl_update_iter = e2e_var_sim(args.e2e_latency, args.e2e_var_sim_para, 1, args.e2e_var_sim_para["period"], event_range, args.seed)
+        ddl_stream = TaskQueue(sort_f=lambda x: x[0], descending=False)
+    else:
+        ddl_update_iter = None
+        ddl_stream = None
 
     if args.test_case == "all":
         args.test_all = True
@@ -110,7 +147,7 @@ def main():
         msg_dispatcher = MsgDispatcher(len(bin_list))
         a_data_pipe = DataPipe("activation", len(bin_list))
         w_data_pipe = DataPipe("weight", len(bin_list))
-        scheduler_list = [Scheduler(_SchedTab, glb_p_list, jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
+        scheduler_list = [Scheduler(_SchedTab, args.e2e_latency, glb_p_list, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
         monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
 
         print("sim_step: ", sim_step)
@@ -175,7 +212,7 @@ def main():
         except:
             print(f"{save_path} not found")
             # print(f"{save_path} not found")
-            bin_list, _ = push_task_into_bins(glb_p_list, affinity_cfg, num_cores, args.quantum_check_en, quantumSize, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
+            # bin_list, _ = push_task_into_bins(glb_p_list, affinity_cfg, num_cores, args.quantum_check_en, quantumSize, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
 
         # from message_agent import Message
         
@@ -188,13 +225,15 @@ def main():
         sensor_pipe = TriggerPipe(len(bin_list))
         a_data_pipe = DataPipe("activation", len(bin_list))
         w_data_pipe = DataPipe("weight", len(bin_list))
-        scheduler_list = [Scheduler(_SchedTab, glb_p_list, jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
+        scheduler_list = [Scheduler(_SchedTab, args.e2e_latency, glb_p_list, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
         monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
 
         print("sim_step: ", sim_step)
         cyclic_sched(task_spec, affinity_cfg, 
                 scheduler_list, monitor_list,
                 event_iter_dict,
+                ddl_update_iter, ddl_stream,
+                load_var_sim_para,
                 rsc_list, 
                 num_cores, 
                 glb_p_list,
@@ -243,13 +282,15 @@ def main():
         msg_dispatcher = MsgDispatcher(len(bin_list))
         a_data_pipe = DataPipe("activation", len(bin_list))
         w_data_pipe = DataPipe("weight", len(bin_list))
-        scheduler_list = [Scheduler(_SchedTab, glb_p_list, jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
+        scheduler_list = [Scheduler(_SchedTab, args.e2e_latency, glb_p_list, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
         monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
 
         print("sim_step: ", sim_step)
         glb_sched(task_spec, affinity_cfg, 
                 scheduler_list, monitor_list,
                 event_iter_dict,
+                ddl_update_iter, ddl_stream,
+                load_var_sim_para,
                 rsc_list, 
                 num_cores, 
                 glb_p_list,

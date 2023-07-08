@@ -111,4 +111,4 @@ class TriggerPipe():
     def get(self, queue_id:int=0):
         return self.queues[queue_id].pop(0)
 
-# data.dest = [dest_table[tgt_pid] for tgt_pid in data.ctx.msg_context["process_info"]["downstream_node"]] 
+# data.dest = [dest_table[tgt_pid] for tgt_pid in data.track_downstream()] 

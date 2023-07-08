@@ -109,7 +109,7 @@ class WatermarkStrategy(object):
         # return cls.chk_data_trigger(_p, stream_dict, min_event_time)
 
         if period is None:
-            return {}, False, None
+            return {}, False
 
         matched_pair = {}
         if event_cache is None:
@@ -136,21 +136,18 @@ class WatermarkStrategy(object):
                             matched_pair.update({key:element})
                             break
         else:
-            return {}, False, None
+            return {}, False
         # check the data trigger
         if cls.join_valid(_p, matched_pair, pred_data):
-            # event time is advanced
-            # _p.event_time = min_event_time
-            event_time = max([matched_pair[key].ctx.get_timestamp() for key in matched_pair]+[min_event_time])
             # pop matched event
             for key in pred_data:
                 if key in matched_pair:
                     stream_dict[key].pop()
-            return matched_pair, True, event_time
+            return matched_pair, True
         else:
             # TODO: watermark strategy
             pass
-            return {}, False, None
+            return {}, False
 
     @classmethod
     def chk_data_trigger(cls, _p:ProcessBase, stream_dict:dict=None, min_event_time=None, pred_data:Dict[int, Dict]=None):
@@ -201,23 +198,20 @@ class WatermarkStrategy(object):
                             matched_pair.update({key:element})
                             break
         else:
-            return {}, False, None
+            return {}, False
         
         # check the data trigger
         if cls.join_valid(_p, matched_pair, pred_data):
             # event time is advanced
-            # _p.event_time = min_event_time
-            event_time = max([matched_pair[key].ctx.get_timestamp() for key in matched_pair])
-            # pop matched event
             for key in pred_data:
                 if key in matched_pair:
                     # stream_dict[key].pop()
                     stream_dict[key].remove(matched_pair[key])
-            return matched_pair, True, event_time
+            return matched_pair, True
         else:
             # TODO: watermark strategy
             pass
-            return {}, False, None
+            return {}, False
     
     @classmethod
     def check_trigger(cls, _p:ProcessBase, event_cache:EventCache=None, 
@@ -250,15 +244,11 @@ class WatermarkStrategy(object):
             else:
                 pred_data = event_cache[_p.pid]
 
-            matched_pair, status, event_time = cls.chk_data_trigger(_p, pred_data=pred_data)
+            matched_pair, status = cls.chk_data_trigger(_p, pred_data=pred_data)
             if status:
                 # to avoid the duplicated context in the condition of job migration
                 if len(_p.msg_cache) == 0:
                     _p.build_ctx()
-                # _p.build_ctx()
-                _p.msg_cache[0].msg_context["time_stamp"] = event_time
-                _p.msg_cache[0].msg_context["stream_domain"] = "multi_stream" if len(_p.pred_data)>1 else "single_stream"
-
                 # cache the context of the upstream src node
                 _p.update_ctx('upstream', matched_pair=matched_pair)
                 return True
@@ -396,9 +386,9 @@ if __name__ == "__main__":
                 for _p, _p_name in zip([p_Lidar_based_3dDet_0, p_Prediction_0, p_Prediction_1, p_Prediction_2], 
                                        ['p_Lidar_based_3dDet_0', 'p_Prediction_0', 'p_Prediction_1', 'p_Prediction_2']):
                     if True:
-                        matched_pair, status, event_time = WatermarkStrategy.check_data_depends(_p, buffer, glb_n_task_dict)
+                        matched_pair, status = WatermarkStrategy.check_data_depends(_p, buffer, glb_n_task_dict)
                         if status:
-                            _p.event_time = event_time
+                            _p.event_time = max([matched_pair[key].ctx.get_timestamp() for key in matched_pair])
                             print(f"Event time {_p_name}: {_p.event_time}")
                             for key, data_event in matched_pair.items():
                                 print(f"Stream: {key}, Timestamp: {data_event.ctx.get_timestamp()}")
@@ -458,9 +448,9 @@ if __name__ == "__main__":
                 for _p, _p_name in zip([p_Lidar_based_3dDet_0, p_Prediction_0, p_Prediction_1, p_Prediction_2], 
                                        ['p_Lidar_based_3dDet_0', 'p_Prediction_0', 'p_Prediction_1', 'p_Prediction_2']):
                     if _p.new_event:
-                        matched_pair, status, event_time = WatermarkStrategy.chk_data_trigger(_p)
+                        matched_pair, status = WatermarkStrategy.chk_data_trigger(_p)
                         if status:
-                            _p.event_time = event_time
+                            _p.event_time = max([matched_pair[key].ctx.get_timestamp() for key in matched_pair])
                             print(f"Event time {_p_name}: {_p.event_time}")
                             for key, data_event in matched_pair.items():
                                 print(f"Stream: {key}, Timestamp: {data_event.ctx.get_timestamp()}")

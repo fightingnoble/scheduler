@@ -94,3 +94,28 @@ B. deadline assignment
    this property is now only used for calculating sim_step, injecting jitter
    now, we use the estimated slack as the exp_comp_t, which is smaller than relative deadline, i.e., ddl.
    
+13. 修改update_ctx 使 event_time, e2e_ddl, dyn_obj_num 随着数据流更新
+  当多个流汇聚的时候应该选择event_time更新对应的那个流，也就是event_time最迟的流
+  对于event_trigger的任务，以上三个属性应该在cache_trigger时候更新
+  否则在cache_upstream的时候更新
+
+14. workload variation infomation format：
+   {
+      "var_item":{
+         {
+            "src_name": ["task_name1", "task_name2", ...]
+            "tgt_name": ["task_nameA", "task_nameB", ...]
+            "typical":10, 
+            "maxsize":30,
+            "period":100,
+         }
+      }
+   }
+   The packet injected to the ctx is in the following format:
+   {
+      var_item: {
+            "typical": var_param["typical"],
+            "tgt_name": var_param["tgt_name"],
+            "size": dyn_obj_num
+      }
+   }

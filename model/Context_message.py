@@ -48,63 +48,18 @@ class ContextMsg(object):
         self.msg_context["data_info"] = {}
         # transfer details
         self.msg_context["transfer_info"] = {}
-
-    def cache_upstreaming(self, matched_pair:List[Data]) -> None:
-        for key in matched_pair:
-            data:Data = matched_pair[key]
-            self.msg_context["src"].update({key:data.ctx.serialize()})
-
-
-    # def cache_upstreaming(self, process:ProcessInt, glb_n_task_dict:Dict, buffer:Buffer) -> None:
-    #     # update the upstreaming data source
-    #     self.msg_context["src"].update(process.get_upstream_ctx(glb_n_task_dict, buffer))
-    #     # # check how many streaming domains are involved
-    #     # if not len(self.msg_context["trigger"]):
-    #     #     if len(self.msg_context["src"]) == 1: 
-    #     #         self.msg_context["stream_domain"] = list(self.msg_context["src"].values())[0]["stream_domain"]
-    #     #     elif len(self.msg_context["src"]) > 1:
-    #     #         self.msg_context["stream_domain"] = "multi-stream"
+        self.msg_context["e2e_var"] = None
+        self.msg_context["load_var"] = {}
+        self.cached_list = ["e2e_var", "load_var"]
+   
+    def setattr(self, attr_name, attr_value, cached=False):
+        self.msg_context[attr_name] = attr_value
+        if cached:
+            self.cached_list.append(attr_name)
     
-    def cache_trigger(self, process:ProcessInt, pred_ctrl:Dict[int, Dict]=None) -> None:
-        trigger_dict = process.get_trigger_ctx(pred_ctrl)
-        assert len(trigger_dict) <= 1
-        self.msg_context["trigger"].update(trigger_dict)
-        if len(trigger_dict) == 1:
-            # set the time stamp of the trigger event
-            trigger = list(trigger_dict.values())[0]
-            self.msg_context["time_stamp"] = trigger["trigger"]['event_time']
-            self.msg_context["stream_domain"] = trigger["data_type"]
-        else:
-            raise ValueError("Multiple trigger events are not supported yet.")
-        
-    def get_timestamp(self) -> float:
-        return self.msg_context["time_stamp"]
-    
-    def get_watermark(self) -> float:
-        return self.msg_context["watermark"]
+    def getattr(self, attr_name):
+        return self.msg_context[attr_name]
 
-    def cache_weight(self, process:ProcessInt, buffer:Buffer) -> None:
-        tgt_buffer = buffer.buffer_mux("weight")
-        data=tgt_buffer[process.pid][0]
-        self.msg_context["weight"].update(data.serialize())
-
-    def cache_processing(self, process:ProcessInt) -> None:
-        self.msg_context["process_info"]["start_time"] = process.start_time
-        self.msg_context["process_info"]["downstream_node"] = process.get_downstream_ctx()
-        self.msg_context["process_info"]["ready_time"] = process.ready_time
-        self.msg_context["process_info"]["end_time"] = process.end_time
-        self.msg_context["process_info"]["processing_time"] = process.cumulative_executed_time
-        # self.msg_context["process_info"]["allocated_resources"] = process.allocated_resources
-        
-    def cache_msg_transfer(self, time:int) -> None:
-        self.msg_context["transfer_info"]["start_time"] = time
-    
-    def update_receive_time(self, time:int) -> None:
-        self.msg_context["transfer_info"]["end_time"] = time
-
-    def cache_data_info(self, data:Data):
-        self.msg_context["data_info"] = data.serialize()
-    
     def get_downstream_node(self) -> List:
         return self.msg_context["process_info"]["downstream_node"]
     
@@ -127,6 +82,82 @@ class ContextMsg(object):
     def get_transfer_delay(self) -> float:
         return self.msg_context["transfer_info"]["end_time"] - self.msg_context["transfer_info"]["start_time"]
     
+    def get_e2e_var(self) -> float:
+        return self.msg_context["e2e_var"]
+
+    def get_timestamp(self) -> float:
+        if self.get_type() == "sensor":
+            return self.msg_context["trigger"]["event_time"]
+        else:
+            return self.msg_context["time_stamp"]
+    
+    def get_watermark(self) -> float:
+        return self.msg_context["watermark"]
+
+    def get_load_var(self) -> Dict:
+        return self.msg_context["load_var"]
+    
+    def cache_upstreaming(self, matched_pair:List[Data]) -> None:
+        for key in matched_pair:
+            data:Data = matched_pair[key]
+            self.msg_context["src"].update({key:data.ctx.serialize()})
+        if self.msg_context["trigger"]:
+            return
+        # max([matched_pair[key].ctx.get_timestamp() for key in matched_pair])
+        idx = max([key for key in matched_pair], key=lambda x: matched_pair[x].ctx.get_timestamp())
+        event_time = matched_pair[idx].ctx.get_timestamp()
+        self.msg_context["stream_domain"] = "multi_stream" if len(matched_pair)>1 else "single_stream"
+        self.msg_context["time_stamp"] = event_time
+        if self.cached_list:
+            for attr_n in self.cached_list:
+                self.msg_context[attr_n] = matched_pair[idx].ctx.getattr(attr_n)
+    
+    def cache_trigger(self, process:ProcessInt, pred_ctrl:Dict[int, Dict]=None) -> None:
+        trigger_dict = process.get_trigger_ctx(pred_ctrl)
+        assert len(trigger_dict) <= 1
+        self.msg_context["trigger"].update(trigger_dict)
+        if len(trigger_dict) == 1:
+            # set the time stamp of the trigger event
+            trigger = self.parser_ctx(list(trigger_dict.values())[0])
+            self.msg_context["stream_domain"] = trigger.get_type()
+            self.msg_context["time_stamp"] = trigger.get_timestamp()
+            if self.cached_list:
+                for attr_n in self.cached_list:
+                    self.msg_context[attr_n] = trigger.getattr(attr_n)
+
+        else:
+            raise ValueError("Multiple trigger events are not supported yet.")
+        
+    def cache_weight(self, process:ProcessInt, buffer:Buffer) -> None:
+        tgt_buffer = buffer.buffer_mux("weight")
+        data=tgt_buffer[process.pid][0]
+        self.msg_context["weight"].update(data.serialize())
+
+    def cache_msg_transfer(self, time:int) -> None:
+        self.msg_context["transfer_info"]["start_time"] = time
+    
+    def cache_data_info(self, data:Data):
+        self.msg_context["data_info"] = data.serialize()
+    
+    def cache_processing(self, process: ProcessInt) -> None:
+        precess_info = {
+            "start_time": process.start_time,
+            "downstream_node": process.get_downstream_ctx(),
+            "ready_time": process.ready_time,
+            "end_time": process.end_time,
+            "processing_time": process.cumulative_executed_time
+        }
+        self.msg_context["process_info"].update(precess_info)
+
+    def update_receive_time(self, time:int) -> None:
+        self.msg_context["transfer_info"]["end_time"] = time
+
+    def update_e2e_var(self, time:int) -> None:
+        self.msg_context["e2e_var"] = time
+    
+    def update_load_var(self, info:Dict) -> None:
+        self.msg_context["load_var"].update(info)
+
     def get_node_attr(self) -> Dict:
         if self.get_type() == "process":
             return self.msg_context["process_info"]
@@ -134,7 +165,6 @@ class ContextMsg(object):
             return self.msg_context["trigger"]
         elif self.get_type() == "weight":
             return self.msg_context["weight"]
-        
 
     def serialize(self) -> Dict:
         return self.msg_context
@@ -142,24 +172,34 @@ class ContextMsg(object):
     @staticmethod
     def create_p_ctx(process:ProcessInt) -> ContextMsg:
         ctx = ContextMsg()
-        ctx.msg_context["process_info"]["pid"] = process.pid
-        ctx.msg_context["process_info"]["name"] = process.task.name
-        ctx.msg_context["process_info"]["period"] = process.task.period
+        msg_context = {
+            "process_info": {
+                "pid": process.pid,
+                "name": process.task.name,
+                "period": process.task.period
+            }
+        }
+        ctx.msg_context.update(msg_context)
         return ctx
 
     @staticmethod
     def create_weight_ctx() -> ContextMsg:
         ctx = ContextMsg()
-        ctx.msg_context["data_type"] = "weight"
+        ctx.msg_context.update({"data_type": "weight"})
         return ctx
 
     @staticmethod
     def create_sensor_ctx(ingestion_time, event_time=None, period=None) -> ContextMsg:
         ctx = ContextMsg()
-        ctx.msg_context["data_type"] = "sensor"
-        ctx.msg_context["trigger"]["ingestion_time"] = ingestion_time
-        ctx.msg_context["trigger"]["event_time"] = event_time
-        ctx.msg_context["trigger"]["period"] = period
+        msg_context = {
+            "data_type": "sensor",
+            "trigger": {
+                "ingestion_time": ingestion_time,
+                "event_time": event_time,
+                "period": period
+            }
+        }
+        ctx.msg_context.update(msg_context)
         return ctx
     
     @staticmethod

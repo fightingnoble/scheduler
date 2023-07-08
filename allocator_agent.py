@@ -1,4 +1,4 @@
-from typing import Union, List, Dict, Iterator, Callable
+from typing import Union, List, Dict, Iterator, Callable, Generator
 import warnings, os
 import numpy as np
 from task.task_agent import TaskInt
@@ -6,7 +6,7 @@ from task.spec import Spec
 from model.buffer import Buffer, Data
 from model.msg_dispatcher import MsgDispatcher
 from model.message_pipe import MessagePipe
-from model.message_handler import message_trigger_event_new
+from model.message_handler import message_trigger_event_new, period_trigger_event, period_trigger_event
 from multiprocessing import Queue
 
 class AllocatorInt(object):
@@ -239,6 +239,7 @@ from model.Context_message import ContextMsg
 
 def sched_step(task_spec:Spec, 
                 event_iter_dict:Dict, 
+                ddl_stream:TaskQueue, load_var_sim_para:TaskQueue,
                 msg_dispatcher:MsgDispatcher, # msg_pipe:Message=Message(),
                 sensor_pipe:TriggerPipe,
                 a_data_pipe:DataPipe, 
@@ -288,7 +289,9 @@ def sched_step(task_spec:Spec,
         DEBUG_FG = False
         inactive_list:List[ProcessInt] = sched.inactive_list 
 
-        message_trigger_event_new(event_iter_dict, inactive_list, glb_p_list, sensor_pipe, timestep, curr_t, True) 
+        message_trigger_event_new(event_iter_dict, inactive_list, glb_p_list, 
+                                  sensor_pipe, ddl_stream, load_var_sim_para,
+                                  timestep, curr_t, True) 
         sched.scheduler_step(msg_dispatcher, a_data_pipe, w_data_pipe, 
                              n_slot, timestep, event_range, sim_slot_num, curr_t, 
                              glb_name_p_dict, res_cfg, msg_queue, a_msg_queue, sensor_msg_queue, monitor, DEBUG_FG)
@@ -301,6 +304,8 @@ def sched_step(task_spec:Spec,
 def cyclic_sched(task_spec:Spec, affinity, 
                 scheduler_list: List[Scheduler], monitor_list:List[Monitor],
                 event_iter_dict:Dict, 
+                ddl_update_iter:Generator, ddl_stream:TaskQueue,
+                load_var_sim_para:Dict,
                 rsc_list:List[Resource_model_int], 
                 total_cores:int, 
                 glb_p_list:List[ProcessInt],
@@ -407,8 +412,17 @@ def cyclic_sched(task_spec:Spec, affinity,
             # modify the exp_comp_t and deadline of the tasks
 
         # print(f"Slot {n_slot:d}, time {curr_t:.6f}")
+        # get ddl
+        if ddl_update_iter is not None:
+            period_trigger_event(ddl_update_iter, curr_t, ddl_stream)
+        if load_var_sim_para is not None:
+            for var_item, var_param in load_var_sim_para.items():
+                dyn_obj_stream = var_param["stream"] 
+                dyn_obj_iter = var_param["iter"] 
+                period_trigger_event(dyn_obj_iter, curr_t, dyn_obj_stream)
         sched_step(task_spec, 
                     event_iter_dict,
+                    ddl_stream, load_var_sim_para, 
                     msg_dispatcher,
                     sensor_pipe,
                     a_data_pipe,
@@ -424,6 +438,8 @@ def glb_sched(task_spec:Spec, affinity,
                 scheduler_list: List[Scheduler], 
                 monitor_list:List[Monitor],
                 event_iter_dict:Dict, 
+                ddl_update_iter:Generator, ddl_stream:TaskQueue,
+                load_var_sim_para:Dict,
                 rsc_list:List[Resource_model_int], 
                 total_cores:int, 
                 glb_p_list:List[ProcessInt],
@@ -469,7 +485,16 @@ def glb_sched(task_spec:Spec, affinity,
         msg_queue:Queue
         DEBUG_FG = False
 
-        message_trigger_event_new(event_iter_dict, inactive_list, glb_p_list, None, timestep, curr_t, True) 
+        # get ddl
+        if ddl_update_iter is not None:
+            period_trigger_event(ddl_update_iter, curr_t, ddl_stream)
+        if load_var_sim_para is not None:
+            for var_item, var_param in load_var_sim_para.items():
+                dyn_obj_stream = var_param["stream"] 
+                dyn_obj_iter = var_param["iter"] 
+                period_trigger_event(dyn_obj_iter, curr_t, dyn_obj_stream)
+        # get dynamic object number
+        message_trigger_event_new(event_iter_dict, inactive_list, glb_p_list, None, ddl_stream, load_var_sim_para, timestep, curr_t, True) 
         glb_dynamic_sched_step(sched, msg_dispatcher, a_data_pipe, w_data_pipe, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, monitor, DEBUG_FG, quantum_check_en, quantumSize)
 
 
@@ -500,7 +525,7 @@ if __name__ == "__main__":
     # parser.add_argument("--sim_step", default=None, type=float, help="simulation step")
     parser.add_argument("--n_p", default=1, type=int, help="number of periods")
     parser.add_argument("--jitter_sim_en", default=False, action="store_true", help="enable jitter simulation")
-    parser.add_argument("--jitter_sim_para", default={"a":-0.2, "b":0.2, "loc":0, "scale":1}, type=dict, help="jitter simulation parameters")
+    parser.add_argument("--jitter_sim_para", default={"loc":0, "scale":0.2}, type=dict, help="jitter simulation parameters")
     parser.add_argument("--file_suffix", default="", type=str, help="file suffix")
     parser.add_argument("--i_file_suffix", default="", type=str, help="file suffix")
     parser.add_argument("--seed", default=0, type=int, help="random seed")
@@ -615,13 +640,14 @@ if __name__ == "__main__":
         sensor_pipe = TriggerPipe(len(bin_list))
         a_data_pipe = DataPipe("activation", len(bin_list))
         w_data_pipe = DataPipe("weight", len(bin_list))
-        scheduler_list = [Scheduler(_SchedTab, glb_p_list, jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
+        scheduler_list = [Scheduler(_SchedTab, glb_p_list, args.e2e_latency, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
         monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
 
         print("sim_step: ", sim_step)
         cyclic_sched(task_spec, affinity_cfg, 
                 scheduler_list, monitor_list,
                 event_iter_dict,
+                None, None, None,
                 rsc_list, 
                 num_cores, 
                 glb_p_list,
@@ -670,13 +696,14 @@ if __name__ == "__main__":
         msg_dispatcher = MsgDispatcher(len(bin_list))
         a_data_pipe = DataPipe("activation", len(bin_list))
         w_data_pipe = DataPipe("weight", len(bin_list))
-        scheduler_list = [Scheduler(_SchedTab, glb_p_list, jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
+        scheduler_list = [Scheduler(_SchedTab, glb_p_list, args.e2e_latency, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
         monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
 
         print("sim_step: ", sim_step)
         glb_sched(task_spec, affinity_cfg, 
                 scheduler_list, monitor_list,
                 event_iter_dict,
+                None, None, None,
                 rsc_list, 
                 num_cores, 
                 glb_p_list,
@@ -739,7 +766,7 @@ if __name__ == "__main__":
         msg_dispatcher = MsgDispatcher(len(bin_list))
         a_data_pipe = DataPipe("activation", len(bin_list))
         w_data_pipe = DataPipe("weight", len(bin_list))
-        scheduler_list = [Scheduler(_SchedTab, glb_p_list, jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
+        scheduler_list = [Scheduler(_SchedTab, glb_p_list, args.e2e_latency, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
         monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
 
         print("sim_step: ", sim_step)

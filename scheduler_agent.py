@@ -22,7 +22,6 @@ from task.task_agent import ProcessInt
 from model.lru import LRUCache
 from sched.monitor_agent import Monitor
 from model.barrier_agent import Barrier
-from model.message_handler import message_trigger, message_trigger_event
 from model.Context_message import ContextMsg
 from model.data_pipe import DataPipe
 from pre_alloc import get_rsc_2b_released
@@ -108,9 +107,10 @@ class Scheduler(object):
     """
 
     def __init__(self, 
-                 _SchedTab: SchedulingTableInt, glb_p_list:List[ProcessInt],
+                 _SchedTab: SchedulingTableInt, e2e_latency:float,
+                 glb_p_list:List[ProcessInt],
                  budget_recoder:Dict[int, List]=None, rsc_recoder_his:Dict[int, LRUCache]=None, 
-                 jitter_sim_en:bool=False, jitter_sim_para:Dict=None, barrier_en:bool=True,
+                 barrier_en:bool=True,
                  ) -> None:
         self.expired_queue: List = []
         self.blocked_queue: List = []
@@ -170,8 +170,7 @@ class Scheduler(object):
         self.barrier = Barrier(0)
         self.assert_barrier = False
 
-        self.jitter_sim_en = jitter_sim_en
-        self.jitter_sim_para = jitter_sim_para
+        self.e2e_latency = e2e_latency
 
 
     def get_queues(self):
@@ -599,10 +598,8 @@ def pendingToReady_cbs(sched, buffer:Buffer, budget_recoder,
         # in_avail = _p.check_depends_data(buffer, glb_n_task_dict=glb_n_task_dict, event_cache)
 
         if len(_p.pred_ctrl)>0 and len(_p.pred_data)>0: 
-            matched_pair, in_avail, event_time = WatermarkStrategy.check_data_depends(_p, buffer, glb_n_task_dict, 
+            matched_pair, in_avail = WatermarkStrategy.check_data_depends(_p, buffer, glb_n_task_dict, 
                                                                                       _p.msg_cache[0].get_timestamp(), event_cache)
-            if in_avail:
-                _p.msg_cache[0].msg_context["time_stamp"] = event_time
         else:
             in_avail = True
 
@@ -895,6 +892,25 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
                 # get the newest assigned budget
                 # planned_rsc_size = budget_recoder[_p.pid][1] # curr_cfg.rsc_map[_p.pid]
                 # planned_slot_num = budget_recoder[_p.pid][2] # curr_cfg.slot_num
+                event_time = _p.msg_cache[0].get_timestamp() 
+                e2e_var = _p.msg_cache[0].get_e2e_var()
+                spatial_scale_factor = sched.e2e_latency/e2e_var if e2e_var > 0 else 1
+
+                workload_var_info = _p.msg_cache[0].get_load_var()
+                involve_times = 0
+                var_scale_factor = 1
+                for var_item, var_param in workload_var_info.items():
+                    tgt_list = var_param['tgt_name']
+                    name = _p.task.name
+                    thread_n = name.split('_')[-1]
+                    troughput_n = name.split('_')[-2]
+                    task_n = name.replace("_"+thread_n, "").replace("_"+troughput_n, "")
+                    if task_n in tgt_list:
+                        var_scale_factor = math.ceil(var_param['size']/var_param['typical'])
+                        involve_times += 1
+                if involve_times > 1:
+                    raise ValueError("a single task should not involve multiple workload scaling processes")
+                
                 chunk_s, chunk_alloc, chunk_slot_num, updated_flg = budget_recoder[_p.pid]
                 chunk_flops = chunk_alloc * chunk_slot_num * timestep * FLOPS_PER_CORE
                 chunk_e = chunk_s + chunk_slot_num
@@ -1322,10 +1338,15 @@ def read_msg_queue(curr_t, msg_queue, ready_queue, throttle_list, inactive_list,
 def trigger_read(inactive_list:List[ProcessInt], sensor_msg_queue:List, 
                 trigger_cache:TriggerCache, process_dict:Dict,
                 timestep, curr_t, DEBUG_FG):
+    """
+        1. Read the sensor message queue and update the trigger cache
+        2. Update the ctrl dependency flags
+    """
 
-    for pid, next_ingestion_time, next_event_time in sensor_msg_queue:
+    # for pid, next_ingestion_time, next_event_time in sensor_msg_queue:
+    for pid, msg in sensor_msg_queue:
         if pid in process_dict:
-            trigger_cache.sensor_cache[pid].append([next_ingestion_time, next_event_time])
+            trigger_cache.sensor_cache[pid].append(msg)
     sensor_msg_queue.clear()
 
     # read the trigger cache
@@ -1337,9 +1358,7 @@ def trigger_read(inactive_list:List[ProcessInt], sensor_msg_queue:List,
             pred_ctrl = trigger_cache[_p.pid]
             event_triggers = trigger_cache.sensor_cache[_p.pid]
         
-        trigger_state = _p.sim_trigger(curr_t, timestep, pred_ctrl, event_triggers)
-        if event_triggers is None:
-            event_triggers = _p.event_triggers
+        _p.sim_trigger(curr_t, timestep, pred_ctrl, event_triggers)
 
 def data_pipe_read(curr_t, glb_name_p_dict, process_dict, buffer, bin_name, bin_event_flg, a_msg_queue: List[Data], 
                    event_cache:EventCache=None):
@@ -1729,9 +1748,7 @@ def pendingToReady(sched, active_list:List[ProcessInt], ready_queue, buffer:Buff
         # in_avail = _p.check_depends_data(buffer, glb_n_task_dict=glb_n_task_dict)
 
         if len(_p.pred_ctrl)>0 and len(_p.pred_data)>0: 
-            matched_pair, in_avail, event_time = WatermarkStrategy.check_data_depends(_p, buffer, glb_n_task_dict, _p.msg_cache[0].get_timestamp())
-            if in_avail:
-                _p.msg_cache[0].msg_context["time_stamp"] = event_time
+            matched_pair, in_avail = WatermarkStrategy.check_data_depends(_p, buffer, glb_n_task_dict, _p.msg_cache[0].get_timestamp())
         else:
             in_avail = True
 

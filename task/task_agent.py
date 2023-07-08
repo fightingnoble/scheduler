@@ -15,6 +15,7 @@ from scipy.stats import truncnorm
 from global_var import *
 from model.Context_message import ContextMsg
 from model.resource_agent import DDL_reservation, RT_reservation, dummy_reservation
+from model.event_gen.e2e_latency import jitter_gen
 # preemptable?/able to preempt others
 scheduling_attr = {
     "fixed": 0,
@@ -217,12 +218,13 @@ class ProcessBase(object):
         """
         return list(self.succ_data.keys())
 
-    def get_trigger_ctx(self, pred_ctrl:Dict[int, Dict]=None):
+    def get_trigger_ctx(self, pred_ctrl:Dict[int, Dict]=None) -> Dict[Any, Dict]:
         trigger_dict = {}
         for key in self.pred_ctrl: 
-            msg:ContextMsg = ContextMsg.create_sensor_ctx(pred_ctrl[key]["ingestion_time"], 
-                                                          pred_ctrl[key]["event_time"],
-                                                          pred_ctrl[key]["period"])
+            # msg:ContextMsg = ContextMsg.create_sensor_ctx(pred_ctrl[key]["ingestion_time"], 
+            #                                               pred_ctrl[key]["event_time"],
+            #                                               pred_ctrl[key]["period"])
+            msg:ContextMsg = pred_ctrl[key]["event_queue"].get()
             trigger_dict.update({key:msg.serialize()})
         return trigger_dict
     
@@ -266,12 +268,16 @@ class ProcessBase(object):
         elif self.trigger_mode == "event":
             if event_triggers:
                 # self.event_triggers.pop(0)
-                next_ingestion_time, next_event_time = event_triggers[0]
+                # next_ingestion_time, next_event_time = event_triggers[0]
+                msg = event_triggers[0]
                 for key in pred_ctrl.keys():
                     pred_ctrl[key]["valid"] = True
-                    pred_ctrl[key]["ingestion_time"] = next_ingestion_time
-                    pred_ctrl[key]["event_time"] = next_event_time
-                    pred_ctrl[key]["period"] = self.task.period
+                    # TODO: replace these attribute by the context, 
+                    # from event_triggers to event_queue
+                    pred_ctrl[key]["event_queue"].put(msg)
+                    # pred_ctrl[key]["ingestion_time"] = next_ingestion_time
+                    # pred_ctrl[key]["event_time"] = next_event_time
+                    # pred_ctrl[key]["period"] = self.task.period
                 return True
         return False
     
@@ -666,12 +672,14 @@ class TaskBase(object):
     def extract_sensor_event(_p, event_range, jitter_sim_en=False, jitter_sim_para=None, seed=0):
         n_event = int(event_range//_p.task.period)
         if jitter_sim_en:
-            jitter = _p.jitter_sim_event(jitter_sim_para, size=n_event, seed=seed)
+            jitter_gen_inst = jitter_gen(1/_p.freq, jitter_sim_para, size=1, seed=seed)
         event_gen = _p.event_generator()
         next(event_gen)
         for i in range(n_event):
             if jitter_sim_en:
-                event_gen.send(jitter[i])
+                jitter = jitter_gen_inst()
+                assert abs(jitter.max()) < 0.5*_p.period, "jitter is too large"
+                event_gen.send(jitter)
             else:
                 event_gen.send(0)
         event_gen.send(None)
@@ -679,13 +687,15 @@ class TaskBase(object):
     def gen_event_modA(self, event_range, jitter_sim_en=False, jitter_sim_para=None, seed=0):
         n_event = int(event_range//self.period)
         if jitter_sim_en:
-            jitter = self.jitter_sim_event(jitter_sim_para, size=n_event, seed=seed)
+            jitter_gen_inst = jitter_gen(1/self.freq, jitter_sim_para, size=1, seed=seed)
 
         i = 0
         event_time = self.i_offset
         while True:
             if jitter_sim_en:
-                yield event_time + jitter[i]
+                jitter = jitter_gen_inst()
+                assert abs(jitter.max()) < 0.5*self.period, "jitter is too large"
+                yield event_time + jitter
             else:
                 yield event_time
             i += 1
@@ -698,14 +708,16 @@ class TaskBase(object):
         n_p = round(event_range//self.period)
         n_event = int(n_p//self.hyper_period_size) * len(self.aval_sub_period) + len([i for i in range(n_p%len(self.aval_sub_period)) if i in self.aval_sub_period])
         if jitter_sim_en:
-            jitter = self.jitter_sim_event(jitter_sim_para, size=n_event, seed=seed)
+            jitter_gen_inst = jitter_gen(1/self.freq, jitter_sim_para, size=1, seed=seed)
 
         event_no = 0
         event_time = self.i_offset
         while True:
             for j in self.aval_sub_period:
                 if jitter_sim_en:
-                    yield event_time + self.period * j + jitter[event_no]
+                    jitter = jitter_gen_inst()
+                    assert abs(jitter.max()) < 0.5*self.period, "jitter is too large"
+                    yield event_time + self.period * j + jitter
                 else:
                     yield event_time + self.period * j
                 event_no += 1
@@ -733,20 +745,6 @@ class TaskBase(object):
         while True:
             n_event = yield from self.event_generator(**kwargs)
             print(f"{n_event} events of {self.name} are generated")
-
-    def jitter_sim_event(self, jitter_sim_para:Dict, size=1, seed:Union[None, int, np.random.Generator, np.random.RandomState]=None):
-        """
-            test case: 
-            sensor data arrival time varies by injecting jitter
-            inject noise to self.task.period, self.task.i_offset
-        """
-        # jitter parameters: a, b, loc, scale
-        a, b, loc, scale = jitter_sim_para["a"], jitter_sim_para["b"], jitter_sim_para["loc"], jitter_sim_para["scale"]
-        # 0.2 # truncnorm.rvs(-0.2, 0.2, size=1, scale=1)[0]
-        jitter_gen = lambda: self.exp_comp_t * truncnorm.rvs(a, b, loc=loc, scale=scale, size=size, random_state=seed)
-        jitter = jitter_gen()
-        assert abs(jitter.max()) < 0.5*self.period, "jitter is too large"
-        return jitter if size>1 else jitter[0]
 
     @classmethod
     def get_event_generator(cls, glb_n_task_dict:Dict[str, TaskBase], hyper_p, n_p, warmup, **kwargs): 

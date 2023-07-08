@@ -922,10 +922,11 @@ def init_depen(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[T
             dep_t = datadict["type"]
             attr = copy.deepcopy(datadict)
             attr.update({"valid":False})
-            attr.update({"event_queue":TaskQueue(sort_f=lambda x: x.ctx.get_timestamp(), descending=False)})
             if dep_t == "data":
+                attr.update({"event_queue":TaskQueue(sort_f=lambda x: x.ctx.get_timestamp(), descending=False)})
                 job.pred_data.update({pre_n:attr})
             elif dep_t == "control":
+                attr.update({"event_queue":TaskQueue(sort_f=lambda x: x.get_timestamp(), descending=False)})
                 job.pred_ctrl.update({pre_n:attr})
             else:
                 raise Exception("Unknown dependency type")
