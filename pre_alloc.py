@@ -43,7 +43,9 @@ def glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, tempora
     def sort_fn(x):
         a = cond_fn1(x)
         b,c,d = cond_fn2(x)
-        return (b,c,a,d,)
+        name = x.task.name
+        thread_n = name.split('_')[-2]
+        return (b,c,a,d,thread_n)
     sorted_ready_l = ready_queue.queue + running_queue.queue + issue_list.queue
     sorted_ready_queue = TaskQueue(sorted_ready_l, descending=False, sort_f=sort_fn)
     del sorted_ready_l

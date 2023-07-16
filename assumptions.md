@@ -68,6 +68,9 @@ slcak 分为spatial slack 和 temporal slack
 在运行时，应对轻微抖动可能导致少量slot的late，具体表现为，time budget 减少。面对少量且频繁抖动，相对于实时的调整core的分配方案，在预分配阶段在时间上保留少量的的冗余（若干slot）显得更加划算——具体表现为：
 exp_comp_t 略微高于 （ops/分配的算力），但是这种冗余反应为端到端的时间增长。那么就只能让一些任务的计算时间更短一些，同样是用资源换取时间。
 对于那些只有一种配置的任务，或者已经在预分配阶段就达到上限的任务，只在时间上保留冗余。
+在pre-allocation 阶段，ERT作为开始时间的下限，我们取release time作为下游任务mapping的最早时间，
+这样下有任务的mapping结果取决于上游任务的mapping效果。
+timestamp+ERT+DDL则作为下游任务的最晚时间，以约束上游任务的最差mapping结果。
 
 
 mechanism: 
@@ -119,3 +122,46 @@ B. deadline assignment
             "size": dyn_obj_num
       }
    }
+15. handler should also determine the adjustment of the scheduling table:
+   1. e2e var: 
+      1. for deadline-driven task, 
+         a. e2e latency requirement is redistributed to each tasks:
+            DDL is recomputed in proportion to the e2e_var, 
+            and the ERT is also updated along each chains in a cascading manner.
+         b. Budget: the trunk of the tasks should 
+
+16. In our scheduling algorithm, 
+      we should confirm that in which condition the context switching overhead can / cannot be ignored:  
+      1. if when and which the next task is executed can not be known in advance, 
+         the context switching overhead cannot be ignored.
+      Case: 
+      1. planned context switching:
+         the task initialization can be performed in advance, i.e., 
+         transfering the weight and initialize other states, before the previous task is finished.
+         In this case, the context switching overhead can be ignored.
+      2. preempted context switching:
+         As the resources allocation is not performed until the previous task is finished, 
+         and all the states should be saved and reinitialized, 
+         as soon as the new allocation scheme is determined.
+         In this case, the context switching overhead cannot be ignored.
+
+17. overhead of our method: 
+   1. fragment cores in each partition, but the switch overhead in each partition is smaller than global scheduling.
+   2. as the number unexpected context switching increases, 
+      the overhead of the context switching increases.
+
+
+18. load_var and thread fork
+   1. release:
+      copy the process, rename the process and change the process id
+      set the `parent_pid, is_fork_inst, pid` for the new process
+      set `n_fork, new_pid, fork_pid_list` for the parent process
+   2. forked process complete:
+      set the property of process with `parent_pid`
+      pop pid to fork_pid_candi
+      remove the pid from fork_pid_list
+      minus n_fork by 1
+      delete the process
+   3. check complete:
+      both `n_fork == 0` and totburst
+

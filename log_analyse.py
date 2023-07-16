@@ -6,6 +6,11 @@ import re
 argparser = argparse.ArgumentParser()
 argparser.add_argument("--folder", type=str, default="./log", help="path to log folder")
 argparser.add_argument("--output", type=str, default="./log/analyze.csv", help="path to output csv file")
+argparser.add_argument("--profiling_filename", type=str, default="profiling_light.csv", help="path to task profiling file")
+argparser.add_argument("--aux_scale_factor", type=float, default=1, help="auxiliary scaling factor")
+argparser.add_argument("--n_p", type=int, default=1, help="number of processors")
+argparser.add_argument("--get_ref_num_exec", action="store_true", help="get the reference number of execution")
+argparser.add_argument("--warmup_dis", type=bool, default=False, help="whether to warm up the system")
 args = argparser.parse_args()
 folder = args.folder # log 文件夹路径
 
@@ -18,7 +23,7 @@ trigger_list = []
 # \t\tTASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) COMPLETED @ {curr_t:.6f}/{_p.event_time:.6f}!!
 
 completed_pattern1 = r'\t\tTASK (\d+):([\w_]+)\((\d+)\) COMPLETED @ ([\d.]+)/([\d.]+)!!'
-completed_pattern2 = r'(lateness detected)TASK (\d+):([\w_]+)\((\d+)\) COMPLETED @ ([\d.]+)/([\d.]+)!!'
+completed_pattern2 = r'\(lateness detected\)TASK (\d+):([\w_]+)\((\d+)\) COMPLETED @ ([\d.]+)/([\d.]+)!!'
 
 
 # TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!
@@ -43,8 +48,8 @@ for filename in sorted(os.listdir(folder)):
                         task_name = match.group(2)
                         time_value = float(match.group(4))
                     elif match := re.search(completed_pattern2, line):
-                        task_name = match.group(3)
-                        time_value = float(match.group(5))
+                        task_name = match.group(2)
+                        time_value = float(match.group(4))
                     if match:
                         if task_name not in completed_dict: 
                             completed_dict[task_name] = [time_value]
@@ -190,22 +195,45 @@ df.columns = pd.MultiIndex.from_product([filename_list, ["Completed Count", "Mis
 df.loc["sum"] = df.sum(axis=0)
 df = df.fillna(0).astype(int)
 
-def merge_cells(group):
-    group = group.applymap(str)
-    group = group.replace({'nan': ''}) # 特殊处理空值
+if args.get_ref_num_exec:
+    from task.task_cfg import load_taskattrib
+    from sched.slack_estim import deduce_num_exec
+    taskattr_dict, f_gcd = load_taskattrib(args.profiling_filename, verbose=False) 
+    num_exec = 0
+    hyper_p = 1/f_gcd
+    if args.aux_scale_factor > 1:
+        for node, taskattr in taskattr_dict.items():
+            # scale up the thread scaling factor
+            if taskattr.timing_flag == "realtime":
+                taskattr.thread_scaling_factor *= args.aux_scale_factor
+    for node in taskattr_dict.keys():
+        taskattr = taskattr_dict[node]
+        num_exec += deduce_num_exec(taskattr.freq, f_gcd, taskattr.thread_scaling_factor)
+    num_exec = int(num_exec) * (args.n_p + (not args.warmup_dis))
+    # add num_exec row, and set it to the last row
+    # add num_exc for every column
+    # 创建一个包含 num_exec 值的 Series，索引与 df.columns 相同
+    num_exec_series = pd.Series([num_exec] * len(df.columns), index=df.columns)
     
-    # 计算每列列表示的长度
-    col_widths = group.apply(max, axis=0).apply(len).to_list()
+    # 将 num_exec_series 添加为 DataFrame 的最后一行
+    df.loc["num_exec"] = num_exec_series
+
+# def merge_cells(group):
+#     group = group.applymap(str)
+#     group = group.replace({'nan': ''}) # 特殊处理空值
     
-    # 将每列按照最长字符串的长度进行格式化，使每列长度一致
-    fmt_str = '\n'.join(['{{:<{width}}}'.format(width=width) for width in col_widths])
+#     # 计算每列列表示的长度
+#     col_widths = group.apply(max, axis=0).apply(len).to_list()
     
-    # 应用格式化字符串并合并每行
-    result = group.apply(lambda x: fmt_str.format(*x.to_list()), axis=1)
-    return result
+#     # 将每列按照最长字符串的长度进行格式化，使每列长度一致
+#     fmt_str = '\n'.join(['{{:<{width}}}'.format(width=width) for width in col_widths])
+    
+#     # 应用格式化字符串并合并每行
+#     result = group.apply(lambda x: fmt_str.format(*x.to_list()), axis=1)
+#     return result
 
 
-grouped = df.groupby(level=0, axis=1)
-merged_df = grouped.apply(merge_cells)
+# grouped = df.groupby(level=0, axis=1)
+# merged_df = grouped.apply(merge_cells)
 
 df.to_csv(args.output, index=True, header=True, encoding="utf-8-sig")

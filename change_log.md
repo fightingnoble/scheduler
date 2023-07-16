@@ -725,3 +725,94 @@ handle progress the stream generation and inject the jitter, load_var, e2e_var i
         raise ValueError("a single task should not involve multiple workload scaling processes")
 ```
   related file: scheduler_agent.py
+
+## 20230716
+
+Debug all_soft mode, the problem lies in the release logic and the allocation logic.
+1. The late task is not released
+```python
+if _p.deadline < curr_t: 
+	if _p.task.criticality == "hard":
+		print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!")
+		_p.task.missed_deadline_count += 1
+	else:
+		warnings.warn(f"Task {_p.task.id}:{_p.task.name}({_p.pid}) violate timing constraint @ {_p.deadline:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!")
+else:
+	_p.handle_process_load_var()
+	cls.release_util(_p, curr_t, active_list)
+```
+2. The late task is not allocated
+```python
+     time_slot_s, time_slot_e, req_rsc_size = _p.rsc_req_estm(n_slot, timestep, FLOPS_PER_CORE) 
+```
+Rewrite the allocation logic:
+the iteration of the allocation only consider the upper bound of the resource requirement.
+lower bound is only considered in the first round. This enssure that no new process enters the running queue, during the iteration
+EstimCoreNums4Process, quant_release_deadline, get_available_cfg, EstimCoreNums4Task
+
+
+Fix typo: 
+``` Python
+  thread_n = job_n.split('_')[-1]
+  troughput_n = job_n.split('_')[-2]
+```
+
+``` Python
+  thread_n = job_n.split('_')[-2]
+  troughput_n = job_n.split('_')[-1]
+```
+
+Fix issue:
+```n_event = int(event_range//self.period)``` generate the wrong number of events, e.g., 3.1//0.1 = 30
+```n_event = int(event_range/self.period)```
+
+Add logic tackle the workload variation based on the ctx infomation
+process fork: 
+  add properties:
+    ```
+      self.n_fork = 0
+      self.fork_pid_list = []
+      self.fork_pid_candi = [] 
+      self.is_fork_inst = False
+      self.parent_pid = None
+      self.var_scale_factor = 1
+      self.load_var = None  
+
+    ```
+    `fork_pid_base = 1000`
+    
+  inject ctx from in message_trigger_event_new
+  init process pool at init time (task_cfg.py)
+  extract workload variation from the context (handle_process_load_var)
+  fork the task @ release (p_fork):
+      copy the process, rename the process and change the process id
+      set the `parent_pid, is_fork_inst, pid` for the new process
+      set `n_fork, new_pid, fork_pid_list` for the parent process
+
+  terminate forked process (kill_fork) @ miss and complete:
+      set the property of process with `parent_pid`
+      append pid to fork_pid_candi
+      remove the pid from fork_pid_list
+      minus n_fork by 1
+      delete the process
+
+Update result analyer:
+  log analyser:
+    context_message.py: 
+      extract, plot and export the end-to-end latency from the trace files
+    ctc_analyser.py:
+      extract, plot and export the ctx switch time from the log files
+    log_analyser.py:
+      add refered number of total execution time to the csv file
+  
+add script that scan the thoughput of the aux tasks given the fixed number of cores
+seperate cfg parser from file_path_prepaer.py
+
+pre-allocation 增加了一个排序因子，现在更容易受收敛
+  ```python
+          name = x.task.name
+          thread_n = name.split('_')[-2]
+          return (b,c,a,d,thread_n)
+  ```
+
+Extract `input_parser` and  `dump_and_check`

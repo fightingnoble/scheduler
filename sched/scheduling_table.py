@@ -564,7 +564,6 @@ class SchedulingTableInt(object):
         
     #     return dependency_table
 
-
 def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[ProcessInt], time_step:float = 1e-6,
                     show=False, save=False, save_path="task_layout_compact.pdf", 
                     hyper_p=0.1, n_p=1, warmup=False, drain=False,
@@ -1002,8 +1001,6 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], init_p_list:List[
             export_svgs(column(fig), filename=save_path+".svg")
             export_png(column(fig), filename=save_path+".png")
 
-
-
 def get_task_layout(bin_list:List[SchedulingTableInt], init_p_list:List[ProcessInt]
                         , show:bool=False, save:bool=False, save_path:str="task_layout.pdf", **kwargs):
 
@@ -1055,7 +1052,6 @@ def get_task_layout(bin_list:List[SchedulingTableInt], init_p_list:List[ProcessI
         kwargs["format"] = "pdf"
     plt.savefig(save_path, **kwargs)
 
-
 class BinGenSelInt(object):
     def __init__(self, tab_temp_size:int):
         self.tab_temp_size = tab_temp_size
@@ -1093,8 +1089,8 @@ class BinGenInt(BinGenSelInt):
 def new_bin(spatial_size:int, temporal_size:int, id:int = 0, name:str = "bin"):
     SchedTab = SchedulingTableInt(spatial_size, temporal_size, id=id, name=name)
     return SchedTab
-
-
+            
+    
 if __name__ == "__main__": 
     import argparse
     parser = argparse.ArgumentParser(description='Process some integers.') 

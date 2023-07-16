@@ -6,13 +6,58 @@ import networkx as nx
 import pandas as pd
 
 if TYPE_CHECKING:
-    from task.task_agent import TaskBase, ProcessBase, TaskIntAttr
+    from task.task_agent import TaskBase, ProcessBase, TaskIntAttr, ProcessInt
     from networkx import DiGraph
 from typing import List, Any, Dict, Tuple, Union
 from global_var import *
 from task.graph_breakdown import decompose_dag_into_chains
 
-def EstimCoreNums(task_dict:Dict[str, TaskBase], flops_dict, node, expected_slack, round_mode="round"):
+def EstimCoreNums4Process(_p:ProcessInt, flops, expected_slack, 
+                          round_mode="round", curr_aval_rsc:int=None):
+    if round_mode == "ceil":
+        round_func = math.ceil
+    elif round_mode == "floor":
+        round_func = math.floor
+    else:
+        round_func = round
+    req_rsc_size = flops / expected_slack / FLOPS_PER_CORE
+
+    constr = None
+    if _p.parallel_mode in ["upb","range"]:
+        req_rsc_size = min(round_func(req_rsc_size), _p.core_max)
+        if req_rsc_size==_p.core_max: 
+            constr = "upb"
+    elif _p.parallel_mode in ["lwb", "range"]:
+        if _p.core_min > curr_aval_rsc:
+            # no available solution
+            return 0, "N/A"
+        else:
+            req_rsc_size = max(round_func(req_rsc_size), _p.core_min)
+            if req_rsc_size==_p.core_min:
+                constr = "lwb"
+    elif _p.parallel_mode == "list":
+        # select the nearest one
+        # filter the core_list by the current available resource
+        if curr_aval_rsc is not None:
+            core_list = [x for x in _p.core_list if 0 < x <= curr_aval_rsc] 
+            if len(core_list) == 0:
+                # no available solution
+                return 0, "N/A"
+        else:
+            core_list = _p.core_list
+        req_rsc_size = min(_p.core_list, key=lambda x:abs(x-req_rsc_size))
+        if req_rsc_size==max(_p.core_list):
+            constr = "upb"
+        elif req_rsc_size==min(_p.core_list):
+            constr = "lwb"
+    else:
+        req_rsc_size = max(round_func(req_rsc_size), 1)
+        if curr_aval_rsc is not None:
+            req_rsc_size = min(req_rsc_size, curr_aval_rsc)
+    got_latency = flops / req_rsc_size / FLOPS_PER_CORE
+    return req_rsc_size, got_latency, constr
+
+def EstimCoreNums4Task(task_dict:Dict[str, TaskBase], flops_dict, node, expected_slack, round_mode="round"):
     if round_mode == "ceil":
         round_func = math.ceil
     elif round_mode == "floor":
@@ -54,7 +99,7 @@ def alloc_func(rsc_map_w:Dict[str, Tuple[int, float]],
         # estimate the slack
         slack_estm = flops_dict[node] / ops_rem * slcak_rem
         # estimate the resource
-        req_rsc_size, got_latency, constr = EstimCoreNums(task_dict, flops_dict, node, slack_estm, 'ceil')
+        req_rsc_size, got_latency, constr = EstimCoreNums4Task(task_dict, flops_dict, node, slack_estm, 'ceil')
         rsc_map_w[node] = (req_rsc_size, got_latency if constr else slack_estm, constr)
     
     # check the constraint

@@ -16,3 +16,5 @@ numerical_error_tol_rel = 0.01
 
 flop_error_tol_abs = 5e-7
 flop_error_tol_bit = 7
+
+fork_pid_base = 1000

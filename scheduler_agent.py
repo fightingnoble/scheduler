@@ -1,8 +1,8 @@
 import numpy as np
 from scipy.stats import truncnorm
-import math
+import math, copy
 from copy import deepcopy
-from typing import Dict, List
+from typing import Dict, List, Tuple
 from model.task_queue_agent import TaskQueue
 from sched.scheduling_table import SchedulingTableInt
 from task.task_agent import ProcessInt
@@ -28,7 +28,7 @@ from pre_alloc import get_rsc_2b_released
 import re
 
 from model.streaming_processing.wartermark_strategy import WatermarkStrategy
-
+from sched.slack_estim import EstimCoreNums4Process
 
 class Scheduler(object): 
     """
@@ -107,7 +107,7 @@ class Scheduler(object):
     """
 
     def __init__(self, 
-                 _SchedTab: SchedulingTableInt, e2e_latency:float,
+                 _SchedTab: SchedulingTableInt, e2e_latency:float, hyper_period:int,
                  glb_p_list:List[ProcessInt],
                  budget_recoder:Dict[int, List]=None, rsc_recoder_his:Dict[int, LRUCache]=None, 
                  barrier_en:bool=True,
@@ -171,6 +171,8 @@ class Scheduler(object):
         self.assert_barrier = False
 
         self.e2e_latency = e2e_latency
+        self.hyper_period = hyper_period
+        self.detail_alloc_info:Dict[str, Dict[float, Tuple]] = {}
 
 
     def get_queues(self):
@@ -342,7 +344,8 @@ def check_miss(sched: Scheduler,
                bin_name: str = "", mode: str = "current",
                bin_list: List[SchedulingTableInt] = None,
                n_slot: int = 0,
-               rsc_recoder=None,):
+               rsc_recoder=None,
+               process_dict: Dict[int, ProcessInt] = None,):
 
     bin_id = sched._SchedTab.id
     for _p in (active_list + ready_queue.queue + running_queue.queue):
@@ -352,7 +355,11 @@ def check_miss(sched: Scheduler,
             if _p.task.criticality == "hard":
                 miss_list.append(_p)
             else:
-                warnings.warn(f"Task {_p.task.id}:{_p.task.name}({_p.pid}) violate timing constraint @ {_p.deadline:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!")
+                _str = f"Task {_p.task.id}:{_p.task.name}({_p.pid}) violate timing constraint @ {_p.deadline:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!"
+                if _p.task.timing_flag == "realtime":
+                    print(_str)
+                else:
+                    warnings.warn(_str)
 
     if bin_name and len(miss_list) and not bin_event_flg:
         bin_event_flg = True
@@ -390,7 +397,12 @@ def check_miss(sched: Scheduler,
         # _p.deadline += _p.task.period
 
         _p.reset_state_vars()            
-        inactive_list.append(_p)
+
+        if _p.is_fork_inst:
+            _p.kill_fork(process_dict)
+            del _p
+        else:
+            inactive_list.append(_p)
         # _p.reset_depends()
 
         # print("Scheduling Table:")
@@ -440,7 +452,6 @@ def check_throttle(sched:Scheduler,
         _p.waitTime = 0
         # _p.cumulative_executed_time = 0
 
-        # _p.required_resource_size = np.ceil(_p.remburst/_p.exp_comp_t/FLOPS_PER_CORE)
         res_cfg.release(_p.pid, verbose=False)
         rsc_recoder.pop(_p.pid)
         running_queue.remove(_p)
@@ -461,11 +472,18 @@ def check_complete(sched:Scheduler, budget_recoder, timestep,
                     mode:str="current", 
                     bin_list:List[SchedulingTableInt]=None, 
                     n_slot:int=0, rsc_recoder=None,
+                    detail_alloc_info: Dict[str, Dict[float, List[Tuple]]]=None,
+                    process_dict:Dict[int, ProcessInt]=None,
                     ):
     bin_id = sched._SchedTab.id
     for _p in running_queue:
         # check whether the task is completed
-        if (_p.totburst >= _p.totcpu):
+        """
+        3. check complete:
+            both `n_fork == 0` and totburst
+        """
+        fork_complete_flg = _p.n_fork == 0 and _p.fork_pid_list == []
+        if (_p.totburst >= _p.totcpu) and fork_complete_flg:
             completed_list.append(_p)
 
     if bin_name and len(completed_list) and not bin_event_flg:
@@ -496,6 +514,17 @@ def check_complete(sched:Scheduler, budget_recoder, timestep,
         if len(_p.succ_ctrl) and save_trace:
             trace_list.append(data.ctx.serialize())
 
+        if detail_alloc_info is not None:
+            for bin_id, _SchedTab in enumerate(bin_list):
+                time_slot_s = int(np.ceil(_p.release_time/timestep))
+                time_slot_e = int(_p.deadline//timestep)
+                alloc_rsc_record = _SchedTab.index_occupy_by_id(time_slot_s, time_slot_e)
+                if not _p.pid in alloc_rsc_record:
+                    continue
+                _recrd = detail_alloc_info.get(_p.task.name, {})
+                _recrd.update({round(_p.event_time, numerical_tol_bit): (bin_id, *alloc_rsc_record[_p.pid])})
+                detail_alloc_info.update({_p.task.name: _recrd})
+
         # reset the task
         # release the resource and move to the wait list
         if mode == "future": 
@@ -520,7 +549,6 @@ def check_complete(sched:Scheduler, budget_recoder, timestep,
         _p.release_time += _p.task.period
         # _p.deadline += _p.task.period
 
-        # _p.required_resource_size = np.ceil(_p.remburst/_p.exp_comp_t/FLOPS_PER_CORE)
         if budget_recoder is not None:
             per_slot_flops = FLOPS_PER_CORE*timestep*budget_recoder[_p.pid][1]
             # if _p.rem_flop_budget[bin_id] >= per_slot_flops-numerical_error_tol_abs:
@@ -531,7 +559,8 @@ def check_complete(sched:Scheduler, budget_recoder, timestep,
             # budget_recoder.pop(_p.pid)
             # _p.rem_flop_budget.pop(bin_id)
             # TODO: a large number of tasks are truncated, remaing budget ~= 1 slot, check why
-            if _p.rem_flop_budget[bin_id] >= per_slot_flops+numerical_error_tol_abs:
+            if _p.rem_flop_budget[bin_id] >= per_slot_flops+numerical_error_tol_abs and \
+                _p.task.name.startswith("Steering_speed"):
                 budget_recoder[_p.pid][2] -= n_slot - budget_recoder[_p.pid][0] 
                 budget_recoder[_p.pid][0] = n_slot
                 print(f"\t\tTruncate the curr_cfg @{n_slot}({curr_t:.6f}), \
@@ -544,16 +573,19 @@ def check_complete(sched:Scheduler, budget_recoder, timestep,
 
         _p.reset_state_vars()
         running_queue.remove(_p)
-        inactive_list.append(_p)
+
+        if msg_dispatcher is not None:
+            msg_dispatcher.broadcast_message(f"TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) COMPLETED @ {curr_t:.6f}/{_p.event_time:.6f}({bin_name})!!")
+
+        if _p.is_fork_inst:
+            _p.kill_fork(process_dict)
+            del _p
+        else:
+            inactive_list.append(_p)
         # _p.reset_depends()
 
-    # print("Scheduling Table:")
-    # print(SchedTab.print_scheduling_table())
     # update_depend(task_dict, completed_list)
-    if msg_dispatcher is not None:
-        for _p in completed_list:
-            # msg_pipe.send(f"{_p.task.name}_completed", prefix="		")
-            msg_dispatcher.broadcast_message(f"TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) COMPLETED @ {curr_t:.6f}/{_p.event_time:.6f}({bin_name})!!")
+    
     
     completed_list.clear()
     return bin_event_flg
@@ -664,6 +696,13 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
     bin_spatial_size = _SchedTab.num_resources
     pre_rsc_bk = deepcopy(res_cfg.rsc_map)
 
+    # ll = inactive_list + active_list + ready_queue.queue + running_queue.queue + throttle_list 
+    # temp_l = [_p.pid for _p in ll]
+    # # statistic occurances of each task
+    # temp_l = np.array(temp_l)
+    # for pid in np.unique(temp_l):
+    #     aa = 0
+
     # (running_queue)
     # check running tasks
     bin_event_flg = check_complete(sched, budget_recoder, timestep, msg_dispatcher, a_data_pipe, curr_t, 
@@ -673,7 +712,8 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
     # check whether the task is miss
     # TODO: other ready tasks shoud be checked
     # TODO: cache eviction
-    read_msg_queue(curr_t, msg_queue, ready_queue, throttle_list, inactive_list, active_list, process_dict, bin_name)
+    read_msg_queue(curr_t, msg_queue, ready_queue, throttle_list, inactive_list, active_list, 
+                   running_queue, process_dict, bin_name, bin_id, res_cfg, budget_recoder,)
 
     bin_event_flg = check_miss(sched, budget_recoder, msg_dispatcher, curr_t, res_cfg, weight_wait_queue, ready_queue, running_queue, miss_list, 
                             throttle_list, active_list, inactive_list, buffer, bin_event_flg, bin_name)
@@ -702,9 +742,13 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
     # bin_event_flg = chk_release(sched, event_range, curr_t, inactive_list, active_list, _SchedTab, timestep, 
     #                             event_cache, trigger_cache,
     #                             bin_event_flg, bin_name) 
-    bin_event_flg = WatermarkStrategy.chk_release(curr_t, inactive_list, active_list, event_cache, trigger_cache,
+    fork_list = []
+    bin_event_flg = WatermarkStrategy.chk_release(curr_t, inactive_list, active_list, 
+                                                  fork_list, 
+                                                  event_cache, trigger_cache,
                                                   bin_event_flg, bin_name)
-
+    for _p in fork_list:
+        process_dict[_p.pid] = _p
 
     # # instruction prefetching
     # cfg_slot_s, cached_cfg, cfg_slot_num  = _SchedTab.sparse_list[_SchedTab.sparse_idx_next]         
@@ -745,9 +789,16 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
         for pid in next_cfg.keys():
             _p = process_dict[pid]
             # _p.deadline += _p.task.period
+            # clean the old budget
+            # if pid in budget_recoder:
+            #     if (n_slot - budget_recoder[pid][0]) * timestep + _p.exp_comp_t > 1/_p.task.freq:
+            #         budget_recoder.pop(pid)
+            #         _p.rem_flop_budget.pop(bin_id)
+            #         print(f"        {_p.task.name:s}({pid:d}) budget is cleaned @ {curr_t:.6f}")
+                    
             if bin_id not in _p.rem_flop_budget:
                 _p.rem_flop_budget[bin_id] = 0
-            _p.rem_flop_budget[bin_id] += next_cfg[pid] * cfg_slot_num * timestep * FLOPS_PER_CORE
+            _p.rem_flop_budget[bin_id] += next_cfg[pid] * cfg_slot_num * timestep * FLOPS_PER_CORE* _p.var_scale_factor
             # ******************************************************
             # Mechanism: 
             # The previous budget is covered, when the new chunk is entered.
@@ -755,7 +806,7 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
             # If the load of privious chunk is uncompleted,
             # the previous timeout budget is useless, 
             # because the comming computation should be allocated with resources as soon as ponssible
-            budget_recoder[pid] = [cfg_slot_s, next_cfg[pid], cfg_slot_num, True]
+            budget_recoder[pid] = [cfg_slot_s, next_cfg[pid]* _p.var_scale_factor, cfg_slot_num, True]
             if _p.pid in rsc_recoder_his:
                 rsc_recoder_his[_p.pid].put(bin_id)
             else:
@@ -818,6 +869,14 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
 
     # calculate the criticity of the task
     # the most critical one is the first one, with the smallest value, use the ascending order
+
+    is_not_hard = lambda x: x.task.criticality != "hard"
+    def get_chain_slack(_p):
+        event_time = _p.msg_cache[0].get_timestamp() 
+        e2e_latency = sched.e2e_latency if _p.timing_flag == "deadline" else sched.hyper_period
+        remain_slack = event_time + e2e_latency - curr_t 
+        return remain_slack
+
     fn_crit = lambda x: x.deadline
     # fn_crit = lambda _p: budget_recoder[_p.pid][0] + budget_recoder[_p.pid][2]
 
@@ -885,31 +944,15 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
             skiped_task = []
 
             while len(sorted_queue) > 0 and curr_aval_rsc > 0:
-                _p = sorted_queue[0]
+                _p:ProcessInt = sorted_queue[0]
                 _p.is_starving = False
 
                 # calculate the required resource size
                 # get the newest assigned budget
                 # planned_rsc_size = budget_recoder[_p.pid][1] # curr_cfg.rsc_map[_p.pid]
                 # planned_slot_num = budget_recoder[_p.pid][2] # curr_cfg.slot_num
-                event_time = _p.msg_cache[0].get_timestamp() 
                 e2e_var = _p.msg_cache[0].get_e2e_var()
                 spatial_scale_factor = sched.e2e_latency/e2e_var if e2e_var > 0 else 1
-
-                workload_var_info = _p.msg_cache[0].get_load_var()
-                involve_times = 0
-                var_scale_factor = 1
-                for var_item, var_param in workload_var_info.items():
-                    tgt_list = var_param['tgt_name']
-                    name = _p.task.name
-                    thread_n = name.split('_')[-1]
-                    troughput_n = name.split('_')[-2]
-                    task_n = name.replace("_"+thread_n, "").replace("_"+troughput_n, "")
-                    if task_n in tgt_list:
-                        var_scale_factor = math.ceil(var_param['size']/var_param['typical'])
-                        involve_times += 1
-                if involve_times > 1:
-                    raise ValueError("a single task should not involve multiple workload scaling processes")
                 
                 chunk_s, chunk_alloc, chunk_slot_num, updated_flg = budget_recoder[_p.pid]
                 chunk_flops = chunk_alloc * chunk_slot_num * timestep * FLOPS_PER_CORE
@@ -944,7 +987,7 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
                     else:
                         # newest assigned budget is still available                    
                         # tries to finish the remaining work assigned by the configuration chunk until the now
-                        req_rsc_size = chunk_alloc
+                        req_rsc_size = chunk_alloc 
 
 
                 # **************************************************************
@@ -999,6 +1042,9 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
                         break
                 assert req_rsc_size > 0
 
+                if _p.load_var == 0:
+                    req_rsc_size = 0
+                
                 # TODO: if the req_rsc_size is larger than the aval_rsc, then add a flag to indicate the task is late                
                 sorted_queue.pop(0)
                 # if curr_aval_rsc >= req_rsc_size: # and req_rsc_size > 0:
@@ -1302,7 +1348,8 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
             if np.logical_xor(curr_cfg_ref != next_cfg, curr_cfg.slot_s == n_slot+1 or curr_cfg.slot_e == n_slot):
                 print("ERROR: cfg not match")
 
-def read_msg_queue(curr_t, msg_queue, ready_queue, throttle_list, inactive_list, active_list, process_dict, bin_name):
+def read_msg_queue(curr_t, msg_queue, ready_queue, throttle_list, inactive_list, active_list, 
+                   running_queue, process_dict, bin_name, bin_id, res_cfg, budget_recoder,):
     # 定义正则表达式模式
     pattern = r'TASK (\d+):([\w_]+)\((\d+)\) (?:COMPLETED|MISSED DEADLINE) @ ([\d.]+)/([\d.]+)\(([\w_]+)\)!!'
     msg_list = []
@@ -1323,17 +1370,26 @@ def read_msg_queue(curr_t, msg_queue, ready_queue, throttle_list, inactive_list,
                     continue
                 _p = process_dict[pid]
 
-                # pop the task from ready queue, active list, and throttle list
+                # pop the task from ready queue, active list, throttle list and running queue
                 if _p in active_list:
                     active_list.remove(_p)
                     print(f"		{_p.task.name:s}({pid:d}) is removed from active list @ {bin_name:s} {curr_t:.6f}")
+                    inactive_list.append(_p)
                 if _p in ready_queue:
                     ready_queue.remove(_p)
                     print(f"		{_p.task.name:s}({pid:d}) is removed from ready queue @ {bin_name:s} {curr_t:.6f}")
+                    inactive_list.append(_p)
                 if _p in throttle_list:
                     throttle_list.remove(_p)
                     print(f"		{_p.task.name:s}({pid:d}) is removed from throttle list @ {bin_name:s} {curr_t:.6f}")
-                inactive_list.append(_p)
+                    inactive_list.append(_p)
+                if _p in running_queue:
+                    running_queue.remove(_p)
+                    print(f"		{_p.task.name:s}({pid:d}) is removed from running queue @ {bin_name:s} {curr_t:.6f}")
+                    res_cfg.release(_p.pid, verbose=False)
+                    inactive_list.append(_p)
+                    budget_recoder.pop(_p.pid)
+                    _p.rem_flop_budget.pop(bin_id)
 
 def trigger_read(inactive_list:List[ProcessInt], sensor_msg_queue:List, 
                 trigger_cache:TriggerCache, process_dict:Dict,
@@ -1463,7 +1519,10 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data
     # check the dependencies of the tasks in inactive list
     # if the dependencies are satisfied, move the task to the wait queue
     # bin_event_flg = chk_release(sched, event_range, curr_t, inactive_list, active_list, _SchedTab, timestep, bin_event_flg, bin_name) 
-    bin_event_flg = WatermarkStrategy.chk_release(curr_t, inactive_list, active_list, )
+    fork_list = []
+    bin_event_flg = WatermarkStrategy.chk_release(curr_t, inactive_list, active_list, fork_list)
+    for _p in fork_list:
+        process_dict[_p.pid] = _p
 
     # check data availability: some tasks may be prefetched
     # TODO: model the runtime weight and feature map transfering 
@@ -1504,89 +1563,85 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data
 
         sorted_queue = sorted(ready_queue.queue + preemptable_list, key=sort_fn)
 
-        rsc_map = OrderedDict()
-        score_dict = OrderedDict()
+        rsc_map = OrderedDict() # record the resource allocation
+        score_dict = OrderedDict() # record the process allocated with resources and unbouned by constraints
+        constr_dict = OrderedDict() # record the resource constraint applied to current allocation
+        slack_dict = OrderedDict()
         curr_aval_rsc = res_cfg.size
-        # sched_trigger_flg = False
-        # if len(sorted_queue) > 0 and curr_aval_rsc > 0:
-        #     sched_trigger_flg = True
-
-        while len(sorted_queue) > 0 and curr_aval_rsc > 0:
-            _p = sorted_queue[0]
-
-            # estimate the runtime and the resource requirement
-            time_slot_s, time_slot_e, req_rsc_size = _p.rsc_req_estm(n_slot, timestep, FLOPS_PER_CORE)
-            # if time_slot_s == time_slot_e:
-            #     sorted_queue.pop(0)
-            #     continue
-            # elif time_slot_s > time_slot_e:
-            #     sorted_queue.pop(0)
-            #     continue
-            if req_rsc_size == 0:
-                sorted_queue.pop(0)
+       
+        # build score dict refer to remaining slack
+        for _p in sorted_queue:
+            time_slot_s, time_slot_e = _p.quant_release_deadline(n_slot, timestep) 
+            if time_slot_s > time_slot_e:
+                slack_dict[_p.pid] = float("inf")
+            else:
+                slack_dict[_p.pid] = time_slot_e - time_slot_s
+        
+        while len(sorted_queue) > 0:
+            _p:ProcessInt = sorted_queue.pop(0)
+            assert _p.remburst > 0
+            # alloc resource depending to the number of resources
+            if curr_t < _p.deadline:
+                # estimate the runtime and the resource requirement
+                req_rsc_size, got_latency, constr = EstimCoreNums4Process(_p, _p.remburst, slack_dict[_p.pid]*timestep, 
+                                                                            "ceil", curr_aval_rsc)
+            else:
+                req_rsc_size, constr = _p.get_available_cfg(curr_aval_rsc, curr_aval_rsc)
+                got_latency = _p.remburst/req_rsc_size/FLOPS_PER_CORE
+            # check if process has no solution
+            if req_rsc_size == 0 and constr == "N/A":
+                # the process (we call it as failure) get no cores due to the resource constraint
+                # but it is the process with higher priority rather the lower one blocking it
+                # so we allow the search to continue, 
+                # the process with lower priority is allowed to get the resource. 
+                # Once the higher priority process release the resource,
+                # and failures can get enough resource to run, 
+                # failures can preempt the lower priority process anytime.
                 continue
             assert req_rsc_size > 0
-            sorted_queue.pop(0)
-            if curr_aval_rsc >= req_rsc_size: # and req_rsc_size > 0:
-                curr_aval_rsc -= req_rsc_size
-                rsc_map[_p.pid] = req_rsc_size
-                score_dict[_p.pid] = 1/(time_slot_e - time_slot_s)
-            else:
-                rsc_map[_p.pid] = curr_aval_rsc
-                curr_aval_rsc = 0
+            curr_aval_rsc -= req_rsc_size
+            rsc_map[_p.pid] = req_rsc_size
+            constr_dict[_p.pid] = constr
+            score_dict[_p.pid] = 1/slack_dict[_p.pid] if slack_dict[_p.pid] != 0 else float("inf")
+            if curr_aval_rsc <= 0:
                 break
+        
+        if curr_aval_rsc > 0:
+            # if there are still resources left, 
+            # it means no late process is waiting for resources
+            assert sum([score == float('inf') for score in score_dict.values()]) == 0
+            # also, there is no process waiting for resources in the ready queue
+            assert len(sorted_queue) == 0
 
-        while True:
-            # check the rsc_size is valid
-            # compare with the core_max, core_min, core_list, parallel_mode
-            for pid in score_dict:
-                _p = process_dict[pid]
-                req_rsc_size = rsc_map[pid]
-                if _p.parallel_mode in ["upb","range"]:
-                    if req_rsc_size > _p.core_max:
-                        curr_aval_rsc += req_rsc_size - _p.core_max
-                        rsc_map[pid] = _p.core_max
-                elif _p.parallel_mode in ["lwb", "range"]:
-                    if req_rsc_size < _p.core_min:
-                        curr_aval_rsc -= _p.core_min - req_rsc_size
-                        rsc_map[pid] = _p.core_min
-                elif _p.parallel_mode == "list":
-                    # select the nearest one
-                    curr_aval_rsc += req_rsc_size - min(_p.core_list, key=lambda x:abs(x-req_rsc_size))
-                    rsc_map[pid] = min(_p.core_list, key=lambda x:abs(x-req_rsc_size))
-                    
-            if curr_aval_rsc == 0:
-                break
-            elif curr_aval_rsc > 0:
-                # remove the process which has been reached the core_max
-                for pid in list(score_dict.keys()):
-                    _p = process_dict[pid]
-                    req_rsc_size = rsc_map[pid]
-                    if req_rsc_size == _p.core_max:
+            while curr_aval_rsc > 0 and len(score_dict) > 0:
+                for pid,_constr in constr_dict.items():
+                    if _constr == "upb":
                         score_dict.pop(pid)
-            else:
-                # remove the process which has been reached the core_min
-                for pid in list(score_dict.keys()):
+                
+                if len(score_dict) > 0:
+                    # allocate the remaining resources proportionally to the score
+                    cum_score_reverse = np.cumsum(list(reversed(score_dict.values())))
+                    cum_size = [curr_aval_rsc * s / cum_score_reverse[-1] for s in cum_score_reverse]
+                    for i, pid in enumerate(reversed(score_dict.keys())):
+                        if i == 0:
+                            size = int(cum_size[0])
+                            rsc_map[pid] += size
+                            cum_size[0] = size
+                        else:
+                            size = int(cum_size[i] - cum_size[i - 1])
+                            rsc_map[pid] += size
+                            cum_size[i] = size + cum_size[i - 1]
+                    curr_aval_rsc = 0
+                # check the rsc_size is valid
+                # compare with the core_max, core_min, core_list, parallel_mode
+                for pid in score_dict:
                     _p = process_dict[pid]
-                    req_rsc_size = rsc_map[pid]
-                    if req_rsc_size == _p.core_min:
-                        score_dict.pop(pid)
-            
-            if len(score_dict) == 0:
-                break
-            # allocate the remaining resources proportionally to the score
-            cum_score_reverse = np.cumsum(list(reversed(score_dict.values())))
-            cum_size = [curr_aval_rsc * s / cum_score_reverse[-1] for s in cum_score_reverse]
-            for i, pid in enumerate(reversed(score_dict.keys())):
-                if i == 0:
-                    size = int(cum_size[0])
-                    rsc_map[pid] += size
-                    cum_size[0] = size
-                else:
-                    size = int(cum_size[i] - cum_size[i - 1])
-                    rsc_map[pid] += size
-                    cum_size[i] = size + cum_size[i - 1]
-            curr_aval_rsc = 0
+                    aval_size, constr = _p.get_available_cfg(rsc_map[pid], rsc_map[pid])
+                    assert constr in ["upb", "none"]
+                    curr_aval_rsc += rsc_map[pid] - aval_size
+                    constr_dict[pid] = constr
+                    rsc_map[pid] = aval_size
+
         sched.new_ready_flg = False
         
         if rsc_map != pre_rsc:

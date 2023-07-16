@@ -480,7 +480,8 @@ def push_step_new(sched: Scheduler, msg_dispatcher: MsgDispatcher,
                                    running_queue, completed_list, inactive_list, buffer, 
                                    bin_event_flg, bin_name, save_trace=False, 
                                    mode="future", bin_list=bin_list, 
-                                   n_slot=n_slot, rsc_recoder=rsc_recoder)
+                                   n_slot=n_slot, rsc_recoder=rsc_recoder, 
+                                   detail_alloc_info=sched.detail_alloc_info)
 
     # check whether the task is miss
     # TODO: other ready tasks shoud be checked

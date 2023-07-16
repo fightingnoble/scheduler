@@ -132,8 +132,8 @@ def main():
 def plot_distr_hist(args, glb_n_task_dict):
     sensor_dict = {}
     for key, task in glb_n_task_dict.items():
-        thread_n = key.split('_')[-1]
-        troughput_n = key.split('_')[-2]
+        thread_n = key.split('_')[-2]
+        troughput_n = key.split('_')[-1]
         task_n = key.replace("_"+thread_n, "").replace("_"+troughput_n, "")
         if task_n in sensor_dict:
             continue

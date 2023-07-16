@@ -168,26 +168,10 @@ def message_trigger_event_new(event_iter_dict:Dict, inactive_list, glb_p_list,
                                                             _p.task.period)
             # index the ddl
             if ddl_stream is not None:
-                e2e_ddl = index_by_timestamp(ddl_stream, _p.next_ingestion_time)
+                e2e_ddl = index_by_timestamp(ddl_stream, _p.next_event_time)
                 msg.update_e2e_var(e2e_ddl)
             if load_var_sim_para is not None:
-                thread_n = name.split('_')[-1]
-                troughput_n = name.split('_')[-2]
-                task_n = name.replace("_"+thread_n, "").replace("_"+troughput_n, "")
-                for var_item, var_param in load_var_sim_para.items():
-                    for source_name in var_param["src_name"]:
-                        if source_name == task_n:
-                            load_var_stream = var_param["stream"]
-                            load_var = index_by_timestamp(load_var_stream, _p.next_ingestion_time)
-                            msg.update_load_var(
-                                {
-                                    var_item: {
-                                        "typical": var_param["typical"],
-                                        "tgt_name": var_param["tgt_name"],
-                                        "size": load_var
-                                    }
-                                }
-                            )
+                load_var_handler(load_var_sim_para, name, _p.next_event_time, msg)
             if sensor_pipe is None:
                 # _p.event_triggers.append([_p.next_ingestion_time, _p.next_event_time])
                 _p.event_triggers.append(msg)
@@ -208,6 +192,25 @@ def message_trigger_event_new(event_iter_dict:Dict, inactive_list, glb_p_list,
         if _p in inactive_list and sensor_pipe is None:
             _p:ProcessBase
             trigger_state = _p.sim_trigger(curr_t, timestep)
+
+def load_var_handler(load_var_sim_para, name, next_event_time, msg):
+    thread_n = name.split('_')[-2]
+    troughput_n = name.split('_')[-1]
+    task_n = name.replace("_"+thread_n, "").replace("_"+troughput_n, "")
+    for var_item, var_param in load_var_sim_para.items():
+        for source_name in var_param["src_name"]:
+            if source_name == task_n:
+                load_var_stream = var_param["stream"]
+                load_var = index_by_timestamp(load_var_stream, next_event_time)
+                msg.update_load_var(
+                                {
+                                    var_item: {
+                                        "typical": var_param["typical"],
+                                        "tgt_name": var_param["tgt_name"],
+                                        "size": load_var
+                                    }
+                                }
+                            )
 
 def period_trigger_event(_iter:Generator, curr_t, _stream:TaskQueue): 
     """

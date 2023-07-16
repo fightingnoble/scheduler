@@ -98,6 +98,14 @@ class ProcessBase(object):
         self.next_ingestion_time = None
         self.ddl_sharing_cross_chain = False
 
+        self.n_fork = 0
+        self.fork_pid_list = []
+        self.fork_pid_candi = [] 
+        self.is_fork_inst = False
+        self.parent_pid = None
+        self.var_scale_factor = 1
+        self.load_var = None
+
     def reset_state_vars(self,):
         self.released = False
         self.ready_time = float("inf")
@@ -187,8 +195,8 @@ class ProcessBase(object):
             if attr_dict["reDistPattn"] == "downscaling":
                 # name parse
                 # remove the thread number at the end of the name
-                thread_n = key.split('_')[-1]
-                troughput_n = key.split('_')[-2]
+                thread_n = key.split('_')[-2]
+                troughput_n = key.split('_')[-1]
                 task_n = key.replace("_"+thread_n, "").replace("_"+troughput_n, "")
                 dict_t.update({task_n:dict_t.get(task_n, False) or valid})
             elif not valid:
@@ -305,6 +313,65 @@ class ProcessBase(object):
             for key in pred_data.keys():
                 pred_data[key]["valid"] = False
 
+    def kill_fork(self, process_dict):
+        """       
+            terminate forked process:
+                set the property of process with `parent_pid`
+                append pid to fork_pid_candi
+                remove the pid from fork_pid_list
+                minus n_fork by 1
+                delete the process
+        """        
+        _p_parent = process_dict[self.parent_pid]
+        _p_parent.fork_pid_candi.append(self.pid)
+        _p_parent.fork_pid_list.remove(self.pid)
+        _p_parent.n_fork -= 1
+        process_dict.pop(self.pid)
+
+    def parse_name(self):
+        name = self.task.name
+        thread_n = name.split('_')[-2]
+        troughput_n = name.split('_')[-1]
+        task_n = name.replace("_"+thread_n, "").replace("_"+troughput_n, "")
+        return task_n,thread_n,troughput_n
+
+    def p_fork(self):
+        fork_list = []
+        task_n, thread_n, troughput_n = self.parse_name()
+        for fork_num in range(self.var_scale_factor-1):
+            _p_fork = copy.deepcopy(self)
+            _p_fork.task.name = task_n + f"_fork_{fork_num+1}_{thread_n}_{troughput_n}"
+            new_pid = self.fork_pid_candi.pop(0)
+            _p_fork.pid = new_pid
+            self.n_fork += 1
+            self.fork_pid_list.append(new_pid)
+            fork_list.append(_p_fork)
+        return fork_list
+
+    def handle_process_load_var(self):
+        """
+        fork the task @ release:
+            copy the process, rename the process and change the process id
+            set the `parent_pid, is_fork_inst, pid` for the new process
+            set `n_fork, new_pid, fork_pid_list` for the parent process
+        """
+        workload_var_info = self.msg_cache[0].get_load_var()
+        involve_times = 0
+        var_scale_factor = 1
+
+        task_n, thread_n, troughput_n = self.parse_name()
+        for var_item, var_param in workload_var_info.items():
+            tgt_list = var_param['tgt_name']
+            if task_n in tgt_list:
+                var_scale_factor = max(math.ceil(var_param['size']/var_param['typical']), 1)
+                load_var = var_param['size']/var_param['typical']
+                involve_times += 1            
+        if involve_times > 1:
+            raise ValueError("a single task should not involve multiple workload scaling processes")
+        elif involve_times == 1:
+            self.var_scale_factor = var_scale_factor 
+            self.load_var = load_var
+
 class ProcessInt(ProcessBase):
     def __init__(self, task:TaskBase, release_t, deadline_abs, pid):
         super().__init__(task, release_t, deadline_abs, pid)
@@ -332,14 +399,10 @@ class ProcessInt(ProcessBase):
         self.is_starving = False
         
 
-    def rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE, mode='rt-wsc'):
+    def rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE, time_slot_s=None, time_slot_e=None, mode='rt-wsc'):
         assert mode in ['rt-wsc', 'expected']
-        # release time round up: task should not be released earlier than the release time
-        time_slot_s = int(np.ceil(_p.release_time/timestep))
-        if time_slot_s < n_slot:
-            time_slot_s = n_slot
-        # deadline round down: task should not be finised later than the deadline
-        time_slot_e = int(_p.deadline//timestep)
+        if time_slot_e is None or time_slot_s is None:
+            time_slot_s, time_slot_e = _p.quant_release_deadline(n_slot, timestep)
         if mode == 'expected':
             num_slot = int(_p.exp_comp_t/timestep)
             req_rsc_size = int(np.ceil(_p.remburst/num_slot/timestep/FLOPS_PER_CORE))
@@ -350,6 +413,15 @@ class ProcessInt(ProcessBase):
                 req_rsc_size = int(np.ceil(_p.remburst/(time_slot_e-time_slot_s)/timestep/FLOPS_PER_CORE))
         return time_slot_s,time_slot_e,req_rsc_size
 
+    def quant_release_deadline(_p, n_slot, timestep):
+        # release time round up: task should not be released earlier than the release time
+        time_slot_s = int(np.ceil(_p.release_time/timestep))
+        if time_slot_s < n_slot:
+            time_slot_s = n_slot
+        # deadline round down: task should not be finised later than the deadline
+        time_slot_e = int(_p.deadline//timestep)
+        return time_slot_s,time_slot_e
+
     def get_available_cfg(self, req_rsc_size:int, curr_aval_rsc:int=None): 
         applied_constraint = "none"         
         # apply constraints based on parallel_mode
@@ -358,11 +430,11 @@ class ProcessInt(ProcessBase):
                 req_rsc_size = self.core_max
                 applied_constraint = "upb"
         elif self.parallel_mode in ["lwb", "range"]:
-            if self.core_min > curr_aval_rsc:
-                # no available solution
-                req_rsc_size = 0
-                applied_constraint = "N/A"
-            elif self.core_min > req_rsc_size: 
+            if curr_aval_rsc is not None:
+                if self.core_min > curr_aval_rsc:
+                    # no available solution
+                    return 0, "N/A"
+            if self.core_min > req_rsc_size: 
                 req_rsc_size = self.core_min
                 applied_constraint = "lwb"
         elif self.parallel_mode == "list":
@@ -372,16 +444,16 @@ class ProcessInt(ProcessBase):
                 core_list = [x for x in self.core_list if 0 < x <= curr_aval_rsc] 
                 if len(core_list) == 0:
                     # no available solution
-                    req_rsc_size = 0
-                    applied_constraint = "N/A"
-                    return req_rsc_size, applied_constraint
+                    return 0, "N/A"
             else:
                 core_list = self.core_list
             req_rsc_size = min(core_list, key=lambda x:abs(x-req_rsc_size))
             applied_constraint = "list"
         
         if req_rsc_size == 0: 
-            applied_constraint = "N/A"
+            return 0, "N/A"
+        if curr_aval_rsc is not None:
+            req_rsc_size = min(req_rsc_size, curr_aval_rsc)
         return req_rsc_size, applied_constraint
 
     def get_available_cfg_vector(self, req_rsc_size_arr: np.ndarray, curr_aval_rsc_arr: np.ndarray = None):
@@ -670,7 +742,7 @@ class TaskBase(object):
             i += 1
     
     def extract_sensor_event(_p, event_range, jitter_sim_en=False, jitter_sim_para=None, seed=0):
-        n_event = int(event_range//_p.task.period)
+        n_event = int(event_range/_p.task.period)
         if jitter_sim_en:
             jitter_gen_inst = jitter_gen(1/_p.freq, jitter_sim_para, size=1, seed=seed)
         event_gen = _p.event_generator()
@@ -685,7 +757,7 @@ class TaskBase(object):
         event_gen.send(None)
 
     def gen_event_modA(self, event_range, jitter_sim_en=False, jitter_sim_para=None, seed=0):
-        n_event = int(event_range//self.period)
+        n_event = int(event_range/self.period)
         if jitter_sim_en:
             jitter_gen_inst = jitter_gen(1/self.freq, jitter_sim_para, size=1, seed=seed)
 
@@ -705,7 +777,7 @@ class TaskBase(object):
             event_time += self.period
     
     def gen_event_modB(self, event_range, jitter_sim_en=False, jitter_sim_para=None, seed=0):
-        n_p = round(event_range//self.period)
+        n_p = round(event_range/self.period)
         n_event = int(n_p//self.hyper_period_size) * len(self.aval_sub_period) + len([i for i in range(n_p%len(self.aval_sub_period)) if i in self.aval_sub_period])
         if jitter_sim_en:
             jitter_gen_inst = jitter_gen(1/self.freq, jitter_sim_para, size=1, seed=seed)

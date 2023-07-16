@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from task.task_agent import ProcessBase
     from model.buffer import EventCache, TriggerCache
 import warnings
+import math, copy
 import numpy as np
 from typing import Dict, Tuple
 from global_var import numerical_tol_bit
@@ -60,8 +61,8 @@ class WatermarkStrategy(object):
             if attr_dict["reDistPattn"] == "downscaling":
                 # name parse
                 # remove the thread number at the end of the name
-                thread_n = key.split('_')[-1]
-                troughput_n = key.split('_')[-2]
+                thread_n = key.split('_')[-2]
+                troughput_n = key.split('_')[-1]
                 task_n = key.replace("_"+thread_n, "").replace("_"+troughput_n, "")
                 if task_n not in joint_stream_dict:
                     joint_stream_dict[task_n] = []
@@ -85,8 +86,8 @@ class WatermarkStrategy(object):
             if attr_dict["reDistPattn"] == "downscaling":
                 # name parse
                 # remove the thread number at the end of the name
-                thread_n = key.split('_')[-1]
-                troughput_n = key.split('_')[-2]
+                thread_n = key.split('_')[-2]
+                troughput_n = key.split('_')[-1]
                 task_n = key.replace("_"+thread_n, "").replace("_"+troughput_n, "")
                 joint_valid.update({task_n:joint_valid.get(task_n, False) + valid})
             elif not valid:
@@ -255,6 +256,7 @@ class WatermarkStrategy(object):
 
     @classmethod
     def chk_release(cls, curr_t, inactive_list:List[ProcessBase], active_list, 
+                    fork_list:List[ProcessBase]=None,
                     event_cache:EventCache=None, trigger_cache:TriggerCache=None,
                     bin_event_flg:bool=False, 
                     bin_name:str="", DEBUG_FG:bool=False,):
@@ -278,21 +280,31 @@ class WatermarkStrategy(object):
         for _p in l_active:
             inactive_list.remove(_p)
             _p.update_deadline_from_timestamp()
-            if _p.deadline < curr_t: 
-                if _p.task.criticality == "hard":
-                    print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!")
-                    _p.task.missed_deadline_count += 1
-                else:
-                    warnings.warn(f"Task {_p.task.id}:{_p.task.name}({_p.pid}) violate timing constraint @ {_p.deadline:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!")
+            if _p.deadline < curr_t and _p.task.criticality == "hard":
+                print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!")
+                print(f"		{_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) deadline: {_p.deadline:.6f}")
+                _p.task.missed_deadline_count += 1
             else:
-                active_list.append(_p)
-                _p.release_time = curr_t
-                _p.released = True
-                if _p.remburst == 0:
-                    _p.remburst += _p.task.flops
-                _str = f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) is activated @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!"
-                print(_str)
+                if _p.deadline < curr_t: 
+                    warnings.warn(f"Task {_p.task.id}:{_p.task.name}({_p.pid}) violate timing constraint @ {_p.deadline:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!")
+                    print(f"		{_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) deadline: {_p.deadline:.6f}")
+                _p.handle_process_load_var()
+                cls.release_util(_p, curr_t, active_list)
         return bin_event_flg 
+
+    @staticmethod
+    def release_util(_p:ProcessBase, curr_t, active_list):
+        active_list.append(_p)
+        _p.totcpu = _p.task.totcpu if _p.load_var is None else _p.task.totcpu * _p.load_var
+        _p.release_time = curr_t
+        _p.released = True
+        _p.core_max = _p.task.core_max*_p.var_scale_factor
+        _p.core_min = _p.task.core_min*_p.var_scale_factor
+        _p.core_list = [x*_p.var_scale_factor for x in _p.task.core_list] if _p.task.core_list is not None else None
+        if _p.remburst == 0:
+            _p.remburst += _p.totcpu
+        _str = f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) is activated @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!"
+        print(_str)
 
 if __name__ == "__main__":
     from model.buffer import Buffer

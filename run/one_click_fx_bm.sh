@@ -12,18 +12,22 @@ PY_ARGS=${@:6}
 
 if [ "$cfg" = "light" ]; then
     fn="profiling_light.csv"
+    e2e_t=0.1
 elif [ "$cfg" = "medium" ]; then
     fn="profiling_medium.csv"
+    e2e_t=0.09
 elif [ "$cfg" = "heavy" ]; then
     fn="profiling.csv"
+    e2e_t=0.09
 else
     echo "无效的输入"
     exit 1
 fi
 
 echo "文件名为：$fn"
-cfg=$(python run/file_path_prepare.py --start $start --step $step --end $end --profiling_filename $fn ${PY_ARGS})
+cfg=$(python run/cfg_parser.py --profiling_filename $fn --e2e_latency $e2e_t ${PY_ARGS})
 echo "cfg is $cfg"
-./run/compare_glb.sh $start $step $end $cfg ${p_fn} --profiling_filename $fn ${PY_ARGS}
-./run/static_optm_test.sh $start $step $end ${p_fn} $cfg --profiling_filename $fn ${PY_ARGS}
-./run/compare_dyn.sh $start $step $end $cfg ${p_fn} --profiling_filename $fn ${PY_ARGS}
+python run/file_path_prepare.py --start $start --step $step --end $end --cfg_n $cfg 
+./run/compare_glb.sh $start $step $end $cfg ${p_fn} --profiling_filename $fn --e2e_latency $e2e_t ${PY_ARGS}
+./run/static_optm_test.sh $start $step $end $cfg ${p_fn} --profiling_filename $fn --e2e_latency $e2e_t ${PY_ARGS}
+./run/compare_dyn.sh $start $step $end $cfg ${p_fn} --profiling_filename $fn --e2e_latency $e2e_t ${PY_ARGS}

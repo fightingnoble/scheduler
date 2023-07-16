@@ -48,7 +48,7 @@ class ContextMsg(object):
         self.msg_context["data_info"] = {}
         # transfer details
         self.msg_context["transfer_info"] = {}
-        self.msg_context["e2e_var"] = None
+        self.msg_context["e2e_var"] = 0
         self.msg_context["load_var"] = {}
         self.cached_list = ["e2e_var", "load_var"]
    
@@ -240,6 +240,118 @@ class ContextMsg(object):
         return dict_o, _root.get_end_time(), nx_graph
 
 
+def plot_trace_list(save_path, result_dict, title):
+    fig = go.Figure()
+    bins_num = 20
+    for attr, (rt_e2e_latency_list, ddl_e2e_latency_list) in result_dict.items():
+        rt_e2e_latency_list = torch.tensor(rt_e2e_latency_list)
+        v_max = rt_e2e_latency_list.max()
+        v_min = rt_e2e_latency_list.min()
+        bins = [(2*k+1)*(v_max-v_min)/2/bins_num+v_min for k in range(bins_num+1)]
+        counts = torch.histc(rt_e2e_latency_list, bins=bins_num, max=v_max, min=v_min)
+        fig.add_trace(go.Bar(
+                x=bins,
+                y=counts.numpy(),
+                name=f"{attr}_rt", # name used in legend and hover labels
+                # marker_color='#EB89B5',
+                opacity=0.75,
+                width=0.0003
+            ))
+        ddl_e2e_latency_list = torch.tensor(ddl_e2e_latency_list)
+        v_max = ddl_e2e_latency_list.max()
+        v_min = ddl_e2e_latency_list.min()
+        bins = [(2*k+1)*(v_max-v_min)/2/bins_num+v_min for k in range(bins_num+1)]
+        counts = torch.histc(ddl_e2e_latency_list, bins=bins_num, max=v_max, min=v_min)
+        fig.add_trace(go.Bar(
+                x=bins,
+                y=counts.numpy(),
+                name=f"{attr}_ddl", # name used in legend and hover labels
+                # marker_color='#EB89B5',
+                opacity=0.75,
+                width=0.0003
+            ))
+
+    # set axis as log scale
+    # fig.update_yaxes(type="log")
+    # set axis as linear scale
+    fig.update_yaxes(type="linear")
+    fig.update_layout(
+        title_text=f"{title}"+'Sampled Results', # title of plot
+        xaxis_title_text='Value', # xaxis label
+        yaxis_title_text='Count', # yaxis label
+        bargap=0.2, # gap between bars of adjacent location coordinates
+        bargroupgap=0.1 # gap between bars of the same location coordinates
+    )
+    # save_path = f"plot/trace_hist/{cfg_n}/{fn}{args.file_suffix}.pdf"
+    dir_path = os.path.dirname(save_path)
+
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path)
+
+    fig.write_image(save_path)
+    print(f"save to {save_path}")
+
+def trace_analyser(timing_flag_dict, trace_path):
+    with open(trace_path, "rb") as f:
+        trace_list = pickle.load(f)
+    print("="*20, trace_path, "="*20)
+    n_violation = 0
+    row_list = ['sensor', 'time', 'T_e2e']
+    sink_dict = {}
+    for trace in trace_list:
+        if trace["process_info"]["name"] in sink_dict:
+            sink_dict[trace["process_info"]["name"]].append(trace)
+        else:
+            sink_dict[trace["process_info"]["name"]] = [trace]
+        
+    e2e_latency_list = [[], []]
+    for sink_key in sink_dict:
+        hist_seri_ctx = None
+        for trace in sorted(sink_dict[sink_key], key=lambda x: x["process_info"]["end_time"]): 
+            dict_o, end_time, nx_graph = ContextMsg.find_sensor(trace, hist_seri_ctx)
+                # print("name: ", trace["process_info"]["name"])
+                # print(dict_o)
+                # print(f"end time: {end_time:.6f}\n")
+            matched_pair = np.array([trigger["event_time"] for trigger in dict_o.values()])
+            event_time = max(matched_pair)
+            # assert event_time == trace["time_stamp"]
+            active_path = matched_pair >= event_time
+            e2e_latency = end_time - matched_pair[active_path] 
+            task_name = "_".join(trace["process_info"]["name"].split("_")[0:-2])
+            if timing_flag_dict[task_name] == "realtime":
+                e2e_latency_list[0].extend(e2e_latency.tolist())
+            else:
+                e2e_latency_list[1].extend(e2e_latency.tolist())
+
+                # index the item > e2e_latency
+            index = np.where(e2e_latency > e2e_latency)
+            if len(index[0]):
+                name_array = np.array(list(dict_o.keys()))
+                df = pd.DataFrame({'sensor': name_array, 'time': matched_pair, 'T_e2e': e2e_latency}, )
+                print(df)
+                print(f"{trace['process_info']['name']} end time: {end_time:.6f}\n")
+
+                dest = trace["process_info"]["name"]
+                for src in name_array[index]:
+                        # 找到节点1到节点3之间的最短路径
+                    shortest_path = nx.algorithms.shortest_paths.weighted.dijkstra_path(nx_graph, source=src, target=dest, weight='weight')
+
+                        # 打印每个节点和边的属性，以及边的权重
+                    print(f'Node: {shortest_path[0]}, attr: {nx_graph.nodes[shortest_path[0]]}') 
+                    for i in range(len(shortest_path) - 1):
+                        source = shortest_path[i]
+                        target = shortest_path[i + 1]
+                        edge_data = nx_graph.get_edge_data(source, target)
+                        print(f'Edge: {source} -> {target}, Weight: {edge_data["weight"]: .6f}')
+                        print(f'Node: {target}, Start Time: {nx_graph.nodes[target]["start_time"]: .6f}, End Time: {nx_graph.nodes[target]["end_time"]: .6f}')
+
+                    print(f'Shortest Path Length: {nx.algorithms.shortest_paths.weighted.dijkstra_path_length(nx_graph, source=src, target=dest, weight="weight")}')
+
+                n_violation += len(index[0])
+            hist_seri_ctx = copy.deepcopy(trace)
+    print(f"total violation: {n_violation}\n")
+    return e2e_latency_list
+
 if __name__ == "__main__":
     from model.trace_example import trace_example
     dict_o, end_time, nx_graph = ContextMsg.find_sensor(trace_example)
@@ -259,11 +371,20 @@ if __name__ == "__main__":
     pio.kaleido.scope.mathjax = None
     
     parser = argparse.ArgumentParser(description="profiling")
-    parser.add_argument("--core_list", type=str, default="300,", help="core list")
+    parser.add_argument("--core_list", type=str, default="300", help="core list")
     parser.add_argument("--profiling_filename", type=str, default="profiling.csv", help="profiling filename")
     parser.add_argument("--file_suffix", default="", type=str, help="file suffix")
     parser.add_argument("--e2e_latency", type=float, default=0.09, help="e2e latency")
     parser.add_argument("--test_case", type=str, default="dynamic", help="task name")
+    # parser.add_argument("--freq", type=float, default=10, help="frequency")
+    parser.add_argument("--wsc_slack_ratio", default=0.8, type=float, help="wsc slack ratio")
+    parser.add_argument("--slack_threshold", default=5e-4, type=float, help="slack threshold")
+    parser.add_argument("--aux_scale_factor", default=1, type=int, help="aux scale factor")
+    parser.add_argument("--gen_benchmark", default=False, action="store_true", help="generate benchmark")
+    parser.add_argument("--root_dir", default=".", type=str, help="root directory")
+    parser.add_argument("--lateness_mode", type=str, default="ignore", help="lateness mode")
+    parser.add_argument("--filename", type=str, default="timing", help="filename")
+    parser.add_argument("--temporal_rda_ratio", default=0.05, type=float, help="temporal ratio")
 
     args = parser.parse_args()
     e2e_latency = args.e2e_latency
@@ -273,10 +394,28 @@ if __name__ == "__main__":
         fn = "dynamic_e2e_trace"
 
     core_list = [int(i) for i in args.core_list.split(",")]
-    if args.profiling_filename == "profiling.csv":
-        cfg_n = "heavy"
+    if not args.gen_benchmark:
+        if args.profiling_filename == "profiling.csv":
+            cfg_n = "heavy"
+        else:
+            cfg_n = args.profiling_filename.split(".")[-2].split("_")[-1]
+        if cfg_n == "light":
+            args.aux_scale_factor = 1
+        elif cfg_n == "heavy":
+            args.aux_scale_factor = 6
+        elif cfg_n == "medium":
+            args.aux_scale_factor = 4
+
+        if cfg_n == "light":
+            args.e2e_latency = 1
+        else:
+            args.e2e_latency = 0.09
+
     else:
-        cfg_n = args.profiling_filename.split(".")[-2].split("_")[-1]
+        cfg_n = f"x{args.aux_scale_factor}_{args.e2e_latency}s_rda-{(args.wsc_slack_ratio-args.temporal_rda_ratio):.2%}(T)_{args.temporal_rda_ratio:.2%}(S)"
+    if args.lateness_mode:
+        cfg_n += f"_{args.lateness_mode}"
+    root_dir = args.root_dir
     
     # load the criticality 
     from task.task_cfg import load_taskattrib
@@ -285,66 +424,22 @@ if __name__ == "__main__":
     for task_name in glb_n_task_dict:
         timing_flag_dict[task_name] = glb_n_task_dict[task_name].timing_flag
 
+    filename = args.filename
+    if args.lateness_mode:
+        filename = args.lateness_mode + filename + ".csv"
+    if not os.path.exists(filename):
+        # Create a dataframe with the values
+        pd.DataFrame(columns=[
+            'aux_scale_factor', 'e2e_latency', 'wsc_slack_ratio', 'temporal_rda_ratio', 'lateness_mode', 'filename',
+            'num_cores', 'file_suffix', 'confidence', 'ddl_percentile', 'rt_percentile'
+        ]).to_csv(filename, index=False)
+    # Load the dataframe
+    df = pd.read_csv(filename)
+
     result_dict = {}
     for num_cores in core_list:
         trace_path = f"trace/{cfg_n}/{fn}_{num_cores}{args.file_suffix}.pkl"
-        with open(trace_path, "rb") as f:
-            trace_list = pickle.load(f)
-        print("="*20, trace_path, "="*20)
-        n_violation = 0
-        row_list = ['sensor', 'time', 'T_e2e']
-        sink_dict = {}
-        for trace in trace_list:
-            if trace["process_info"]["name"] in sink_dict:
-                sink_dict[trace["process_info"]["name"]].append(trace)
-            else:
-                sink_dict[trace["process_info"]["name"]] = [trace]
-        
-        e2e_latency_list = [[], []]
-        for sink_key in sink_dict:
-            hist_seri_ctx = None
-            for trace in sorted(sink_dict[sink_key], key=lambda x: x["process_info"]["end_time"]): 
-                dict_o, end_time, nx_graph = ContextMsg.find_sensor(trace, hist_seri_ctx)
-                # print("name: ", trace["process_info"]["name"])
-                # print(dict_o)
-                # print(f"end time: {end_time:.6f}\n")
-                matched_pair = np.array([trigger["event_time"] for trigger in dict_o.values()])
-                event_time = max(matched_pair)
-                active_path = matched_pair >= event_time
-                e2e_latency = end_time - matched_pair[active_path] 
-                task_name = "_".join(trace["process_info"]["name"].split("_")[0:-2])
-                if timing_flag_dict[task_name] == "realtime":
-                    e2e_latency_list[0].extend(e2e_latency.tolist())
-                else:
-                    e2e_latency_list[1].extend(e2e_latency.tolist())
-
-                # index the item > e2e_latency
-                index = np.where(e2e_latency > e2e_latency)
-                if len(index[0]):
-                    name_array = np.array(list(dict_o.keys()))
-                    df = pd.DataFrame({'sensor': name_array, 'time': matched_pair, 'T_e2e': e2e_latency}, )
-                    print(df)
-                    print(f"{trace['process_info']['name']} end time: {end_time:.6f}\n")
-
-                    dest = trace["process_info"]["name"]
-                    for src in name_array[index]:
-                        # 找到节点1到节点3之间的最短路径
-                        shortest_path = nx.algorithms.shortest_paths.weighted.dijkstra_path(nx_graph, source=src, target=dest, weight='weight')
-
-                        # 打印每个节点和边的属性，以及边的权重
-                        print(f'Node: {shortest_path[0]}, attr: {nx_graph.nodes[shortest_path[0]]}') 
-                        for i in range(len(shortest_path) - 1):
-                            source = shortest_path[i]
-                            target = shortest_path[i + 1]
-                            edge_data = nx_graph.get_edge_data(source, target)
-                            print(f'Edge: {source} -> {target}, Weight: {edge_data["weight"]: .6f}')
-                            print(f'Node: {target}, Start Time: {nx_graph.nodes[target]["start_time"]: .6f}, End Time: {nx_graph.nodes[target]["end_time"]: .6f}')
-
-                        print(f'Shortest Path Length: {nx.algorithms.shortest_paths.weighted.dijkstra_path_length(nx_graph, source=src, target=dest, weight="weight")}')
-
-                    n_violation += len(index[0])
-                hist_seri_ctx = copy.deepcopy(trace)
-        print(f"total violation: {n_violation}\n")
+        e2e_latency_list = trace_analyser(timing_flag_dict, trace_path)
 
         # cache the result and the label
         result_dict[num_cores] = e2e_latency_list
@@ -355,56 +450,45 @@ if __name__ == "__main__":
         print(f"mean: {np.mean(rt_e2e_latency_list):.6f}, std: {np.std(rt_e2e_latency_list):.6f}, max: {np.max(rt_e2e_latency_list):.6f}, min: {np.min(rt_e2e_latency_list):.6f}")
         print(f"mean: {np.mean(ddl_e2e_latency_list):.6f}, std: {np.std(ddl_e2e_latency_list):.6f}, max: {np.max(ddl_e2e_latency_list):.6f}, min: {np.min(ddl_e2e_latency_list):.6f}")
         # calculate the percentile
-        rt_percentile = np.percentile(rt_e2e_latency_list, [90, 95, 99, 99.9, 99.99])
-        ddl_percentile = np.percentile(ddl_e2e_latency_list, [90, 95, 99, 99.9, 99.99])
-        print(f"rt_percentile: {rt_percentile}")
-        print(f"ddl_percentile: {ddl_percentile}")
+        rt_percentiles = np.percentile(rt_e2e_latency_list, [90, 95, 99, 99.9, 99.99])
+        ddl_percentiles = np.percentile(ddl_e2e_latency_list, [90, 95, 99, 99.9, 99.99])
+        print(f"rt_percentile: {rt_percentiles}")
+        print(f"ddl_percentile: {ddl_percentiles}")
 
+        # Create a dictionary with the values
+        data = {
+            'aux_scale_factor': args.aux_scale_factor,
+            'e2e_latency': args.e2e_latency,
+            'wsc_slack_ratio': args.wsc_slack_ratio - args.temporal_rda_ratio,
+            'temporal_rda_ratio': args.temporal_rda_ratio,
+            'lateness_mode': args.lateness_mode,
+            'filename': f"{fn}",
+            'num_cores': num_cores,
+            'file_suffix': args.file_suffix,
+            'confidence': [90, 95, 99, 99.9, 99.99],
+            'ddl_percentile': ddl_percentiles,
+            'rt_percentile': rt_percentiles
+        }
+
+        data_idx = (df['aux_scale_factor'] == args.aux_scale_factor) & \
+                     (df['e2e_latency'] == args.e2e_latency) & \
+                        (df['wsc_slack_ratio'] == args.wsc_slack_ratio - args.temporal_rda_ratio) & \
+                            (df['temporal_rda_ratio'] == args.temporal_rda_ratio) & \
+                                (df['lateness_mode'] == args.lateness_mode) & \
+                                    (df['filename'] == f"{fn}") & \
+                                        (df['num_cores'] == num_cores) & \
+                                            (df['file_suffix'] == args.file_suffix)
+
+        if df.loc[data_idx].size:
+            df.loc[data_idx, 'ddl_percentile'] = ddl_percentiles
+            df.loc[data_idx, 'rt_percentile'] = rt_percentiles
+            df.loc[data_idx, 'confidence'] = [90, 95, 99, 99.9, 99.99]
+        else:
+            df = pd.concat([df, pd.DataFrame(data)])
+
+
+    # Save the dataframe to a CSV file
+    df.to_csv(filename, index=False)
     # plot histogram
-    fig = go.Figure()
-    bins_num = 20
-    for rt_e2e_latency_list, ddl_e2e_latency_list in result_dict.values():
-        rt_e2e_latency_list = torch.tensor(rt_e2e_latency_list)
-        v_max = rt_e2e_latency_list.max()
-        v_min = rt_e2e_latency_list.min()
-        bins = [(2*k+1)*(v_max-v_min)/2/bins_num+v_min for k in range(bins_num+1)]
-        counts = torch.histc(rt_e2e_latency_list, bins=bins_num, max=v_max, min=v_min)
-        fig.add_trace(go.Bar(
-                x=bins,
-                y=counts.numpy(),
-                name=f"{num_cores}_rt", # name used in legend and hover labels
-                # marker_color='#EB89B5',
-                opacity=0.75
-            ))
-        ddl_e2e_latency_list = torch.tensor(ddl_e2e_latency_list)
-        v_max = ddl_e2e_latency_list.max()
-        v_min = ddl_e2e_latency_list.min()
-        bins = [(2*k+1)*(v_max-v_min)/2/bins_num+v_min for k in range(bins_num+1)]
-        counts = torch.histc(ddl_e2e_latency_list, bins=bins_num, max=v_max, min=v_min)
-        fig.add_trace(go.Bar(
-                x=bins,
-                y=counts.numpy(),
-                name=f"{num_cores}_ddl", # name used in legend and hover labels
-                # marker_color='#EB89B5',
-                opacity=0.75
-            ))
+    # plot_trace_list(save_path, result_dict, title)
 
-    # set axis as log scale
-    # fig.update_yaxes(type="log")
-    # set axis as linear scale
-    fig.update_yaxes(type="linear")
-    fig.update_layout(
-        title_text=f"{cfg_n}/{fn}_{num_cores}{args.file_suffix}.pkl"+'Sampled Results', # title of plot
-        xaxis_title_text='Value', # xaxis label
-        yaxis_title_text='Count', # yaxis label
-        bargap=0.2, # gap between bars of adjacent location coordinates
-        bargroupgap=0.1 # gap between bars of the same location coordinates
-    )
-    save_path = f"plot/trace_hist/{cfg_n}/{fn}{args.file_suffix}.pdf"
-    dir_path = os.path.dirname(save_path)
-
-    if not os.path.exists(dir_path):
-        os.makedirs(dir_path)
-
-    fig.write_image(save_path)
-    print(f"save to {save_path}")

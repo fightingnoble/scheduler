@@ -48,7 +48,8 @@ class Resource_model_int(object):
         # update the rsc map
         self.rsc_map.clear()
         for k, v in other.items():
-            self.rsc_map[k] = v
+            if v:
+                self.rsc_map[k] = v
         # update the available rsc
         self.available_rsc = self.size
         for k, v in self.rsc_map.items():

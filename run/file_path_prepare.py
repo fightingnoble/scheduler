@@ -34,33 +34,15 @@ import os
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--verbose", action="store_true", help="verbose")
-parser.add_argument("--temporal_rda_ratio", default=0.05, type=float, help="temporal ratio")
-parser.add_argument("--profiling_filename", type=str, default="profiling_light.csv", help="profiling filename")
-parser.add_argument("--lateness_mode", type=str, default="ignore", help="lateness mode")
-parser.add_argument("--e2e_latency", type=float, default=0.09, help="e2e latency")
-parser.add_argument("--wsc_slack_ratio", default=0.8, type=float, help="wsc slack ratio")
-parser.add_argument("--slack_threshold", default=5e-4, type=float, help="slack threshold")
-parser.add_argument("--aux_scale_factor", default=1, type=int, help="aux scale factor")
-parser.add_argument("--gen_benchmark", default=False, action="store_true", help="generate benchmark")
+parser.add_argument("--cfg_n", default="light", type=str, help="cfg_n")
 parser.add_argument("--start", default=200, type=int, help="start")
 parser.add_argument("--step", default=20, type=int, help="step")
 parser.add_argument("--end", default=360, type=int, help="end")
 args = parser.parse_args() 
-# print(args)
-if not args.gen_benchmark:
-    if args.profiling_filename == "profiling.csv":
-        cfg_n = "heavy"
-    else:
-        cfg_n = args.profiling_filename.split(".")[-2].split("_")[-1]
-else:
-    cfg_n = f"x{args.aux_scale_factor}_{args.e2e_latency}s_rda-{(args.wsc_slack_ratio-args.temporal_rda_ratio):.2%}(T)_{args.temporal_rda_ratio:.2%}(S)"
-
-
-fn = args.profiling_filename
 start = args.start
 step = args.step
 end = args.end
+cfg_n = args.cfg_n
 
 # print("文件名为：", fn)
 
