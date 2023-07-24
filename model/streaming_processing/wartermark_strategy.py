@@ -256,10 +256,10 @@ class WatermarkStrategy(object):
 
     @classmethod
     def chk_release(cls, curr_t, inactive_list:List[ProcessBase], active_list, 
-                    fork_list:List[ProcessBase]=None,
                     event_cache:EventCache=None, trigger_cache:TriggerCache=None,
                     bin_event_flg:bool=False, 
-                    bin_name:str="", DEBUG_FG:bool=False,):
+                    bin_name:str="", DEBUG_FG:bool=False,
+                    ):
         """
         check release
             1. check the dependencies of the tasks in inactive list
@@ -289,22 +289,9 @@ class WatermarkStrategy(object):
                     warnings.warn(f"Task {_p.task.id}:{_p.task.name}({_p.pid}) violate timing constraint @ {_p.deadline:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!")
                     print(f"		{_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) deadline: {_p.deadline:.6f}")
                 _p.handle_process_load_var()
-                cls.release_util(_p, curr_t, active_list)
+                _p.release_util(curr_t, active_list)
         return bin_event_flg 
 
-    @staticmethod
-    def release_util(_p:ProcessBase, curr_t, active_list):
-        active_list.append(_p)
-        _p.totcpu = _p.task.totcpu if _p.load_var is None else _p.task.totcpu * _p.load_var
-        _p.release_time = curr_t
-        _p.released = True
-        _p.core_max = _p.task.core_max*_p.var_scale_factor
-        _p.core_min = _p.task.core_min*_p.var_scale_factor
-        _p.core_list = [x*_p.var_scale_factor for x in _p.task.core_list] if _p.task.core_list is not None else None
-        if _p.remburst == 0:
-            _p.remburst += _p.totcpu
-        _str = f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) is activated @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!"
-        print(_str)
 
 if __name__ == "__main__":
     from model.buffer import Buffer

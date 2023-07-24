@@ -18,3 +18,5 @@ flop_error_tol_abs = 5e-7
 flop_error_tol_bit = 7
 
 fork_pid_base = 1000
+max_fork_candi_num = 20
+max_fork_pid = 100

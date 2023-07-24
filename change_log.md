@@ -816,3 +816,78 @@ pre-allocation 增加了一个排序因子，现在更容易受收敛
   ```
 
 Extract `input_parser` and  `dump_and_check`
+
+## 20230724
+
+Fix bug in glb allocation logic (glb_dynamic_sched_step) !!
+ - relatd files: scheduling_agent.py
+
+modify load_var sim flow:
+  Now the option:
+   copy budget for the forked process
+   fork the task (p_fork) @ ready:
+   add process index to process_dict
+  all happen at ready time
+
+
+  - fix the print and plot to support the temporal process
+    (print_alloc_detail, get_task_layout_compact): 
+    compare pid with fork_pid_base to detect the forked process; generate name and add it to the pid2name
+  - add global var
+  - add fork_p_inst to record the forked process, add function p_fork, kill_fork to create and kill the forked process
+  - related files: allocator_agent.py, scheduling_table.py, sim_main.py, global_var.py. task_agent.py
+  - regularize the init process pool at init time (task_cfg.py)
+
+add option to depress the warning:
+  - show_warnings: allocate_rsc_4_process_new, glb_alloc_new, check_miss, glb_dynamic_sched_step, scheduler_step, pendingToReady_cbs
+
+Debug all_soft mode:
+  - The late event is not drained
+  - The late task is not drianed
+  - optimize period printing: period_boader_display
+  - related files: allocator_agent.py, sim_main.py
+
+Debug pre-allocation:
+  pre_alloc: 打印过于频繁
+  - 设置了DEBUG模式，打印了每个分配失败的错误
+  - 因为soft deadline所以不会被终止，但因为不允许部分分配，而且空间又很紧张，一直无法分配，一直报错
+  - TODO: enable partial allocation for the soft tasks
+  More cores perform worse than less cores:
+  - 由于pre-allocation 采用了 不合适bin的排序，而且使用了first-fit的策略。
+  - 任务选择了可用时间更迟的bin，如果这种任务后来被踢出，那么延误的时间将很难被补回
+  - 改进了pre-allocation的排序策略，现在采用了可用时间更早的bin（综合考虑空闲的和可抢占的）
+  - sort_bin_list: sort the bin according to the feature
+   - free: slot_s, avil_unit, preemption: slot_s, avil_unit
+  release logic:
+  - future mode：应当释放包括当前时刻之后的所有资源，而不是当前时刻之后的资源 (get_rsc_2b_released)
+    ```
+                if alloc_slot_s_t[i]+allo_slot_t[i] >= n_slot: 
+    ```
+  - sim speedup:
+    - new_drop_flg
+    - add condition to skip the scheduling cycle, if no task is released or no resource is released
+      ```
+          # compare the new cfg with the old one to decide the preemption
+          trigger_condA = sched.new_ready_flg
+          trigger_condB = sched.new_drop_flg
+
+          if trigger_condA or trigger_condB: 
+              glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, temporal_rda_ratio, ready_queue, running_queue, rsc_recoder, 
+                          rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, n_slot, curr_t, DEBUG_FG=DEBUG_FG, show_warnings=show_warnings)
+              sched.new_ready_flg = False
+      ```
+
+
+Extract new functions:
+  period_boader_display
+
+
+fix path:
+  - dyn_glb -> glb_dyn
+  - related files: sim_main.py
+
+add throughput analysis:
+  - related files: tp_analyser.py
+
+throughput scanning script:
+  distinguish the core and the x-axu

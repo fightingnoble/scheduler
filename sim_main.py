@@ -128,12 +128,13 @@ def main():
             warmup=True, drain=True
             )
         
-        from sched.scheduling_table import get_task_layout_compact
-        get_task_layout_compact(bin_list, glb_p_list, save= True, time_step= sim_step,
+        pid2name = {_p.pid:_p.task.name for _p in glb_p_list}
+        from sched.scheduling_table import get_task_layout_compact, get_task_layout_sparse
+        get_task_layout_compact(bin_list, pid2name, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
         txt_size=40, tick_dens=2, save_path=f"plot/{root_dir}/{cfg_n}/{num_cores}/new_task_bin_pack_cyclic_{num_cores}{args.file_suffix}.pdf") 
 
-        get_task_layout_compact(bin_list, glb_p_list, save= True, time_step= sim_step,
+        get_task_layout_compact(bin_list, pid2name, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
         txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/{root_dir}/{cfg_n}/{num_cores}/new_task_bin_pack_full_{num_cores}{args.file_suffix}.pdf")
 
@@ -152,7 +153,7 @@ def main():
             # with open(f"init_p_list_{num_cores}{args.file_suffix}.pkl", "rb") as f:
             #     init_p_list = pickle.load(f)
         except:
-            print(f"{bin_list_save_path} not found")
+            raise FileNotFoundError(f"{bin_list_save_path} not found")
             # print(f"{save_path} not found")
             # bin_list, _ = push_task_into_bins(glb_p_list, affinity_cfg, num_cores, args.quantum_check_en, quantumSize, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
 
@@ -199,12 +200,17 @@ def main():
         for _SchedTab in actual_sched_record:
             _SchedTab.print_alloc_detail(pid2name, sim_step)
 
-        from sched.scheduling_table import get_task_layout_compact
-        get_task_layout_compact(actual_sched_record, glb_p_list, save= True, time_step= sim_step,
+        from sched.scheduling_table import get_task_layout_compact, get_task_layout_sparse
+        get_task_layout_compact(actual_sched_record, pid2name, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
         txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/{root_dir}/{cfg_n}/{num_cores}/dyn_full_{num_cores}{args.file_suffix}.pdf")
 
         trace_path = f"trace/{root_dir}/{cfg_n}/dynamic_e2e_trace_{num_cores}{args.file_suffix}.pkl"
+        dir_path = os.path.dirname(trace_path)
+
+        if not os.path.exists(dir_path):
+            os.makedirs(dir_path)
+
         # save trace_list to trace_file
         with open(trace_path, "wb") as f:
             pickle.dump(trace_list, f)
@@ -245,7 +251,8 @@ def main():
                 msg_dispatcher,
                 a_data_pipe, w_data_pipe,
                 args.quantum_check_en, quantumSize, 
-                args.verbose, warmup=True, drain=True)
+                args.verbose, warmup=True, drain=True, 
+                lateness_mode=args.lateness_mode)
         
         print("number of context switch {}".format(scheduler_list[0].barrier.number_of_asserts))
         print("cumulative context switch {}".format(scheduler_list[0].barrier.cumulative_time))
@@ -261,11 +268,11 @@ def main():
 
         from sched.scheduling_table import get_task_layout_compact
         file_name = f"plot/{root_dir}/{cfg_n}/{num_cores}/glb_dyn_full_{num_cores}{args.file_suffix}.pdf" if not args.barrier_dis else f"plot/{root_dir}/{cfg_n}/{num_cores}/glb_dyn_full_{num_cores}_ideal{args.file_suffix}.pdf"
-        get_task_layout_compact(actual_sched_record, glb_p_list, save= True, time_step= sim_step,
+        get_task_layout_compact(actual_sched_record, pid2name, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
         txt_size=40, tick_dens=4, plot_start=0, save_path=file_name)
 
-        trace_path = f"trace/{root_dir}/{cfg_n}/dyn_glb_e2e_trace_{num_cores}{args.file_suffix}.pkl"
+        trace_path = f"trace/{root_dir}/{cfg_n}/glb_dyn_e2e_trace_{num_cores}{args.file_suffix}.pkl"
         # save trace_list to trace_file
         dir_path = os.path.dirname(trace_path)
 

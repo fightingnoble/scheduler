@@ -389,7 +389,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     e2e_latency = args.e2e_latency
     if args.test_case == "glb_dynamic":
-        fn = "dyn_glb_e2e_trace"
+        fn = "glb_dyn_e2e_trace"
     elif args.test_case == "dynamic":
         fn = "dynamic_e2e_trace"
 
@@ -426,7 +426,8 @@ if __name__ == "__main__":
 
     filename = args.filename
     if args.lateness_mode:
-        filename = args.lateness_mode + filename + ".csv"
+        filename = args.lateness_mode + filename
+    filename = f"{filename}.csv"
     if not os.path.exists(filename):
         # Create a dataframe with the values
         pd.DataFrame(columns=[
@@ -436,13 +437,9 @@ if __name__ == "__main__":
     # Load the dataframe
     df = pd.read_csv(filename)
 
-    result_dict = {}
     for num_cores in core_list:
         trace_path = f"trace/{cfg_n}/{fn}_{num_cores}{args.file_suffix}.pkl"
         e2e_latency_list = trace_analyser(timing_flag_dict, trace_path)
-
-        # cache the result and the label
-        result_dict[num_cores] = e2e_latency_list
 
         # aplly histogram analysis
         rt_e2e_latency_list = np.array(e2e_latency_list[0])

@@ -86,7 +86,6 @@ if __name__ == "__main__":
     # Load the dataframe
     df = pd.read_csv(filename)
 
-    result_dict = {}
     for num_cores in core_list:
         folder = f"log/{root_dir}/{cfg_n}/{num_cores}"
         for fn in sorted(os.listdir(folder)):

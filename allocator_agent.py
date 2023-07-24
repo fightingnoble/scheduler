@@ -401,12 +401,7 @@ def cyclic_sched(task_spec:Spec, affinity,
     for n_slot in range(sim_slot_num):
         curr_t = n_slot * timestep
 
-        if (n_slot - 1) * timestep < event_range and n_slot * timestep >= event_range: 
-            print("="*20, "DRAIN", "="*20, "\n")
-        elif n_slot == 0 and warmup:
-            print("="*20, "WARMUP", "="*20, "\n")
-        elif (n_slot * timestep)//hyper_p > (n_slot-1)*timestep//hyper_p:
-            print("="*20, "PERIOD {:d}".format(int((n_slot * timestep)//hyper_p)), "="*20, "\n")
+        period_boader_display(timestep, hyper_p, n_p, warmup, event_range, n_slot)
         
         # TODO: detect the spec change
             # modify the exp_comp_t and deadline of the tasks
@@ -448,13 +443,18 @@ def glb_sched(task_spec:Spec, affinity,
                 a_data_pipe:DataPipe=None,
                 w_data_pipe:DataPipe=None, 
                 quantum_check_en:bool = False, quantumSize=None,
-                verbose=False, *, warmup=False, drain=False,):
+                verbose=False, *, warmup=False, drain=False,
+                lateness_mode="ignore",):
     """
     partition the scheduling table
     """
     event_range = hyper_p * (n_p+warmup)
     sim_range = hyper_p * (n_p+warmup+drain)
     sim_slot_num = int(sim_range/timestep)
+    if lateness_mode == "all_soft" and drain:
+        sim_slot_num_drain = float("inf")
+    else:
+        sim_slot_num_drain = sim_slot_num
 
     glb_name_p_dict = {p.task.name:p for p in glb_p_list}
 
@@ -468,15 +468,12 @@ def glb_sched(task_spec:Spec, affinity,
             inactive_list.append(_p)
     sched.process_dict.update({p.pid:p for p in glb_p_list})
 
-    for n_slot in range(sim_slot_num):
+    # for n_slot in range(sim_slot_num):
+    n_slot = 0
+    while sim_slot_num_drain - n_slot:
         curr_t = n_slot * timestep
 
-        if (n_slot - 1) * timestep < event_range and n_slot * timestep >= event_range: 
-            print("="*20, "DRAIN", "="*20, "\n")
-        elif n_slot == 0 and warmup:
-            print("="*20, "WARMUP", "="*20, "\n")
-        elif (n_slot * timestep)//hyper_p > (n_slot-1)*timestep//hyper_p:
-            print("="*20, "PERIOD {:d}".format(int((n_slot * timestep)//hyper_p)), "="*20, "\n")
+        period_boader_display(timestep, hyper_p, n_p, warmup, event_range, n_slot)
         
         curr_t = n_slot * timestep
 
@@ -496,8 +493,29 @@ def glb_sched(task_spec:Spec, affinity,
         # get dynamic object number
         message_trigger_event_new(event_iter_dict, inactive_list, glb_p_list, None, ddl_stream, load_var_sim_para, timestep, curr_t, True) 
         glb_dynamic_sched_step(sched, msg_dispatcher, a_data_pipe, w_data_pipe, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, monitor, DEBUG_FG, quantum_check_en, quantumSize)
+        n_slot += 1
+        if lateness_mode == 'all_soft' and drain:
+            weight_wait_queue, ready_queue, running_queue, \
+            miss_list, preempt_list, issue_list, completed_list, throttle_list,\
+            inactive_list, active_list = sched.get_queues()
+            name2p = {p.task.name:p for p in glb_p_list}
+            excced_sim_range = n_slot >= sim_slot_num
+            if excced_sim_range:
+                queue_clear_flg = len(active_list + ready_queue.queue + running_queue.queue) == 0
+                if queue_clear_flg:
+                    event_clean_flg = not np.any([len(name2p[name].event_triggers) for name in event_iter_dict])
+                    if event_clean_flg:
+                        break
 
-
+def period_boader_display(timestep, hyper_p, n_p, warmup, event_range, n_slot):
+    if n_slot * timestep >= event_range: 
+       if (n_slot * timestep)//hyper_p > (n_slot-1)*timestep//hyper_p:
+             print("="*20, "DRAIN PERIOD {:d}".format(int((n_slot * timestep)//hyper_p)-n_p-warmup), "="*20, "\n")
+    elif n_slot == 0 and warmup:
+        print("="*20, "WARMUP", "="*20, "\n")
+    elif (n_slot * timestep)//hyper_p > (n_slot-1)*timestep//hyper_p:
+        print("="*20, "PERIOD {:d}".format(int((n_slot * timestep)//hyper_p)), "="*20, "\n")
+            
 
 if __name__ == "__main__": 
     import numpy as np 
@@ -559,12 +577,13 @@ if __name__ == "__main__":
     if args.test_case == "bin_pack" or args.test_all:
         # push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, num_cores, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
         bin_list, glb_p_list = push_task_into_bins(glb_p_list, affinity_cfg, num_cores, args.quantum_check_en, quantumSize, sim_step, hyper_p, num_periods, args.verbose, warmup=True, drain=True)
+        pid2name = {_p.pid:_p.task.name for _p in glb_p_list}
         from sched.scheduling_table import get_task_layout_compact
-        get_task_layout_compact(bin_list, glb_p_list, save= True, time_step= sim_step,
+        get_task_layout_compact(bin_list, pid2name, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
         txt_size=40, tick_dens=2, save_path=f"plot/{cfg_n}/{num_cores}/task_bin_pack_cyclic_{num_cores}{args.file_suffix}.pdf") 
 
-        get_task_layout_compact(bin_list, glb_p_list, save= True, time_step= sim_step,
+        get_task_layout_compact(bin_list, pid2name, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
         txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/{cfg_n}/{num_cores}/task_bin_pack_full_{num_cores}{args.file_suffix}.pdf")
 
@@ -639,7 +658,7 @@ if __name__ == "__main__":
             _SchedTab.print_alloc_detail(pid2name, sim_step)
 
         from sched.scheduling_table import get_task_layout_compact
-        get_task_layout_compact(actual_sched_record, glb_p_list, save= True, time_step= sim_step,
+        get_task_layout_compact(actual_sched_record, pid2name, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
         txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/{cfg_n}/{num_cores}/dyn_full_{num_cores}{args.file_suffix}.pdf")
 
@@ -699,11 +718,11 @@ if __name__ == "__main__":
 
         from sched.scheduling_table import get_task_layout_compact
         file_name = f"plot/{cfg_n}/{num_cores}/glb_dyn_full_{num_cores}{args.file_suffix}.pdf" if not args.barrier_dis else f"plot/{cfg_n}/{num_cores}/glb_dyn_full_{num_cores}_ideal{args.file_suffix}.pdf"
-        get_task_layout_compact(actual_sched_record, glb_p_list, save= True, time_step= sim_step,
+        get_task_layout_compact(actual_sched_record, pid2name, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
         txt_size=40, tick_dens=4, plot_start=0, save_path=file_name)
 
-        trace_path = f"trace/{cfg_n}/dyn_glb_e2e_trace_{num_cores}{args.file_suffix}.pkl"
+        trace_path = f"trace/{cfg_n}/glb_dyn_e2e_trace_{num_cores}{args.file_suffix}.pkl"
         # save trace_list to trace_file
         dir_path = os.path.dirname(trace_path)
 
@@ -756,13 +775,13 @@ if __name__ == "__main__":
             num_periods, args.verbose, 
             warmup=True, drain=True
             )
-        
+        pid2name = {_p.pid:_p.task.name for _p in glb_p_list}
         from sched.scheduling_table import get_task_layout_compact
-        get_task_layout_compact(bin_list, glb_p_list, save= True, time_step= sim_step,
+        get_task_layout_compact(bin_list, pid2name, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
         txt_size=40, tick_dens=2, save_path=f"plot/{cfg_n}/{num_cores}/new_task_bin_pack_cyclic_{num_cores}{args.file_suffix}.pdf") 
 
-        get_task_layout_compact(bin_list, glb_p_list, save= True, time_step= sim_step,
+        get_task_layout_compact(bin_list, pid2name, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
         txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/{cfg_n}/{num_cores}/new_task_bin_pack_full_{num_cores}{args.file_suffix}.pdf")
 

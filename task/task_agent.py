@@ -101,6 +101,7 @@ class ProcessBase(object):
         self.n_fork = 0
         self.fork_pid_list = []
         self.fork_pid_candi = [] 
+        self.fork_p_inst = []
         self.is_fork_inst = False
         self.parent_pid = None
         self.var_scale_factor = 1
@@ -313,7 +314,48 @@ class ProcessBase(object):
             for key in pred_data.keys():
                 pred_data[key]["valid"] = False
 
-    def kill_fork(self, process_dict):
+    def parse_name(self):
+        name = self.task.name
+        thread_n = name.split('_')[-2]
+        troughput_n = name.split('_')[-1]
+        task_n = name.replace("_"+thread_n, "").replace("_"+troughput_n, "")
+        return task_n,thread_n,troughput_n
+
+    def pre_fork(self, verbose:bool=False) -> List[ProcessBase]:
+        for fork_num in range(self.var_scale_factor-1):
+            new_pid = self.fork_pid_candi.pop(0)
+            self.fork_pid_list.append(new_pid)
+        if verbose and self.var_scale_factor > 1:
+            print(f"                {self.task.name}({self.pid}) forked {self.var_scale_factor-1} processes({self.fork_pid_list})")
+
+    def p_fork(self) -> List[ProcessBase]:
+        if self.var_scale_factor == 1:
+            return []
+        fork_list:List[ProcessBase] = []
+        task_n, thread_n, troughput_n = self.parse_name()
+        rem_load = self.load_var - 1
+        for fork_num in range(self.var_scale_factor-1):
+            _p_fork = copy.deepcopy(self)
+            _p_fork.task.name = task_n + f"_fork_{fork_num+1}_{thread_n}_{troughput_n}"
+            _p_fork.pid = self.fork_pid_list[fork_num]
+
+            _p_fork.fork_pid_list = []
+            _p_fork.fork_pid_candi = [] 
+            _p_fork.fork_p_inst = []
+            _p_fork.n_fork = 0
+            _p_fork.is_fork_inst = True
+            _p_fork.parent_pid = self.pid
+            _p_fork.var_scale_factor = 1
+
+            assert rem_load >= 0, f"rem_load({rem_load}) should be greater than 0"
+            _p_fork.load_var = rem_load
+            _p_fork.totcpu = self.task.totcpu if rem_load >= 1 else self.task.totcpu * rem_load
+            self.n_fork += 1
+            rem_load -= 1
+            fork_list.append(_p_fork)
+        return fork_list
+
+    def kill_fork(self, process_dict:List[ProcessBase]):
         """       
             terminate forked process:
                 set the property of process with `parent_pid`
@@ -322,31 +364,12 @@ class ProcessBase(object):
                 minus n_fork by 1
                 delete the process
         """        
-        _p_parent = process_dict[self.parent_pid]
+        _p_parent:ProcessBase = process_dict[self.parent_pid]
         _p_parent.fork_pid_candi.append(self.pid)
         _p_parent.fork_pid_list.remove(self.pid)
+        _p_parent.fork_p_inst.remove(self)
         _p_parent.n_fork -= 1
         process_dict.pop(self.pid)
-
-    def parse_name(self):
-        name = self.task.name
-        thread_n = name.split('_')[-2]
-        troughput_n = name.split('_')[-1]
-        task_n = name.replace("_"+thread_n, "").replace("_"+troughput_n, "")
-        return task_n,thread_n,troughput_n
-
-    def p_fork(self):
-        fork_list = []
-        task_n, thread_n, troughput_n = self.parse_name()
-        for fork_num in range(self.var_scale_factor-1):
-            _p_fork = copy.deepcopy(self)
-            _p_fork.task.name = task_n + f"_fork_{fork_num+1}_{thread_n}_{troughput_n}"
-            new_pid = self.fork_pid_candi.pop(0)
-            _p_fork.pid = new_pid
-            self.n_fork += 1
-            self.fork_pid_list.append(new_pid)
-            fork_list.append(_p_fork)
-        return fork_list
 
     def handle_process_load_var(self):
         """
@@ -371,6 +394,27 @@ class ProcessBase(object):
         elif involve_times == 1:
             self.var_scale_factor = var_scale_factor 
             self.load_var = load_var
+
+    def ready_util(self, curr_t, ready_queue):
+        ready_queue.put(self)
+        self.ready_time = curr_t
+        self.ready = True
+        self.set_state("ready")
+
+    def release_util(self, curr_t, active_list, verbose=True):
+        active_list.append(self)
+        # _p.totcpu = _p.task.totcpu if _p.load_var is None else _p.task.totcpu * _p.load_var
+        if self.load_var is None or self.load_var >= 1:
+            self.totcpu = self.task.totcpu
+        else:
+            self.totcpu = self.task.totcpu * self.load_var
+        self.release_time = curr_t
+        self.released = True
+        if self.remburst == 0:
+            self.remburst += self.totcpu
+        if verbose:
+            _str = f"		TASK {self.task.id:d}:{self.task.name:s}({self.pid:d}) is activated @ {curr_t:.6f}/{self.msg_cache[0].get_timestamp():.6f}!!"
+            print(_str)
 
 class ProcessInt(ProcessBase):
     def __init__(self, task:TaskBase, release_t, deadline_abs, pid):

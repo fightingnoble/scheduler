@@ -454,7 +454,8 @@ def push_step_new(sched: Scheduler, msg_dispatcher: MsgDispatcher,
                   glb_name_p_dict, res_cfg: Resource_model_int,
                   issue_sort_fn, issue_list,
                   iter_next_bin_obj, bin_list, bin_name_list,
-                  DEBUG_FG=False, quantum_check_en: bool = False, quantumSize=None):
+                  DEBUG_FG=False, quantum_check_en: bool = False, quantumSize=None,
+                  show_warnings=True):
 
 
     weight_wait_queue, ready_queue, running_queue, \
@@ -489,7 +490,8 @@ def push_step_new(sched: Scheduler, msg_dispatcher: MsgDispatcher,
     bin_event_flg = check_miss(sched, None, None, curr_t, None, weight_wait_queue, ready_queue, 
                                running_queue, miss_list, throttle_list, active_list, 
                                inactive_list, buffer, bin_event_flg, bin_name, 
-                               mode="future", bin_list=bin_list, n_slot=n_slot, rsc_recoder=rsc_recoder)
+                               mode="future", bin_list=bin_list, n_slot=n_slot, rsc_recoder=rsc_recoder, 
+                               show_warnings=show_warnings)
 
     # spill out the data of type "output", which is expired
     # buffer.pop_timeout("output", curr_t, True)
@@ -522,11 +524,14 @@ def push_step_new(sched: Scheduler, msg_dispatcher: MsgDispatcher,
     # TODO: model the runtime weight and feature map transfering 
     pendingToReady(sched, active_list, ready_queue, buffer, curr_t, glb_name_p_dict, bin_name, ) 
 
-    # sort the tasks in the ready queue and the running queue
-    sort_fn = lambda x: x.deadline
+    # compare the new cfg with the old one to decide the preemption
+    trigger_condA = sched.new_ready_flg
+    trigger_condB = sched.new_drop_flg
 
-    glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, temporal_rda_ratio, ready_queue, running_queue, rsc_recoder, 
-                rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, n_slot, curr_t)
+    if trigger_condA or trigger_condB: 
+        glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, temporal_rda_ratio, ready_queue, running_queue, rsc_recoder, 
+                    rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, n_slot, curr_t, DEBUG_FG=DEBUG_FG, show_warnings=show_warnings)
+        sched.new_ready_flg = False
 
     # issue the task
     # if the task of the queue equals to the current slot, then issue the task

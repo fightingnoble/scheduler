@@ -1061,7 +1061,7 @@ def create_init_p_list(tasks: Union[List[TaskInt], Dict[str, TaskInt]], verbose:
             print("TASK {:d}:{:s}({:d}), is expected to finish {}T OPs in {:f}-{:f} !!".format(
                 p.task.id, p.task.name, p.pid, p.totcpu, p.release_time, p.deadline))
         # init the fork_pid_candi with the random value
-        p.fork_pid_candi = p.pid * fork_pid_base + np.random.randint(0, 100, size=20)
+        p.fork_pid_candi = p.pid * fork_pid_base + np.random.randint(0, max_fork_pid, size=max_fork_candi_num)
         p.fork_pid_candi = np.unique(p.fork_pid_candi).tolist()
     return init_p_list
 

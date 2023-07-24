@@ -72,12 +72,19 @@ exp_comp_t 略微高于 （ops/分配的算力），但是这种冗余反应为�
 这样下有任务的mapping结果取决于上游任务的mapping效果。
 timestamp+ERT+DDL则作为下游任务的最晚时间，以约束上游任务的最差mapping结果。
 
-
+realtime 不用给冗余 现在都留了
+```python
+            ddl[node] = ert[node] + comp_time[node] *1e7 / (1 - temporal_rda_ratio)/ 1e7
+```
 mechanism: 
    Partial allocation is not allowed, i.e., the task is allocated to the whole cores or none.
    Each task only try once; the tasks already allocated are skipped;
    the tasks are preempted are given an extra opportunities.
    TODO: Allow partial allocation and add the logic to ensure the task have allocated enough resource, otherwise, we should not issue the task or compensate the resource latter. 
+
+sort the bin according to the feature
+   - free: slot_s, avil_unit, preemption: slot_s, avil_unit
+
 
 10. compared items
 A. Context switching
@@ -152,16 +159,86 @@ B. deadline assignment
 
 
 18. load_var and thread fork
-   1. release:
+
+  properties:
+    ```
+      self.n_fork = 0
+      self.fork_pid_list = []
+      self.fork_pid_candi = [] 
+      self.is_fork_inst = False
+      self.parent_pid = None
+      self.var_scale_factor = 1
+      self.load_var = None  
+      self.fork_p_inst = []
+
+    ```
+    `fork_pid_base = 1000`
+    
+   inject ctx from in message_trigger_event_new
+   init process pool at init time (task_cfg.py)
+   extract workload variation from the context (handle_process_load_var)
+
+   在ready 之前fork 需要考虑fork的进程的依赖，以及budget的设置
+   在ready设置，需要考虑进程的throttle以及恢复
+
+   copy budget for the forked process
+   fork the task (p_fork) @ ready:
       copy the process, rename the process and change the process id
       set the `parent_pid, is_fork_inst, pid` for the new process
       set `n_fork, new_pid, fork_pid_list` for the parent process
-   2. forked process complete:
+   add process index to process_dict
+      
+   set ready state for the forked process
+
+   check complete:
+      both `n_fork == 0` and totburst
+      sorted(running_queue.queue, key=lambda x: x.is_fork_inst, reverse=True) check the forked process first
+
+   terminate forked process (kill_fork) @ miss and complete:
       set the property of process with `parent_pid`
-      pop pid to fork_pid_candi
+      append pid to fork_pid_candi
       remove the pid from fork_pid_list
       minus n_fork by 1
       delete the process
-   3. check complete:
-      both `n_fork == 0` and totburst
+      
 
+parameter scan
+   e2e_var_sim_en
+   jitter_sim_en
+   load_var_sim_en
+   e2e_var_sim_en
+   seed, 
+   aux_scale_factor
+   e2e_latency
+   
+
+
+Hardware paremeters:
+   num_cores
+
+event_parameters:
+   jitter_sim_en
+   jitter_sim_para
+   load_var_sim_en
+   load_var_sim_para
+   load_var_para_file
+   e2e_var_sim_en
+   e2e_var_sim_para
+
+Simulation parameters:
+   seed
+   warmup_dis
+   n_p
+
+Benchmark params
+   aux_scale_factor
+   e2e_latency
+   profiling_filename
+
+Scheduler parameters
+   wsc_slack_ratio
+   temporal_rda_ratio
+   lateness_mode
+   temporal_rda_ratio
+   test_case
+   barrier_dis
