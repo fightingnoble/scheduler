@@ -115,7 +115,7 @@ if __name__ == "__main__":
     parser.add_argument("--root_dir", default=".", type=str, help="root directory")
     parser.add_argument("--filename", type=str, default="timing", help="filename")
     parser.add_argument("--folder_search_seq", type=str, default="cfg_n,num_cores", help="core list")
-    parser.add_argument("--profiling_filename", type=str, default="profiling_light.csv", help="profiling filename")
+    parser.add_argument("--profiling_filename", type=str, default="profiling/profiling_light.csv", help="profiling filename")
     parser.add_argument("--stat_csv_filename", type=str, default=r"new_bin_pack(\d+)?.csv", help="csv filename")
     parser.add_argument("--n_p", type=int, default=3, help="number of processors")
     parser.add_argument("--warmup_dis", type=bool, default=False, help="whether to warm up the system")

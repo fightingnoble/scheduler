@@ -931,3 +931,9 @@ move analyser to analyze folder:
 
 add negative lru:
   - related files: lru.py
+
+## 20230803/pm-5
+  move scheduler related files to sched folder
+  move profiling related files to profiling folder
+  move text related files to doc folder
+

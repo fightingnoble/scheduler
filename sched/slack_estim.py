@@ -215,7 +215,7 @@ def estim_release_dll_time(task_graph_nx:DiGraph,
                             task_type: Dict[str, str]={}, 
                            temporal_rda_ratio=0, sched_step_comp=0, 
                            comm_compen_en=False, 
-                           profiling_filename:str="profiling.csv",
+                           profiling_filename:str="profiling/profiling.csv",
                            verbose=False):
     """
     set the ERT and ddl property of each task: 
@@ -318,7 +318,7 @@ def test():
     import numpy as np 
     parser = argparse.ArgumentParser()
     parser.add_argument("--verbose", action="store_true", help="verbose")
-    parser.add_argument("--profiling_filename", type=str, default="profiling.csv", help="profiling filename") 
+    parser.add_argument("--profiling_filename", type=str, default="profiling/profiling.csv", help="profiling filename") 
     parser.add_argument("--e2e_latency", type=float, default=0.09, help="e2e latency")
     # parser.add_argument("--freq", type=float, default=10, help="frequency")
     parser.add_argument("--temporal_rda_ratio", default=0.05, type=float, help="temporal ratio")

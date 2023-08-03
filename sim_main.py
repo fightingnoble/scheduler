@@ -2,7 +2,7 @@ import os
 from task.task_cfg import create_init_p_list, gen_workloads
 from task.task_cfg import affinity_cfg
 from task.task_cfg import init_affinity
-from global_sched import push_task_into_bins, push_task_into_bins_new
+from sched.global_sched import push_task_into_bins, push_task_into_bins_new
 from task.task_agent import TaskInt 
 from task.task_agent import TaskInt
 from task.spec import Spec
@@ -10,7 +10,7 @@ from model.msg_dispatcher import MsgDispatcher
 from model.data_pipe import DataPipe, TriggerPipe
 from sched.scheduling_table import SchedulingTableInt
 from model.resource_agent import Resource_model_int
-from scheduler_agent import Scheduler
+from sched.scheduler_agent import Scheduler
 from sched.monitor_agent import Monitor
 from allocator_agent import glb_sched, cyclic_sched
 from model.event_gen.e2e_latency import dyn_obj_sim, e2e_var_sim
@@ -27,7 +27,7 @@ def main():
     args = input_parser() 
     print(args)
     if not args.gen_benchmark:
-        if args.profiling_filename == "profiling.csv":
+        if args.profiling_filename == "profiling/profiling.csv":
             cfg_n = "heavy"
         else:
             cfg_n = args.profiling_filename.split(".")[-2].split("_")[-1]

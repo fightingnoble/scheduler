@@ -25,7 +25,7 @@ from sched.monitor_agent import Monitor
 from model.barrier_agent import Barrier
 from model.Context_message import ContextMsg
 from model.data_pipe import DataPipe
-from pre_alloc import get_rsc_2b_released
+from sched.pre_alloc import get_rsc_2b_released
 import re
 
 from model.streaming_processing.wartermark_strategy import WatermarkStrategy

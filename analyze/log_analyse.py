@@ -45,7 +45,7 @@ if __name__ == "__main__":
     argparser = argparse.ArgumentParser()
     argparser.add_argument("--folder", type=str, default="./log", help="path to log folder")
     argparser.add_argument("--output", type=str, default="./log/analyze.csv", help="path to output csv file")
-    argparser.add_argument("--profiling_filename", type=str, default="profiling_light.csv", help="path to task profiling file")
+    argparser.add_argument("--profiling_filename", type=str, default="profiling/profiling_light.csv", help="path to task profiling file")
     argparser.add_argument("--aux_scale_factor", type=float, default=1, help="auxiliary scaling factor")
     argparser.add_argument("--n_p", type=int, default=1, help="number of processors")
     argparser.add_argument("--get_ref_num_exec", action="store_true", help="get the reference number of execution")

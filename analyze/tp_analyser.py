@@ -116,7 +116,7 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="profiling")
-    parser.add_argument("--profiling_filename", type=str, default="profiling_light.csv", help="profiling filename")
+    parser.add_argument("--profiling_filename", type=str, default="profiling/profiling_light.csv", help="profiling filename")
     parser.add_argument("--root_dir", default=".", type=str, help="root directory")
     parser.add_argument("--filename", type=str, default="throughput", help="filename")
     parser.add_argument("--stat_csv_filename", type=str, default="new_bin_pack.csv", help="csv filename")

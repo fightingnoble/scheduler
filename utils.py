@@ -51,7 +51,7 @@ def input_parser():
     parser.add_argument("--data_lifetime_mode", default="static", type=str, help="lifetime mode: most_recent, ref_count, timeout, watermark") 
     parser.add_argument("--spatial_rda_ratio", default=0.2, type=float, help="spatial ratio")
     parser.add_argument("--temporal_rda_ratio", default=0.05, type=float, help="temporal ratio")
-    parser.add_argument("--profiling_filename", type=str, default="profiling_light.csv", help="profiling filename")
+    parser.add_argument("--profiling_filename", type=str, default="profiling/profiling_light.csv", help="profiling filename")
     parser.add_argument("--lateness_mode", type=str, default="ignore", help="lateness mode")
     # parser.add_argument("--lateness_threshold", type=float, default=0.0, help="lateness threshold")
     # parser.add_argument("--cbs_en", default=False, action="store_true", help="enable cbs")

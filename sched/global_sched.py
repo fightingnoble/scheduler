@@ -34,13 +34,13 @@ from model.lru import LRUCache
 from sched.monitor_agent import Monitor
 from model.data_pipe import DataPipe
 
-from scheduler_agent import Scheduler, check_miss, check_complete, chk_release
-from scheduler_agent import data_pipe_read, pendingToReady
+from sched.scheduler_agent import Scheduler, check_miss, check_complete, chk_release
+from sched.scheduler_agent import data_pipe_read, pendingToReady
 from model.message_handler import message_trigger_event_new
 from model.streaming_processing.wartermark_strategy import WatermarkStrategy
 
 import warnings
-from pre_alloc import glb_alloc_new, get_rsc_2b_released
+from sched.pre_alloc import glb_alloc_new, get_rsc_2b_released
 from sched.sort_function import get_target_bin_score
 # ==================== top-level scheduling procedure ====================
 def push_task_into_bins(init_p_list: List[TaskInt], affinity, 

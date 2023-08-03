@@ -89,10 +89,10 @@ from model.task_queue_agent import TaskQueue
 from task.task_agent import ProcessInt
 import copy
 from model.lru import LRUCache
-from scheduler_agent import Scheduler, glb_dynamic_sched_step
+from sched.scheduler_agent import Scheduler, glb_dynamic_sched_step
 from sched.monitor_agent import Monitor
 
-from scheduler_agent import Scheduler 
+from sched.scheduler_agent import Scheduler 
 from sched.monitor_agent import Monitor
 from task.spec import Spec
 from model.msg_dispatcher import MsgDispatcher
@@ -524,11 +524,11 @@ if __name__ == "__main__":
     from task.task_cfg import load_taskint, create_init_p_list
     from task.task_cfg import affinity_cfg, task_graph_srcs, task_graph_ops, task_graph_sinks
     from task.task_cfg import creat_physical_graph, creat_logical_graph, init_depen, init_affinity, redist_ert_dll
-    from global_sched import push_task_into_bins, push_task_into_bins_new
+    from sched.global_sched import push_task_into_bins, push_task_into_bins_new
     from utils import input_parser
 
     args = input_parser()
-    if args.profiling_filename == "profiling.csv":
+    if args.profiling_filename == "profiling/profiling.csv":
         cfg_n = "heavy"
     else:
         cfg_n = args.profiling_filename.split(".")[-2].split("_")[-1]

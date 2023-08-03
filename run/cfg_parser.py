@@ -7,7 +7,7 @@ from utils import input_parser
 args = input_parser() 
 # print(args)
 if not args.gen_benchmark:
-    if args.profiling_filename == "profiling.csv":
+    if args.profiling_filename == "profiling/profiling.csv":
         cfg_n = "heavy"
     else:
         cfg_n = args.profiling_filename.split(".")[-2].split("_")[-1]

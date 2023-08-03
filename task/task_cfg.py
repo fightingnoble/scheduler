@@ -307,7 +307,7 @@ def creat_logical_graph(srcs:Dict[str, List[str]], ops:Dict[str, List[str]], sin
             logical_graph_nx.add_edge(op_n, sink_n, type="data")
     return logical_graph_nx
 
-def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filename:str="profiling.csv", 
+def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filename:str="profiling/profiling.csv", 
                          taskattr_dict:Dict[str, TaskIntAttr]=None):
     """
     Physical Graph:
@@ -428,7 +428,7 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filen
     
     return physical_graph_nx
 
-def creat_jobTask_graph(task_graph:Dict[str, List[str]], f_gcd, plot:bool=False, profiling_filename:str="profiling.csv"):
+def creat_jobTask_graph(task_graph:Dict[str, List[str]], f_gcd, plot:bool=False, profiling_filename:str="profiling/profiling.csv"):
     # create task graph from task_graph
     task_graph_nx = nx.DiGraph(task_graph)
 
@@ -575,7 +575,7 @@ def creat_jobTask_graph(task_graph:Dict[str, List[str]], f_gcd, plot:bool=False,
         T release (ms),DDL (ms),Cores/Req.,No-stall latency (ms),Util.,Min required cores,Equavalent used cores,No-stall Bandwidth
 
     """
-def load_taskint(profiling_filename:str="profiling.csv", 
+def load_taskint(profiling_filename:str="profiling/profiling.csv", 
                  freq_div_en:bool=True, thread_scaling_en:bool=True, 
                  plot:bool = False, verbose: bool = False) -> Dict[str, TaskInt]:
 
@@ -685,7 +685,7 @@ def load_taskint(profiling_filename:str="profiling.csv",
     return task_dict, f_gcd
 
 
-def load_taskattrib(profiling_filename:str="profiling.csv", verbose: bool = False) -> Dict[str, TaskIntAttr]:
+def load_taskattrib(profiling_filename:str="profiling/profiling.csv", verbose: bool = False) -> Dict[str, TaskIntAttr]:
 
     df = pd.read_csv(profiling_filename, sep=",", index_col=0) 
     if verbose:
@@ -1015,7 +1015,7 @@ def init_affinity(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Unio
 
 def redist_ert_dll(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[TaskInt,ProcessInt]]],
         logical_graph_nx:nx.DiGraph=None, temporal_rda_ratio=0, sched_step_comp=0, 
-        comm_compen_en=False, profiling_filename:str="profiling.csv", verbose=False):
+        comm_compen_en=False, profiling_filename:str="profiling/profiling.csv", verbose=False):
 
     df:pd.DataFrame = pd.read_csv(profiling_filename, sep=",", index_col=0) 
     comp_time: Dict[str, float] = {task_n:df.loc[task_n, "Expected Latency (ms)"]/1000 for task_n in df.T}
@@ -1075,10 +1075,10 @@ if __name__ == "__main__":
     parser.add_argument("--plot", action="store_true", help="plot the task timeline")
     parser.add_argument("--bin_pack", action="store_true", help="plot the task timeline")
     parser.add_argument("--test_all", default=False, help="test all the task")
-    parser.add_argument("--profiling_filename", type=str, default="profiling.csv", help="profiling filename")
+    parser.add_argument("--profiling_filename", type=str, default="profiling/profiling.csv", help="profiling filename")
     args = parser.parse_args() 
 
-    if args.profiling_filename == "profiling.csv":
+    if args.profiling_filename == "profiling/profiling.csv":
         cfg_n = "heavy"
     else:
         cfg_n = args.profiling_filename.split(".")[-2].split("_")[-1]
