@@ -17,6 +17,7 @@ from sched.scheduling_table import SchedulingTableInt
 from model.resource_agent import Resource_model_int
 from global_var import *
 
+from model.event_gen.e2e_latency import jitter_gen
 from model.task_queue_agent import TaskQueue 
 from task.task_agent import ProcessInt
 from model.lru import LRUCache
@@ -175,6 +176,14 @@ class Scheduler(object):
         self.hyper_period = hyper_period
         self.detail_alloc_info:Dict[str, Dict[float, Tuple]] = {}
 
+        # Buffer size: 40MB, 256 cores, 156.25KB/core
+        # bandwidth: 100GB/s
+        # direction: off-chip -> on-chip, on-chip -> off-chip
+        # latency: 100ns
+        head_latency = AVG_HOP_NUM * LAT_PER_HOP
+        tail_latency = GLB_BUFFER_SIZE_PER_CORE * _SchedTab.num_resources / BW_DRAM * 0.8
+        self.ctx_lat_gen = jitter_gen(tail_latency, {'scale': 0.2, }, size=1, seed=_SchedTab.id)
+        self.get_ctx_lat = lambda x=1: (self.ctx_lat_gen() + head_latency)*x + tail_latency
 
     def get_queues(self):
         # wait_queue, ready_queue, running_queue, miss_list, preempt_list, issue_list, completed_list
@@ -704,6 +713,13 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
     bin_spatial_size = _SchedTab.num_resources
     pre_rsc_bk = deepcopy(res_cfg.rsc_map)
 
+    if sched.assert_barrier:
+        barrier_state = barrier.update(timestep)
+        if not barrier_state:
+            print(f"		Barrier is satisfied at {curr_t:.6f}")
+            sched.assert_barrier = False
+        barrier.cumulative_time += timestep
+
     # ll = inactive_list + active_list + ready_queue.queue + running_queue.queue + throttle_list 
     # temp_l = [_p.pid for _p in ll]
     # # statistic occurances of each task
@@ -812,11 +828,9 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
             # because the comming computation should be allocated with resources as soon as ponssible
             # budget_recoder[pid] = [cfg_slot_s, next_cfg[pid]* _p.var_scale_factor, cfg_slot_num, True]
             budget_recoder[pid] = [cfg_slot_s, next_cfg[pid], cfg_slot_num, True]
-            if _p.pid in rsc_recoder_his:
-                rsc_recoder_his[_p.pid].put(bin_id)
-            else:
+            if _p.pid not in rsc_recoder_his:
                 rsc_recoder_his[_p.pid] = LRUCache(3)
-                rsc_recoder_his[_p.pid].put(bin_id)
+            rsc_recoder_his[_p.pid].put(bin_id)
 
         # TODO: Queue for the weight prefetching
         # instruction prefetching
@@ -1061,9 +1075,8 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
                 _p.required_resource_size = req_rsc_size
 
             sched.new_ready_flg = False
-            for pid in budget_recoder:
-                budget_recoder[pid][3] = False
 
+            to_assert_flag = False
             if rsc_map != pre_rsc:
                 new_pid = set(rsc_map.keys()) - set(pre_rsc.keys())
                 expired_pid = set(pre_rsc.keys()) - set(rsc_map.keys())
@@ -1081,6 +1094,42 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
                 
                 for pid in new_pid:
                     issue_list.append(process_dict[pid])
+
+                # logic to judge whether the swithing is planned or decided by the scheduler at runtime
+                # the swithing out of plan features:
+                # 1. some tasks release core and other tasks take the core
+                # 2. this overtake behavior is not planned in the scheduling table
+                # step: 
+                # 1. check whether some cores are released
+                # 2. check whether this plan is in the scheduling table
+                off_discount = 0
+                on_discount = 0
+                for _p in ctx_switch_list:
+                    old_size = pre_rsc[_p.pid]
+                    new_size = rsc_map[_p.pid]
+                    if old_size > new_size: 
+                        if budget_recoder[_p.pid][3]:
+                            chunk_s, chunk_alloc, chunk_slot_num, updated_flg = budget_recoder[_p.pid]
+                            if new_size != chunk_alloc:
+                                to_assert_flag = True
+                            else:
+                                off_discount += chunk_alloc
+                        else:
+                            to_assert_flag = True
+                    else:
+                        chunk_s, chunk_alloc, chunk_slot_num, updated_flg = budget_recoder[_p.pid]
+                        if new_size == chunk_alloc:
+                            on_discount += chunk_alloc
+
+                
+                if len(preempt_list):
+                    to_assert_flag = True
+
+                if to_assert_flag:
+                    for _p in issue_list:
+                        chunk_s, chunk_alloc, chunk_slot_num, updated_flg = budget_recoder[_p.pid]
+                        if chunk_alloc == rsc_map[_p.pid]:
+                            on_discount += chunk_alloc
 
                 # update the resource configuration
                 for _p in preempt_list:
@@ -1117,15 +1166,32 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
                     print(_str)
                 issue_list.clear()
 
+            for pid in budget_recoder:
+                budget_recoder[pid][3] = False
+            
+            if to_assert_flag:
+                # assert a barrier, sim data movement: 
+                if sched.barrier_en:
+                    off_size = (sum(pre_rsc.values())-off_discount) * 1/3
+                    on_size = (sum(rsc_map.values()) - on_discount) * 2/3
+                    x = (on_size+off_size) /sched._SchedTab.num_resources
+                    barrier.assert_barrier(sched.get_ctx_lat(x))
+                    print(f"		Barrier asserted at {curr_t:.6f}; Counter {barrier.reset_time}s")
+                    sched.assert_barrier = True
+
     # execute the task in running list
     # update the running task
-    updateRunningQueue(timestep, running_queue, res_cfg) 
-    for _p in running_queue:
-        per_slot_flops = FLOPS_PER_CORE*timestep*budget_recoder[_p.pid][1]
-        if _p.remburst > -per_slot_flops+numerical_error_tol_abs:
-            _p.rem_flop_budget[bin_id] -= res_cfg.rsc_map[_p.pid] * timestep * FLOPS_PER_CORE
+    if not barrier.state():
+        updateRunningQueue(timestep, running_queue, res_cfg) 
+        for _p in running_queue:
+            per_slot_flops = FLOPS_PER_CORE*timestep*budget_recoder[_p.pid][1]
+            if _p.remburst > -per_slot_flops+numerical_error_tol_abs:
+                _p.rem_flop_budget[bin_id] -= res_cfg.rsc_map[_p.pid] * timestep * FLOPS_PER_CORE
 
-    monitor.add_a_record(res_cfg)
+    if not sched.assert_barrier:
+        monitor.add_a_record(res_cfg)
+    else:
+        monitor.add_a_placehold_record()
 
     if n_slot < sim_slot_num-1:
         next_cfg = _SchedTab.scheduling_table[tab_pointer+1]
@@ -1205,38 +1271,41 @@ def trigger_read(inactive_list:List[ProcessInt], sensor_msg_queue:List,
 
 def data_pipe_read(curr_t, glb_name_p_dict, process_dict, buffer, bin_name, bin_event_flg, a_msg_queue: List[Data], 
                    event_cache:EventCache=None):
-    msg_dict:Dict[int, Data] = {}
+    msg_dict:Dict[int, list[Data]] = {}
     # read out all message and clear the message pipe
     for data in a_msg_queue:
         tgt_p_name_l = data.track_downstream()
         for key in tgt_p_name_l:
             tgt_pid = glb_name_p_dict[key].pid
             if tgt_pid in process_dict:
-                msg_dict[tgt_pid] = data
+                if tgt_pid not in msg_dict:
+                    msg_dict[tgt_pid] = []
+                msg_dict[tgt_pid].append(data)
                 # add the ref_pid to the data
                 data.ref_pid.append(tgt_pid)
-    for data in set(msg_dict.values()):
+    for data in set([data for data_l in msg_dict.values() for data in data_l]):
         buffer.put(data)
     a_msg_queue.clear()
 
-    for tgt_pid, data in msg_dict.items():
+    for tgt_pid, data_l in msg_dict.items():
         _p = process_dict[tgt_pid]
         if event_cache is None:
             pred_data = _p.pred_data
         else:
             pred_data = event_cache[tgt_pid]
         for key, attr in pred_data.items():
-            if data.pid == glb_name_p_dict[key].pid:
-                attr["event_queue"].put(data)
-                attr["valid"] = True
-                attr["time"] = curr_t
-                attr["data"] = data
-                
-                # TODO: fix the event time as the actual time
-                if bin_name and not bin_event_flg:
-                    bin_event_flg = True
-                    print(f"({bin_name})")
-                print(f"		{_p.task.name} received event {key:s} @ {curr_t:.6f}/{data.ctx.get_timestamp():.6f}")
+            for data in data_l:
+                if data.pid == glb_name_p_dict[key].pid:
+                    attr["event_queue"].put(data)
+                    attr["valid"] = True
+                    attr["time"] = curr_t
+                    attr["data"] = data
+                    
+                    # TODO: fix the event time as the actual time
+                    if bin_name and not bin_event_flg:
+                        bin_event_flg = True
+                        print(f"({bin_name})")
+                    print(f"		{_p.task.name} received event {key:s} @ {curr_t:.6f}/{data.ctx.get_timestamp():.6f}")
     return bin_event_flg
 
 # =================== intergrated into scheduler class ===================
@@ -1560,16 +1629,19 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data
                 print(_str)
             issue_list.clear()
 
-        # assert a barrier
-        # data movement: 
-        # size: 40MB
-        # bandwidth: 100GB/s
-        # direction: off-chip -> on-chip, on-chip -> off-chip
-        # latency: 100ns
-        if sched.barrier_en:
-            barrier.assert_barrier(2*40e6/100e9*truncnorm.rvs(-0.2, 0.2, size=1, loc=0.6, scale=1)[0] + 100*1e-9)
-            print(f"		Barrier asserted at {curr_t:.6f};")
-            sched.assert_barrier = True
+            # assert a barrier
+            # data movement: 
+            # size: 40MB
+            # bandwidth: 100GB/s
+            # direction: off-chip -> on-chip, on-chip -> off-chip
+            # latency: 100ns
+            if sched.barrier_en:
+                off_size = sum(pre_rsc.values()) * 1/3
+                on_size = sum(rsc_map.values()) * 2/3
+                x = (on_size+off_size) /sched._SchedTab.num_resources
+                barrier.assert_barrier(sched.get_ctx_lat(x))
+                print(f"		Barrier asserted at {curr_t:.6f}; Counter {barrier.reset_time}s")
+                sched.assert_barrier = True
 
     # execute the task in running list
     # update the running task

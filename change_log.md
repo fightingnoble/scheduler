@@ -891,3 +891,43 @@ add throughput analysis:
 
 throughput scanning script:
   distinguish the core and the x-axu
+
+## 20230803
+
+path fix:
+  args.wsc_slack_ratio-args.temporal_rda_ratio
+  trace_path print
+  timeline plot add cfg info
+
+fix bug: 
+  th_analyser: 
+    - add a new item even it has already existed
+    - profiled parameters are str, while the value in pandas is float
+    - related files: tp_analyser.py
+
+optimize the seq scanner:
+  - related files: tp_analyser.py
+
+add ctx to dynamic scheduler:
+  - add output
+  - related files: scheduling_agent.py, global_var.py, sim_main.py, benchmark_gen.py
+
+fix bug in data pipe reader:
+  now can read multiple data and well not lose any data
+  ```
+    if tgt_pid not in msg_dict:
+        msg_dict[tgt_pid] = []
+    msg_dict[tgt_pid].append(data)
+  ```
+
+add more bin sort options:
+  - related files: allocator_agent.py, pre_alloc.py, sort_function.py, utils.py
+
+fix bug EstimCoreNums4Process:
+  fix constraint check condition
+
+move analyser to analyze folder:
+ - ctx_switch_analyser.py  e2e_latency.py  log_analyse.py  min_core.py  timing_analyzer.py  tp_analyser.py
+
+add negative lru:
+  - related files: lru.py

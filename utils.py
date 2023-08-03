@@ -62,6 +62,7 @@ def input_parser():
     parser.add_argument("--aux_scale_factor", default=1, type=int, help="aux scale factor")
     parser.add_argument("--gen_benchmark", default=False, action="store_true", help="generate benchmark")
     parser.add_argument("--root_dir", default=".", type=str, help="root directory")
+    parser.add_argument("--bin_sort", default="EAT", type=str, help="bin sort: EAT, barycenter")
 
     args = parser.parse_args()
     return args

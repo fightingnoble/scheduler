@@ -1,7 +1,20 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from typing import List, Dict
+from typing import List, Dict, Callable
 import networkx as nx
+from functools import reduce
+import re
+import numpy as np
+import argparse
+# load the trace list from the file
+import pickle
+import pandas as pd
+import copy
+import os 
+import torch
+import plotly.graph_objects as go
+import plotly.io as pio   
+pio.kaleido.scope.mathjax = None
 
 if TYPE_CHECKING:
     from model.buffer import Data, Buffer
@@ -291,7 +304,7 @@ def plot_trace_list(save_path, result_dict, title):
     fig.write_image(save_path)
     print(f"save to {save_path}")
 
-def trace_analyser(timing_flag_dict, trace_path):
+def trace_analyser(timing_flag_dict, trace_path, e2e_latency, lateness_mode, get_n_violation=False):
     with open(trace_path, "rb") as f:
         trace_list = pickle.load(f)
     print("="*20, trace_path, "="*20)
@@ -316,18 +329,21 @@ def trace_analyser(timing_flag_dict, trace_path):
             event_time = max(matched_pair)
             # assert event_time == trace["time_stamp"]
             active_path = matched_pair >= event_time
-            e2e_latency = end_time - matched_pair[active_path] 
+            trace_e2e_latency = end_time - matched_pair[active_path] 
             task_name = "_".join(trace["process_info"]["name"].split("_")[0:-2])
             if timing_flag_dict[task_name] == "realtime":
-                e2e_latency_list[0].extend(e2e_latency.tolist())
-            else:
-                e2e_latency_list[1].extend(e2e_latency.tolist())
-
+                e2e_latency_list[0].append(trace_e2e_latency[0])
                 # index the item > e2e_latency
-            index = np.where(e2e_latency > e2e_latency)
-            if len(index[0]):
+                index = np.where(trace_e2e_latency > 0.1)
+            else:
+                e2e_latency_list[1].append(trace_e2e_latency[0])
+                # index the item > e2e_latency
+                index = np.where(trace_e2e_latency > e2e_latency)
+
+            n_violation += len(index[0])
+            if len(index[0]) > 0 and lateness_mode != "all_soft":
                 name_array = np.array(list(dict_o.keys()))
-                df = pd.DataFrame({'sensor': name_array, 'time': matched_pair, 'T_e2e': e2e_latency}, )
+                df = pd.DataFrame({'sensor': name_array, 'time': matched_pair, 'T_e2e': trace_e2e_latency}, )
                 print(df)
                 print(f"{trace['process_info']['name']} end time: {end_time:.6f}\n")
 
@@ -347,145 +363,17 @@ def trace_analyser(timing_flag_dict, trace_path):
 
                     print(f'Shortest Path Length: {nx.algorithms.shortest_paths.weighted.dijkstra_path_length(nx_graph, source=src, target=dest, weight="weight")}')
 
-                n_violation += len(index[0])
             hist_seri_ctx = copy.deepcopy(trace)
     print(f"total violation: {n_violation}\n")
-    return e2e_latency_list
+    if get_n_violation:
+        return e2e_latency_list, n_violation
+    else:
+        return e2e_latency_list
+
 
 if __name__ == "__main__":
     from model.trace_example import trace_example
     dict_o, end_time, nx_graph = ContextMsg.find_sensor(trace_example)
     print(dict_o)
     print("end time: ", end_time)
-
-    import numpy as np
-    import argparse
-    # load the trace list from the file
-    import pickle
-    import pandas as pd
-    import copy
-    import os 
-    import torch
-    import plotly.graph_objects as go
-    import plotly.io as pio   
-    pio.kaleido.scope.mathjax = None
-    
-    parser = argparse.ArgumentParser(description="profiling")
-    parser.add_argument("--core_list", type=str, default="300", help="core list")
-    parser.add_argument("--profiling_filename", type=str, default="profiling.csv", help="profiling filename")
-    parser.add_argument("--file_suffix", default="", type=str, help="file suffix")
-    parser.add_argument("--e2e_latency", type=float, default=0.09, help="e2e latency")
-    parser.add_argument("--test_case", type=str, default="dynamic", help="task name")
-    # parser.add_argument("--freq", type=float, default=10, help="frequency")
-    parser.add_argument("--wsc_slack_ratio", default=0.8, type=float, help="wsc slack ratio")
-    parser.add_argument("--slack_threshold", default=5e-4, type=float, help="slack threshold")
-    parser.add_argument("--aux_scale_factor", default=1, type=int, help="aux scale factor")
-    parser.add_argument("--gen_benchmark", default=False, action="store_true", help="generate benchmark")
-    parser.add_argument("--root_dir", default=".", type=str, help="root directory")
-    parser.add_argument("--lateness_mode", type=str, default="ignore", help="lateness mode")
-    parser.add_argument("--filename", type=str, default="timing", help="filename")
-    parser.add_argument("--temporal_rda_ratio", default=0.05, type=float, help="temporal ratio")
-
-    args = parser.parse_args()
-    e2e_latency = args.e2e_latency
-    if args.test_case == "glb_dynamic":
-        fn = "glb_dyn_e2e_trace"
-    elif args.test_case == "dynamic":
-        fn = "dynamic_e2e_trace"
-
-    core_list = [int(i) for i in args.core_list.split(",")]
-    if not args.gen_benchmark:
-        if args.profiling_filename == "profiling.csv":
-            cfg_n = "heavy"
-        else:
-            cfg_n = args.profiling_filename.split(".")[-2].split("_")[-1]
-        if cfg_n == "light":
-            args.aux_scale_factor = 1
-        elif cfg_n == "heavy":
-            args.aux_scale_factor = 6
-        elif cfg_n == "medium":
-            args.aux_scale_factor = 4
-
-        if cfg_n == "light":
-            args.e2e_latency = 1
-        else:
-            args.e2e_latency = 0.09
-
-    else:
-        cfg_n = f"x{args.aux_scale_factor}_{args.e2e_latency}s_rda-{(args.wsc_slack_ratio-args.temporal_rda_ratio):.2%}(T)_{args.temporal_rda_ratio:.2%}(S)"
-    if args.lateness_mode:
-        cfg_n += f"_{args.lateness_mode}"
-    root_dir = args.root_dir
-    
-    # load the criticality 
-    from task.task_cfg import load_taskattrib
-    glb_n_task_dict, f_gcd = load_taskattrib(args.profiling_filename, verbose=False) 
-    timing_flag_dict = {}
-    for task_name in glb_n_task_dict:
-        timing_flag_dict[task_name] = glb_n_task_dict[task_name].timing_flag
-
-    filename = args.filename
-    if args.lateness_mode:
-        filename = args.lateness_mode + filename
-    filename = f"{filename}.csv"
-    if not os.path.exists(filename):
-        # Create a dataframe with the values
-        pd.DataFrame(columns=[
-            'aux_scale_factor', 'e2e_latency', 'wsc_slack_ratio', 'temporal_rda_ratio', 'lateness_mode', 'filename',
-            'num_cores', 'file_suffix', 'confidence', 'ddl_percentile', 'rt_percentile'
-        ]).to_csv(filename, index=False)
-    # Load the dataframe
-    df = pd.read_csv(filename)
-
-    for num_cores in core_list:
-        trace_path = f"trace/{cfg_n}/{fn}_{num_cores}{args.file_suffix}.pkl"
-        e2e_latency_list = trace_analyser(timing_flag_dict, trace_path)
-
-        # aplly histogram analysis
-        rt_e2e_latency_list = np.array(e2e_latency_list[0])
-        ddl_e2e_latency_list = np.array(e2e_latency_list[1])
-        print(f"mean: {np.mean(rt_e2e_latency_list):.6f}, std: {np.std(rt_e2e_latency_list):.6f}, max: {np.max(rt_e2e_latency_list):.6f}, min: {np.min(rt_e2e_latency_list):.6f}")
-        print(f"mean: {np.mean(ddl_e2e_latency_list):.6f}, std: {np.std(ddl_e2e_latency_list):.6f}, max: {np.max(ddl_e2e_latency_list):.6f}, min: {np.min(ddl_e2e_latency_list):.6f}")
-        # calculate the percentile
-        rt_percentiles = np.percentile(rt_e2e_latency_list, [90, 95, 99, 99.9, 99.99])
-        ddl_percentiles = np.percentile(ddl_e2e_latency_list, [90, 95, 99, 99.9, 99.99])
-        print(f"rt_percentile: {rt_percentiles}")
-        print(f"ddl_percentile: {ddl_percentiles}")
-
-        # Create a dictionary with the values
-        data = {
-            'aux_scale_factor': args.aux_scale_factor,
-            'e2e_latency': args.e2e_latency,
-            'wsc_slack_ratio': args.wsc_slack_ratio - args.temporal_rda_ratio,
-            'temporal_rda_ratio': args.temporal_rda_ratio,
-            'lateness_mode': args.lateness_mode,
-            'filename': f"{fn}",
-            'num_cores': num_cores,
-            'file_suffix': args.file_suffix,
-            'confidence': [90, 95, 99, 99.9, 99.99],
-            'ddl_percentile': ddl_percentiles,
-            'rt_percentile': rt_percentiles
-        }
-
-        data_idx = (df['aux_scale_factor'] == args.aux_scale_factor) & \
-                     (df['e2e_latency'] == args.e2e_latency) & \
-                        (df['wsc_slack_ratio'] == args.wsc_slack_ratio - args.temporal_rda_ratio) & \
-                            (df['temporal_rda_ratio'] == args.temporal_rda_ratio) & \
-                                (df['lateness_mode'] == args.lateness_mode) & \
-                                    (df['filename'] == f"{fn}") & \
-                                        (df['num_cores'] == num_cores) & \
-                                            (df['file_suffix'] == args.file_suffix)
-
-        if df.loc[data_idx].size:
-            df.loc[data_idx, 'ddl_percentile'] = ddl_percentiles
-            df.loc[data_idx, 'rt_percentile'] = rt_percentiles
-            df.loc[data_idx, 'confidence'] = [90, 95, 99, 99.9, 99.99]
-        else:
-            df = pd.concat([df, pd.DataFrame(data)])
-
-
-    # Save the dataframe to a CSV file
-    df.to_csv(filename, index=False)
-    # plot histogram
-    # plot_trace_list(save_path, result_dict, title)
 

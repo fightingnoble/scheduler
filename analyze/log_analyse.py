@@ -2,10 +2,11 @@ import os
 import argparse
 import pandas as pd
 import re
-from task.task_cfg import load_taskattrib
+from task.task_cfg import load_taskattrib, creat_logical_graph
+from task.task_cfg import task_graph_srcs, task_graph_ops, task_graph_sinks
 from sched.slack_estim import deduce_num_exec
 
-def extract_num_exec(profiling_filename, aux_scale_factor, n_p, warmup_dis):
+def extract_num_exec(profiling_filename, aux_scale_factor, n_p, warmup_dis, mode=""):
     taskattr_dict, f_gcd = load_taskattrib(profiling_filename, verbose=False) 
     num_exec = 0
     if aux_scale_factor > 1:
@@ -13,11 +14,23 @@ def extract_num_exec(profiling_filename, aux_scale_factor, n_p, warmup_dis):
             # scale up the thread scaling factor
             if taskattr.timing_flag == "realtime":
                 taskattr.thread_scaling_factor *= aux_scale_factor
-    for node in taskattr_dict.keys():
-        taskattr = taskattr_dict[node]
-        num_exec += deduce_num_exec(taskattr.freq, f_gcd, taskattr.thread_scaling_factor)
-    num_exec = int(num_exec) * (n_p + (not warmup_dis))
-    return num_exec
+    if mode == "e2e":
+        logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
+        # get the predecessor of sink nodes
+        sink_predecessor = set()
+        for node in task_graph_sinks:
+            sink_predecessor.update(logical_graph_nx.predecessors(node))
+        for node in sink_predecessor:
+            taskattr = taskattr_dict[node]
+            num_exec += deduce_num_exec(taskattr.freq, f_gcd, taskattr.thread_scaling_factor)
+        num_exec = int(num_exec) * (n_p + (not warmup_dis))
+        return num_exec, sink_predecessor
+    else:
+        for node in taskattr_dict.keys():
+            taskattr = taskattr_dict[node]
+            num_exec += deduce_num_exec(taskattr.freq, f_gcd, taskattr.thread_scaling_factor)
+        num_exec = int(num_exec) * (n_p + (not warmup_dis))
+        return num_exec
 
 # extract number of cores
 def extract_num_cores(filename):
@@ -39,6 +52,7 @@ if __name__ == "__main__":
     argparser.add_argument("--warmup_dis", type=bool, default=False, help="whether to warm up the system")
     args = argparser.parse_args()
     folder = args.folder # log 文件夹路径
+    print(f"===========folder: {folder}===========")
 
     completed_list = []  # 用于存储已完成任务及其计数
     miss_list = []  # 用于存储未完成任务及其计数

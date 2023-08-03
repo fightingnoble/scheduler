@@ -670,7 +670,7 @@ if __name__ == "__main__":
         try:
             with open(trace_path, "rb") as f:
                 trace_list = pickle.load(f)
-            print("trace saved successfully")
+            print(f"{trace_path} saved successfully")
         except:
             print("trace file not found")
             exit(0)            
@@ -734,7 +734,7 @@ if __name__ == "__main__":
         try:
             with open(trace_path, "rb") as f:
                 trace_list = pickle.load(f)
-            print("trace saved successfully")
+            print(f"{trace_path} saved successfully")
         except:
             print("trace file not found")
             exit(0)

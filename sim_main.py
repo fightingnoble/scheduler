@@ -32,7 +32,7 @@ def main():
         else:
             cfg_n = args.profiling_filename.split(".")[-2].split("_")[-1]
     else:
-        cfg_n = f"x{args.aux_scale_factor}_{args.e2e_latency}s_rda-{(args.wsc_slack_ratio-args.temporal_rda_ratio):.2%}(T)_{args.temporal_rda_ratio:.2%}(S)"
+        cfg_n = f"x{args.aux_scale_factor}_{args.e2e_latency}s_rda-{(args.wsc_slack_ratio):.2%}(T)_{args.temporal_rda_ratio:.2%}(S)"
     cfg_n += f"_{args.lateness_mode}"
     root_dir = args.root_dir
     num_cores = args.num_cores
@@ -98,6 +98,9 @@ def main():
         args.test_all = True
 
     elif args.test_case == "bin_pack_new" or args.test_all:
+        for _p in glb_p_list:
+            _p.task.criticality = "hard"
+
         bin_list = [SchedulingTableInt(num_cores, 1, 0, "bin_glb_dynamic")]
         # from message_agent import Message
         
@@ -125,7 +128,8 @@ def main():
             a_data_pipe, w_data_pipe,
 
             num_periods, args.verbose, 
-            warmup=True, drain=True
+            warmup=True, drain=True, 
+            bin_sort=args.bin_sort,
             )
         
         pid2name = {_p.pid:_p.task.name for _p in glb_p_list}
@@ -191,6 +195,21 @@ def main():
                 a_data_pipe, w_data_pipe, 
                 args.verbose, warmup=True, drain=True)
 
+        tot_cores = 0
+        n_switch = 0
+        weighted_avg_cumulative_time = 0
+        for _sched in scheduler_list:
+            partition_id = _sched._SchedTab.id
+            bin_size = _sched._SchedTab.num_resources
+            tot_cores += bin_size
+            print(f"(Partition {partition_id}) number of context switch {_sched.barrier.number_of_asserts}")
+            print(f"(Partition {partition_id}) cumulative context switch {_sched.barrier.cumulative_time}")
+            weighted_avg_cumulative_time += _sched.barrier.cumulative_time * num_cores
+            n_switch += _sched.barrier.number_of_asserts
+        print(f"number of context switch {n_switch}")
+        weighted_avg_cumulative_time /= tot_cores
+        print(f"cumulative context switch {weighted_avg_cumulative_time}")
+
         actual_sched_record = [monitor.trace_recoder for monitor in monitor_list]
 
         pid2name = {_p.pid:_p.task.name for _p in glb_p_list}
@@ -206,22 +225,7 @@ def main():
         txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/{root_dir}/{cfg_n}/{num_cores}/dyn_full_{num_cores}{args.file_suffix}.pdf")
 
         trace_path = f"trace/{root_dir}/{cfg_n}/dynamic_e2e_trace_{num_cores}{args.file_suffix}.pkl"
-        dir_path = os.path.dirname(trace_path)
-
-        if not os.path.exists(dir_path):
-            os.makedirs(dir_path)
-
-        # save trace_list to trace_file
-        with open(trace_path, "wb") as f:
-            pickle.dump(trace_list, f)
-        
-        try:
-            with open(trace_path, "rb") as f:
-                trace_list = pickle.load(f)
-            print("trace saved successfully")
-        except:
-            print("trace file not found")
-            exit(0)            
+        dump_and_check(trace_path, trace_list)          
 
     elif args.test_case == "glb_dynamic" or args.test_all:
         bin_list = [SchedulingTableInt(num_cores, 1, 0, "bin_glb_dynamic")]
@@ -274,20 +278,7 @@ def main():
 
         trace_path = f"trace/{root_dir}/{cfg_n}/glb_dyn_e2e_trace_{num_cores}{args.file_suffix}.pkl"
         # save trace_list to trace_file
-        dir_path = os.path.dirname(trace_path)
-
-        if not os.path.exists(dir_path):
-            os.makedirs(dir_path)
-
-        with open(trace_path, "wb") as f:
-            pickle.dump(trace_list, f)
-        try:
-            with open(trace_path, "rb") as f:
-                trace_list = pickle.load(f)
-            print("trace saved successfully")
-        except:
-            print("trace file not found")
-            exit(0)
+        dump_and_check(trace_path, trace_list)
 
 if __name__ == "__main__":
     main()

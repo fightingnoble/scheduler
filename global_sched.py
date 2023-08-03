@@ -40,7 +40,8 @@ from model.message_handler import message_trigger_event_new
 from model.streaming_processing.wartermark_strategy import WatermarkStrategy
 
 import warnings
-from pre_alloc import get_target_bin_score, glb_alloc_new, get_rsc_2b_released
+from pre_alloc import glb_alloc_new, get_rsc_2b_released
+from sched.sort_function import get_target_bin_score
 # ==================== top-level scheduling procedure ====================
 def push_task_into_bins(init_p_list: List[TaskInt], affinity, 
                         total_cores:int, quantum_check_en, quantumSize, 
@@ -344,7 +345,8 @@ def push_task_into_bins_new(
                             w_data_pipe:DataPipe=None, 
 
                             n_p=1, verbose=False, DEBUG_FG=False, *, 
-                            warmup=False, drain=False,):
+                            warmup=False, drain=False, 
+                            bin_sort="EAT", bin_sort_reverse=True):
 
     """
     implement a naive 2d bin-packing algorithm
@@ -426,7 +428,7 @@ def push_task_into_bins_new(
                            glb_name_p_dict, None, 
                              issue_sort_fn, issue_list, 
                             iter_next_bin_obj, bin_list, bin_name_list, 
-                           DEBUG_FG, quantum_check_en, quantumSize)
+                           DEBUG_FG, quantum_check_en, quantumSize, bin_sort=bin_sort, bin_sort_reverse=bin_sort_reverse)
         # update the wait task
         w_data_pipe.update_wait_time(timestep)
         a_data_pipe.update_wait_time(timestep)
@@ -455,7 +457,7 @@ def push_step_new(sched: Scheduler, msg_dispatcher: MsgDispatcher,
                   issue_sort_fn, issue_list,
                   iter_next_bin_obj, bin_list, bin_name_list,
                   DEBUG_FG=False, quantum_check_en: bool = False, quantumSize=None,
-                  show_warnings=True):
+                  show_warnings=True, bin_sort="EAT", bin_sort_reverse=True):
 
 
     weight_wait_queue, ready_queue, running_queue, \
@@ -530,7 +532,8 @@ def push_step_new(sched: Scheduler, msg_dispatcher: MsgDispatcher,
 
     if trigger_condA or trigger_condB: 
         glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, temporal_rda_ratio, ready_queue, running_queue, rsc_recoder, 
-                    rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, n_slot, curr_t, DEBUG_FG=DEBUG_FG, show_warnings=show_warnings)
+                    rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, n_slot, curr_t, 
+                    DEBUG_FG=DEBUG_FG, show_warnings=show_warnings, bin_sort=bin_sort, bin_sort_reverse=bin_sort_reverse)
         sched.new_ready_flg = False
 
     # issue the task
@@ -685,7 +688,8 @@ def allocate_rsc_4_process(_p:ProcessInt, n_slot:int,
             # suppose the target was allocated with the resource
             for _pid in _p.task.affinity:
                 if _pid in rsc_recoder_his:
-                    affinity_tgt_bin_id_list.append(rsc_recoder_his[_pid].get_mru())
+                    if not rsc_recoder_his[_pid].is_empty():
+                        affinity_tgt_bin_id_list.append(rsc_recoder_his[_pid].get_mru())
             return affinity_tgt_bin_id_list
 
         affinity_tgt_bin_id_list = get_target_bin_id(_p, bin_name_list, rsc_recoder_his)

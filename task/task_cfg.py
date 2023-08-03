@@ -16,6 +16,7 @@ from sched.slack_estim import estim_release_dll_time, duduce_cfg
 
 # 'ID', 'Task (chain) names', 'Flops on path (G)', 'Expected Latency (ms)', 'T release (ms)', 'Freq.', 'DDL (ms)', 'Cores/Req.', 
 # 'Throuput factor (Spat.)', 'Thread factor (S)', 'Min required cores', 'Timing_flag', 'Max required Cores', 'RDA./Req.', 'Resource Type', 'Pre-assigned', 'Priority'
+__all__ = ['task_graph_srcs', 'task_graph_ops', 'task_graph_sinks', 'affinity_cfg']
 
 task_graph_srcs = {
     # "Entry": ["surr_view_camera_pub", "streo_camera_pub", "LiDAR_pub"],
@@ -44,7 +45,6 @@ task_graph_ops = {
     "Depth_estimation": ["Sink_screen"],
 }
 
-__all__ = ['task_graph', 'affinity_cfg']
 
 
 # task_graph = {   
@@ -1101,9 +1101,9 @@ if __name__ == "__main__":
                 print(f"w/o T_comm: {task_n}: {df.loc[task_n, 'T release (ms)']/1000:.8f} - {df.loc[task_n, 'DDL (ms)']/1000:.8f}({df.loc[task_n, 'DDL (ms)']/1000-df.loc[task_n, 'T release (ms)']/1000:.8f})") 
             print("------------------")
     elif args.test_case == "timeline" or args.test_all:
-        vis_task_static_timeline(list(glb_n_task_dict.values()), save=True, save_path="plot/{cfg_n}/task_static_timeline_cyclic.pdf", hyper_p=hyper_p, n_p=2, warmup=False, drain=True, )
+        vis_task_static_timeline(list(glb_n_task_dict.values()), save=True, save_path=f"plot/{cfg_n}_task_static_timeline_cyclic.pdf", hyper_p=hyper_p, n_p=2, warmup=False, drain=True, )
     elif args.test_case == "liveness" or args.test_all:
-        vis_task_static_timeline(list(glb_n_task_dict.values()), save=True, save_path="plot/{cfg_n}/task_liveness_timeline_cyclic.svg", 
+        vis_task_static_timeline(list(glb_n_task_dict.values()), save=True, save_path=f"plot/{cfg_n}_task_liveness_timeline_cyclic.svg", 
         hyper_p=hyper_p, n_p=1, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
         txt_size=40, tick_dens=4)
     elif args.test_case == "graph" or args.test_all:

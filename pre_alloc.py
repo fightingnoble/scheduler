@@ -8,16 +8,17 @@ from functools import reduce
 
 from global_var import *
 from model.lru import LRUCache
-from sched.scheduling_table import SchedulingTableInt, dense_to_sparse
+from sched.scheduling_table import SchedulingTableInt
 from task.task_agent import TaskInt
 from model.task_queue_agent import TaskQueue 
 from task.task_agent import ProcessInt
+from sched.sort_function import sort_bin_list_EAT, sort_bin_list_by_barycenter, get_process_sort
 import warnings
 
 def glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, temporal_rda_ratio, ready_queue, running_queue, rsc_recoder, 
                   rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list:TaskQueue, bin_name_list, n_slot, curr_t, 
                   DEBUG_FG=False, 
-                  show_warnings=True):
+                  show_warnings=True, bin_sort="EAT", bin_sort_reverse=True,):
     # =================================================
     # push the ready task into the idle slot
     # input: 
@@ -39,18 +40,9 @@ def glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, tempora
     # C. priorize the task that has firm affinity with the existing bins
 
     # rearange the task in the ready queue
-    cond_fn1 = lambda x: x.deadline
-    cond_fn2 = lambda x: get_target_bin_score(x, bin_name_list=bin_name_list, rsc_recoder_his=rsc_recoder_his, reverse=True)
-    # sorted_ready_queue = sorted(ready_queue.queue, key=lambda x: (cond_fn1(x), cond_fn2(x)))
-    # sort_fn = lambda x: (cond_fn2(x), cond_fn1(x))
-    def sort_fn(x):
-        a = cond_fn1(x)
-        b,c,d = cond_fn2(x)
-        name = x.task.name
-        thread_n = name.split('_')[-2]
-        return (b,c,a,d,thread_n)
+    process_sort = get_process_sort(bin_name_list, rsc_recoder_his)
     sorted_ready_l = ready_queue.queue + running_queue.queue + issue_list.queue
-    sorted_ready_queue = TaskQueue(sorted_ready_l, descending=False, sort_f=sort_fn)
+    sorted_ready_queue = TaskQueue(sorted_ready_l, descending=False, sort_f=process_sort)
     del sorted_ready_l
 
     # mechanism: 
@@ -71,8 +63,8 @@ def glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, tempora
         # try to allocate and preempt
         state = allocate_rsc_4_process_new(_p, n_slot, process_dict, timestep, temporal_rda_ratio, FLOPS_PER_CORE, quantumSize,  
                                                             rsc_recoder, rsc_recoder_his, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, 
-                                                            quantum_check_en, strategy='first_fit', glb_key=sort_fn, verbose=False, DEBUG=DEBUG_FG,
-                                                            show_warnings=show_warnings)
+                                                            quantum_check_en, strategy='first_fit', glb_key=process_sort, verbose=False, DEBUG=DEBUG_FG,
+                                                            show_warnings=show_warnings, bin_sort=bin_sort, bin_sort_reverse=bin_sort_reverse)
         # the tasks are preempted are given an extra opportunities
         for _p_2b_preempt in preempt_list:
             pid = _p_2b_preempt.pid
@@ -92,6 +84,7 @@ def glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, tempora
 
             # update the rsc_recoder
             rsc_recoder.pop(_p_2b_preempt.pid)
+            # rsc_recoder_his[_p_2b_preempt.pid].put_neg(bin_id, rsc_recoder[_p_2b_preempt.pid])
 
             if _p_2b_preempt.currentburst != 0:
                 # task is in the running queue
@@ -119,11 +112,13 @@ def allocate_rsc_4_process_new(_p:ProcessInt, n_slot:int,
                 iter_next_bin_obj:Iterator, bin_list:List[SchedulingTableInt], bin_name_list:List[str], 
                 quantum_check_en:bool, strategy:str, glb_key:callable[[ProcessInt], int]=None,
                 verbose:bool=False, DEBUG:bool=False,
-                show_warnings=True):
+                show_warnings=True, bin_sort="EAT", bin_sort_reverse=True,):
 
     # expected rsc_size and slot number
     time_slot_s, time_slot_e, req_rsc_size = _p.rsc_req_estm(n_slot, timestep, FLOPS_PER_CORE)
     # expected_slot_num = math.ceil(_p.totcpu / (req_rsc_size * timestep * FLOPS_PER_CORE))
+    if time_slot_s >= time_slot_e:
+        return False
     expected_slot_num = time_slot_e - time_slot_s
     # time_slot_e = min(time_slot_s + int(np.ceil(expected_slot_num * (temporal_rda_ratio + 1))), time_slot_e)
 
@@ -135,7 +130,7 @@ def allocate_rsc_4_process_new(_p:ProcessInt, n_slot:int,
                 rsc_recoder, rsc_recoder_his, 
                 iter_next_bin_obj, bin_list, bin_name_list, 
                 strategy,
-                glb_key)
+                glb_key, bin_sort, bin_sort_reverse,)
     
     # case 1: is pre-assigned with the resource, 
     # - state is False and fail_info is None, but fail_info is not None
@@ -217,11 +212,9 @@ def allocate_rsc_4_process_new(_p:ProcessInt, n_slot:int,
     # record the allocation result and prepare the issue list
     if state:
         rsc_recoder[_p.pid] = [alloc_slot_s, alloc_size, allo_slot, bin_id]
-        if _p.pid in rsc_recoder_his:
-            rsc_recoder_his[_p.pid].put(bin_id)
-        else:
+        if _p.pid not in rsc_recoder_his:
             rsc_recoder_his[_p.pid] = LRUCache(3)
-            rsc_recoder_his[_p.pid].put(bin_id)
+        rsc_recoder_his[_p.pid].put(bin_id, [alloc_slot_s, alloc_size, allo_slot])
     else:
         Warning("TASK {:d}:{:s}({:d}) IS DELAY ISSUED!!".format(_p.task.id, _p.task.name, _p.pid))
     return state
@@ -234,7 +227,8 @@ def bin_select(_p:ProcessInt, time_slot_s, time_slot_e, req_rsc_size,
                 rsc_recoder:dict, rsc_recoder_his:Dict[int, LRUCache], 
                 iter_next_bin_obj:Iterator, bin_list:List[SchedulingTableInt], bin_name_list:List[str], 
                 strategy:str,
-                glb_key:Callable[[ProcessInt], float]=None,):
+                glb_key:Callable[[ProcessInt], float]=None,
+                bin_sort:str="EAT", bin_sort_reverse:bool=True,):
  
     # strategy: 
     # 1. the resource constraint should be respected
@@ -269,17 +263,33 @@ def bin_select(_p:ProcessInt, time_slot_s, time_slot_e, req_rsc_size,
         # rsc_avl_list = [sum(_bin.idx_free_by_slot(time_slot_s, time_slot_e, key=_p.pid)) for _bin in bin_list]
 
         affinity_tgt_bin_id_list = get_target_bin_id(_p, bin_name_list, rsc_recoder_his)
+        # if _p.pid in rsc_recoder_his:
+        #     hate_bin_id_list = list(rsc_recoder_his[_p.pid].dict_neg.keys())
+        # else:
+        #     hate_bin_id_list = []
 
         # mark other bins as the targets of the search
         affinity_search_bin_id_list = [n for n in range(len(bin_list)) if n not in affinity_tgt_bin_id_list] 
-        # arrange the targets of the search in the order of the fitness of the size
-        affinity_search_bin_id_list.sort(key=lambda x: abs(bin_list[x].num_resources - req_rsc_size))
         
         # sort the bin according to the feature
         # - free: slot_s, avil_unit, preemption: slot_s, avil_unit
-        affinity_search_bin_id_list = sort_bin_list(_p, time_slot_s, time_slot_e, timestep, _p_index_by_pid,
-                                                    bin_list, affinity_search_bin_id_list,
-                                                    bin_name_list, rsc_recoder_his)
+        if bin_sort == "EAT":
+            bin_sort_fn = sort_bin_list_EAT
+            affinity_search_bin_id_list = bin_sort_fn(_p, time_slot_s, time_slot_e, timestep, _p_index_by_pid,
+                                                        bin_list, affinity_search_bin_id_list,
+                                                        bin_name_list, rsc_recoder_his)
+        elif bin_sort == "barycenter":
+            bin_sort_fn = sort_bin_list_by_barycenter
+            affinity_search_bin_id_list = bin_sort_fn(_p, time_slot_s, time_slot_e, timestep, _p_index_by_pid,
+                                                        bin_list, affinity_search_bin_id_list,
+                                                        bin_name_list, rsc_recoder_his)
+        elif bin_sort == "bf":
+            # arrange the targets of the search in the order of the fitness of the size
+            affinity_search_bin_id_list.sort(key=lambda x: abs(bin_list[x].num_resources - req_rsc_size))
+        else:
+            # arrange the targets of the search in the order of the reverse fitness of the size
+            affinity_search_bin_id_list.sort(key=lambda x: abs(bin_list[x].num_resources - req_rsc_size), reverse=True)
+
 
         # 3. the affinity settings of all the tasks should be respected 
         # try to find bin to fit the task
@@ -289,21 +299,11 @@ def bin_select(_p:ProcessInt, time_slot_s, time_slot_e, req_rsc_size,
         fail_info_list = []
         for bin_id in affinity_tgt_bin_id_list + affinity_search_bin_id_list: 
             # rearange the task in the ready queue
-            cond_fn1 = lambda x: x.deadline
-            cond_fn2 = lambda x: get_target_bin_score(x, bin_name_list=[bin_name_list[bin_id]], rsc_recoder_his=rsc_recoder_his, reverse=True)
-            # sorted_ready_queue = sorted(ready_queue.queue, key=lambda x: (cond_fn1(x), cond_fn2(x)))
-            # sort_fn = lambda x: (cond_fn2(x), cond_fn1(x))
-            def sort_fn(x):
-                a = cond_fn1(x)
-                b,c,d = cond_fn2(x)
-                return (b,c,a,d,)
-                # return (b,a,c,d,)
-                # return (b,a, )
-
+            process_sort = get_process_sort([bin_name_list[bin_id]], rsc_recoder_his)
             state, succ_info, fail_info = check_and_alloc_at_queue(_p, bin_list[bin_id], timestep, FLOPS_PER_CORE, 
                                         quantum_check_en, quantumSize, rsc_recoder, 
                                         time_slot_s, time_slot_e, req_rsc_size, expected_slot_num, 
-                                        _p_index_by_pid, key=sort_fn, return_all_occupant=strategy=="best_fit")
+                                        _p_index_by_pid, key=process_sort, return_all_occupant=strategy=="best_fit")
             if state: 
                 break
             elif fail_info is not None:
@@ -334,44 +334,6 @@ def bin_select(_p:ProcessInt, time_slot_s, time_slot_e, req_rsc_size,
                 warnings.warn("No more bin can be created")
     return state, bin_id, succ_info, fail_info
 
-def sort_bin_list(_p:ProcessInt, time_slot_s, time_slot_e, timestep, _p_index_by_pid:Dict[int, ProcessInt],
-                  bin_list:List[SchedulingTableInt], affinity_search_bin_id_list:List[int],
-                  bin_name_list:List[str], rsc_recoder_his:Dict[int, LRUCache]):
-    """
-        find the earliest bin that can provide enough resources
-        feature:
-        - free: slot_s, avil_unit, preemption: slot_s, avil_unit
-
-    """
-    bin_feature_list = []
-    for _bin_id in affinity_search_bin_id_list:
-        _bin = bin_list[_bin_id]
-        cond_fn1 = lambda x: x.deadline
-        cond_fn2 = lambda x: get_target_bin_score(x, bin_name_list=[bin_name_list[_bin_id]], rsc_recoder_his=rsc_recoder_his, reverse=True)
-        def sort_fn(x):
-            a = cond_fn1(x)
-            b,c,d = cond_fn2(x)
-            return (b,c,a,d,)
-
-        preemptable_l = {}
-        ordered_occupant_dict:Dict[int, List[int]] = _bin.index_occupy_by_id(time_slot_s, time_slot_e)
-        for pid in ordered_occupant_dict:
-            if sort_fn(_p_index_by_pid[pid]) > sort_fn(_p):
-                alloc_slot_s_t, alloc_size_t, allo_slot_t = ordered_occupant_dict[pid]
-                total_alloc_unit_t = np.sum(np.array(alloc_size_t) * np.array(allo_slot_t))
-                preemptable_l[pid] = [alloc_slot_s_t[0], total_alloc_unit_t]
-        preemptable_units = sum([_unit for _s, _unit in preemptable_l.values()]) if preemptable_l else 0
-        preemptable_start = min([_s for _s, _unit in preemptable_l.values()]) if preemptable_l else float("inf")
-        
-        aval_l = _bin.idx_free_by_slot(time_slot_s, time_slot_e, key=_p.pid)
-        available_units = sum(aval_l)
-        # index 1st non-zero element
-        available_start = time_slot_s + np.nonzero(aval_l)[0][0] if available_units > 0 else float("inf")
-        bin_feature_list.append([_bin_id, available_start, available_units, preemptable_start, preemptable_units])
-    # sort the bin according to the feature
-    itr = filter(lambda x: (x[2]+x[4])*timestep*FLOPS_PER_CORE>_p.remburst, sorted(bin_feature_list, key=lambda x: min(x[1], x[3])))
-    affinity_search_bin_id_list = [x[0] for x in itr]
-    return affinity_search_bin_id_list
 
 def check_and_alloc_at_queue(_p, bin:SchedulingTableInt, timestep, FLOPS_PER_CORE, 
                              quantum_check_en, quantumSize, rsc_recoder, 
@@ -498,59 +460,11 @@ def get_target_bin_id(_p, bin_name_list, rsc_recoder_his):
     # suppose the target was allocated with the resource
     for _pid in _p.task.affinity:
         if _pid in rsc_recoder_his:
-            preference = rsc_recoder_his[_pid].get_mru()
-            if preference not in affinity_tgt_bin_id_list:
-                affinity_tgt_bin_id_list.append(preference)
+            if not rsc_recoder_his[_pid].is_empty():
+                preference = rsc_recoder_his[_pid].get_mru()
+                if preference not in affinity_tgt_bin_id_list:
+                    affinity_tgt_bin_id_list.append(preference)
     return affinity_tgt_bin_id_list
-
-# how does task affinity match with the existing bins
-def get_target_bin_score(_p:ProcessInt, bin_name_list:List[str], rsc_recoder_his:Dict[int, LRUCache], reverse=True): 
-    """
-    measure how well the affinity target matches with the existing bins
-    """
-    pre_alloc_flg = False
-    # case 1: task is pre-assigned with the resource
-    p_name = _p.task.name
-    if p_name in bin_name_list: 
-        pre_alloc_flg = True
-    
-    # lvl 1: target is pre-assigned with the resource
-    # i.e., "MultiCameraFusion": ["ImageBB"]
-    affinity_tgt_bin_id_list = []
-    for task_n, task_id in zip(_p.task.affinity_n, _p.task.affinity): 
-        if task_n in bin_name_list:
-            tgt_id = bin_name_list.index(task_n)
-            if tgt_id not in affinity_tgt_bin_id_list:
-                affinity_tgt_bin_id_list.append(tgt_id)
-            else:
-                affinity_tgt_bin_id_list.append(-1)
-        else:
-            affinity_tgt_bin_id_list.append(-1)
-
-    # lvl 2: target was allocated with the resource
-    # i.e., "Depth_estimation": ["Lane_drivable_area_det", "Optical_Flow"]
-    preferred_bin_id_list = []
-    for task_n, task_id in zip(_p.task.affinity_n, _p.task.affinity): 
-        # case 3: suppose the target was allocated with the resource
-        if task_id in rsc_recoder_his and task_n not in bin_name_list:
-            preference = rsc_recoder_his[task_id].get_mru()
-            if preference not in affinity_tgt_bin_id_list and preference not in preferred_bin_id_list:
-                preferred_bin_id_list.append(preference)
-            else:
-                preferred_bin_id_list.append(-1)
-        else:
-            preferred_bin_id_list.append(-1)
-
-    # score function
-    weight = 1/2**(np.arange(len(_p.task.affinity))+1) # 1/2, 1/4, 1/8, ...
-
-    score0 = 1. if pre_alloc_flg else 0.
-    score1 = np.sum(weight*(np.array(affinity_tgt_bin_id_list)!=-1))
-    score2 = np.sum(weight*(np.array(preferred_bin_id_list)!=-1))
-    
-    if reverse:
-        return (1-score0, 1-score1, 1-score2)
-    return (score0, score1, score2)
 
 def get_rsc_2b_released(rsc_recoder, n_slot, _p):
     alloc_slot_s_t, alloc_size_t, allo_slot_t, bin_id_t = rsc_recoder[_p.pid]

@@ -18,6 +18,7 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 from model.event_gen.e2e_latency import jitter_gen
+from global_var import *
 
 def main():
     import argparse
@@ -76,7 +77,7 @@ def main():
         else:
             cfg_n = args.profiling_filename.split(".")[-2].split("_")[-1]
     else:
-        cfg_n = f"x{args.aux_scale_factor}_{args.e2e_latency}s_rda-{(args.wsc_slack_ratio-args.temporal_rda_ratio):.2%}(T)_{args.temporal_rda_ratio:.2%}(S)"
+        cfg_n = f"x{args.aux_scale_factor}_{args.e2e_latency}s_rda-{(args.wsc_slack_ratio):.2%}(T)_{args.temporal_rda_ratio:.2%}(S)"
     num_cores = args.num_cores
     num_periods = args.n_p
     slack_threshold = args.slack_threshold
@@ -167,6 +168,15 @@ def plot_distr_hist(args, glb_n_task_dict):
                                         bins='auto', histtype='stepfilled', alpha=0.2,
                                         label=f"e2e")
     ax[axis_idx//cols, axis_idx%cols].set_title(f"e2e-{args.e2e_latency}ms")
+    axis_idx += 1
+    head_latency = AVG_HOP_NUM * LAT_PER_HOP
+    tail_latency = GLB_BUFFER_SIZE_PER_CORE * 256 / BW_DRAM * 0.8
+    switch_lat= jitter_gen(tail_latency, {'scale': 0.2, }, size=plot_sample_num, seed=0)() + head_latency
+    ax[axis_idx//cols, axis_idx%cols].hist(switch_lat, density=True,
+                                        bins='auto', histtype='stepfilled', alpha=0.2,
+                                        label=f"switch")
+    ax[axis_idx//cols, axis_idx%cols].set_title(f"switch-{2*40e6/100e9*1e3}ms")
+
     # set axis as scientific notation
     ax[axis_idx//cols, axis_idx%cols].ticklabel_format(style='sci', axis='x', scilimits=(0,0))
     axis_idx += 1

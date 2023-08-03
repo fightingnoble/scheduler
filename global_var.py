@@ -20,3 +20,14 @@ flop_error_tol_bit = 7
 fork_pid_base = 1000
 max_fork_candi_num = 20
 max_fork_pid = 100
+
+GLB_BUFFER_SIZE = 40E6 # Bytes
+GLB_BUFFER_SIZE_PER_CORE = 156.25E3 # Bytes
+BW_DRAM = 100E9 # Bytes/s
+LAT_PER_HOP = 10e-9 # Seconds
+AVG_HOP_NUM = 10
+MIN_CORE_NUM = 256
+
+W_perc = 1/3
+A_perc = 1/3
+O_perc = 1/3

@@ -1364,6 +1364,49 @@ def dense_to_sparse(scheduling_table:np.ndarray):
         sparse_list.append([pre_idx, pre_rsc, len(scheduling_table)-pre_idx])
     return sparse_list
 
+def calc_free_spaces(items, bin_height, bin_width):
+    # Sort by start  
+    items.sort(key=lambda x: x[0]) 
+
+    free_spaces = []
+    prev_end = 0
+    prev_height = 0
+
+    for item in items:
+        start, height, length = item 
+        
+        # Calculate free space before this item
+        if start > prev_end:
+            free_spaces.append([prev_end, start - prev_end, bin_height - prev_height])
+
+        # Calculate free space above this item
+        if height < bin_height: 
+            free_spaces.append([start, length, bin_height - height])
+
+        # Update prev end and height
+        prev_end = start + length
+        prev_height = height
+
+    # Add trailing free space
+    if prev_end < bin_width:
+        free_spaces.append([prev_end, bin_width - prev_end, bin_height - prev_height])
+
+    return free_spaces
+
+def get_freespace_features(free_spaces):
+    # Calculate total free area
+    free_area = sum(w*h for x,y,w,h in free_spaces)
+
+    # Calculate x and y barycenters 
+    # weighted_x = np.array([x*w*h for x,w,h in free_spaces])
+    # weighted_y = np.array([y*w*h for y,w,h in free_spaces])
+    weighted_x = np.array([(x+w/2)*w*h for x,y,w,h in free_spaces])
+    weighted_y = np.array([(y+h/2)*w*h for x,y,w,h in free_spaces])
+
+    bary_x = weighted_x.sum()/free_area
+    bary_y = weighted_y.sum()/free_area 
+    return free_area, bary_x, bary_y
+
 
 class BinGenSelInt(object):
     def __init__(self, tab_temp_size:int):

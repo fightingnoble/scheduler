@@ -28,13 +28,13 @@ def EstimCoreNums4Process(_p:ProcessInt, flops, expected_slack,
         if req_rsc_size==_p.core_max: 
             constr = "upb"
     elif _p.parallel_mode in ["lwb", "range"]:
-        if _p.core_min > curr_aval_rsc:
-            # no available solution
-            return 0, "N/A"
-        else:
-            req_rsc_size = max(round_func(req_rsc_size), _p.core_min)
-            if req_rsc_size==_p.core_min:
-                constr = "lwb"
+        if curr_aval_rsc is not None:
+            if _p.core_min > curr_aval_rsc:
+                # no available solution
+                return 0, "N/A"
+        req_rsc_size = max(round_func(req_rsc_size), _p.core_min)
+        if req_rsc_size==_p.core_min:
+            constr = "lwb"
     elif _p.parallel_mode == "list":
         # select the nearest one
         # filter the core_list by the current available resource
@@ -52,8 +52,8 @@ def EstimCoreNums4Process(_p:ProcessInt, flops, expected_slack,
             constr = "lwb"
     else:
         req_rsc_size = max(round_func(req_rsc_size), 1)
-        if curr_aval_rsc is not None:
-            req_rsc_size = min(req_rsc_size, curr_aval_rsc)
+    if curr_aval_rsc is not None:
+        req_rsc_size = min(req_rsc_size, curr_aval_rsc)
     got_latency = flops / req_rsc_size / FLOPS_PER_CORE
     return req_rsc_size, got_latency, constr
 

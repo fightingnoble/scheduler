@@ -5,8 +5,12 @@ class LRUCache:
 
     def __init__(self, capacity: int=-1):
         self.dict=OrderedDict()
+        self.dict_neg=OrderedDict()
         self.remain=capacity
         self.bk = deepcopy(self.dict)
+    
+    def is_empty(self):
+        return len(self.dict)==0
     
     def get(self, key: int) -> int:
         if key not in self.dict:
@@ -26,14 +30,36 @@ class LRUCache:
                 self.remain-=1
             elif self.remain==0:
                 # Pairs are returned in FIFO order if false.
-                # first item is popped
+                # earliest item is popped
                 self.dict.popitem(last=False)
         self.dict[key]=value
+        if key in self.dict_neg:
+            self.dict_neg.pop(key)
 
     def withdraw(self):
         delta_size = len(self.dict) - len(self.bk)
         self.dict = deepcopy(self.bk)
         self.remain += delta_size
+
+    def get_lrp(self):
+        """
+        return the latest popped item
+        """
+        if len(self.dict_neg)==0:
+            return None
+        k = list(self.dict_neg.keys())[-1]
+        return k
+    
+    def put_neg(self, key: int, value: int=None) -> None:
+        if key in self.dict:
+            if key != self.get_mru():
+                # push back the item
+                self.dict.move_to_end(key, last=False)
+            else:
+                self.dict_neg[key]=self.dict.pop(key)
+                self.remain+=1
+        else:
+            self.dict_neg[key]=value
 
     def get_lru(self):
         """

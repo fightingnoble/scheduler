@@ -85,6 +85,12 @@ mechanism:
 sort the bin according to the feature
    - free: slot_s, avil_unit, preemption: slot_s, avil_unit
 
+resource reservation: 
+   input parameters:
+      wsc_slack_ratio
+      temporal_rda_ratio
+   deduced parameters:
+      spatial_rda_ratio = (1 - temporal_rda_ratio)/wsc_slack_ratio
 
 10. compared items
 A. Context switching
@@ -202,6 +208,7 @@ B. deadline assignment
       delete the process
       
 
+
 parameter scan
    e2e_var_sim_en
    jitter_sim_en
@@ -239,6 +246,5 @@ Scheduler parameters
    wsc_slack_ratio
    temporal_rda_ratio
    lateness_mode
-   temporal_rda_ratio
    test_case
    barrier_dis
