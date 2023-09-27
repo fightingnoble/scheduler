@@ -785,20 +785,20 @@ class TaskBase(object):
             event_time += self.hyper_period_size * self.period
             i += 1
     
-    def extract_sensor_event(_p, event_range, jitter_sim_en=False, jitter_sim_para=None, seed=0):
-        n_event = int(event_range/_p.task.period)
-        if jitter_sim_en:
-            jitter_gen_inst = jitter_gen(1/_p.freq, jitter_sim_para, size=1, seed=seed)
-        event_gen = _p.event_generator()
-        next(event_gen)
-        for i in range(n_event):
-            if jitter_sim_en:
-                jitter = jitter_gen_inst()
-                assert abs(jitter.max()) < 0.5*_p.period, "jitter is too large"
-                event_gen.send(jitter)
-            else:
-                event_gen.send(0)
-        event_gen.send(None)
+    # def extract_sensor_event(_p, event_range, jitter_sim_en=False, jitter_sim_para=None, seed=0):
+    #     n_event = int(event_range/_p.task.period)
+    #     if jitter_sim_en:
+    #         jitter_gen_inst = jitter_gen(1/_p.freq, jitter_sim_para, size=1, seed=seed)
+    #     event_gen = _p.event_generator()
+    #     next(event_gen)
+    #     for i in range(n_event):
+    #         if jitter_sim_en:
+    #             jitter = jitter_gen_inst()
+    #             assert abs(jitter.max()) < 0.5*_p.period, "jitter is too large"
+    #             event_gen.send(jitter)
+    #         else:
+    #             event_gen.send(0)
+    #     event_gen.send(None)
 
     def gen_event_modA(self, event_range, jitter_sim_en=False, jitter_sim_para=None, seed=0):
         n_event = int(event_range/self.period)
@@ -811,9 +811,10 @@ class TaskBase(object):
             if jitter_sim_en:
                 jitter = jitter_gen_inst()
                 assert abs(jitter.max()) < 0.5*self.period, "jitter is too large"
-                yield event_time + jitter
+                out = round(event_time + jitter, numerical_tol_bit)
+                yield out
             else:
-                yield event_time
+                yield round(event_time, numerical_tol_bit)
             i += 1
             if i >= n_event:
                 yield np.inf
@@ -833,9 +834,9 @@ class TaskBase(object):
                 if jitter_sim_en:
                     jitter = jitter_gen_inst()
                     assert abs(jitter.max()) < 0.5*self.period, "jitter is too large"
-                    yield event_time + self.period * j + jitter
+                    yield round(event_time + self.period * j + jitter, numerical_tol_bit)
                 else:
-                    yield event_time + self.period * j
+                    yield round(event_time + self.period * j, numerical_tol_bit)
                 event_no += 1
                 if event_no >= n_event:
                     yield np.inf
@@ -875,11 +876,11 @@ class TaskBase(object):
         return event_iter_dict
 
     def extract_sensor_event(_task, event_range):
-        event_gen = _task.delegate_event_generator()
-        next(event_gen)
-        l = []
+        event_gen = _task.delegate_event_generator(event_range=event_range)
+        l = [next(event_gen)]
         while True:
             event_time = event_gen.send(0)
+            # print(event_time)
             if event_time >= event_range:
                 break
             l.append(event_time) 
@@ -920,13 +921,20 @@ class TaskInt(TaskBase):
         self.pre_assigned_resource_flag = pre_assigned_resource_flag
 
         # resource mapping
-        if pre_assigned_resource_flag:
-            assert "main_size" in kwargs.keys(), "main_size is not provided"
-            assert "RDA_size" in kwargs.keys(), "RDA_size is not provided"
-            src_type:DDL_reservation = DDL_reservation if timing_flag == "deadline" else RT_reservation
-            self.pre_assigned_resource = src_type(kwargs["main_size"], kwargs["RDA_size"])
+        # if pre_assigned_resource_flag:
+        #     assert "main_size" in kwargs.keys(), "main_size is not provided"
+        #     assert "RDA_size" in kwargs.keys(), "RDA_size is not provided"
+        #     src_type:DDL_reservation = DDL_reservation if timing_flag == "deadline" else RT_reservation
+        #     self.pre_assigned_resource = src_type(kwargs["main_size"], kwargs["RDA_size"])
+        # else:
+        #     self.pre_assigned_resource:DDL_reservation = dummy_reservation(0, 0)
+
+        assert "main_size" in kwargs.keys(), "main_size is not provided"
+        assert "RDA_size" in kwargs.keys(), "RDA_size is not provided"
+        if kwargs["RDA_size"]>0:
+            self.pre_assigned_resource = DDL_reservation(kwargs["main_size"], kwargs["RDA_size"])
         else:
-            self.pre_assigned_resource:DDL_reservation = dummy_reservation(0, 0)
+            self.pre_assigned_resource = RT_reservation(kwargs["main_size"], kwargs["RDA_size"])
         
         # =============== 3. runtime attribute ===============
         # L1 resource allocation

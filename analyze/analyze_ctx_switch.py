@@ -3,32 +3,11 @@ from functools import reduce
 import pandas as pd
 import os
 
-folder_pattern = {
-    "num_cores": r"(\d+)",
-    "cfg_n": r"x(\d+)_(\d+\.\d+)s_rda-(\d+\.\d+)%\(T\)_(\d+\.\d+)%\(S\)_(\w+)", 
-    "cfg_option": r"(soft|heavy|medium)"
-}
-folder_pattern_keys = {
-    "num_cores": ["num_cores",],
-    "cfg_n": ["aux_scale_factor", "e2e_latency", "wsc_slack_ratio", "temporal_rda_ratio", "lateness_mode"], 
-    "cfg_option": ["cfg_option",]
-}
-folder_type = {
-    "num_cores": [int,],
-    "cfg_n": [int, float, float, float, str],
-    "cfg_option": str
-}
-folder_search_seq = ["cfg_n", "num_cores"]
-file_pattern = r"(dyn|glb_dyn)(_\d+)?_jitter_(dis|en)\.log\.txt"
-# file_pattern = r"(glb_dyn)(_\d+)?_jitter_(dis|en)\.log\.txt"
-file_pattern_keys = ["method", "", "jitter_en"]
-# bin_pack_new_{x}.log.txt
-# glb_dyn_{x}_ideal.log.txt
-# glb_dyn_{x}_jitter_dis.log.txt
-# glb_dyn_{x}_jitter_en.log.txt
-# dyn_{x}_jitter_dis.log.txt
-# dyn_{x}_jitter_en.log.txt
+from analyze.pattern import folder_pattern, folder_pattern_keys, folder_type, get_path_var_scaner
+from analyze.pattern import log_pattern, log_pattern_keys, log_pattern_type
+from utils import update_df
 
+folder_search_seq = ["cfg_n", "num_cores"]
 # 读取文件内容
 def get_ctx_switch_info(filename):
     with open(filename, 'r') as file:
@@ -52,7 +31,7 @@ def get_ctx_switch_info(filename):
         print(f"Cumulative context switch: {cumulative_context_switch_time}")
         return number_of_context_switch, cumulative_context_switch_time
 
-def get_ctx_extracter(file_pattern):
+def get_ctx_extracter(file_pattern, file_pattern_keys, file_pattern_type):
     def extract_ctx_num(df, folder, info_dict):
         root,dirs,files = os.walk(folder).__next__()
         assert len(dirs) == 0
@@ -62,29 +41,24 @@ def get_ctx_extracter(file_pattern):
                 file_path = os.path.join(folder, fn)
                 print(file_path)
                 # Create a dictionary with the values
-                data = {**info_dict, **dict(zip(file_pattern_keys, fn_match.groups()))}
+                data = {**info_dict, **{k: t(v) for k,v,t in zip(file_pattern_keys, fn_match.groups(), file_pattern_type) if v is not None}}
                 data.pop("")
-        
-                # Append a row to the dataframe with the values
-                criteria = [df[col] == val for col, val in data.items()]
-                data_idx = reduce(lambda x, y: x&y, criteria)
+                if 'seed' not in data:
+                    data['seed'] = ""
 
+                if data['jitter_en'] and data['seed'] == "":
+                    continue
+                        
                 number_of_context_switch, cumulative_context_switch_time = get_ctx_switch_info(file_path)
-                if df.loc[data_idx].size:
-                    df.loc[data_idx, 'n_ctx_switch'] = number_of_context_switch
-                    df.loc[data_idx, 'cum_time'] = cumulative_context_switch_time
-                    df.loc[data_idx, 'throughput'] = -1
-                else:
-                    data.update({'n_ctx_switch': number_of_context_switch, 
-                                 'cum_time': cumulative_context_switch_time,
-                                 'throughput': -1})
-                    df = pd.concat([df, pd.DataFrame.from_dict(data, orient='index').T], ignore_index=True)
+                df = update_df(df, data, {'n_ctx_switch': number_of_context_switch,
+                                            'cum_time': cumulative_context_switch_time,
+                                            'throughput': -1})
         return df
     return extract_ctx_num
 
 if __name__ == "__main__":
     import argparse
-    from analyze.tp_analyser import get_path_var_scaner, get_throughput_extracter
+    from analyze.analyze_tp import get_throughput_extracter
     parser = argparse.ArgumentParser(description="profiling")
     parser.add_argument("--root_dir", default=".", type=str, help="root directory")
     parser.add_argument("--filename", type=str, default="ctx_switch", help="filename")
@@ -108,14 +82,15 @@ if __name__ == "__main__":
         # Create a dataframe with the values
         pd.DataFrame(columns=
             [key for search_key in folder_search_seq for key in folder_pattern_keys[search_key]]
-            + [key for key in file_pattern_keys if key != ""]
+            + [key for key in log_pattern_keys if key != ""]
         + ['n_ctx_switch', 'cum_time', 'throughput']).to_csv(filename, index=False)
 
     # Load the dataframe
     df = pd.read_csv(filename)
 
     root_path = os.path.join('log', root_dir)
-    ctx_extracter = get_ctx_extracter(file_pattern) 
+    ctx_extracter = get_ctx_extracter(log_pattern, log_pattern_keys, log_pattern_type) 
+    # for find minimum required cores
     tp_extracter = get_throughput_extracter(args.stat_csv_filename, args.profiling_filename, args.n_p, args.warmup_dis) 
     scanner = get_path_var_scaner([ctx_extracter, tp_extracter], folder_pattern, folder_pattern_keys, folder_type, folder_search_seq)
     df = scanner(df, root_path, len(folder_search_seq), dict(), 0)

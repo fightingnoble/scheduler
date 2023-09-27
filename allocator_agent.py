@@ -92,7 +92,7 @@ from model.lru import LRUCache
 from sched.scheduler_agent import Scheduler, glb_dynamic_sched_step
 from sched.monitor_agent import Monitor
 
-from sched.scheduler_agent import Scheduler 
+from sched.scheduler_agent import load_sched_tab
 from sched.monitor_agent import Monitor
 from task.spec import Spec
 from model.msg_dispatcher import MsgDispatcher
@@ -248,7 +248,8 @@ def sched_step(task_spec:Spec,
                 rsc_list:List[Resource_model_int], 
                 total_cores:int, n_slot, 
                 glb_p_list:List[ProcessInt],
-                timestep, hyper_p, n_p=1, verbose=False, *, warmup=False, drain=False,):
+                timestep, hyper_p, n_p=1, verbose=False, *, warmup=False, drain=False, 
+                cyclic=False,):
         
     """
     implement a step of runtime scheduling
@@ -292,9 +293,14 @@ def sched_step(task_spec:Spec,
         message_trigger_event_new(event_iter_dict, inactive_list, glb_p_list, 
                                   sensor_pipe, ddl_stream, load_var_sim_para,
                                   timestep, curr_t, True) 
-        sched.scheduler_step(msg_dispatcher, a_data_pipe, w_data_pipe, 
-                             n_slot, timestep, event_range, sim_slot_num, curr_t, 
-                             glb_name_p_dict, res_cfg, msg_queue, a_msg_queue, sensor_msg_queue, monitor, DEBUG_FG)
+        if not cyclic:
+            sched.scheduler_step(msg_dispatcher, a_data_pipe, w_data_pipe, 
+                                n_slot, timestep, event_range, sim_slot_num, curr_t, 
+                                glb_name_p_dict, res_cfg, msg_queue, a_msg_queue, sensor_msg_queue, monitor, DEBUG_FG)
+        else:
+            sched.cyclic_step(msg_dispatcher, a_data_pipe, w_data_pipe, 
+                                n_slot, timestep, event_range, sim_slot_num, curr_t, 
+                                glb_name_p_dict, res_cfg, msg_queue, a_msg_queue, sensor_msg_queue, monitor, DEBUG_FG)
     # update the wait task
     w_data_pipe.update_wait_time(timestep)
     a_data_pipe.update_wait_time(timestep)
@@ -314,7 +320,8 @@ def cyclic_sched(task_spec:Spec, affinity,
                 sensor_pipe:TriggerPipe=None,
                 a_data_pipe:DataPipe=None,
                 w_data_pipe:DataPipe=None, 
-                verbose=False, *, warmup=False, drain=False,):
+                bin_path_format:str=None,
+                verbose=False, *, warmup=False, drain=False, cyclic=False,):
     """
     partition the scheduling table
     """
@@ -410,6 +417,18 @@ def cyclic_sched(task_spec:Spec, affinity,
         # get ddl
         if ddl_update_iter is not None:
             period_trigger_event(ddl_update_iter, curr_t, ddl_stream)
+            if curr_t > 0:
+                for event_time, event in ddl_stream.queue:
+                    if round(event_time, numerical_tol_bit) <= round(curr_t-timestep, numerical_tol_bit):
+                        continue
+                    elif round(event_time, numerical_tol_bit) <= round(curr_t, numerical_tol_bit):
+                        e2e_ddl, aux_scale_factor = event
+                        if e2e_ddl != scheduler_list[0].e2e_latency:
+                            assert scheduler_list[0]._SchedTab_L0 is None
+                            map_new_to_old, new_map_rev = load_sched_tab(total_cores, e2e_ddl, aux_scale_factor, bin_path_format, scheduler_list)                                
+                        break
+                    else:
+                        break
         if load_var_sim_para is not None:
             for var_item, var_param in load_var_sim_para.items():
                 dyn_obj_stream = var_param["stream"] 
@@ -426,7 +445,8 @@ def cyclic_sched(task_spec:Spec, affinity,
                     rsc_list, 
                     total_cores, n_slot, 
                     glb_p_list, 
-                    timestep, hyper_p, n_p, verbose, warmup=warmup, drain=drain) 
+                    timestep, hyper_p, n_p, verbose, warmup=warmup, drain=drain, 
+                    cyclic=cyclic) 
 
 
 def glb_sched(task_spec:Spec, affinity, 
@@ -524,7 +544,7 @@ if __name__ == "__main__":
     from task.task_cfg import load_taskint, create_init_p_list
     from task.task_cfg import affinity_cfg, task_graph_srcs, task_graph_ops, task_graph_sinks
     from task.task_cfg import creat_physical_graph, creat_logical_graph, init_depen, init_affinity, redist_ert_dll
-    from sched.global_sched import push_task_into_bins, push_task_into_bins_new
+    from sched.global_sched import push_task_into_bins_new
     from utils import input_parser
 
     args = input_parser()
@@ -574,40 +594,6 @@ if __name__ == "__main__":
 
     if args.test_case == "all":
         args.test_all = True
-    if args.test_case == "bin_pack" or args.test_all:
-        # push_task_into_scheduling_table_cyclic_preemption_disable(task_dict, num_cores, sim_step*1, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
-        bin_list, glb_p_list = push_task_into_bins(glb_p_list, affinity_cfg, num_cores, args.quantum_check_en, quantumSize, sim_step, hyper_p, num_periods, args.verbose, warmup=True, drain=True)
-        pid2name = {_p.pid:_p.task.name for _p in glb_p_list}
-        from sched.scheduling_table import get_task_layout_compact
-        get_task_layout_compact(bin_list, pid2name, save= True, time_step= sim_step,
-        hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
-        txt_size=40, tick_dens=2, save_path=f"plot/{cfg_n}/{num_cores}/task_bin_pack_cyclic_{num_cores}{args.file_suffix}.pdf") 
-
-        get_task_layout_compact(bin_list, pid2name, save= True, time_step= sim_step,
-        hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
-        txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/{cfg_n}/{num_cores}/task_bin_pack_full_{num_cores}{args.file_suffix}.pdf")
-
-        # select a period to save 
-        assert num_periods >= 1
-        bin_list2save = []
-
-        # save the bin_list and the init_p_list
-        with open(save_path, "wb") as f:
-            pickle.dump(bin_list, f)
-        # with open(f"init_p_list_{num_cores}{args.file_suffix}.pkl", "wb") as f:
-        #     pickle.dump(init_p_list, f)
-        try:
-            # load the bin_list and the init_p_list
-            with open(save_path, "rb") as f:
-                bin_list = pickle.load(f)
-            print(f"{save_path} saved and loaded successfully")
-            # with open(f"init_p_list_{num_cores}{args.file_suffix}.pkl", "rb") as f:
-            #     init_p_list = pickle.load(f)
-            # print(f"init_p_list_{num_cores}{args.file_suffix}.pkl saved and loaded successfully")
-        except:
-            print(f"{save_path} not found")
-            exit()
-
     elif args.test_case == "dynamic" or args.test_all:
         try:
             # load the bin_list and the init_p_list
@@ -617,8 +603,6 @@ if __name__ == "__main__":
             #     init_p_list = pickle.load(f)
         except:
             print(f"{save_path} not found")
-            # print(f"{save_path} not found")
-            bin_list, _ = push_task_into_bins(glb_p_list, affinity_cfg, num_cores, args.quantum_check_en, quantumSize, sim_step, hyper_p, 1, args.verbose, warmup=True, drain=True)
 
         # from message_agent import Message
         

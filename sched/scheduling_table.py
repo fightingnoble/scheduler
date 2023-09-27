@@ -51,6 +51,9 @@ class SchedulingTableInt(object):
         self.wr_pointer = 0
         self.hypper_period = hp
 
+    def is_empty(self):
+        return np.all([rsc.is_empty() for rsc in self.scheduling_table]) or len(self.scheduling_table) == 0
+
     def append(self, rsc_agent: Resource_model_int):
         # Too slow
         # self.scheduling_table = np.append(self.scheduling_table, rsc_agent)
@@ -61,6 +64,11 @@ class SchedulingTableInt(object):
             self.scheduling_table = np.append(self.scheduling_table, np.array([Resource_model_int(self.num_resources, ) for _ in range(self.hypper_period)], dtype=Resource_model_int))
         self.scheduling_table[self.wr_pointer].update(rsc_agent.rsc_map)
         self.wr_pointer += 1
+
+    def add_rsc_num(self, num:int):
+        self.num_resources += num
+        for rsc in self.scheduling_table:
+            rsc.add_rsc_num(num)
 
     def index_occupy_by_id(self, time_slot_s:int=None, time_slot_e:int=None) -> Dict[int, List[int]]:
         """
@@ -208,88 +216,7 @@ class SchedulingTableInt(object):
                 if DEBUG:
                     print("Enough resources: as evenly as possible")
 
-                # available (A)
-                rsc_avl_tmp = np.zeros(len(s), dtype=int) 
-                rsc_lack = expected_req_rsc_size
-                cum_slot_length = 0
-
-                for i in range(len(s)):
-                    rsc_avl_tmp[i] = slot_n[i]
-                    # slot length                        
-                    if cum_slot_length + (e[i] - s[i]) >= expected_slot_num:
-                        curr_slot[i] = int(expected_slot_num - cum_slot_length)
-                        break
-                    else:
-                        curr_slot[i] = int(e[i] - s[i])
-                        cum_slot_length += curr_slot[i]
-
-                # Try to distribute the rsc_lack to the intervals as evenly as possible
-                n_iter = 0
-                cum_size = 0
-                # find the available slots (a vector)
-                avl_slot_idx = np.where(rsc_avl_tmp> 0)[0]
-                # apply the size constraint based on parallelism cfg files
-                if task.parallel_mode in ["lwb", "range"]: 
-                    avl_slot_idx &= np.where(rsc_avl_tmp>task.core_min)[0] 
-                
-                while rsc_lack>0 and avl_slot_idx.size>0: 
-                    # the max step of the size ++
-                    max_step = rsc_avl_tmp[avl_slot_idx].min() 
-                    # the size of the current available slots
-                    cum_size_t = max_step + cum_size
-                    # apply the size constraint 
-                    cum_size_t, _constr = task.get_available_cfg(cum_size_t, cum_size_t)
-                    # judge whether the size_t is valid
-                    size_t = cum_size_t - cum_size                            
-                    if size_t > 0:
-                        slot_size_sum = np.sum(curr_slot[avl_slot_idx])
-                        if slot_size_sum * size_t >= rsc_lack:
-                            size_t = np.ceil(rsc_lack / slot_size_sum).astype(int)
-                            rsc_lack = 0
-                        else: 
-                            rsc_lack -= slot_size_sum * size_t
-                    
-                        cum_size += size_t
-
-                        curr_alloc[avl_slot_idx] += size_t
-                        rsc_avl_tmp[avl_slot_idx] -= size_t
-                    else:
-                        rsc_avl_tmp[rsc_avl_tmp == max_step] = 0
-
-                    upb_flg = _constr == "upb"
-                    list_upb_flg = _constr == "list" and cum_size_t == max(task.core_list)
-                    if upb_flg or list_upb_flg:
-                        break
-                    # subtract the slots idx that cannot be allocated from the available slots
-                    # Find indices where rsc_avl_tmp is greater than 0
-                    non_zero_indices = np.where(rsc_avl_tmp <= 0)[0]
-
-                    # Subtract the non-zero indices from avl_slot_idx
-                    avl_slot_idx = np.setdiff1d(avl_slot_idx, non_zero_indices)
-                    
-                    n_iter += 1
-                    if n_iter > 1000:
-                        assert False, "Infinite loop"
-                
-                if rsc_lack > 0:
-                    curr_alloc.fill(0)
-                    curr_slot.fill(0)
-                    # as soon as possible
-                    self.asap_insert(task, DEBUG, s, e, slot_n, curr_alloc, curr_slot, expected_req_rsc_size)
-                else:
-                    # Check whether the task allocate too much resources
-                    i=1
-                    while True:
-                        non_zero_indices = np.where(curr_alloc > 0)[0]
-                        non_zero_min_idx = curr_alloc[non_zero_indices].argmin()
-                        slot_idx = non_zero_indices[non_zero_min_idx]
-                        if rsc_lack + curr_alloc[slot_idx] <= 0:
-                            curr_slot[slot_idx] -= 1
-                            rsc_lack += curr_alloc[slot_idx] * 1
-                            if curr_slot[slot_idx] == 0:
-                                curr_alloc[slot_idx] = 0
-                        else:
-                            break
+                self.aeap_insert(task, expected_slot_num, DEBUG, s, e, slot_n, curr_alloc, curr_slot, expected_req_rsc_size)
 
             # allocate resources
             idx = curr_alloc.nonzero()[0]
@@ -300,6 +227,146 @@ class SchedulingTableInt(object):
 
             self.sparse_mode = False
             return True, (time_slot_s+np.array(s)[idx]).tolist(), curr_alloc[idx].tolist(), curr_slot[idx].tolist()
+
+    def aeap_insert(self, task, expected_slot_num, DEBUG, s, e, slot_n, curr_alloc, curr_slot, expected_req_rsc_size):
+        # available (A)
+        rsc_avl_tmp = np.zeros(len(s), dtype=int) 
+        rsc_lack = expected_req_rsc_size
+        cum_slot_length = 0
+
+        for i in range(len(s)):
+            rsc_avl_tmp[i] = slot_n[i]
+                    # slot length                        
+            if cum_slot_length + (e[i] - s[i]) >= expected_slot_num:
+                curr_slot[i] = int(expected_slot_num - cum_slot_length)
+                break
+            else:
+                curr_slot[i] = int(e[i] - s[i])
+                cum_slot_length += curr_slot[i]
+
+                # Try to distribute the rsc_lack to the intervals as evenly as possible
+        n_iter = 0
+        cum_size = 0
+                # find the available slots (a vector)
+        avl_slot_idx = np.where(rsc_avl_tmp> 0)[0]
+                # apply the size constraint based on parallelism cfg files
+        if task.parallel_mode in ["lwb", "range"]: 
+            avl_slot_idx &= np.where(rsc_avl_tmp>task.core_min)[0] 
+                
+        while rsc_lack>0 and avl_slot_idx.size>0: 
+                    # the max step of the size ++
+            max_step = rsc_avl_tmp[avl_slot_idx].min() 
+                    # the size of the current available slots
+            cum_size_t = max_step + cum_size
+                    # apply the size constraint 
+            cum_size_t, _constr = task.get_available_cfg(cum_size_t, cum_size_t)
+                    # judge whether the size_t is valid
+            size_t = cum_size_t - cum_size                            
+            if size_t > 0:
+                slot_size_sum = np.sum(curr_slot[avl_slot_idx])
+                if slot_size_sum * size_t >= rsc_lack:
+                    size_t = np.ceil(rsc_lack / slot_size_sum).astype(int)
+                    rsc_lack = 0
+                else: 
+                    rsc_lack -= slot_size_sum * size_t
+                    
+                cum_size += size_t
+
+                curr_alloc[avl_slot_idx] += size_t
+                rsc_avl_tmp[avl_slot_idx] -= size_t
+            else:
+                rsc_avl_tmp[rsc_avl_tmp == max_step] = 0
+
+            upb_flg = _constr == "upb"
+            list_upb_flg = _constr == "list" and cum_size_t == max(task.core_list)
+            if upb_flg or list_upb_flg:
+                break
+                    # subtract the slots idx that cannot be allocated from the available slots
+                    # Find indices where rsc_avl_tmp is greater than 0
+            zero_indices = np.where(rsc_avl_tmp <= 0)[0]
+
+                    # Subtract the non-zero indices from avl_slot_idx
+            avl_slot_idx = np.setdiff1d(avl_slot_idx, zero_indices)
+                    
+            n_iter += 1
+            if n_iter > 1000:
+                assert False, "Infinite loop"
+                
+        if rsc_lack > 0:
+            curr_alloc.fill(0)
+            curr_slot.fill(0)
+                    # as soon as possible
+            self.asap_insert(task, DEBUG, s, e, slot_n, curr_alloc, curr_slot, expected_req_rsc_size)
+        else:
+                    # Check whether the task allocate too much resources
+            i=1
+            while True:
+                non_zero_indices = np.where(curr_alloc > 0)[0]
+                non_zero_min_idx = curr_alloc[non_zero_indices].argmin()
+                slot_idx = non_zero_indices[non_zero_min_idx]
+                if rsc_lack + curr_alloc[slot_idx] <= 0:
+                    curr_slot[slot_idx] -= 1
+                    rsc_lack += curr_alloc[slot_idx] * 1
+                    if curr_slot[slot_idx] == 0:
+                        curr_alloc[slot_idx] = 0
+                else:
+                    break
+
+    def block_insert(self, rsc_avl:np.ndarray,
+                     expected_req_rsc_size, req_rsc_size:int, 
+                     expected_slot_num:int, preempt_en:bool=True, strategy:str='asap', 
+                     verbose=False, DEBUG=False)->Tuple[bool, Union[int,List[int]], Union[int,List[int]], Union[int,List[int]]]: 
+        """
+            Input: 
+                preemptable: preempt_en
+                strategy: asap
+
+            Output:
+                placement offset: phi_pos
+        """
+        
+        # divide the rsc_avl into intervals, w.r.t. whether the rsc_avl >= req_rsc_size or not
+        direct_aval_idx = rsc_avl >= req_rsc_size
+        s, e, size = self.interval_sparsifier(direct_aval_idx)
+        size = [req_rsc_size if size[i] else 0 for i in range(len(size))]
+        # current allocation (C)
+        curr_slot = np.zeros(len(s), dtype=int)
+
+        if (direct_aval_idx).sum() * req_rsc_size < expected_req_rsc_size:
+            return False, [], []
+        else: 
+            if not preempt_en:
+                # check if the task can be executed on the single interval
+                for i in range(len(s)):
+                    if (e[i] - s[i]) >= expected_slot_num and size[i] > req_rsc_size:
+                        # allocate resources 
+                        return True, [s[i],], [expected_slot_num,]
+                return False, [], []
+            else:
+                cum_rsc_alloc = 0
+                # divide the rsc_avl into intervals as soon as possible
+                for i in range(len(s)): 
+                    # rsc size
+                    if size[i] >= req_rsc_size:
+                        # slot length
+                        if cum_rsc_alloc + req_rsc_size * (e[i] - s[i]) >= expected_req_rsc_size:
+                            curr_slot[i] = math.ceil((expected_req_rsc_size - cum_rsc_alloc)/req_rsc_size)
+                            break
+                        else:
+                            curr_slot[i] = int(e[i] - s[i])
+                            cum_rsc_alloc += req_rsc_size * curr_slot[i]
+                # allocate resources
+                idx = curr_slot.nonzero()[0]
+                return True, np.array(s)[idx].tolist(), curr_slot[idx].tolist()
+
+    @staticmethod
+    def interval_sparsifier(rsc_avl):
+        boader = (rsc_avl[0:-1] != rsc_avl[1:]).nonzero()[0] + 1
+        s = [0] + boader.tolist() 
+        e = boader.tolist() + [len(rsc_avl)] 
+        size = [rsc_avl[s[i]] for i in range(len(s))]
+        return s,e,size
+
 
     def asap_insert(self, task:ProcessInt, DEBUG, s, e, slot_n, curr_alloc, curr_slot, expected_req_rsc_size):
         if DEBUG:
@@ -346,8 +413,14 @@ class SchedulingTableInt(object):
             for i in range(len(curr_alloc)):
                 for rsc_map in self.scheduling_table[time_slot_s[i]:time_slot_s[i]+curr_slot[i]]:
                     rsc_map.release(task.pid, curr_alloc[i], verbose)
-        self.sparse_mode = False
-    
+
+    def allocate(self, pid:int, time_slot_s:List[int], curr_alloc:List[int], curr_slot:List[int], verbose: bool = False):
+        assert len(curr_alloc) == len(curr_slot) == len(time_slot_s)
+        for i in range(len(curr_alloc)):
+            for rsc_map in self.scheduling_table[time_slot_s[i]:time_slot_s[i]+curr_slot[i]]:
+                rsc_map:Resource_model_int
+                rsc_map.allocate(pid, curr_alloc[i], verbose)
+
     def step(self, mode:str="cyclic"): 
         assert mode in ["cyclic", "dynamic"]
         running = self.scheduling_table[0]
@@ -399,7 +472,7 @@ class SchedulingTableInt(object):
         _str = [f"[{empty_boader_s[i]}-{empty_boader_e[i]})" for i in range(len(empty_boader_s))]
         print("slot:{} Empty".format(",".join(_str,)))
 
-    def print_alloc_detail(self, pid2name:Dict[int,str], timestep):
+    def print_alloc_detail(self, pid2name:Dict[int,str], timestep, core_max_dict:Dict[str,int]=dict(), max_core_stat:bool=False):
         bin_pack_result = self.index_occupy_by_id()
 
         # sort the result by the start time
@@ -414,6 +487,9 @@ class SchedulingTableInt(object):
             _result = bin_pack_result.pop(pid)
             if pid < fork_pid_base:
                 _name = pid2name[pid]
+                thread_n = _name.split('_')[-2]
+                troughput_n = _name.split('_')[-1]
+                task_n = _name.replace("_"+thread_n, "").replace("_"+troughput_n, "")                
             else:
                 task_n = pid2name[int(pid/fork_pid_base)]
                 thread_n = task_n.split('_')[-2]
@@ -432,6 +508,10 @@ class SchedulingTableInt(object):
             print("\tstart time: {:s}".format(", ".join([f"{x*timestep:.6f}" for x in _result[0]])))
             print("\talloc cores: {:s}".format(", ".join([f"{x:d}" for x in _result[1]])))
             print("\tused time: {:s}".format(", ".join([f"{x*timestep:.6f}" for x in _result[2]])))
+            if max_core_stat:
+                if task_n not in core_max_dict:
+                    core_max_dict[task_n] = set()
+                core_max_dict[task_n] = core_max_dict[task_n] | set(_result[1])
         print("=====================================\n")
 
     def to_sparse_dict(self, init_pos: int = 0, verbose: bool = False):
@@ -467,6 +547,9 @@ class SchedulingTableInt(object):
         # return self.sparse_list[list(self.sparse_dict.keys())[self.sparse_dict_idx]]
         return self.sparse_list[self.sparse_idx]
 
+    def update(self, scheduling_table:np.ndarray):
+        self.scheduling_table = scheduling_table
+        self._SchedTab.to_sparse_dict(-1)
 
     def get_plot_frame(self, start:int=0, end:int=-1):
         frame = []

@@ -4,21 +4,24 @@ from typing import List, Dict, Iterator, Callable
 from collections import OrderedDict
 import math
 import numpy as np
-from functools import reduce
+import warnings, copy
 
 from global_var import *
-from model.lru import LRUCache
-from sched.scheduling_table import SchedulingTableInt
-from task.task_agent import TaskInt
-from model.task_queue_agent import TaskQueue 
 from task.task_agent import ProcessInt
-from sched.sort_function import sort_bin_list_EAT, sort_bin_list_by_barycenter, get_process_sort
-import warnings
+from task.task_agent import TaskInt
+from model.lru import LRUCache
+from model.task_queue_agent import TaskQueue 
+from sched.scheduling_table import SchedulingTableInt
+from sched.sort_function import get_process_sort
+from sched.bin_ops import sort_bin_list_EAT, sort_bin_list_by_barycenter, index_preeempt_num_cores_by_interval
+from sched.monitor_agent import get_rsc_2b_released, get_target_bin_id
 
 def glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, temporal_rda_ratio, ready_queue, running_queue, rsc_recoder, 
                   rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list:TaskQueue, bin_name_list, n_slot, curr_t, 
                   DEBUG_FG=False, 
-                  show_warnings=True, bin_sort="EAT", bin_sort_reverse=True,):
+                  show_warnings=True, 
+                  binpack_cfg:Dict={"sort":"EAT", "sort_reverse":True, "mode": 'reside'},
+                  ):
     # =================================================
     # push the ready task into the idle slot
     # input: 
@@ -64,7 +67,7 @@ def glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, tempora
         state = allocate_rsc_4_process_new(_p, n_slot, process_dict, timestep, temporal_rda_ratio, FLOPS_PER_CORE, quantumSize,  
                                                             rsc_recoder, rsc_recoder_his, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, 
                                                             quantum_check_en, strategy='first_fit', glb_key=process_sort, verbose=False, DEBUG=DEBUG_FG,
-                                                            show_warnings=show_warnings, bin_sort=bin_sort, bin_sort_reverse=bin_sort_reverse)
+                                                            show_warnings=show_warnings, binpack_cfg=binpack_cfg)
         # the tasks are preempted are given an extra opportunities
         for _p_2b_preempt in preempt_list:
             pid = _p_2b_preempt.pid
@@ -112,9 +115,12 @@ def allocate_rsc_4_process_new(_p:ProcessInt, n_slot:int,
                 iter_next_bin_obj:Iterator, bin_list:List[SchedulingTableInt], bin_name_list:List[str], 
                 quantum_check_en:bool, strategy:str, glb_key:callable[[ProcessInt], int]=None,
                 verbose:bool=False, DEBUG:bool=False,
-                show_warnings=True, bin_sort="EAT", bin_sort_reverse=True,):
+                show_warnings=True, 
+                binpack_cfg:Dict={"sort":"EAT", "sort_reverse":True, "mode": 'reside'},
+                ):
 
     # expected rsc_size and slot number
+    # time_slot_s, time_slot_e, req_rsc_size = _p.rsc_req_estm(n_slot, timestep, FLOPS_PER_CORE, mode="expected")
     time_slot_s, time_slot_e, req_rsc_size = _p.rsc_req_estm(n_slot, timestep, FLOPS_PER_CORE)
     # expected_slot_num = math.ceil(_p.totcpu / (req_rsc_size * timestep * FLOPS_PER_CORE))
     if time_slot_s >= time_slot_e:
@@ -130,7 +136,7 @@ def allocate_rsc_4_process_new(_p:ProcessInt, n_slot:int,
                 rsc_recoder, rsc_recoder_his, 
                 iter_next_bin_obj, bin_list, bin_name_list, 
                 strategy,
-                glb_key, bin_sort, bin_sort_reverse,)
+                glb_key, binpack_cfg=binpack_cfg)
     
     # case 1: is pre-assigned with the resource, 
     # - state is False and fail_info is None, but fail_info is not None
@@ -171,9 +177,12 @@ def allocate_rsc_4_process_new(_p:ProcessInt, n_slot:int,
             state, alloc_slot_s, alloc_size, allo_slot, total_alloc_unit, total_FLOPS_alloc = \
                 try_to_allocate(_p, bin, timestep, FLOPS_PER_CORE, 
                                 time_slot_s, time_slot_e, 
-                                req_rsc_size, expected_slot_num, )
+                                req_rsc_size, expected_slot_num, binpack_cfg=binpack_cfg,
+                                verbose=verbose, DEBUG=DEBUG)
             if not state:
+                # reset the state
                 state, alloc_slot_s, alloc_size, allo_slot = False, None, None, None
+                total_alloc_unit, total_FLOPS_alloc = 0, 0
                 # bin.add_lock(_p, time_slot_s, time_slot_e)
                 # Warning(f"A unexpected situation happens, task {_p.task.id}:{_p.task.name}({_p.pid}) is not allocated successfully after preemption or create a new bin")
                 # raise ValueError(f"A unexpected situation happens, task {_p.task.id}:{_p.task.name}({_p.pid}) is not allocated successfully after preemption in its own bin")
@@ -228,7 +237,7 @@ def bin_select(_p:ProcessInt, time_slot_s, time_slot_e, req_rsc_size,
                 iter_next_bin_obj:Iterator, bin_list:List[SchedulingTableInt], bin_name_list:List[str], 
                 strategy:str,
                 glb_key:Callable[[ProcessInt], float]=None,
-                bin_sort:str="EAT", bin_sort_reverse:bool=True,):
+                binpack_cfg:Dict={"sort":"EAT", "sort_reverse":True, "mode": 'reside'},):
  
     # strategy: 
     # 1. the resource constraint should be respected
@@ -252,10 +261,11 @@ def bin_select(_p:ProcessInt, time_slot_s, time_slot_e, req_rsc_size,
     #   For the task that is pre-assigned with the resource, the affinity is set to be itself
     if p_name in bin_name_list:
         bin_id = bin_name_list.index(p_name)
-        state, succ_info, fail_info = check_and_alloc_at_queue(_p, bin_list[bin_id], timestep, FLOPS_PER_CORE, 
+        state, succ_info, fail_info = check_and_preemt_at_queue(_p, bin_list[bin_id], timestep, FLOPS_PER_CORE, 
                                     quantum_check_en, quantumSize, rsc_recoder, 
                                     time_slot_s, time_slot_e, req_rsc_size, expected_slot_num, 
-                                    _p_index_by_pid, glb_key, return_all_occupant=False)
+                                    _p_index_by_pid, glb_key, return_all_occupant=False,
+                                    binpack_cfg=binpack_cfg,)
 
     else: 
 
@@ -273,6 +283,7 @@ def bin_select(_p:ProcessInt, time_slot_s, time_slot_e, req_rsc_size,
         
         # sort the bin according to the feature
         # - free: slot_s, avil_unit, preemption: slot_s, avil_unit
+        bin_sort = binpack_cfg["sort"]
         if bin_sort == "EAT":
             bin_sort_fn = sort_bin_list_EAT
             affinity_search_bin_id_list = bin_sort_fn(_p, time_slot_s, time_slot_e, timestep, _p_index_by_pid,
@@ -300,10 +311,12 @@ def bin_select(_p:ProcessInt, time_slot_s, time_slot_e, req_rsc_size,
         for bin_id in affinity_tgt_bin_id_list + affinity_search_bin_id_list: 
             # rearange the task in the ready queue
             process_sort = get_process_sort([bin_name_list[bin_id]], rsc_recoder_his)
-            state, succ_info, fail_info = check_and_alloc_at_queue(_p, bin_list[bin_id], timestep, FLOPS_PER_CORE, 
+            state, succ_info, fail_info = check_and_preemt_at_queue(_p, bin_list[bin_id], timestep, FLOPS_PER_CORE, 
                                         quantum_check_en, quantumSize, rsc_recoder, 
                                         time_slot_s, time_slot_e, req_rsc_size, expected_slot_num, 
-                                        _p_index_by_pid, key=process_sort, return_all_occupant=strategy=="best_fit")
+                                        _p_index_by_pid, key=process_sort, return_all_occupant=strategy=="best_fit",
+                                        binpack_cfg=binpack_cfg,
+                                        )
             if state: 
                 break
             elif fail_info is not None:
@@ -334,19 +347,20 @@ def bin_select(_p:ProcessInt, time_slot_s, time_slot_e, req_rsc_size,
                 warnings.warn("No more bin can be created")
     return state, bin_id, succ_info, fail_info
 
-
-def check_and_alloc_at_queue(_p, bin:SchedulingTableInt, timestep, FLOPS_PER_CORE, 
+def check_and_preemt_at_queue(_p, bin:SchedulingTableInt, timestep, FLOPS_PER_CORE, 
                              quantum_check_en, quantumSize, rsc_recoder, 
                              time_slot_s, time_slot_e, req_rsc_size, expected_slot_num, 
                              _p_index_by_pid, key, return_all_occupant, 
+                             binpack_cfg:Dict={"sort":"EAT", "sort_reverse":True, "mode": 'reside'},
                              partial_alloc_en=False, partial_preempt_en=False,
-                             verbose=False):
+                             verbose=False, DEBUG=False):
     # try to allocate the resource on the bin
     # check for free resources
     state, alloc_slot_s, alloc_size, allo_slot, total_alloc_unit, total_FLOPS_alloc = \
         try_to_allocate(_p, bin, timestep, FLOPS_PER_CORE, 
                         time_slot_s, time_slot_e, req_rsc_size, expected_slot_num, 
-                        partial_alloc_en=partial_alloc_en, verbose=verbose)
+                        partial_alloc_en=partial_alloc_en, binpack_cfg=binpack_cfg,
+                        verbose=verbose, DEBUG=DEBUG)
     # check for allocated resources
     if not state:
         # reset the state
@@ -373,8 +387,12 @@ def check_and_alloc_at_queue(_p, bin:SchedulingTableInt, timestep, FLOPS_PER_COR
 
 def try_to_allocate(_p, bin: SchedulingTableInt, timestep, FLOPS_PER_CORE,
                     time_slot_s, time_slot_e, req_rsc_size, expected_slot_num, 
-                    partial_alloc_en:bool = False, verbose:bool = False):
-    state, alloc_slot_s, alloc_size, allo_slot = bin.insert_task(_p, req_rsc_size, time_slot_s, time_slot_e, expected_slot_num, verbose=False)
+                    partial_alloc_en:bool = False, 
+                    binpack_cfg:Dict={"sort":"EAT", "sort_reverse":True, "mode": 'reside'},
+                    verbose:bool = False, DEBUG=False):
+    state, alloc_slot_s, alloc_size, allo_slot = bin.insert_task_new(_p, req_rsc_size, time_slot_s, time_slot_e, expected_slot_num, 
+                                                                     mode=binpack_cfg["mode"],
+                                                                     verbose=False)
     total_alloc_unit = np.sum(np.array(alloc_size) * np.array(allo_slot))
     total_FLOPS_alloc = total_alloc_unit * timestep * FLOPS_PER_CORE
     # check if the task is allocated successfully
@@ -450,37 +468,6 @@ def get_preempt_candi(_p:ProcessInt, bin:SchedulingTableInt,
                 break
     return flops_2b_preempt, ordered_occupant_dict, p_2b_realloc, total_FLOPS_occupied, 
 
-def get_target_bin_id(_p, bin_name_list, rsc_recoder_his):
-    # find the target bin of the affinity target
-    affinity_tgt_bin_id_list = []
-    for task_n in _p.task.affinity_n:
-        # suppose the target is pre-assigned with the resource but is not allocated
-        if task_n in bin_name_list:
-            affinity_tgt_bin_id_list.append(bin_name_list.index(task_n))
-    # suppose the target was allocated with the resource
-    for _pid in _p.task.affinity:
-        if _pid in rsc_recoder_his:
-            if not rsc_recoder_his[_pid].is_empty():
-                preference = rsc_recoder_his[_pid].get_mru()
-                if preference not in affinity_tgt_bin_id_list:
-                    affinity_tgt_bin_id_list.append(preference)
-    return affinity_tgt_bin_id_list
-
-def get_rsc_2b_released(rsc_recoder, n_slot, _p):
-    alloc_slot_s_t, alloc_size_t, allo_slot_t, bin_id_t = rsc_recoder[_p.pid]
-    if isinstance(alloc_slot_s_t, list):
-        alloc_slot_s, alloc_size, allo_slot = [], [], []
-        for i in range(len(alloc_slot_s_t)):
-            if alloc_slot_s_t[i]+allo_slot_t[i] >= n_slot: 
-                alloc_slot_s.append(alloc_slot_s_t[i] if alloc_slot_s_t[i] > n_slot else n_slot )
-                alloc_size.append(alloc_size_t[i] )
-                allo_slot.append(allo_slot_t[i] if alloc_slot_s_t[i] > n_slot else allo_slot_t[i]-(n_slot - alloc_slot_s_t[i]) )
-    else:
-        alloc_slot_s = alloc_slot_s_t if alloc_slot_s_t > n_slot else n_slot
-        alloc_size = alloc_size_t
-        allo_slot = allo_slot_t if alloc_slot_s_t > n_slot else allo_slot_t-(n_slot - alloc_slot_s_t)
-    return bin_id_t,alloc_slot_s,alloc_size,allo_slot
-
 # test code
 if __name__ == "__main__":
     import argparse
@@ -526,11 +513,11 @@ if __name__ == "__main__":
 
     init_p_list = []
     pid = 0
-    for task in task_list[0:5]: 
+    for _p in task_list[0:5]: 
         # for r, d in zip(task.get_release_event(event_range), task.get_deadline_event(event_range)):
-        r = task.get_release_time()
-        d = task.get_deadline_time()
-        p = task.make_process(r, d, pid)
+        r = _p.get_release_time()
+        d = _p.get_deadline_time()
+        p = _p.make_process(r, d, pid)
         p.remburst = p.task.flops
         pid += 1
         init_p_list.append(p)
@@ -583,7 +570,7 @@ if __name__ == "__main__":
         _p4 = init_p_list[4]
         time_slot_s, time_slot_e, req_rsc_size = _p4.rsc_req_estm(n_slot, timestep, FLOPS_PER_CORE)
         expected_slot_num = time_slot_e-time_slot_s 
-        state, succ_info, fail_info = check_and_alloc_at_queue(_p4, scheduling_table, timestep, FLOPS_PER_CORE, 
+        state, succ_info, fail_info = check_and_preemt_at_queue(_p4, scheduling_table, timestep, FLOPS_PER_CORE, 
                                                 quantum_check_en, quantumSize, rsc_recoder, 
                                                 time_slot_s, time_slot_e, req_rsc_size, expected_slot_num, 
                                                 _p_index_by_pid, key, return_all_occupant=strategy=="best_fit")

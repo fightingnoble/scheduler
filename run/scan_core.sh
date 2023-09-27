@@ -12,7 +12,8 @@ pre_alloc=${7:-"False"}
 static_sim=${8:-"False"}
 glb_dyn=${9:-"True"}
 dyn=${10:-"True"}
-PY_ARGS=${@:11}
+seed=${11:-"0"}
+PY_ARGS=${@:12}
 
 echo "target path log/$root_dir/$cfg"
 cfg=$(python run/cfg_parser.py --n_p ${n_p} ${PY_ARGS})
@@ -37,16 +38,18 @@ for x in $(seq "$start" "$step" "$end"); do
                     if [ -f "$dir_path/glb_dyn_${x}_jitter_dis.log.txt" ]; then
                         rm "$dir_path/glb_dyn_${x}_jitter_dis.log.txt"
                     fi
-
+                    echo "start (glb_static) $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
                     nohup python $p_fn --test_case glb_dynamic --barrier_dis --num_cores $x --root_dir ${root_dir} --n_p $n_p ${PY_ARGS} > $dir_path/glb_dyn_${x}_ideal.log.txt 2>&1 
                     nohup python $p_fn --test_case glb_dynamic --num_cores $x --root_dir ${root_dir} --n_p $n_p ${PY_ARGS} > $dir_path/glb_dyn_${x}_jitter_dis.log.txt 2>&1 
+                    echo "finish (glb_static) $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
                 fi
                 if [ -f "$dir_path/glb_dyn_${x}_jitter_en.log.txt" ]; then
                     rm "$dir_path/glb_dyn_${x}_jitter_en.log.txt"
                 fi
-                nohup python $p_fn --test_case glb_dynamic --jitter_sim_en --file_suffix var_0.2 --num_cores $x --root_dir ${root_dir} --n_p $n_p ${PY_ARGS} > $dir_path/glb_dyn_${x}_jitter_en.log.txt 2>&1 
+                echo "start (glb seed_$seed) $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
+                nohup python $p_fn --test_case glb_dynamic --jitter_sim_en --file_suffix var_0.2 --num_cores $x --root_dir ${root_dir} --n_p $n_p ${PY_ARGS} --seed $seed > $dir_path/glb_dyn_${x}_jitter_en_seed_$seed.log.txt 2>&1 
+                echo "finish (glb seed_$seed) $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
                 echo "finish (glb) $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
-
             fi
         }
         {
@@ -63,17 +66,21 @@ for x in $(seq "$start" "$step" "$end"); do
                     if [ -f "$dir_path/dyn_${x}_jitter_dis.log.txt" ]; then
                         rm "$dir_path/dyn_${x}_jitter_dis.log.txt"
                     fi
+                    echo "start (dyn_static) $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
                     nohup python $p_fn --test_case dynamic --num_cores $x --root_dir ${root_dir} --n_p $n_p ${PY_ARGS} > $dir_path/dyn_${x}_jitter_dis.log.txt 2>&1 
+                    echo "finish (dyn_static) $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
                 fi
                 if [ -f "$dir_path/dyn_${x}_jitter_en.log.txt" ]; then
                     rm "$dir_path/dyn_${x}_jitter_en.log.txt"
                 fi
-                nohup python $p_fn --test_case dynamic --jitter_sim_en --file_suffix var_0.2 --num_cores $x --root_dir ${root_dir} --n_p $n_p ${PY_ARGS} > $dir_path/dyn_${x}_jitter_en.log.txt 2>&1 
+                echo "start (dyn seed_$seed) $cfg/$xd" `date "+%Y-%m-%d %H:%M:%S.%3N"`
+                nohup python $p_fn --test_case dynamic --jitter_sim_en --file_suffix var_0.2 --num_cores $x --root_dir ${root_dir} --n_p $n_p ${PY_ARGS} --seed $seed > $dir_path/dyn_${x}_jitter_en_seed_$seed.log.txt 2>&1 
+                echo "finish (dyn seed_$seed) $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
                 echo "finish (dyn) $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
             fi
         }
-        echo "start (log_analyse) $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
-        python -m analyze.log_analyse --folder ./$dir_path/ --output ./$dir_path/new_bin_pack$x.csv 
+        echo "start (stat_num_exec) $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
+        python -m analyze.stat_num_exec --folder ./$dir_path/ --output ./$dir_path/new_bin_pack$x.csv 
         echo "finish $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
     }&
 done

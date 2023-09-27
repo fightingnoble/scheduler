@@ -270,10 +270,7 @@ def deduce_task_attrib(taskattr: TaskIntAttr,
                         temporal_rda_ratio: float,
                         wsc_slack_ratio: float,):
 
-    if taskattr.timing_flag == "deadline":
-        rda_size = min(deduce_RDA(req_rsc_size, temporal_rda_ratio, wsc_slack_ratio), taskattr.core_max-req_rsc_size)
-    else:
-        rda_size = 0
+    rda_size = min(deduce_RDA(req_rsc_size, temporal_rda_ratio, wsc_slack_ratio), taskattr.core_max-req_rsc_size)
     taskattr.rda_size = rda_size
     taskattr.main_size = req_rsc_size
     taskattr.num_exec = deduce_num_exec(taskattr.freq, f_gcd, taskattr.thread_scaling_factor)

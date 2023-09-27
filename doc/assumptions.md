@@ -50,6 +50,40 @@ the task decrease the size is handled at first.
 
 这段代码是一个插入式调度算法，用于为每个任务分配足够的核心资源。它使用了一个自定义的贪心的装箱算法（Naive Bin Packing Algorithm）。
 
+Redundency mechanism to handle the jitter:
+   Parameters:
+      - typical slack (%)
+      - worst slack (%)
+
+   slcak 分为spatial slack 和 temporal slack
+      - spatial slack: 任务的spatial slack是指任务的最大可用资源和最小可用资源之间的差值（为一些关键任务预留一些冗余资源，这些的任务对冗余资源保留最高优先级的使用权）
+      - temporal slack: 任务的temporal slack是指任务的最大可用时间和最小可用时间之间的差值, 给一些任务预分配更多的资源，以得到跟多的时间slack，然后把这些slack均分给所有的任务以应对调度导致的轻微的抖动（若干个slot）
+      在运行时，应对轻微抖动可能导致少量slot的late，具体表现为，time budget 减少。面对少量且频繁抖动，相对于实时的调整core的分配方案，在预分配阶段在时间上保留少量的的冗余（若干slot）显得更加划算——具体表现为：
+      exp_comp_t 略微高于 （ops/分配的算力），但是这种冗余反应为端到端的时间增长。那么就只能让一些任务的计算时间更短一些，同样是用资源换取时间。
+      对于那些只有一种配置的任务，或者已经在预分配阶段就达到上限的任务，只在时间上保留冗余。
+      在pre-allocation 阶段，ERT作为开始时间的下限，我们取release time作为下游任务mapping的最早时间，
+      这样下有任务的mapping结果取决于上游任务的mapping效果。
+      timestamp+ERT+DDL则作为下游任务的最晚时间，以约束上游任务的最差mapping结果。
+
+   拆解步骤：   
+      - a.  Assure typical slack staticly, and worst slack dynamically.
+         shrink the end-to-end slack by the typical slack, 
+         ```
+         slcak_rem = (1-temporal_rda_ratio)*1e3*slcak_rem/1e3
+         ```
+      - b.  allocate the resource according to the slack distributed to each task, 
+         and recompute the ERT and DDL of each task.
+
+         ```python
+         ddl[node] = ert[node] + comp_time[node] *1e7 / (1 - temporal_rda_ratio)/ 1e7
+         ```
+      - c.  Preserve resource capacity for the worst slack,
+         ```
+         deduce_RDA = lambda size, temporal_rda_ratio, wsc_slack_ratio: math.ceil(size * (1-temporal_rda_ratio) / wsc_slack_ratio) - size
+         ```
+      - d.  determin the resource at runtime according to the remaining slack and remaining burst.
+
+Bin-packing algorithm:
 该代码块中的insert_task函数接受一个任务（task）以及所需的资源大小（req_rsc_size），时间槽的起始和结束时间（time_slot_s和time_slot_e），以及期望的时间槽数量（expected_slot_num）。函数的目标是将任务插入到调度表中的合适时间间隔中（使用First-Fit策略），并分配足够的资源。
 
 首先，函数检查是否存在足够的可用资源来满足任务需求，并且时间槽的数量足够。如果满足条件，则分配资源并返回成功标志（True）、开始时间槽（time_slot_s）、分配的资源大小（req_rsc_size）和分配的时间槽数量（expected_slot_num）。
@@ -62,15 +96,6 @@ the task decrease the size is handled at first.
 
 首先过滤掉资源数量小于core_min的位置，这样后面只需要考虑，core_max 和 core_list 的约束
 
-slcak 分为spatial slack 和 temporal slack
-   - spatial slack: 任务的spatial slack是指任务的最大可用资源和最小可用资源之间的差值（为一些关键任务预留一些冗余资源，这些的任务对冗余资源保留最高优先级的使用权）
-   - temporal slack: 任务的temporal slack是指任务的最大可用时间和最小可用时间之间的差值, 给一些任务预分配更多的资源，以得到跟多的时间slack，然后把这些slack均分给所有的任务以应对调度导致的轻微的抖动（若干个slot）
-在运行时，应对轻微抖动可能导致少量slot的late，具体表现为，time budget 减少。面对少量且频繁抖动，相对于实时的调整core的分配方案，在预分配阶段在时间上保留少量的的冗余（若干slot）显得更加划算——具体表现为：
-exp_comp_t 略微高于 （ops/分配的算力），但是这种冗余反应为端到端的时间增长。那么就只能让一些任务的计算时间更短一些，同样是用资源换取时间。
-对于那些只有一种配置的任务，或者已经在预分配阶段就达到上限的任务，只在时间上保留冗余。
-在pre-allocation 阶段，ERT作为开始时间的下限，我们取release time作为下游任务mapping的最早时间，
-这样下有任务的mapping结果取决于上游任务的mapping效果。
-timestamp+ERT+DDL则作为下游任务的最晚时间，以约束上游任务的最差mapping结果。
 
 realtime 不用给冗余 现在都留了
 ```python
@@ -85,12 +110,33 @@ mechanism:
 sort the bin according to the feature
    - free: slot_s, avil_unit, preemption: slot_s, avil_unit
 
+
+decision:
+   - (algorithm:reside/coalescing) Allow spatial sharing among partitions or not?
+      - No: highest Perf.
+      - Yes: 
+         - (mode:non-block/block)(安全资源够) Block or not:
+            - continuous block(空间连续)
+               - (preempt_en:False/True) mapped to single time single interval or broken into multiple chunk
+                  - Yes: (时间空间连续)
+                  - No: (时间连续空间不连续)
+            - non-continuous blocks (allowed to change its expected size): ASAP, AEAP
+         - Allow shrinked redundency (安全资源可以不够): release unused resources, allocate all reources in the living interval 
+         - Allow allocate resources in best effort, even not enough in its time interval (最低资源都不够)
+   
+
 resource reservation: 
    input parameters:
       wsc_slack_ratio
       temporal_rda_ratio
    deduced parameters:
       spatial_rda_ratio = (1 - temporal_rda_ratio)/wsc_slack_ratio
+
+单独分割静态placement：
+   op1: new_bin: 修改push_task_into_bins_new
+   op2: init_bin_list
+   op3: delete_bin
+
 
 10. compared items
 A. Context switching
@@ -166,47 +212,75 @@ B. deadline assignment
 
 18. load_var and thread fork
 
-  properties:
-    ```
-      self.n_fork = 0
-      self.fork_pid_list = []
-      self.fork_pid_candi = [] 
-      self.is_fork_inst = False
-      self.parent_pid = None
-      self.var_scale_factor = 1
-      self.load_var = None  
-      self.fork_p_inst = []
+   >   在ready 之前fork 需要考虑fork的进程的依赖，以及budget的设置
+   >   在ready设置，需要考虑进程的throttle以及恢复
 
-    ```
-    `fork_pid_base = 1000`
-    
-   inject ctx from in message_trigger_event_new
-   init process pool at init time (task_cfg.py)
-   extract workload variation from the context (handle_process_load_var)
+   properties:
+      ```
+         self.n_fork = 0
+         self.fork_pid_list = []
+         self.fork_pid_candi = [] 
+         self.is_fork_inst = False
+         self.parent_pid = None
+         self.var_scale_factor = 1
+         self.load_var = None  
+         self.fork_p_inst = []
 
-   在ready 之前fork 需要考虑fork的进程的依赖，以及budget的设置
-   在ready设置，需要考虑进程的throttle以及恢复
-
-   copy budget for the forked process
-   fork the task (p_fork) @ ready:
-      copy the process, rename the process and change the process id
-      set the `parent_pid, is_fork_inst, pid` for the new process
-      set `n_fork, new_pid, fork_pid_list` for the parent process
-   add process index to process_dict
+      ```
+      `fork_pid_base = 1000`
       
-   set ready state for the forked process
+      inject ctx from in message_trigger_event_new
+      init process pool at init time (task_cfg.py)
+      extract workload variation from the context (handle_process_load_var)
 
-   check complete:
-      both `n_fork == 0` and totburst
-      sorted(running_queue.queue, key=lambda x: x.is_fork_inst, reverse=True) check the forked process first
+      copy budget for the forked process
+      fork the task (p_fork) @ ready:
+         copy the process, rename the process and change the process id
+         set the `parent_pid, is_fork_inst, pid` for the new process
+         set `n_fork, new_pid, fork_pid_list` for the parent process
+      add process index to process_dict
+         
+      set ready state for the forked process
 
-   terminate forked process (kill_fork) @ miss and complete:
-      set the property of process with `parent_pid`
-      append pid to fork_pid_candi
-      remove the pid from fork_pid_list
-      minus n_fork by 1
-      delete the process
+      check complete:
+         both `n_fork == 0` and totburst
+         sorted(running_queue.queue, key=lambda x: x.is_fork_inst, reverse=True) check the forked process first
+
+      terminate forked process (kill_fork) @ miss and complete:
+         set the property of process with `parent_pid`
+         append pid to fork_pid_candi
+         remove the pid from fork_pid_list
+         minus n_fork by 1
+         delete the process
       
+19. e2e var sim, load scheduling table, adjust allocation
+      Old table will not assign budget to any task
+
+      inject ctx from in message_trigger_event_new
+      trigger the e2e var event as well as set L0 scheduling table for all scheduler
+      set draining state for all old tasks
+      set event time divider
+      
+      initialize the core map
+      update the position dict
+
+      @ release stage
+      detect the process e2e var
+         Yes -> entering the draing stage
+
+      @ release resource
+      send message to the msg pip
+
+      @ on receiving the message
+      update the core map L0 
+      move the core map L0 to the core map
+      set the size of the res_cfg
+
+
+      @ budget load stage 
+         update the budget according to the ctx
+      
+      check the draining state
 
 
 parameter scan

@@ -1,5 +1,10 @@
 import os
-import pickle, argparse
+import pickle, argparse, time
+from functools import wraps, reduce
+from global_var import cfg_dir
+from typing import Dict, Callable
+import pandas as pd
+
 def dump_and_check(save_path, obj2save):
     dir_path = os.path.dirname(save_path)
 
@@ -17,13 +22,25 @@ def dump_and_check(save_path, obj2save):
         print(f"{save_path} not found")
         exit()
 
+def load_pickle(path):
+    try:
+        with open(path, "rb") as f:
+            obj = pickle.load(f)
+    except:
+        raise FileNotFoundError(f"{path} not found")
+    return obj
+
+class Found(Exception):
+    pass
+
 def input_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("--verbose", action="store_true", help="verbose")
     parser.add_argument("--test_case", type=str, default="all", help="task name")
-    parser.add_argument("--plot", action="store_true", help="plot the task timeline")
+    parser.add_argument("--plot", type=bool, default=False, help="plot")
     parser.add_argument("--test_all", default=False, help="test all the task")
     parser.add_argument("--num_cores", default=266, type=int, help="number of cores")
+    parser.add_argument("--num_bins", default=-1, type=int, help="number of bins")
     parser.add_argument("--BinExtendRule", default="list", type=str, help="Rule for when and how to extend the bin")
     parser.add_argument("--preemptable", default=False, action="store_true", help="enable preemption")
     parser.add_argument("--quantum_check_en", default=False, action="store_true", help="enable quantum check")
@@ -37,12 +54,13 @@ def input_parser():
     parser.add_argument("--jitter_sim_en", default=False, action="store_true", help="enable jitter simulation")
     parser.add_argument("--jitter_sim_para", default={"loc":0, "scale":0.2}, type=dict, help="jitter simulation parameters")
     
+    parser.add_argument("--var_sim_cfg", default="var_sim_cfg.json", type=str, help="variation simulation config file")
+
     parser.add_argument("--load_var_sim_en", default=False, action="store_true", help="enable dynamic object simulation")
-    parser.add_argument("--load_var_sim_para", default={}, type=dict, help="dynamic object simulation parameters")
-    parser.add_argument("--load_var_para_file", default="load_var_para.json", type=str, help="dynamic object simulation parameters file")
+    parser.add_argument("--load_var_sim_para", default=dict(), type=dict, help="dynamic object simulation parameters")
 
     parser.add_argument("--e2e_var_sim_en", default=False, action="store_true", help="enable e2e latency variation simulation")
-    parser.add_argument("--e2e_var_sim_para", default={"loc":0, "scale":0.2, "period":0.1}, type=dict, help="e2e latency variation simulation parameters")
+    parser.add_argument("--e2e_var_sim_para", default=dict(), type=dict, help="e2e latency variation simulation parameters")
     
     parser.add_argument("--file_suffix", default="", type=str, help="file suffix")
     parser.add_argument("--i_file_suffix", default="", type=str, help="file suffix")
@@ -62,8 +80,45 @@ def input_parser():
     parser.add_argument("--aux_scale_factor", default=1, type=int, help="aux scale factor")
     parser.add_argument("--gen_benchmark", default=False, action="store_true", help="generate benchmark")
     parser.add_argument("--root_dir", default=".", type=str, help="root directory")
-    parser.add_argument("--bin_sort", default="EAT", type=str, help="bin sort: EAT, barycenter")
 
+    parser.add_argument("--bin_pack_cfg", default="bin_pack_cfg.json", type=str, help="bin pack config file")
+    parser.add_argument("--bin_pack_para", default=dict(), type=dict, help="bin pack algorithm parameters")
+    # parser.add_argument("--bin_sort", default="EAT", type=str, help="bin sort: EAT, barycenter")
+    # parser.add_argument("--bin_sort_reverse", default=True, type=bool, help="bin sort reverse")
+    
+    parser.add_argument("--max_core_stat", default=False, type=bool, help="max core stat")
     args = parser.parse_args()
     return args
 
+# define a wrapper for displaying current function, start time, end time, and execution time
+def time_cnt(description:str):
+    def time_decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            print("="*10+description+"="*10)
+            start_time = time.time()
+            print("Start time: ", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start_time)))
+            t_s = time.monotonic()
+            func(*args, **kwargs)
+            t_e = time.monotonic()
+            s, ms = divmod((t_e - t_s) * 1000, 1000)
+            m, s = divmod(s, 60)
+            h, m = divmod(m, 60)
+            print("%d:%02d:%02d:%03d" % (h, m, s, ms))
+            end_time = time.time()
+            print("End time: ", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(end_time)))
+        return wrapper
+    return time_decorator
+
+def update_df(df, index_dict:Dict, info_dict:Dict, update_fn:Callable=lambda x,y:y):
+    criteria = [df[col] == val for col, val in index_dict.items()]
+    data_idx = reduce(lambda x, y: x&y, criteria)
+
+    if df.loc[data_idx].size:
+        for key in info_dict.keys():
+            origin = df.loc[data_idx, key]
+            df.loc[data_idx, key] = update_fn(origin, info_dict[key])
+    else:
+        index_dict.update(info_dict)
+        df = pd.concat([df, pd.DataFrame(index_dict, index=[0])], ignore_index=True)
+    return df

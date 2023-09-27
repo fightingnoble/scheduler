@@ -44,6 +44,10 @@ class Resource_model_int(object):
         self.slot_s = None
         self.slot_num = None
     
+    def add_rsc_num(self, num:int):
+        self.size += num
+        self.available_rsc += num
+    
     def update(self, other:RscMapInt):
         # update the rsc map
         self.rsc_map.clear()
@@ -55,6 +59,8 @@ class Resource_model_int(object):
         for k, v in self.rsc_map.items():
             self.available_rsc -= v
         
+    def is_empty(self):
+        return not bool(self.rsc_map)
     
     def get_available_rsc(self):
         return self.available_rsc

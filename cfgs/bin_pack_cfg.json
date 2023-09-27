@@ -1,0 +1,11 @@
+{
+    "sort":"barycenter", 
+    "sort_reverse":true, 
+    "quantum_check_en": false,
+    "partial_alloc_en": false,
+    "mode": "non-block",
+    "release_temp_rda":true,
+    "reservation_policy": "manual",
+    "algorithm": "reside",
+    "preempt_en": "true"
+}
