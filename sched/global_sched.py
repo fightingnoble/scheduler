@@ -12,10 +12,10 @@ from global_var import *
 from model.resource_agent import Resource_model_int
 from model.task_queue_agent import TaskQueue 
 from model.buffer import Buffer
-from model.msg_dispatcher import MsgDispatcher
-from model.message_handler import message_trigger_event_new
+from model.message.msg_dispatcher import MsgDispatcher
+from model.message.message_handler import message_trigger_event_new
 from model.streaming_processing.wartermark_strategy import WatermarkStrategy
-from model.data_pipe import DataPipe
+from model.message.data_pipe import DataPipe
 from model.position_table import PosTableInt
 
 from sched.monitor_agent import Monitor

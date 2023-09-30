@@ -4,26 +4,12 @@ from typing import List, Dict, Union, Generator
 from typing import TYPE_CHECKING
 from global_var import *
 import numpy as np
-from model.Context_message import ContextMsg
+from model.message.Context_message import ContextMsg
 
 if TYPE_CHECKING:
     from task.task_agent import ProcessBase
-    from model.data_pipe import TriggerPipe
+    from model.message.data_pipe import TriggerPipe
     from model.task_queue_agent import TaskQueue
-
-def jitter_sim_event(_p, jitter_sim_para:Dict, size=1, seed:Union[None, int, np.random.Generator, np.random.RandomState]=None):
-    """
-        test case: 
-        sensor data arrival time varies by injecting jitter
-        inject noise to self.task.period, self.task.i_offset
-    """
-    # jitter parameters: a, b, loc, scale
-    a, b, loc, scale = jitter_sim_para["a"], jitter_sim_para["b"], jitter_sim_para["loc"], jitter_sim_para["scale"]
-    # 0.2 # truncnorm.rvs(-0.2, 0.2, size=1, scale=1)[0]
-    jitter_gen = lambda: _p.task.exp_comp_t * truncnorm.rvs(a, b, loc=loc, scale=scale, size=size, random_state=seed)
-    jitter = jitter_gen()
-    assert abs(jitter.max()) < 0.5*_p.task.period, "jitter is too large"
-    return jitter if size>1 else jitter[0]
 
 def message_trigger_event_new(event_iter_dict:Dict, inactive_list, glb_p_list, 
                               sensor_pipe:TriggerPipe, ddl_stream:TaskQueue, load_var_sim_para:Dict,

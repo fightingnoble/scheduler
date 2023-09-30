@@ -11,7 +11,7 @@ import warnings
 from collections import OrderedDict
 
 from model.buffer import Buffer, Data
-from model.msg_dispatcher import MsgDispatcher
+from model.message.msg_dispatcher import MsgDispatcher
 from queue import Queue
 from sched.scheduling_table import SchedulingTableInt
 from model.resource_agent import Resource_model_int
@@ -23,8 +23,8 @@ from task.task_agent import ProcessInt
 from model.lru import LRUCache
 from sched.monitor_agent import Monitor
 from model.barrier_agent import Barrier
-from model.Context_message import ContextMsg
-from model.data_pipe import DataPipe
+from model.message.Context_message import ContextMsg
+from model.message.data_pipe import DataPipe
 from sched.monitor_agent import get_rsc_2b_released
 import re
 
@@ -192,6 +192,7 @@ class Scheduler(object):
         tail_latency = GLB_BUFFER_SIZE_PER_CORE * _SchedTab.num_resources / BW_DRAM * 0.8
         self.ctx_lat_gen = jitter_gen(tail_latency, {'scale': 0.2, }, size=1, seed=_SchedTab.id)
         self.get_ctx_lat = lambda x=1: (self.ctx_lat_gen() + head_latency)*x + tail_latency
+        self.comm_lat_gen = jitter_gen(head_latency, {'scale': 0.2, }, size=1, seed=_SchedTab.id)
 
     def res_release(self, pid, op_pos_dict:bool=True):
         self.res_cfg.release(pid, verbose=False)
@@ -434,7 +435,7 @@ def check_miss(sched: Scheduler,
         elif _p in running_queue.queue:
             if mode == "future":
                 bin_id_t, alloc_slot_s, alloc_size, allo_slot = get_rsc_2b_released(rsc_recoder, n_slot, _p)
-                _SchedTab = bin_list[bin_id_t]
+                _SchedTab:SchedulingTableInt = bin_list[bin_id_t]
                 _SchedTab.release(_p, alloc_slot_s, alloc_size, allo_slot, verbose=False)
             elif mode == "current":
                 sched.res_release(_p.pid)
@@ -593,7 +594,7 @@ def check_complete(sched:Scheduler, budget_recoder, timestep,
             # release the resource and move to the wait list
             bin_id_t, alloc_slot_s, alloc_size, allo_slot = get_rsc_2b_released(rsc_recoder, n_slot, _p)
                 
-            _SchedTab = bin_list[bin_id_t]
+            _SchedTab:SchedulingTableInt = bin_list[bin_id_t]
             _SchedTab.release(_p, alloc_slot_s, alloc_size, allo_slot, verbose=False)
 
         elif mode == "current":

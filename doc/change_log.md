@@ -389,7 +389,7 @@ Fix bug:
 
 ```python
 if chunk_s < n_slot < chunk_e:
-    # case 1: newest assigned budget is still available                  
+    # case 1: newest assigned budget is still available                
     #   tries to finish the remaining work assigned by the configuration chunk until the now
     assert chunk_e == curr_cfg.slot_e + 1
     planned_flops = sum(_p.rem_flop_budget.values())
@@ -409,7 +409,7 @@ else:
         #   newest assigned budget is still available but not enough
         req_rsc_size = math.ceil(planned_flops/(chunk_e + 1 - n_slot)/timestep /FLOPS_PER_CORE)
     else:
-        # newest assigned budget is still available                  
+        # newest assigned budget is still available                
         # tries to finish the remaining work assigned by the configuration chunk until the now
         req_rsc_size = chunk_alloc
 ```
@@ -478,7 +478,7 @@ fix bug: some tasks are lost after preemption, and the scheduling table can not 
 ```python
     # initialize task affinity list
     thread_n = int(exe_k)
-    affinity_tgt_n_list = affinity_cfg[task_n]      
+    affinity_tgt_n_list = affinity_cfg[task_n]    
     affinity_tgt_n_list = [n+'_'+str(thread_n) for n in affinity_tgt_n_list]
     task.affinity_n = affinity_tgt_n_list
     # initialize dependency list
@@ -652,7 +652,7 @@ Tested benchmark generation and simulation is completed.
     Add p_fn and PY_ARGS to the python script:
       pass more arguments to the python script from the shell script
       support slect the main file of the python script
-    ``    p_fn=${5:-"allocator_agent.py"}     PY_ARGS=${@:6}    ``
+    ``   p_fn=${5:-"allocator_agent.py"}     PY_ARGS=${@:6}   ``
     Select cfg dir:
       Generated ver:
         The cfg dir is parsed by the python script, and then passed to the shell script
@@ -996,7 +996,8 @@ add negative lru:
 
 add rounding at event generation i.e., `round(xxx, numerical_tol_bit)`
 
-change the mode of estimation storage: 
+change the mode of estimation storage:
+
 ```python
         # resource mapping
         # if pre_assigned_resource_flag:
@@ -1027,7 +1028,9 @@ def manual_defined_reservation(bin_list, glb_p_list, total_cores, _new_bin):
 
         rda_size = min(deduce_RDA(req_rsc_size, temporal_rda_ratio, wsc_slack_ratio), taskattr.core_max-req_rsc_size)
 ```
-in attr_deduce module, we have: 
+
+in attr_deduce module, we have:
+
 ```python
         rda_size = min(deduce_RDA(req_rsc_size, temporal_rda_ratio, wsc_slack_ratio), taskattr.core_max-req_rsc_size)
 
@@ -1035,3 +1038,7 @@ in attr_deduce module, we have:
 
 Add configration folder, and put the folder setting into the global_var.py
 modified the name of various results profilers and various xlsl generators.
+
+## 20230930
+
+clean up folders: message related

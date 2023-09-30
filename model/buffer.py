@@ -8,7 +8,7 @@ import collections
 import typing
 import copy
 from queue import Queue
-from model.Context_message import ContextMsg
+from model.message.Context_message import ContextMsg
 if typing.TYPE_CHECKING:
     from task.task_agent import ProcessBase
 

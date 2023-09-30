@@ -6,8 +6,8 @@ from sched.global_sched import push_task_into_bins_new, coleasing_alloc
 from task.task_agent import TaskInt 
 from task.task_agent import TaskInt
 from task.spec import Spec
-from model.msg_dispatcher import MsgDispatcher
-from model.data_pipe import DataPipe, TriggerPipe
+from model.message.msg_dispatcher import MsgDispatcher
+from model.message.data_pipe import DataPipe, TriggerPipe
 from sched.scheduling_table import SchedulingTableInt
 from model.resource_agent import Resource_model_int
 from sched.scheduler_agent import Scheduler
@@ -57,7 +57,6 @@ def main():
     # remain parameters in group1 unfilled
     cfg_n_format = cfg_root_fmt.format(**cfg_para_dict, **{}.fromkeys(para_scan_group1, r"{}"))
 
-    bin_list_save_path = bin_save_fmt.format(**path_para_dict, **para_scan_group2)
     routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **para_scan_group2)
     plot_root = plot_root_fmt.format(**path_para_dict, **para_scan_group2)
     trace_root = trace_root_fmt.format(**path_para_dict, **para_scan_group2)
@@ -102,7 +101,7 @@ def main():
     sim_step = min([glb_n_task_dict[task].exp_comp_t for task in glb_n_task_dict])/32
     quantumSize = sim_step*args.quantumSize
     np.random.seed(args.seed)
-    # from model.message_handler import gen_sensor_event
+    # from model.message.message_handler import gen_sensor_event
     # event_iter_dict = gen_sensor_event(glb_p_list, hyper_p, num_periods, True, args.jitter_sim_en, args.jitter_sim_para, args.seed)
     jitter_para_dict = dict(jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para, seed=args.seed)
     event_iter_dict = TaskInt.get_event_generator(glb_n_task_dict, hyper_p, num_periods, warmup, **jitter_para_dict)
@@ -165,6 +164,7 @@ def main():
         print("sim_step: ", sim_step)
         bin_list.clear()
         if binpack_cfg["algorithm"] == "reside":
+            bin_list_save_path = bin_save_fmt.format(**path_para_dict, **para_scan_group2)
             bin_list = push_task_into_bins_new(
                 bin_list,
                 glb_p_list, affinity_cfg, event_iter_dict,
@@ -198,13 +198,14 @@ def main():
             filename = os.path.join(csv_xlxs_root, 'coalescing_req_cores.csv')
             import pandas as pd
             if not os.path.exists(filename):
-                pd.DataFrame(columns=list(cfg_para_dict.keys())+list(para_scan_group1.keys())+["num_cores"]).to_csv(filename)
+                pd.DataFrame(columns=list(cfg_para_dict.keys())+list(para_scan_group1.keys())+["num_cores"]).to_csv(filename, index=False)
             # Load the dataframe
             df = pd.read_csv(filename)
-
+            num_cores = sum(max_core_layout[1].values())
             df = update_df(df, {**cfg_para_dict, **para_scan_group1}, 
-                           {"num_cores": sum(max_core_layout[1].values())})
+                           {"num_cores": num_cores})
             df.to_csv(filename, index=False)
+            bin_list_save_path = bin_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
         else:
             raise NotImplementedError(f"binpack algorithm {binpack_cfg['algorithm']} is not implemented")
 

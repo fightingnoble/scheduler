@@ -4,7 +4,7 @@ import pandas as pd
 import os
 import numpy as np
 from analyze.stat_num_exec import extract_num_exec
-from model.Context_message import trace_analyser
+from model.message.Context_message import trace_analyser
 
 from analyze.pattern import folder_pattern, folder_pattern_keys, folder_type, get_path_var_scaner
 from analyze.pattern import trace_pattern, trace_pattern_keys, trace_pattern_type

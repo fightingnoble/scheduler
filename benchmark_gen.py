@@ -5,8 +5,8 @@ from task.task_cfg import init_affinity
 from task.task_agent import TaskInt 
 from task.task_agent import TaskInt
 from task.spec import Spec
-from model.msg_dispatcher import MsgDispatcher
-from model.data_pipe import DataPipe, TriggerPipe
+from model.message.msg_dispatcher import MsgDispatcher
+from model.message.data_pipe import DataPipe, TriggerPipe
 from sched.scheduling_table import SchedulingTableInt
 from model.resource_agent import Resource_model_int
 from sched.scheduler_agent import Scheduler
@@ -64,7 +64,7 @@ def main():
     quantumSize = sim_step*args.quantumSize
     save_path = f"cache/{cfg_n}/bin_list_{num_cores}{args.i_file_suffix}.pkl"
     np.random.seed(args.seed)
-    # from model.message_handler import gen_sensor_event
+    # from model.message.message_handler import gen_sensor_event
     # event_iter_dict = gen_sensor_event(glb_p_list, hyper_p, num_periods, True, args.jitter_sim_en, args.jitter_sim_para, args.seed)
     jitter_para_dict = dict(jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para, seed=args.seed)
     event_iter_dict = TaskInt.get_event_generator(glb_n_task_dict, hyper_p, num_periods, True, **jitter_para_dict)
