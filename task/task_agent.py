@@ -136,6 +136,11 @@ class ProcessBase(object):
         else:
             raise NotImplementedError
 
+    def get_chain_deadline(_p, sched):
+        event_time = _p.msg_cache[0].get_timestamp() 
+        e2e_latency = sched.e2e_latency if _p.task.timing_flag == "deadline" else sched.hyper_period
+        chain_deadline = event_time + e2e_latency 
+        return chain_deadline
 
     def set_state(self, state):
         assert state in task_lifetime.keys()

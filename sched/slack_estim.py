@@ -86,18 +86,18 @@ def EstimCoreNums4Task(task_dict:Dict[str, TaskBase], flops_dict, node, expected
             constr = "lwb"
     else:
         req_rsc_size = max(round_func(req_rsc_size), 1)
-    got_latency = flops_dict[node] / req_rsc_size / FLOPS_PER_CORE
+    got_latency = elim_nume_error(flops_dict[node] / req_rsc_size / FLOPS_PER_CORE)
     return req_rsc_size, got_latency, constr
 
 
 def alloc_func(rsc_map_w:Dict[str, Tuple[int, float]], 
                task_dict:Dict[str, TaskBase], 
                flops_dict:Dict[str, float], 
-               ops_rem, slcak_rem, threshold):
+               ops_rem, slack_rem, threshold):
     state = True
     for node in flops_dict:
         # estimate the slack
-        slack_estm = flops_dict[node] / ops_rem * slcak_rem
+        slack_estm = flops_dict[node] / ops_rem * slack_rem
         # estimate the resource
         req_rsc_size, got_latency, constr = EstimCoreNums4Task(task_dict, flops_dict, node, slack_estm, 'ceil')
         rsc_map_w[node] = (req_rsc_size, got_latency if constr else slack_estm, constr)
@@ -105,10 +105,11 @@ def alloc_func(rsc_map_w:Dict[str, Tuple[int, float]],
     # check the constraint
     constr_dict = {node:constr for node, (_, _, constr) in rsc_map_w.items() if node in flops_dict and constr is not None}
     if len(constr_dict) == 0:
-        return state, 0, slcak_rem
+        slack_rem -= sum([lat for node, (_, lat, _) in rsc_map_w.items() if node in flops_dict])
+        return state, 0, slack_rem
     else:
         state = False
-        curr_slack_rem = sum([slack_estm for node, (_, slack_estm, _) in rsc_map_w.items() if node in flops_dict]) -slcak_rem
+        curr_slack_rem = sum([slack_estm for node, (_, slack_estm, _) in rsc_map_w.items() if node in flops_dict]) -slack_rem
 
         # exactly match the slack: 
         #  1. no process is reassigned due to the constraint
@@ -120,16 +121,16 @@ def alloc_func(rsc_map_w:Dict[str, Tuple[int, float]],
             for node,_constr in constr_dict.items():
                 if _constr == "upb":
                     ops_rem -= flops_dict[node]
-                    slcak_rem -= rsc_map_w[node][1]
+                    slack_rem -= rsc_map_w[node][1]
                     flops_dict.pop(node)
         else:
             # remove the process which has been reached the core_min
             for node,_constr in constr_dict.items():
                 if _constr == "lwb":
                     ops_rem -= flops_dict[node]
-                    slcak_rem -= rsc_map_w[node][1]
+                    slack_rem -= rsc_map_w[node][1]
                     flops_dict.pop(node)
-    return state, ops_rem, slcak_rem
+    return state, ops_rem, slack_rem
 
 
 def build_score_dict_ref_flops(task_dict:Dict[str, TaskBase], nodes:Any, score_dict):
@@ -139,7 +140,7 @@ def build_score_dict_ref_flops(task_dict:Dict[str, TaskBase], nodes:Any, score_d
         score_dict[node_n] = _task.flops
 
 
-def DistributeSlack(task_dict:Dict[str, TaskBase], e2e_latency, chains:List[List[Any]], temporal_rda_ratio, threshold):
+def DistributeSlack(task_dict:Dict[str, TaskBase], e2e_latency, chains:List[List[Any]], temporal_rel, temporal_abs_en, threshold):
     chains_info = []
     for chain in chains:
         flops_dict = {}
@@ -152,14 +153,22 @@ def DistributeSlack(task_dict:Dict[str, TaskBase], e2e_latency, chains:List[List
         else:
             slcak_rem = tail_task.freq_division_factor / tail_task.freq
             is_ddl_constr = False
-        slcak_rem = (1-temporal_rda_ratio)*1e3*slcak_rem/1e3
+        # temporal_abs = max([1/task_dict[node].freq*temporal_rel for node in chain if task_dict[node].trigger_mode!='N']) if temporal_abs_en else 0
+        if temporal_abs_en and task_dict[chain[0]].trigger_mode!='N':
+            temporal_abs = elim_nume_error(1/task_dict[chain[0]].freq*temporal_rel)
+            print(chain[0], temporal_abs)
+        else:
+            temporal_abs = 0
+        # temporal_abs = 0
+        slcak_rem = (1-temporal_rel)*1e3*(slcak_rem-temporal_abs)/1e3
         ops_rem = sum(flops_dict.values())
         chains_info.append((chain, flops_dict, slcak_rem, ops_rem, is_ddl_constr))
     
-    sort_idx = np.array([(slcak_rem, not is_ddl_constr, -ops_rem) for _, _, slcak_rem, ops_rem, is_ddl_constr in chains_info], dtype=np.dtype('f8, ?, f8')).argsort()
+    sort_idx = np.array([(not is_ddl_constr, -ops_rem/slcak_rem) for _, _, slcak_rem, ops_rem, is_ddl_constr in chains_info], dtype=np.dtype('?, f8')).argsort()
     chains_info = [chains_info[i] for i in sort_idx]
     
-    rsc_map_w:Dict[str, Tuple[int, float]] = {}
+    rsc_map_w:Dict[int, float, str] = {}
+    # e2e_lat_info = []
     for chain, flops_dict, slcak_rem, ops_rem, is_ddl_constr in chains_info:
         for node in chain:
             if node in rsc_map_w:
@@ -169,12 +178,13 @@ def DistributeSlack(task_dict:Dict[str, TaskBase], e2e_latency, chains:List[List
         state = False
         while not state and len(flops_dict) > 0:
             state, ops_rem, slcak_rem = alloc_func(rsc_map_w, task_dict, flops_dict, ops_rem, slcak_rem, threshold)
+        # e2e_lat_info.append(sum([lat for node, (_, lat, _) in rsc_map_w.items() if node in chain]))
     return rsc_map_w
 
 def rsc_slack_estim(taskJobs:Union[Dict[str, Union[TaskBase,ProcessBase]], List[Union[TaskBase,ProcessBase]]], 
              task_graph:DiGraph, start_nodes, end_nodes, e2e_latency, 
              temporal_rda_ratio, 
-             threshold):
+             threshold, abs_reserve_en=False):
     """
     input:
         system specification:
@@ -207,13 +217,14 @@ def rsc_slack_estim(taskJobs:Union[Dict[str, Union[TaskBase,ProcessBase]], List[
     chains = []
     for start_node in start_nodes:
         chains += decompose_dag_into_chains(task_graph, start_node, end_nodes)
-    return DistributeSlack(task_dict, e2e_latency, chains, temporal_rda_ratio, threshold)
+    return DistributeSlack(task_dict, e2e_latency, chains, temporal_rda_ratio, abs_reserve_en, threshold)
 
 def estim_release_dll_time(task_graph_nx:DiGraph, 
                             comp_time: Dict[str, float]={},
                             io_time: Dict[str, float]={}, 
                             task_type: Dict[str, str]={}, 
-                           temporal_rda_ratio=0, sched_step_comp=0, 
+                           temporal_rel=0, temporal_abs_en=False, 
+                           temporal_abs={},
                            comm_compen_en=False, 
                            profiling_filename:str="profiling/profiling.csv",
                            verbose=False):
@@ -236,8 +247,10 @@ def estim_release_dll_time(task_graph_nx:DiGraph,
     for node in nx.topological_sort(task_graph_nx):  # 拓扑排序遍历节点
         preds = task_graph_nx.pred[node]  # 获取当前节点的前驱节点
         if node not in comp_time:
-            ert[node] = 0 if len(preds) == 0 else max([ddl[pred] for pred in preds])
+            # for the start node and the end node respectively
+            ert[node] = 0 if len(preds) == 0 else max([ddl[pred] for pred in preds]) 
             ddl[node] = ert[node]
+            
         else:
             if len(preds) > 0:
                 if comm_compen_en:
@@ -250,10 +263,24 @@ def estim_release_dll_time(task_graph_nx:DiGraph,
             # if task_type[node] == "RT": 
             #     ddl[node] = ert[node] + comp_time[node] + sched_step_comp 
             # else:
-            ddl[node] = ert[node] + comp_time[node] *1e7 / (1 - temporal_rda_ratio)/ 1e7
+            slack = comp_time[node] *1e7 / (1 - temporal_rel)/ 1e7
+            # judge whether have start pred
+            if temporal_abs_en:
+                for pred in preds:
+                    if pred not in comp_time:
+                        # judge whether the pred is on the critical path
+                        if ddl[pred] + temporal_abs[node] > ert[node]:
+                            slack += temporal_abs[node]
+                            print("Compensation:", node, temporal_abs[node])
+                        break
+            ddl[node] = ert[node] + slack
+    # eliminate the numerical error
+    for node in ddl:
+        ddl[node] = elim_nume_error(ddl[node])
+        ert[node] = elim_nume_error(ert[node])
     return ert, ddl
 
-deduce_RDA = lambda size, temporal_rda_ratio, wsc_slack_ratio: math.ceil(size * (1-temporal_rda_ratio) / wsc_slack_ratio) - size
+deduce_RDA = lambda size, temporal_rda_ratio, wsc_slack_ratio: math.ceil(size * (1-temporal_rda_ratio) / wsc_slack_ratio) - size if (1-temporal_rda_ratio) != wsc_slack_ratio else 0 
 deduce_num_exec = lambda freq, f_gcd, thread_scaling_factor: math.ceil(freq / f_gcd) * thread_scaling_factor
 deduce_no_stall_latency = lambda size, flops: flops / size / FLOPS_PER_CORE 
 deduce_min_tot_rsc = lambda req_rsc, thread_scaling_factor, freq_division_factor: req_rsc * thread_scaling_factor * freq_division_factor
@@ -270,7 +297,7 @@ def deduce_task_attrib(taskattr: TaskIntAttr,
                         temporal_rda_ratio: float,
                         wsc_slack_ratio: float,):
 
-    rda_size = min(deduce_RDA(req_rsc_size, temporal_rda_ratio, wsc_slack_ratio), taskattr.core_max-req_rsc_size)
+    rda_size = min(deduce_RDA(req_rsc_size, temporal_rda_ratio, wsc_slack_ratio), taskattr.core_max_compile-req_rsc_size)
     taskattr.rda_size = rda_size
     taskattr.main_size = req_rsc_size
     taskattr.num_exec = deduce_num_exec(taskattr.freq, f_gcd, taskattr.thread_scaling_factor)
@@ -286,25 +313,70 @@ def deduce_task_attrib(taskattr: TaskIntAttr,
     taskattr.util = deduce_util(equiv_core, min_tot_rsc)
 
 def duduce_cfg(taskattr_dict, f_gcd, hyper_p, 
-               logical_graph_nx, task_graph_srcs, task_graph_sinks, 
-               slack_threshold, e2e_latency, temporal_rda_ratio, wsc_slack_ratio, verbose=False):
+               logical_graph_nx, task_graph_srcs, task_graph_sinks, sink_attr,
+               slack_threshold, e2e_latency, temporal_rda_ratio, wsc_slack_ratio,
+                 abs_reserve_en=False, verbose=False, plot=False):
     rsc_map_w = rsc_slack_estim(taskattr_dict, logical_graph_nx, task_graph_srcs, 
-                         task_graph_sinks, e2e_latency, temporal_rda_ratio, slack_threshold) 
+                         task_graph_sinks, e2e_latency, temporal_rda_ratio, slack_threshold, abs_reserve_en) 
     if verbose:
         print(rsc_map_w)
     ert, ddl = estim_release_dll_time(logical_graph_nx, 
                             comp_time={node:slack_estm for node, (_, slack_estm, _) in rsc_map_w.items()},
                             io_time={node:1e-6 for node in taskattr_dict},
                             task_type={node:taskattr_dict[node].timing_flag for node in taskattr_dict},
-                            temporal_rda_ratio=temporal_rda_ratio,)
+                            temporal_rel=temporal_rda_ratio, temporal_abs_en=abs_reserve_en,
+                            temporal_abs={
+                                node: elim_nume_error(1/taskattr_dict[node].freq*temporal_rda_ratio) 
+                                    for node in taskattr_dict if taskattr_dict[node].trigger_mode!='N'
+                                    } if abs_reserve_en else {},
+                            )
+    # legality check: all sink node enforce the deadline constraint
+    for node in task_graph_sinks:
+        if sink_attr[node]=="deadline":
+            assert ddl[node] <= e2e_latency
+        else:
+            assert ddl[node] <= hyper_p
     if verbose:
         print(ert, ddl) 
+    # update ert, ddl, exp_comp_t to graph as well as the taskattr_dict
     for node, (req_rsc_size, slack_estm, constr) in rsc_map_w.items():
         taskattr:TaskIntAttr = taskattr_dict[node]
         taskattr.ERT = ert[node]
         taskattr.ddl = ddl[node] - ert[node]
         taskattr.exp_comp_t = slack_estm
         deduce_task_attrib(taskattr, f_gcd, hyper_p, req_rsc_size, temporal_rda_ratio, wsc_slack_ratio)
+    for node in logical_graph_nx:
+        logical_graph_nx.nodes[node]["ert"] = ert[node]
+        logical_graph_nx.nodes[node]["ddl"] = ddl[node]
+        logical_graph_nx.nodes[node]["exp_comp_t"] = rsc_map_w[node][1] if node in rsc_map_w else 0
+
+    if plot:
+        import matplotlib.pyplot as plt
+        fig = plt.figure(figsize=(20, 10))
+        ax1 = fig.add_subplot(111)
+
+        node_color_map = {"op": "red", "sink": "blue", "src": "green"}
+        edge_color_map = {"data": "red", "control": "blue"}
+        
+        node_colors = [node_color_map[d] for n, d in logical_graph_nx.nodes(data="type")]
+        edge_colors = [edge_color_map[d] for u,v,d in logical_graph_nx.edges(data="type")]
+        for layer, nodes in enumerate(nx.topological_generations(logical_graph_nx)):
+            for node in nodes:
+                logical_graph_nx.nodes[node]["layer"] = layer
+        pos = nx.multipartite_layout(logical_graph_nx, subset_key="layer")
+        # text with 45 degree rotation
+        nx.draw(logical_graph_nx, pos, with_labels=False, node_size=100, node_color=node_colors, edge_color=edge_colors, font_size=10, ax=ax1)
+        # Draw node labels "name" "ddl," "ert," and "exp_comp_t" attributes
+        node_labels = {}
+        for node, data in logical_graph_nx.nodes(data=True):
+            node_labels[node] = f"{node}\n[{data['ddl']:.5f}:{data['ert']:.5f}]\nexp_comp_t:{data['exp_comp_t']:.5f}"
+        text = nx.draw_networkx_labels(logical_graph_nx, pos, labels=node_labels, font_size=10, ax=ax1)
+
+        for _, t in text.items():
+            t.set_rotation(60)
+        fig.tight_layout()
+        plt.savefig("plot/{cfg_n}/jobTask_graph_dbg.pdf", format="pdf")
+
     if verbose:
         for node, taskattr in taskattr_dict.items():
             print(node, taskattr)
@@ -324,7 +396,7 @@ def test():
     parser.add_argument("--aux_scale_factor", default=1, type=int, help="aux scale factor")
     args = parser.parse_args() 
 
-    from task.task_cfg import task_graph_srcs, task_graph_sinks, creat_logical_graph, task_graph_ops
+    from task.task_cfg import task_graph_srcs, task_graph_sinks, creat_logical_graph, task_graph_ops, sink_attr
     from task.task_cfg import load_taskattrib, gen_taskint_from_cfg
     taskattr_dict, f_gcd = load_taskattrib(args.profiling_filename, verbose=args.verbose) 
     hyper_p = 1/f_gcd
@@ -336,9 +408,9 @@ def test():
     logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
     slack_threshold = args.slack_threshold
     duduce_cfg(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, task_graph_srcs, 
-                         task_graph_sinks, slack_threshold, 
+                         task_graph_sinks, sink_attr, slack_threshold, 
                          args.e2e_latency, args.temporal_rda_ratio, args.wsc_slack_ratio, 
-                         True)
+                         verbose=True)
     glb_n_task_dict = gen_taskint_from_cfg(taskattr_dict, f_gcd)
 
     for node, taskint in glb_n_task_dict.items():

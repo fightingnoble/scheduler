@@ -1,3 +1,4 @@
+import math
 FLOPS_PER_CORE = 0.5
 
 overhead_pushpull_per_core = {0.6:83, 0.8:87,} # cycles
@@ -13,8 +14,16 @@ trace_list = []
 numerical_error_tol_abs = 1e-12
 numerical_tol_bit = 12
 numerical_error_tol_rel = 0.01
+elim_nume_error = lambda x: round(x, numerical_tol_bit)
+# def elim_error(x, n_dig, mod='round'):
+#     if mod == 'up':
+#         return round(x + 0.5 * numerical_error_tol_abs, numerical_tol_bit)
+#     elif mod == 'down':
+#         return round(x - 0.5 * numerical_error_tol_abs, numerical_tol_bit)
+#     else:
+#         return round(x, numerical_tol_bit)
 
-flop_error_tol_abs = 5e-7
+flop_error_tol_abs = FLOPS_PER_CORE * 1e-6
 flop_error_tol_bit = 7
 
 fork_pid_base = 1000
@@ -38,17 +47,21 @@ plot_dir = "./plot"
 trace_dir = "./trace"
 cache_dir = "./cache"
 
-
+import os 
 cfg_root_fmt = r"x{aux_scale_factor}_{e2e_latency}s_rda-{wsc_slack_ratio:.2%}(T)_{temporal_rda_ratio:.2%}(S)_{lateness_mode}"
-bin_save_fmt = r"cache/{root_dir}/{cfg_n}/bin_{num_cores}{i_file_suffix}.pkl"
-routing_table_save_fmt = r"cache/{root_dir}/{cfg_n}/routing_table_{num_cores}{i_file_suffix}.pkl"
-plot_root_fmt = r"plot/{root_dir}/{cfg_n}/{num_cores}"
-trace_root_fmt = r"trace/{root_dir}/{cfg_n}"
+cache_root_fmt = os.path.join(cache_dir, r"{root_dir}", r"{cfg_n}")
+plot_root_fmt = os.path.join(plot_dir, r"{root_dir}", r"{cfg_n}", r"{num_cores}")
+trace_root_fmt = os.path.join(trace_dir, r"{root_dir}", r"{cfg_n}")
+
+bin_fn_fmt = r"bin_list_{num_cores}{i_file_suffix}.pkl"
+routing_table_fn_fmt = r"routing_table_{num_cores}{i_file_suffix}.pkl"
+bin_save_fmt = os.path.join(cache_root_fmt, bin_fn_fmt)
+routing_table_save_fmt = os.path.join(cache_root_fmt, routing_table_fn_fmt)
 
 # case: cyclic, sta_dyn, glb_dyn
 
-plt_path_w_seed_fmt = r"{plot_root}/seed_{seed}/{case}_full_{num_cores}{file_suffix}.pdf"
-plt_path_wo_seed_fmt = r"{plot_root}/{case}_{plt_size}_{num_cores}{file_suffix}.pdf"
+plt_fn_w_seed_fmt = r"{plot_root}/seed_{seed}/{case}_full_{num_cores}{file_suffix}.pdf"
+plt_fn_wo_seed_fmt = r"{plot_root}/{case}_{plt_size}_{num_cores}{file_suffix}.pdf"
 
-trace_path_wo_seed_fmt = r"{trace_root}/{case}_e2e_trace_{num_cores}.pkl" 
-trace_path_w_seed_fmt = r"{trace_root}/{case}_e2e_trace_{num_cores}_seed_{seed}{file_suffix}.pkl" 
+trace_fn_wo_seed_fmt = r"{trace_root}/{case}_e2e_trace_{num_cores}.pkl" 
+trace_fn_w_seed_fmt = r"{trace_root}/{case}_e2e_trace_{num_cores}_seed_{seed}{file_suffix}.pkl" 

@@ -6,6 +6,7 @@ def decompose_dag_into_chains(dag:nx.DiGraph, start_node, end_node)-> List[List[
 
     def dfs(node, path):
         if node in end_node:
+            # remove the start and end nodes
             chains.append(path[1:-1])
             return
         for successor in dag.successors(node):

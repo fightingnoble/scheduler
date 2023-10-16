@@ -1,4 +1,4 @@
-import os
+import os, re
 from task.task_cfg import create_init_p_list, gen_workloads
 from task.task_cfg import affinity_cfg
 from task.task_cfg import init_affinity
@@ -18,6 +18,7 @@ from model.event_gen.e2e_latency import discrete_event_sim
 from model.task_queue_agent import TaskQueue
 from utils import dump_and_check, load_pickle, update_df
 from global_var import *
+import flock
 
 
 def main():
@@ -57,7 +58,6 @@ def main():
     # remain parameters in group1 unfilled
     cfg_n_format = cfg_root_fmt.format(**cfg_para_dict, **{}.fromkeys(para_scan_group1, r"{}"))
 
-    routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **para_scan_group2)
     plot_root = plot_root_fmt.format(**path_para_dict, **para_scan_group2)
     trace_root = trace_root_fmt.format(**path_para_dict, **para_scan_group2)
     bin_path_format = os.path.join('cache', root_dir, cfg_n_format, r"bin_list_{}"+f"{args.i_file_suffix}.pkl")
@@ -80,6 +80,11 @@ def main():
             e2e_var_sim_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['e2e_var']
         else:
             e2e_var_sim_para = args.e2e_var_sim_para
+
+    if args.bin_pack_para == {}:
+        args.binpack_cfg = binpack_cfg = json.load(open(os.path.join(cfg_dir, args.bin_pack_cfg), "r"))
+    else:
+        binpack_cfg = args.bin_pack_para
 
     hyper_p, glb_n_task_dict, physical_graph_nx = gen_workloads(args, slack_threshold)
 
@@ -141,11 +146,6 @@ def main():
     elif args.test_case == "bin_pack_new" or args.test_all:
         for _p in glb_p_list:
             _p.task.criticality = "hard"
-
-        if args.bin_pack_para == {}:
-            binpack_cfg = json.load(open(os.path.join(cfg_dir, args.bin_pack_cfg), "r"))
-        else:
-            binpack_cfg = args.bin_pack_para
         
         bin_list = [SchedulingTableInt(num_cores, 1, 0, "bin_glb_dynamic")]
         # from message_agent import Message
@@ -165,11 +165,12 @@ def main():
         bin_list.clear()
         if binpack_cfg["algorithm"] == "reside":
             bin_list_save_path = bin_save_fmt.format(**path_para_dict, **para_scan_group2)
+            routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **para_scan_group2)
             bin_list = push_task_into_bins_new(
                 bin_list,
                 glb_p_list, affinity_cfg, event_iter_dict,
                 num_cores, args.quantum_check_en, quantumSize, 
-                sim_step, hyper_p, args.spatial_rda_ratio, args.temporal_rda_ratio,
+                sim_step, hyper_p, args.wsc_slack_ratio, args.temporal_rda_ratio,
 
                 scheduler_list, monitor_list,
                 msg_dispatcher,
@@ -185,7 +186,7 @@ def main():
                 bin_list,
                 glb_p_list, affinity_cfg, event_iter_dict,
                 num_cores, args.quantum_check_en, quantumSize, 
-                sim_step, hyper_p, args.spatial_rda_ratio, args.temporal_rda_ratio,
+                sim_step, hyper_p, args.wsc_slack_ratio, args.temporal_rda_ratio,
 
                 scheduler_list, monitor_list,
                 msg_dispatcher,
@@ -200,29 +201,34 @@ def main():
             if not os.path.exists(filename):
                 pd.DataFrame(columns=list(cfg_para_dict.keys())+list(para_scan_group1.keys())+["num_cores"]).to_csv(filename, index=False)
             # Load the dataframe
+
+                        
             df = pd.read_csv(filename)
             num_cores = sum(max_core_layout[1].values())
             df = update_df(df, {**cfg_para_dict, **para_scan_group1}, 
                            {"num_cores": num_cores})
             df.to_csv(filename, index=False)
+
             bin_list_save_path = bin_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
+            routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
         else:
             raise NotImplementedError(f"binpack algorithm {binpack_cfg['algorithm']} is not implemented")
 
         pid2name = {_p.pid:_p.task.name for _p in glb_p_list}
         from sched.scheduling_table import get_task_layout_compact, get_task_layout_sparse
         
-        # f"{plot_root}/new_task_bin_pack_cyclic_{num_cores}{args.file_suffix}.pdf"
-        get_task_layout_compact(bin_list, pid2name, save= True, time_step= sim_step,
-        hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
-        txt_size=40, tick_dens=2, 
-        save_path=plt_path_wo_seed_fmt.format(**plot_path_para, **{"case": "new_task_bin_pack", "plt_size": "cyclic"})) 
-        
-        # f"{plot_root}/new_task_bin_pack_full_{num_cores}{args.file_suffix}.pdf"
-        get_task_layout_compact(bin_list, pid2name, save= True, time_step= sim_step,
-        hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
-        txt_size=40, tick_dens=4, plot_start=0, 
-        save_path=plt_path_wo_seed_fmt.format(**plot_path_para, **{"case": "new_task_bin_pack", "plt_size": "full"}))
+        if args.plot:
+            # f"{plot_root}/new_task_bin_pack_cyclic_{num_cores}{args.file_suffix}.pdf"
+            get_task_layout_compact(bin_list, pid2name, save= True, time_step= sim_step,
+            hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
+            txt_size=40, tick_dens=2, 
+            save_path=plt_fn_wo_seed_fmt.format(**plot_path_para, **{"case": "new_task_bin_pack", "plt_size": "cyclic"})) 
+            
+            # f"{plot_root}/new_task_bin_pack_full_{num_cores}{args.file_suffix}.pdf"
+            get_task_layout_compact(bin_list, pid2name, save= True, time_step= sim_step,
+            hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
+            txt_size=40, tick_dens=4, plot_start=0, 
+            save_path=plt_fn_wo_seed_fmt.format(**plot_path_para, **{"case": "new_task_bin_pack", "plt_size": "full"}))
         
 
         # select a period to save 
@@ -230,11 +236,27 @@ def main():
         bin_list2save = []
         # for _sched_tab in bin_list:
         dump_and_check(bin_list_save_path, bin_list)
-        dump_and_check(routing_table_save_path, scheduler_list[0].detail_alloc_info)
+        # dump_and_check(routing_table_save_path, scheduler_list[0].detail_alloc_info)
 
     elif args.test_case == "dynamic" or args.test_all or args.test_case == "cyclic":
+        if binpack_cfg["algorithm"] == "coalescing":
+            folder = cache_root_fmt.format(**path_para_dict)
+            root,dirs,files = os.walk(folder).__next__()
+            assert len(dirs) == 0
+            bin_list_save_path,  routing_table_save_path = None, None
+            for fn in files:
+                if match := re.match(bin_fn_fmt.format(**path_para_dict, **{"num_cores": r"(\d*)"}), fn):
+                    break
+            if not match:
+                print(f"!!! Warning: no bin_list file in {folder} !!!")
+                return
+            num_cores = int(match.group(1))
+            bin_list_save_path = bin_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
+            routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
+        else:
+            bin_list_save_path = bin_save_fmt.format(**path_para_dict, **para_scan_group2)
+            routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **para_scan_group2)
         bin_list = load_pickle(bin_list_save_path)
-
         num_bins = len(bin_list) if num_bins == -1 else num_bins
         for bin_id in range(num_bins):
             if bin_id >= len(bin_list):
@@ -316,12 +338,12 @@ def main():
             return
 
         if args.plot:
-            if args.test_case == "cyclic":
+            if args.jitter_sim_en:
                 # "{plot_root}/seed_{args.seed}/cyclic_full_{num_cores}{args.file_suffix}.pdf"
-                plot_path=plt_path_w_seed_fmt.format(**plot_path_para, **{"case": "cyclic", "plt_size": "full"})
+                plot_path=plt_fn_wo_seed_fmt.format(**plot_path_para, **{"case": "cyclic", "plt_size": "full"})
             else:
                 # f"{plot_root}/dyn_full_{num_cores}{args.file_suffix}.pdf"
-                plot_path=plt_path_wo_seed_fmt.format(**plot_path_para, **{"case": "dyn", "plt_size": "full"})
+                plot_path=plt_fn_w_seed_fmt.format(**plot_path_para, **{"case": "dyn", "plt_size": "full"})
 
             from sched.scheduling_table import get_task_layout_compact, get_task_layout_sparse
             get_task_layout_compact(actual_sched_record, pid2name, save= True, time_step= sim_step,
@@ -331,12 +353,12 @@ def main():
         # "case": "cyclic" if args.test_case == "cyclic" else "dynamic"
         if args.jitter_sim_en:
             # trace_path = f"{trace_root}/cyclic_e2e_trace_{num_cores}"
-            trace_path = trace_path_w_seed_fmt.format(**trace_path_para, **{"case": args.test_case})
+            trace_path = trace_fn_w_seed_fmt.format(**trace_path_para, **{"case": args.test_case})
         else:
             # trace_path = f"{trace_root}/dynamic_e2e_trace_{num_cores}"
-            trace_path = trace_path_wo_seed_fmt.format(**trace_path_para, **{"case": args.test_case})
+            trace_path = trace_fn_wo_seed_fmt.format(**trace_path_para, **{"case": args.test_case})
 
-        dump_and_check(trace_path, trace_list)          
+        dump_and_check(trace_path, trace_list) 
 
     elif args.test_case == "glb_dynamic" or args.test_all:
         bin_list = [SchedulingTableInt(num_cores, 1, 0, "bin_glb_dynamic")]
@@ -406,9 +428,9 @@ def main():
 
         # f"{trace_root}/glb_dyn_e2e_trace_{num_cores}"
         if args.jitter_sim_en:
-            trace_path = trace_path_w_seed_fmt.format(**trace_path_para, **{"case": "glb_dyn"})
+            trace_path = trace_fn_w_seed_fmt.format(**trace_path_para, **{"case": "glb_dyn"})
         else:
-            trace_path = trace_path_wo_seed_fmt.format(**trace_path_para, **{"case": "glb_dyn"})
+            trace_path = trace_fn_wo_seed_fmt.format(**trace_path_para, **{"case": "glb_dyn"})
         
         # save trace_list to trace_file
         dump_and_check(trace_path, trace_list)

@@ -4,7 +4,7 @@
 # Default parameters
 seed_start=${1:-0}
 seed_end=${2:-9}
-plot=${3:-"False"}
+plot=${3:-""}
 check_max_core=${4:-"False"}
 for ((seed=$seed_start; seed<=$seed_end; seed++)); do
     {

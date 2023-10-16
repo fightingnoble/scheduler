@@ -20,7 +20,7 @@ from model.position_table import PosTableInt
 
 from sched.monitor_agent import Monitor
 from sched.scheduler_agent import Scheduler, check_miss, check_complete
-from sched.scheduler_agent import data_pipe_read, pendingToReady
+from sched.scheduler_agent import data_pipe_read, pendingToReady, updateRunningQueue
 from sched.pre_alloc import glb_alloc_new
 from sched.pre_alloc_new import glb_alloc_new2
 from sched.bin_ops import new_bin, get_initlist_and_biniter, static_1_bin
@@ -30,7 +30,7 @@ def push_task_into_bins_new(
         bin_list: List[SchedulingTableInt], 
         glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,
         total_cores:int, quantum_check_en, quantumSize, 
-        timestep, hyper_p, spatial_rda_ratio, temporal_rda_ratio,
+        timestep, hyper_p, wsc_slack_ratio, temporal_rda_ratio,
 
         scheduler_list: List[Scheduler], monitor_list:List[Monitor],
         msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
@@ -263,28 +263,15 @@ def push_step_new(
                 break
 
     # =================================================
-    _p_dict = {p.pid:p for p in running_queue}
     for _SchedTab in bin_list:
         curr_cfg = _SchedTab.scheduling_table[n_slot]
-        if curr_cfg.rsc_map:
-            # update the running task
-            # _p_dict_n = {p.task.name:p for p in running_queue}
-            # if "MultiCameraFusion_0" in _p_dict_n.keys():
-            #     if not _p_dict_n["MultiCameraFusion_0"].pid in curr_cfg.rsc_map.keys():
-            #         print("MultiCameraFusion_0 is not in the current configuration")
-            for pid in curr_cfg.rsc_map.keys():
-                _p = _p_dict[pid]
-                _p.currentburst += curr_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
-                _p.burst += curr_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
-                _p.totburst += curr_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
-                _p.remburst -= curr_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
-                _p.cumulative_executed_time += timestep
+        updateRunningQueue(timestep, running_queue, curr_cfg) 
 
 def coleasing_alloc(
         bin_list: List[SchedulingTableInt], 
         glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,
         total_cores:int, quantum_check_en, quantumSize, 
-        timestep, hyper_p, spatial_rda_ratio, temporal_rda_ratio,
+        timestep, hyper_p, wsc_slack_ratio, temporal_rda_ratio,
 
         scheduler_list: List[Scheduler], monitor_list:List[Monitor],
         msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
@@ -326,11 +313,16 @@ def coleasing_alloc(
         _p:ProcessInt
         stimu_tab = _p.task.extract_sensor_event(event_range)
         # (task_name, pid, req_size, stimu_t, start_t, ddl_t, exp_comp_t)
-        process_block_sortby_start_slot.extend(
-            [(_p.task.name, _p.pid, 
+        for stimu_t in stimu_tab:
+            item = (_p.task.name, _p.pid, 
               _p.task.pre_assigned_resource.main_size + _p.task.pre_assigned_resource.RDA_size, 
-              stimu_t, stimu_t+_p.task.ERT, stimu_t+_p.task.ERT+_p.task.ddl, _p.task.exp_comp_t) for stimu_t in stimu_tab])
-        
+              stimu_t, elim_nume_error(stimu_t+_p.task.ERT), elim_nume_error(stimu_t+_p.task.ERT+_p.task.ddl), _p.task.exp_comp_t)
+            start_t, ddl_t = item[4], item[5]
+            # quantize the start time and ddl time
+            slot_s = int(math.ceil(start_t/timestep)) * timestep
+            slot_e = int(math.floor(ddl_t/timestep)) * timestep
+            process_block_sortby_start_slot.append((item[0], item[1], item[2], item[3], slot_s, slot_e, item[6]))
+
     # sort the event list by the start time, ddl, exp_comp_t
     process_block_sortby_start_slot.sort(key=lambda x: (x[4], x[5], x[6]))
     event_set = OrderedDict()
@@ -349,6 +341,8 @@ def coleasing_alloc(
     max_core_layout = {} # start, core_size, slot_num
     position_recoder = PosTableInt(len(event_set)) # cache the current usage of the cores
     prev_t = 0
+    cum_flops = {}
+    process_dict = {p.pid:p for p in glb_p_list}
 
     # scan the event list, place, and pop the task into the bin, 
     # expanding the bin size if necessary
@@ -368,19 +362,43 @@ def coleasing_alloc(
             else:
                 print("="*20, "PERIOD {:d}".format(curr_n_period), "="*20, "\n")
 
+        if prev_t < curr_t and curr_items:
+            flops_per_core = (curr_t-prev_t) * FLOPS_PER_CORE 
+            flops_dict = {}
+            cores_dict = {}
+            for item in curr_items:
+                # task_name, pid, req_size, stimu_t, start_t, ddl_t, exp_comp_t = item
+                req_size = item[2]
+                pid = item[1]
+                start_t, ddl_t = item[4], item[5]
+                size_del_rda = process_dict[pid].task.flops/FLOPS_PER_CORE/(ddl_t-start_t)
+                cores_dict[pid] = int(math.ceil(size_del_rda/(1-temporal_rda_ratio)))
+                if cum_flops[pid] > 0:
+                    flops = flops_per_core*math.ceil(size_del_rda)
+                    flops = min(flops, cum_flops[pid])
+                    flops_dict.update({pid:flops})
+                    cum_flops[pid] -= flops
+                else:
+                    flops_dict.update({pid:0})
+            _bin.sparse_flops.append([round(prev_t/timestep), flops_dict])
+            _bin.sparse_cores.append([round(prev_t/timestep), cores_dict])
+
         # get the pending items
         while len(process_block_sortby_start_slot):
-            task_name, pid, req_size, stimu_t, start_t, ddl_t, finish_t = process_block_sortby_start_slot[0]
+            task_name, pid, req_size, stimu_t, start_t, ddl_t, exp_comp_t = process_block_sortby_start_slot[0]
             if start_t <= curr_t:
                 pending_items.append(process_block_sortby_start_slot.pop(0))
-                print("task_name:", task_name, "stimu_t:", stimu_t, "start_t:", start_t, "ddl_t:", ddl_t, "finish_t:", finish_t)
+                print("task_name:", task_name, "stimu_t:", stimu_t, "start_t:", start_t, "ddl_t:", ddl_t, "exp_comp_t:", exp_comp_t)
             else:
                 break
         
         # pop the items that are finished regarding the ddl
         while len(curr_items):
             if curr_items[0][5] <= curr_t:
+                pid = curr_items[0][1]
+                assert cum_flops[pid] == 0
                 curr_items.pop(0)
+                cum_flops.pop(pid)
             else:
                 break
 
@@ -420,17 +438,24 @@ def coleasing_alloc(
         # place the pending items into the bin
 
         for item in pending_items:
-            task_name, pid, req_size, stimu_t, start_t, ddl_t, finish_t = item
-            slot_s = int(math.ceil(start_t/timestep))
-            slot_e = int(math.floor(ddl_t/timestep))
+            task_name, pid, req_size, stimu_t, start_t, ddl_t, exp_comp_t = item
+            slot_s = round(start_t/timestep)
+            slot_e = round(ddl_t/timestep)
             slot_n = slot_e - slot_s
             _bin.allocate(pid, [slot_s,], [req_size,], [slot_n,], DEBUG_FG)
             curr_items.append(item)
+            cum_flops.update({pid:process_dict[pid].task.flops})
         pending_items.clear()
 
         # sort the current items and pending items by the ddl
         curr_items.sort(key=lambda x: x[5])
         prev_t = curr_t
+    
+    # sparsify the Scheduling table
+    # initialize the interval info: slot_s, slot_e, core_size, flops
+    _bin.to_sparse_dict()
+    _bin.alloc_mod = "max"
+    
     print("max_core_layout:", max_core_layout)
     assert max_core_num == sum(max_core_layout[1].values()), "max_core_num should be equal to the sum of the core size of the current items"
     print("max_core_num:", max_core_num)

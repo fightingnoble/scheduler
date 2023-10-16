@@ -29,6 +29,10 @@ task_graph_sinks = {
     "Sink_control": [],
     "Sink_screen": [],
 }
+sink_attr={
+    "Sink_control": "deadline",
+    "Sink_screen": "realtime"
+}
 task_graph_ops = {   
     "Traffic_light_detection": ["Sink_control"],
     "ImageBB": ["MultiCameraFusion"],
@@ -870,15 +874,24 @@ def gen_taskint_from_cfg(taskattr_dict:Dict[str, TaskIntAttr], f_gcd: int,
 def gen_workloads(args, slack_threshold):
     taskattr_dict, f_gcd = load_taskattrib(args.profiling_filename, verbose=args.verbose) 
     hyper_p = 1/f_gcd
-    if args.aux_scale_factor > 1:
+    assert args.aux_scale_factor >= 0
+    if args.aux_scale_factor != 1:
         for node, taskattr in taskattr_dict.items():
             # scale up the thread scaling factor
             if taskattr.timing_flag == "realtime":
                 taskattr.thread_scaling_factor *= args.aux_scale_factor
 
     logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
+
+    if args.binpack_cfg["algorithm"] == "coalescing":
+        temporal_rda_ratio = 1-args.wsc_slack_ratio
+        abs_reserve_en = True
+    else:
+        temporal_rda_ratio = args.temporal_rda_ratio
+        abs_reserve_en = False
     duduce_cfg(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, task_graph_srcs, 
-                         task_graph_sinks, slack_threshold, args.e2e_latency, args.temporal_rda_ratio, args.wsc_slack_ratio)
+                task_graph_sinks, sink_attr, slack_threshold, args.e2e_latency, 
+                temporal_rda_ratio, args.wsc_slack_ratio, abs_reserve_en=abs_reserve_en)
     glb_n_task_dict = gen_taskint_from_cfg(taskattr_dict, f_gcd)
     physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), taskattr_dict=taskattr_dict)
     init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
@@ -1014,7 +1027,7 @@ def init_affinity(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Unio
     return pos_affinity_cfg, neg_affinity_cfg
 
 def redist_ert_dll(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[TaskInt,ProcessInt]]],
-        logical_graph_nx:nx.DiGraph=None, temporal_rda_ratio=0, sched_step_comp=0, 
+        logical_graph_nx:nx.DiGraph=None, temporal_rda_ratio=0, temporal_abs_en=0, 
         comm_compen_en=False, profiling_filename:str="profiling/profiling.csv", verbose=False):
 
     df:pd.DataFrame = pd.read_csv(profiling_filename, sep=",", index_col=0) 
@@ -1023,7 +1036,7 @@ def redist_ert_dll(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Uni
     task_type: Dict[str, str] = {task_n:df.loc[task_n, "Timing_flag"] for task_n in df.T}
 
     ert, ddl = estim_release_dll_time(logical_graph_nx, comp_time, io_time, task_type,
-                                      temporal_rda_ratio, sched_step_comp, comm_compen_en, profiling_filename, verbose)
+                                      temporal_rda_ratio, temporal_abs_en, {}, comm_compen_en, profiling_filename, verbose)
     # if taskJobs is a list, convert it to a dict
     if isinstance(taskJobs, list):
         if taskJobs[0].__class__.__name__ == "ProcessInt":
@@ -1092,7 +1105,7 @@ if __name__ == "__main__":
 
     if args.test_case == "ert_ddl" or args.test_all:
         logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
-        ert, ddl = estim_release_dll_time(logical_graph_nx, temporal_rda_ratio=0.05, sched_step_comp=sim_step, 
+        ert, ddl = estim_release_dll_time(logical_graph_nx, temporal_rel=0.05, temporal_abs_en=sim_step, 
                                           profiling_filename=args.profiling_filename, verbose=args.verbose)
         df = pd.read_csv(args.profiling_filename, sep=",", index_col=0) 
         for task_n in ert: 
@@ -1113,13 +1126,15 @@ if __name__ == "__main__":
         physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), args.profiling_filename)
         init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
 
-        node_color_map = {"op": "red", "sink": "blue", "src": "green"}
-        edge_color_map = {"data": "red", "control": "blue"}
-        node_colors = [node_color_map[d] for n, d in logical_graph_nx.nodes(data="type")]
-        edge_colors = [edge_color_map[d] for u,v,d in logical_graph_nx.edges(data="type")]
         fig = plt.figure(figsize=(20, 10))
         ax1 = fig.add_subplot(121)
         ax2 = fig.add_subplot(122)
+
+        node_color_map = {"op": "red", "sink": "blue", "src": "green"}
+        edge_color_map = {"data": "red", "control": "blue"}
+        
+        node_colors = [node_color_map[d] for n, d in logical_graph_nx.nodes(data="type")]
+        edge_colors = [edge_color_map[d] for u,v,d in logical_graph_nx.edges(data="type")]
         for layer, nodes in enumerate(nx.topological_generations(logical_graph_nx)):
             for node in nodes:
                 logical_graph_nx.nodes[node]["layer"] = layer

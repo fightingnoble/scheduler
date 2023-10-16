@@ -38,7 +38,7 @@ class SchedulingTableInt(object):
         self.temp_size = num_time_slots
         self.locker = None
         self.lock_mask = np.ones((num_time_slots), dtype=bool)
-        self.sparse_list = OrderedDict()
+        self.sparse_list = list() # OrderedDict()
         # current index of the sparse list
         self.sparse_idx = 0
         # previous index of the sparse list
@@ -46,6 +46,9 @@ class SchedulingTableInt(object):
         # next index of the sparse list
         self.sparse_idx_next = 0
         self.sparse_mode = False
+        self.alloc_mod = "exactly" 
+        self.sparse_flops = list()
+        self.sparse_cores = list()
 
         # available when used as a recorder
         self.wr_pointer = 0
@@ -228,14 +231,14 @@ class SchedulingTableInt(object):
             self.sparse_mode = False
             return True, (time_slot_s+np.array(s)[idx]).tolist(), curr_alloc[idx].tolist(), curr_slot[idx].tolist()
 
-    def aeap_insert(self, task, expected_slot_num, DEBUG, s, e, slot_n, curr_alloc, curr_slot, expected_req_rsc_size):
+    def aeap_insert(self, task, expected_slot_num, DEBUG, s, e, size, curr_alloc, curr_slot, expected_req_rsc_size):
         # available (A)
         rsc_avl_tmp = np.zeros(len(s), dtype=int) 
         rsc_lack = expected_req_rsc_size
         cum_slot_length = 0
 
         for i in range(len(s)):
-            rsc_avl_tmp[i] = slot_n[i]
+            rsc_avl_tmp[i] = size[i]
                     # slot length                        
             if cum_slot_length + (e[i] - s[i]) >= expected_slot_num:
                 curr_slot[i] = int(expected_slot_num - cum_slot_length)
@@ -296,7 +299,7 @@ class SchedulingTableInt(object):
             curr_alloc.fill(0)
             curr_slot.fill(0)
                     # as soon as possible
-            self.asap_insert(task, DEBUG, s, e, slot_n, curr_alloc, curr_slot, expected_req_rsc_size)
+            self.asap_insert(task, DEBUG, s, e, size, curr_alloc, curr_slot, expected_req_rsc_size)
         else:
                     # Check whether the task allocate too much resources
             i=1
@@ -429,19 +432,27 @@ class SchedulingTableInt(object):
             self.scheduling_table[-1].clear()
         return running
 
-    def print_scheduling_table(self, pid2name:Dict[int,str]=None, timestep=None):
+    def print_scheduling_table(self, pid2name:Dict[int,str]=None, timestep=None, time_slot_s:int=None, time_slot_e:int=None):
+        if time_slot_s is None:
+            time_slot_s = 0
+
+        if time_slot_e is None:
+            rsc_agents_arr = self.scheduling_table[time_slot_s:]
+        else:
+            rsc_agents_arr = self.scheduling_table[time_slot_s:time_slot_e]
+
         empty_boader_s = []
         empty_boader_e = []
         title_line = False
 
-        pre_rsc = self.scheduling_table[0].rsc_map
+        pre_rsc = rsc_agents_arr[0].rsc_map
         pre_idx = 0
         empty_flag = len(pre_rsc) == 0
         if empty_flag:
             empty_boader_s.append(0)
         
-        for rsc_map_idx in range(len(self.scheduling_table)):
-            rsc_map = self.scheduling_table[rsc_map_idx].rsc_map
+        for rsc_map_idx in range(len(rsc_agents_arr)):
+            rsc_map = rsc_agents_arr[rsc_map_idx].rsc_map
 
             if rsc_map == pre_rsc:
                 continue
@@ -465,9 +476,9 @@ class SchedulingTableInt(object):
                 if empty_flag:
                     empty_boader_s.append(rsc_map_idx)
         if empty_flag:
-            empty_boader_e.append(len(self.scheduling_table))
+            empty_boader_e.append(len(rsc_agents_arr))
         else:
-            print(f"slot:[{pre_idx}-{len(self.scheduling_table)})\n{str(pre_rsc)}")
+            print(f"slot:[{pre_idx}-{len(rsc_agents_arr)})\n{str(pre_rsc)}")
 
         _str = [f"[{empty_boader_s[i]}-{empty_boader_e[i]})" for i in range(len(empty_boader_s))]
         print("slot:{} Empty".format(",".join(_str,)))
@@ -524,6 +535,14 @@ class SchedulingTableInt(object):
         self.sparse_idx = init_pos
         self.sparse_idx_next = init_pos + 1
         self.sparse_mode = True
+        # check attribute self.alloc_mod, sparse_flops
+        if not hasattr(self, "alloc_mod"):
+            self.alloc_mod = "exactly"
+        if not hasattr(self, "sparse_flops"):
+            self.sparse_flops = list()
+        if not hasattr(self, "sparse_cores"):
+            self.sparse_cores = list()
+
 
     # add spase inded by 1
     def idx_plus_1(self,):

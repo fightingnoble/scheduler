@@ -1,12 +1,15 @@
 ## parameters ranges
+
 等价算力：200
 最稳妥的cores：315
 最少：可能303
 
 ## Basic Assumptions
+
 1. Buffer size is very large
 2. Every generated results are broad casted to all downstream processes
 3. lifetime defination:
+
    ```
            # metric_fn = lambda x: (x.event_time + x.life_time - curr_t, buffer.sort_fn(x))
            metric_fn = lambda x: (x.processed_done_time + x.life_time - curr_t, buffer.sort_fn(x))
@@ -30,7 +33,6 @@ _p.set_state("ready")
 
 _p.is_starving
 
-
 preemption: (new task entering the ready queue) a job is suspend and the resource is taken over by other task(s);
 
 ressignment-in-turn: (new task entering the ready queue and ready queue is not empty and old task free cores) old job(s) finished and new job(s) take over the free resource;
@@ -41,10 +43,10 @@ replenishment: (free cores exist and some task are starving) free resources are 
 
 8. layout & placement
 
-Currently, we only consider 1D layout, with a huristic algorithm: 
-reallocating the position from the original base position, i.e., cum_pos, 
-looking left and right, and select the leftmost position from left_pos, then, rightmost position from right_pos. 
-the task decrease the size is handled at first. 
+Currently, we only consider 1D layout, with a huristic algorithm:
+reallocating the position from the original base position, i.e., cum_pos,
+looking left and right, and select the leftmost position from left_pos, then, rightmost position from right_pos.
+the task decrease the size is handled at first.
 
 9. preallocation
 
@@ -65,22 +67,15 @@ Redundency mechanism to handle the jitter:
       这样下有任务的mapping结果取决于上游任务的mapping效果。
       timestamp+ERT+DDL则作为下游任务的最晚时间，以约束上游任务的最差mapping结果。
 
-   拆解步骤：   
-      - a.  Assure typical slack staticly, and worst slack dynamically.
-         shrink the end-to-end slack by the typical slack, 
-         ```
-         slcak_rem = (1-temporal_rda_ratio)*1e3*slcak_rem/1e3
-         ```
-      - b.  allocate the resource according to the slack distributed to each task, 
+   拆解步骤：
+    - a.  Assure typical slack staticly, and worst slack dynamically.
+         shrink the end-to-end slack by the typical slack,``         slcak_rem = (1-temporal_rda_ratio)*1e3*slcak_rem/1e3         ``
+      - b.  allocate the resource according to the slack distributed to each task,
          and recompute the ERT and DDL of each task.
 
-         ```python
-         ddl[node] = ert[node] + comp_time[node] *1e7 / (1 - temporal_rda_ratio)/ 1e7
-         ```
+    ``python          ddl[node] = ert[node] + comp_time[node] *1e7 / (1 - temporal_rda_ratio)/ 1e7          ``
       - c.  Preserve resource capacity for the worst slack,
-         ```
-         deduce_RDA = lambda size, temporal_rda_ratio, wsc_slack_ratio: math.ceil(size * (1-temporal_rda_ratio) / wsc_slack_ratio) - size
-         ```
+         ``         deduce_RDA = lambda size, temporal_rda_ratio, wsc_slack_ratio: math.ceil(size * (1-temporal_rda_ratio) / wsc_slack_ratio) - size         ``
       - d.  determin the resource at runtime according to the remaining slack and remaining burst.
 
 Bin-packing algorithm:
@@ -96,36 +91,37 @@ Bin-packing algorithm:
 
 首先过滤掉资源数量小于core_min的位置，这样后面只需要考虑，core_max 和 core_list 的约束
 
-
 realtime 不用给冗余 现在都留了
+
 ```python
             ddl[node] = ert[node] + comp_time[node] *1e7 / (1 - temporal_rda_ratio)/ 1e7
 ```
-mechanism: 
+
+mechanism:
    Partial allocation is not allowed, i.e., the task is allocated to the whole cores or none.
    Each task only try once; the tasks already allocated are skipped;
    the tasks are preempted are given an extra opportunities.
-   TODO: Allow partial allocation and add the logic to ensure the task have allocated enough resource, otherwise, we should not issue the task or compensate the resource latter. 
+   TODO: Allow partial allocation and add the logic to ensure the task have allocated enough resource, otherwise, we should not issue the task or compensate the resource latter.
 
 sort the bin according to the feature
-   - free: slot_s, avil_unit, preemption: slot_s, avil_unit
 
+- free: slot_s, avil_unit, preemption: slot_s, avil_unit
 
 decision:
-   - (algorithm:reside/coalescing) Allow spatial sharing among partitions or not?
-      - No: highest Perf.
-      - Yes: 
-         - (mode:non-block/block)(安全资源够) Block or not:
-            - continuous block(空间连续)
-               - (preempt_en:False/True) mapped to single time single interval or broken into multiple chunk
-                  - Yes: (时间空间连续)
-                  - No: (时间连续空间不连续)
-            - non-continuous blocks (allowed to change its expected size): ASAP, AEAP
-         - Allow shrinked redundency (安全资源可以不够): release unused resources, allocate all reources in the living interval 
-         - Allow allocate resources in best effort, even not enough in its time interval (最低资源都不够)
-   
 
-resource reservation: 
+- (algorithm:reside/coalescing) Allow spatial sharing among partitions or not?
+  - No: highest Perf.
+  - Yes:
+    - (mode:non-block/block)(安全资源够) Block or not:
+      - continuous block(空间连续)
+        - (preempt_en:False/True) mapped to single time single interval or broken into multiple chunk
+          - Yes: (时间空间连续)
+          - No: (时间连续空间不连续)
+      - non-continuous blocks (allowed to change its expected size): ASAP, AEAP
+    - Allow shrinked redundency (安全资源可以不够): release unused resources, allocate all reources in the living interval
+    - Allow allocate resources in best effort, even not enough in its time interval (最低资源都不够)
+
+resource reservation:
    input parameters:
       wsc_slack_ratio
       temporal_rda_ratio
@@ -137,162 +133,160 @@ resource reservation:
    op2: init_bin_list
    op3: delete_bin
 
+9.5 dynamic allocation
+   9.5.1 trigger cond.
+      case 1: release late !!! the running task that is identified as preemptable [chunk_s, chunk_e]
+   9.5.2 budget server
+   
+
 
 10. compared items
-A. Context switching
- - planned 
- - preempted
+    A. Context switching
 
-B. deadline assignment 
-   - shared
-   - fixed
+- planned
+- preempted
+
+B. deadline assignment
+
+- shared
+- fixed
 
 11. graph scalling
-   根据上下游节点的频率和并行度讨论图变换的模式。
-   对于上游频率高于下游的情况：采用间隔均匀采点模式（等间距分割）
-   下游高于上游情况：目前提供两种模式接口（interleave，repea），但是采用的是等间距分割模式
-
+    根据上下游节点的频率和并行度讨论图变换的模式。
+    对于上游频率高于下游的情况：采用间隔均匀采点模式（等间距分割）
+    下游高于上游情况：目前提供两种模式接口（interleave，repea），但是采用的是等间距分割模式
 12. exp_comp_t
-   this property is now only used for calculating sim_step, injecting jitter
-   now, we use the estimated slack as the exp_comp_t, which is smaller than relative deadline, i.e., ddl.
-   
+    this property is now only used for calculating sim_step, injecting jitter
+    now, we use the estimated slack as the exp_comp_t, which is smaller than relative deadline, i.e., ddl.
 13. 修改update_ctx 使 event_time, e2e_ddl, dyn_obj_num 随着数据流更新
-  当多个流汇聚的时候应该选择event_time更新对应的那个流，也就是event_time最迟的流
-  对于event_trigger的任务，以上三个属性应该在cache_trigger时候更新
-  否则在cache_upstream的时候更新
-
+    当多个流汇聚的时候应该选择event_time更新对应的那个流，也就是event_time最迟的流
+    对于event_trigger的任务，以上三个属性应该在cache_trigger时候更新
+    否则在cache_upstream的时候更新
 14. workload variation infomation format：
-   {
-      "var_item":{
-         {
-            "src_name": ["task_name1", "task_name2", ...]
-            "tgt_name": ["task_nameA", "task_nameB", ...]
-            "typical":10, 
-            "maxsize":30,
-            "period":100,
-         }
-      }
-   }
-   The packet injected to the ctx is in the following format:
-   {
-      var_item: {
-            "typical": var_param["typical"],
-            "tgt_name": var_param["tgt_name"],
-            "size": dyn_obj_num
-      }
-   }
+    {
+    "var_item":{
+    {
+    "src_name": ["task_name1", "task_name2", ...]
+    "tgt_name": ["task_nameA", "task_nameB", ...]
+    "typical":10,
+    "maxsize":30,
+    "period":100,
+    }
+    }
+    }
+    The packet injected to the ctx is in the following format:
+    {
+    var_item: {
+    "typical": var_param["typical"],
+    "tgt_name": var_param["tgt_name"],
+    "size": dyn_obj_num
+    }
+    }
 15. handler should also determine the adjustment of the scheduling table:
-   1. e2e var: 
-      1. for deadline-driven task, 
-         a. e2e latency requirement is redistributed to each tasks:
-            DDL is recomputed in proportion to the e2e_var, 
-            and the ERT is also updated along each chains in a cascading manner.
-         b. Budget: the trunk of the tasks should 
+16. e2e var:
 
-16. In our scheduling algorithm, 
-      we should confirm that in which condition the context switching overhead can / cannot be ignored:  
-      1. if when and which the next task is executed can not be known in advance, 
-         the context switching overhead cannot be ignored.
-      Case: 
-      1. planned context switching:
-         the task initialization can be performed in advance, i.e., 
-         transfering the weight and initialize other states, before the previous task is finished.
-         In this case, the context switching overhead can be ignored.
-      2. preempted context switching:
-         As the resources allocation is not performed until the previous task is finished, 
-         and all the states should be saved and reinitialized, 
-         as soon as the new allocation scheme is determined.
-         In this case, the context switching overhead cannot be ignored.
+    1. for deadline-driven task,
+       a. e2e latency requirement is redistributed to each tasks:
+       DDL is recomputed in proportion to the e2e_var,
+       and the ERT is also updated along each chains in a cascading manner.
+       b. Budget: the trunk of the tasks should
+17. In our scheduling algorithm,
+    we should confirm that in which condition the context switching overhead can / cannot be ignored:
 
-17. overhead of our method: 
-   1. fragment cores in each partition, but the switch overhead in each partition is smaller than global scheduling.
-   2. as the number unexpected context switching increases, 
-      the overhead of the context switching increases.
+    1. if when and which the next task is executed can not be known in advance,
+       the context switching overhead cannot be ignored.
+       Case:
+    2. planned context switching:
+       the task initialization can be performed in advance, i.e.,
+       transfering the weight and initialize other states, before the previous task is finished.
+       In this case, the context switching overhead can be ignored.
+    3. preempted context switching:
+       As the resources allocation is not performed until the previous task is finished,
+       and all the states should be saved and reinitialized,
+       as soon as the new allocation scheme is determined.
+       In this case, the context switching overhead cannot be ignored.
+18. overhead of our method:
+19. fragment cores in each partition, but the switch overhead in each partition is smaller than global scheduling.
+20. as the number unexpected context switching increases,
+    the overhead of the context switching increases.
+21. load_var and thread fork
 
-
-18. load_var and thread fork
-
-   >   在ready 之前fork 需要考虑fork的进程的依赖，以及budget的设置
-   >   在ready设置，需要考虑进程的throttle以及恢复
+> 在ready 之前fork 需要考虑fork的进程的依赖，以及budget的设置
+> 在ready设置，需要考虑进程的throttle以及恢复
 
    properties:
       ```
          self.n_fork = 0
          self.fork_pid_list = []
-         self.fork_pid_candi = [] 
+         self.fork_pid_candi = []
          self.is_fork_inst = False
          self.parent_pid = None
          self.var_scale_factor = 1
-         self.load_var = None  
-         self.fork_p_inst = []
+         self.load_var = None
+    self.fork_p_inst = []
 
-      ```
-      `fork_pid_base = 1000`
-      
-      inject ctx from in message_trigger_event_new
+    ````fork_pid_base = 1000`
+
+    inject ctx from in message_trigger_event_new
       init process pool at init time (task_cfg.py)
       extract workload variation from the context (handle_process_load_var)
 
-      copy budget for the forked process
+    copy budget for the forked process
       fork the task (p_fork) @ ready:
          copy the process, rename the process and change the process id
-         set the `parent_pid, is_fork_inst, pid` for the new process
+         set the`parent_pid, is_fork_inst, pid` for the new process
          set `n_fork, new_pid, fork_pid_list` for the parent process
       add process index to process_dict
-         
-      set ready state for the forked process
 
-      check complete:
-         both `n_fork == 0` and totburst
+    set ready state for the forked process
+
+    check complete:
+         both`n_fork == 0` and totburst
          sorted(running_queue.queue, key=lambda x: x.is_fork_inst, reverse=True) check the forked process first
 
-      terminate forked process (kill_fork) @ miss and complete:
-         set the property of process with `parent_pid`
+    terminate forked process (kill_fork) @ miss and complete:
+         set the property of process with`parent_pid`
          append pid to fork_pid_candi
          remove the pid from fork_pid_list
          minus n_fork by 1
          delete the process
-      
+
 19. e2e var sim, load scheduling table, adjust allocation
-      Old table will not assign budget to any task
+    Old table will not assign budget to any task
 
-      inject ctx from in message_trigger_event_new
-      trigger the e2e var event as well as set L0 scheduling table for all scheduler
-      set draining state for all old tasks
-      set event time divider
-      
-      initialize the core map
-      update the position dict
+    inject ctx from in message_trigger_event_new
+    trigger the e2e var event as well as set L0 scheduling table for all scheduler
+    set draining state for all old tasks
+    set event time divider
 
-      @ release stage
-      detect the process e2e var
-         Yes -> entering the draing stage
+    initialize the core map
+    update the position dict
 
-      @ release resource
-      send message to the msg pip
+    @ release stage
+    detect the process e2e var
+    Yes -> entering the draing stage
 
-      @ on receiving the message
-      update the core map L0 
-      move the core map L0 to the core map
-      set the size of the res_cfg
+    @ release resource
+    send message to the msg pip
 
+    @ on receiving the message
+    update the core map L0
+    move the core map L0 to the core map
+    set the size of the res_cfg
 
-      @ budget load stage 
-         update the budget according to the ctx
-      
-      check the draining state
+    @ budget load stage
+    update the budget according to the ctx
 
+    check the draining state
 
 parameter scan
    e2e_var_sim_en
    jitter_sim_en
    load_var_sim_en
    e2e_var_sim_en
-   seed, 
+   seed,
    aux_scale_factor
    e2e_latency
-   
-
 
 Hardware paremeters:
    num_cores
@@ -322,3 +316,11 @@ Scheduler parameters
    lateness_mode
    test_case
    barrier_dis
+
+# Numerical error
+
+wrong syntex: int(a//b) -> int(a/b)
+
+q_time = math.floor(time/timestamp) * timestamp
+
+q_time / timestamp 由于数值误差应该用round 而非 int 才能得到和之前相同的结果

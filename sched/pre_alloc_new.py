@@ -449,7 +449,12 @@ def check_and_preemt_alloc(_p:ProcessInt, n_slot:int, bin:SchedulingTableInt,
             mode, rsc_avl, s, e, size, expected_req_rsc_size, 
             verbose, DEBUG
         )
-        
+        idx = np.where(alloc_size)[0]
+        # (time_slot_s+np.array(s)[idx]).tolist(), slot_n[idx].tolist(), (e[idx]-s[idx]).tolist()
+        alloc_s = [alloc_s[i] for i in idx]
+        alloc_size = [alloc_size[i] for i in idx]
+        alloc_len = [alloc_len[i] for i in idx]
+
     if policy != 'N/A':
         bin.allocate(_p.pid, alloc_s, alloc_size, alloc_len, verbose=DEBUG)
         total_alloc_unit = np.sum(np.array(alloc_size) * np.array(alloc_len))

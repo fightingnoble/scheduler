@@ -20,11 +20,13 @@ import math
 from model.task_queue_agent import TaskQueue
 from model.buffer import Data, Buffer
 from typing import List, Dict, Callable
+from model.event_gen.e2e_latency import jitter_gen
+from global_var import AVG_HOP_NUM, LAT_PER_HOP, BW_DRAM
 
 class DataPipe:
     def __init__(self, data_type, num_reciever:int, 
                  capacity:int=-1, queues_list:List[TaskQueue]=None,
-                 sort_fn:Callable=None
+                 sort_fn:Callable=None, jitter_sim_para=None, seed:int=0, ideal=True
                  ) -> None:
         # ["unicast", data, dest] sorted by max(io_time-waitTime, 0)
         self.buffer = TaskQueue(descending=False, sort_f=lambda x: max(x[1].io_time-x[1].waitTime, 0))
@@ -36,6 +38,9 @@ class DataPipe:
             self.queues = [TaskQueue(sort_f=self.sort_fn, descending=False) for _ in range(num_reciever)]
         else:
             self.queues = queues_list
+        head_latency = AVG_HOP_NUM * LAT_PER_HOP
+        self.comm_lat_gen = jitter_gen(head_latency, jitter_sim_para, size=1, seed=seed)
+        self.get_io_lat = lambda size: self.comm_lat_gen() + size / BW_DRAM
     
     def put(self, data:Data, mode:bool="broadcast", dest:List[int]=None,):
         if mode == "broadcast":

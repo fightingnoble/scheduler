@@ -58,12 +58,15 @@ def discrete_event_sim(event_list:List, size=1,
 
 def jitter_gen(ref_value, jitter_sim_para:Dict, size=1, 
                seed:Union[None, int, np.random.Generator, np.random.RandomState]=None):
+    enforce_wc = jitter_sim_para.get("enforce_wc", False) 
     scope = ref_value * jitter_sim_para["scale"]
     loc = 0
     scale = scope/3
     myclip_a = -scope
     myclip_b = scope
     a, b = (myclip_a - loc) / scale, (myclip_b - loc) / scale
+    if enforce_wc:
+        return lambda: b 
     generator = np.random.default_rng(seed)
     if size == 1:
         jitter_gen_inst = lambda: truncnorm.rvs(a, b, loc=loc, scale=scale, random_state=generator)

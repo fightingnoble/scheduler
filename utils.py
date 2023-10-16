@@ -52,7 +52,7 @@ def input_parser():
     parser.add_argument("--n_p", default=1, type=int, help="number of periods")
     
     parser.add_argument("--jitter_sim_en", default=False, action="store_true", help="enable jitter simulation")
-    parser.add_argument("--jitter_sim_para", default={"loc":0, "scale":0.2}, type=dict, help="jitter simulation parameters")
+    parser.add_argument("--jitter_sim_para", default={"loc":0, "scale":0.2, "force_wc":False}, type=dict, help="jitter simulation parameters")
     
     parser.add_argument("--var_sim_cfg", default="var_sim_cfg.json", type=str, help="variation simulation config file")
 
@@ -99,7 +99,7 @@ def time_cnt(description:str):
             start_time = time.time()
             print("Start time: ", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start_time)))
             t_s = time.monotonic()
-            func(*args, **kwargs)
+            result = func(*args, **kwargs)
             t_e = time.monotonic()
             s, ms = divmod((t_e - t_s) * 1000, 1000)
             m, s = divmod(s, 60)
@@ -107,6 +107,7 @@ def time_cnt(description:str):
             print("%d:%02d:%02d:%03d" % (h, m, s, ms))
             end_time = time.time()
             print("End time: ", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(end_time)))
+            return result
         return wrapper
     return time_decorator
 

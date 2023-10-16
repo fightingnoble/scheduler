@@ -389,7 +389,7 @@ Fix bug:
 
 ```python
 if chunk_s < n_slot < chunk_e:
-    # case 1: newest assigned budget is still available                
+    # case 1: newest assigned budget is still available              
     #   tries to finish the remaining work assigned by the configuration chunk until the now
     assert chunk_e == curr_cfg.slot_e + 1
     planned_flops = sum(_p.rem_flop_budget.values())
@@ -409,7 +409,7 @@ else:
         #   newest assigned budget is still available but not enough
         req_rsc_size = math.ceil(planned_flops/(chunk_e + 1 - n_slot)/timestep /FLOPS_PER_CORE)
     else:
-        # newest assigned budget is still available                
+        # newest assigned budget is still available              
         # tries to finish the remaining work assigned by the configuration chunk until the now
         req_rsc_size = chunk_alloc
 ```
@@ -478,7 +478,7 @@ fix bug: some tasks are lost after preemption, and the scheduling table can not 
 ```python
     # initialize task affinity list
     thread_n = int(exe_k)
-    affinity_tgt_n_list = affinity_cfg[task_n]    
+    affinity_tgt_n_list = affinity_cfg[task_n]  
     affinity_tgt_n_list = [n+'_'+str(thread_n) for n in affinity_tgt_n_list]
     task.affinity_n = affinity_tgt_n_list
     # initialize dependency list
@@ -652,7 +652,7 @@ Tested benchmark generation and simulation is completed.
     Add p_fn and PY_ARGS to the python script:
       pass more arguments to the python script from the shell script
       support slect the main file of the python script
-    ``   p_fn=${5:-"allocator_agent.py"}     PY_ARGS=${@:6}   ``
+    ``  p_fn=${5:-"allocator_agent.py"}     PY_ARGS=${@:6}  ``
     Select cfg dir:
       Generated ver:
         The cfg dir is parsed by the python script, and then passed to the shell script
@@ -1042,3 +1042,102 @@ modified the name of various results profilers and various xlsl generators.
 ## 20230930
 
 clean up folders: message related
+
+
+## 20231007
+
+fix the scheduler bug:
+
+old budget not cleared → task get ready in new turns directly → new ready → trigger the scheduler → 
+budget out off date → clear new ready_flag → new budget comes without triggering the scheduler → miss
+
+from `trigger_condC=sum([budget_recoder[_p.pid][3] for_pinrunning_queue.queue])` to `trigger_condC=sum([budget_recoder[_p.pid][3] for_pinsorted_queue]) >0`.
+
+change `--plot False` as `--plot ""`
+
+add elim_nume_error and fix some path var (global_var.py)
+
+fix bug:
+  pre_alloc_new.py 
+  allocated interval contain interval of [0] size, which trigger error checking that "A unexpected situation happens, task {_p_2b_preempt.task.name} is not executed but in the running queue"
+
+sort the task before checking miss (by getting chain deadline by `get_chain_deadline`), and add chain timeout condition (task_agent.py ).
+
+solve WSC-estimation-based allocation, add gurobi based chain slack ditirbution (slcak_estim.py).
+
+modifiy budget server (scheduling_table.py, global_sched.py, scheduler_agent.py, resource_agent.py):
+  Update:
+  ```python
+  for pid in next_cfg.keys():
+              _p = process_dict[pid]
+                      
+              if bin_id not in _p.rem_flop_budget:
+                  _p.rem_flop_budget[bin_id] = 0
+                          
+              flops_tbd = cfg_flops_dict[pid]
+              rem_flop_budget=_p.rem_flop_budget[bin_id]
+              if rem_flop_budget> numerical_error_tol_abs or flops_tbd>numerical_error_tol_abs: 
+                  _p.rem_flop_budget[bin_id] += flops_tbd # * _p.var_scale_factor
+                  budget_recoder[pid] = [cfg_slot_s, next_cfg[pid], cfg_slot_num, True]
+  ```
+
+  Clean up:
+
+  ```python
+  for pid in budget_recoder:
+          _p = process_dict[pid]
+          rem_flop_budget = _p.rem_flop_budget[sched._SchedTab.id]
+          if rem_flop_budget < numerical_error_tol_abs and _p.pid in budget_recoder:
+              budget_recoder.pop(pid)
+              _p.rem_flop_budget[bin_id] = 0
+  ```
+
+  Remove other cleanup in: check_compelete, check_miss, cross_canclation,check_throttle
+
+  Aggregation remain flops:
+
+  ```python
+                  for _p in issue_list:
+                      planned_flops = sum([v for v in _p.rem_flop_budget.values() if v > flop_error_tol_abs])
+                      for bin_idx in _p.rem_flop_budget.keys():
+                          if bin_idx != bin_id:
+                              _p.rem_flop_budget[bin_idx] = 0
+                          else:
+                              _p.rem_flop_budget[bin_idx] = planned_flops
+  ```
+
+  check ready:
+
+  ```python
+  if _p.pid in budget_recoder and sched._SchedTab.id in _p.rem_flop_budget:
+      rem_flop_budget = _p.rem_flop_budget[sched._SchedTab.id]
+      if rem_flop_budget> numerical_error_tol_abs:
+  ```
+
+  ```python
+  if update_budget:
+              ops = min(ops, _p.rem_flop_budget[bin_id])
+          else:
+              ops = min(ops, _p.totcpu-_p.totburst)
+  ```
+
+  为WCET的mapping增加了sparse_cores 属性，以及Runtime时候cfg的更新逻辑：
+  `_bin.sparse_cores.append([round(prev_t/*timestep*), cores_dict])`
+
+  `size_del_rda = math.ceil(req_size * *wsc_slack_ratio*/(1-*temporal_rda_ratio*))`
+
+  ```python
+  if _SchedTab.alloc_mod != 'exactly':
+              curr_cfg.update(_SchedTab.sparse_cores[_SchedTab.sparse_idx][1])
+          else:
+              curr_cfg.update(next_cfg)
+  ```
+  budget 在确定资源分配的时候，除了planned_flops外还在另一个地方用到忘了改：
+
+  `chunk_flops = chunk_alloc * chunk_slot_num * timestep * FLOPS_PER_CORE`
+
+  改为`chunk_flops = _p.rem_flop_budget[bin_id]`
+
+  utils.py: 
+    Add force WSC option
+    Add comm var (not varified)

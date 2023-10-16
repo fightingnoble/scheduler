@@ -43,6 +43,7 @@ class Resource_model_int(object):
         self.slot_e = None
         self.slot_s = None
         self.slot_num = None
+        self.flops_dict= dict()
     
     def add_rsc_num(self, num:int):
         self.size += num
