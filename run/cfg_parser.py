@@ -12,7 +12,7 @@ if not args.gen_benchmark:
     else:
         cfg_n = args.profiling_filename.split(".")[-2].split("_")[-1]
 else:
-    cfg_n = f"x{args.aux_scale_factor}_{args.e2e_latency}s_rda-{(args.wsc_slack_ratio):.2%}(T)_{args.temporal_rda_ratio:.2%}(S)"
+    cfg_n = f"x{args.aux_scale_factor}_{args.e2e_latency}s_rda-{(args.wsc_slack_ratio):.2%}(T)_{args.exec_t_comp_ratioA:.2%}(S)"
 cfg_n += f"_{args.lateness_mode}"
 
 print(f"{cfg_n}")

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from scipy.stats import truncnorm
+from scipy.stats import truncnorm, truncexpon
 from typing import List, Dict, Union, Callable
 from global_var import *
 import numpy as np
@@ -19,7 +19,7 @@ def e2e_var_sim(e2e_latency, jitter_sim_para:Dict, size=1,
             simulate behivior of the system which randomly changes deadline allocations with a given period
     """
     # jitter parameters: a, b, loc, scale
-    jitter_gen_inst = jitter_gen(e2e_latency, jitter_sim_para, size, seed)
+    jitter_gen_inst = jitter_gen_biside(e2e_latency, jitter_sim_para, size, seed)
     event_time = 0
     event_no = 0
     while True:
@@ -56,7 +56,7 @@ def discrete_event_sim(event_list:List, size=1,
         event_time += period
         event_no += 1
 
-def jitter_gen(ref_value, jitter_sim_para:Dict, size=1, 
+def jitter_gen_biside(ref_value, jitter_sim_para:Dict, size=1, 
                seed:Union[None, int, np.random.Generator, np.random.RandomState]=None):
     enforce_wc = jitter_sim_para.get("enforce_wc", False) 
     scope = ref_value * jitter_sim_para["scale"]
@@ -66,7 +66,7 @@ def jitter_gen(ref_value, jitter_sim_para:Dict, size=1,
     myclip_b = scope
     a, b = (myclip_a - loc) / scale, (myclip_b - loc) / scale
     if enforce_wc:
-        return lambda: b 
+        return lambda: np.full(size, myclip_b) if size>1 else np.float64(myclip_b)
     generator = np.random.default_rng(seed)
     if size == 1:
         jitter_gen_inst = lambda: truncnorm.rvs(a, b, loc=loc, scale=scale, random_state=generator)
@@ -74,6 +74,21 @@ def jitter_gen(ref_value, jitter_sim_para:Dict, size=1,
         jitter_gen_inst = lambda: truncnorm.rvs(a, b, loc=loc, scale=scale, size=size, random_state=generator)
     return jitter_gen_inst
 
+def exp_jitter(ref_value, jitter_sim_para:Dict, size=1, 
+               seed:Union[None, int, np.random.Generator, np.random.RandomState]=None, lamda_exp:float=100.):
+    enforce_wc = jitter_sim_para.get("enforce_wc", False) 
+    scope = ref_value * jitter_sim_para["scale"]
+    loc = 0
+    scale=1/lamda_exp
+    b = scope/scale
+    if enforce_wc:
+        return lambda: np.full(size, scope) if size>1 else np.float64(scope)
+    generator = np.random.default_rng(seed)
+    if size == 1:
+        jitter_gen_inst = lambda: truncexpon.rvs(b, loc=loc, scale=scale, random_state=generator)
+    else:
+        jitter_gen_inst = lambda: truncexpon.rvs(b, loc=loc, scale=scale, size=size, random_state=generator)
+    return jitter_gen_inst
 
 # lambda maxsize, seq_len, seed: np.random.default_rng(np.random.default_rng(seed)).integers(0, maxsize, size=seq_len)
 def get_intger_gen(maxsize, seq_len, seed):

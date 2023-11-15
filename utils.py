@@ -6,10 +6,7 @@ from typing import Dict, Callable
 import pandas as pd
 
 def dump_and_check(save_path, obj2save):
-    dir_path = os.path.dirname(save_path)
-
-    if not os.path.exists(dir_path):
-        os.makedirs(dir_path)
+    check_parents_path(save_path)
 
     with open(save_path, "wb") as f:
         pickle.dump(obj2save, f)
@@ -21,6 +18,12 @@ def dump_and_check(save_path, obj2save):
     except:
         print(f"{save_path} not found")
         exit()
+
+def check_parents_path(save_path):
+    dir_path = os.path.dirname(save_path)
+
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path)
 
 def load_pickle(path):
     try:
@@ -41,6 +44,7 @@ def input_parser():
     parser.add_argument("--test_all", default=False, help="test all the task")
     parser.add_argument("--num_cores", default=266, type=int, help="number of cores")
     parser.add_argument("--num_bins", default=-1, type=int, help="number of bins")
+    parser.add_argument("--timestepxus", default=10, type=int, help="timestep in us")
     parser.add_argument("--BinExtendRule", default="list", type=str, help="Rule for when and how to extend the bin")
     parser.add_argument("--preemptable", default=False, action="store_true", help="enable preemption")
     parser.add_argument("--quantum_check_en", default=False, action="store_true", help="enable quantum check")
@@ -52,8 +56,11 @@ def input_parser():
     parser.add_argument("--n_p", default=1, type=int, help="number of periods")
     
     parser.add_argument("--jitter_sim_en", default=False, action="store_true", help="enable jitter simulation")
-    parser.add_argument("--jitter_sim_para", default={"loc":0, "scale":0.2, "force_wc":False}, type=dict, help="jitter simulation parameters")
-    
+    parser.add_argument("--jitter_sim_para", default={}, type=dict, help="jitter simulation parameters")
+
+    parser.add_argument("--exec_var_en", default=False, action="store_true", help="enable exec jitter simulation")
+    parser.add_argument("--exec_var_para", default={}, type=dict, help="exec jitter simulation parameters")
+
     parser.add_argument("--var_sim_cfg", default="var_sim_cfg.json", type=str, help="variation simulation config file")
 
     parser.add_argument("--load_var_sim_en", default=False, action="store_true", help="enable dynamic object simulation")
@@ -67,8 +74,9 @@ def input_parser():
     parser.add_argument("--seed", default=0, type=int, help="random seed")
     parser.add_argument("--barrier_dis", default=False, action="store_true", help="disable barrier")
     parser.add_argument("--data_lifetime_mode", default="static", type=str, help="lifetime mode: most_recent, ref_count, timeout, watermark") 
-    parser.add_argument("--spatial_rda_ratio", default=0.2, type=float, help="spatial ratio")
-    parser.add_argument("--temporal_rda_ratio", default=0.05, type=float, help="temporal ratio")
+    parser.add_argument("--jitter_t_comp_ratio", default=0.2, type=float, help="spatial ratio")
+    parser.add_argument("--exec_t_comp_ratioA", default=0.05, type=float, help="temporal ratio")
+    parser.add_argument("--exec_t_comp_ratioB", default=0.05, type=float, help="temporal ratio")
     parser.add_argument("--profiling_filename", type=str, default="profiling/profiling_light.csv", help="profiling filename")
     parser.add_argument("--lateness_mode", type=str, default="ignore", help="lateness mode")
     # parser.add_argument("--lateness_threshold", type=float, default=0.0, help="lateness threshold")

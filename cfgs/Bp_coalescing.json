@@ -7,5 +7,5 @@
     "release_temp_rda":false,
     "reservation_policy": "static_1_bin",
     "algorithm": "coalescing",
-    "preempt_en": "false"
+    "preempt_en": false
 }

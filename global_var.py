@@ -15,13 +15,13 @@ numerical_error_tol_abs = 1e-12
 numerical_tol_bit = 12
 numerical_error_tol_rel = 0.01
 elim_nume_error = lambda x: round(x, numerical_tol_bit)
-# def elim_error(x, n_dig, mod='round'):
-#     if mod == 'up':
-#         return round(x + 0.5 * numerical_error_tol_abs, numerical_tol_bit)
-#     elif mod == 'down':
-#         return round(x - 0.5 * numerical_error_tol_abs, numerical_tol_bit)
-#     else:
-#         return round(x, numerical_tol_bit)
+def elim_error(x, n_dig, abs_err, mod='round'):
+    if mod == 'up':
+        return round(x + 0.5 * abs_err, n_dig)
+    elif mod == 'down':
+        return round(x - 0.5 * abs_err, n_dig)
+    else:
+        return round(x, n_dig)
 
 flop_error_tol_abs = FLOPS_PER_CORE * 1e-6
 flop_error_tol_bit = 7
@@ -37,6 +37,8 @@ LAT_PER_HOP = 10e-9 # Seconds
 AVG_HOP_NUM = 10
 MIN_CORE_NUM = 256
 
+BROADCAST_SCALER = 1
+
 W_perc = 1/3
 A_perc = 1/3
 O_perc = 1/3
@@ -48,7 +50,7 @@ trace_dir = "./trace"
 cache_dir = "./cache"
 
 import os 
-cfg_root_fmt = r"x{aux_scale_factor}_{e2e_latency}s_rda-{wsc_slack_ratio:.2%}(T)_{temporal_rda_ratio:.2%}(S)_{lateness_mode}"
+cfg_root_fmt = r"x{aux_scale_factor}_{e2e_latency}s_rda-{wsc_slack_ratio:.2%}(T)_{exec_t_comp_ratioA:.2%}(S)_{lateness_mode}"
 cache_root_fmt = os.path.join(cache_dir, r"{root_dir}", r"{cfg_n}")
 plot_root_fmt = os.path.join(plot_dir, r"{root_dir}", r"{cfg_n}", r"{num_cores}")
 trace_root_fmt = os.path.join(trace_dir, r"{root_dir}", r"{cfg_n}")
@@ -60,7 +62,7 @@ routing_table_save_fmt = os.path.join(cache_root_fmt, routing_table_fn_fmt)
 
 # case: cyclic, sta_dyn, glb_dyn
 
-plt_fn_w_seed_fmt = r"{plot_root}/seed_{seed}/{case}_full_{num_cores}{file_suffix}.pdf"
+plt_fn_w_seed_fmt = r"{plot_root}/seed_{seed}/{case}_{plt_size}_{num_cores}{file_suffix}.pdf"
 plt_fn_wo_seed_fmt = r"{plot_root}/{case}_{plt_size}_{num_cores}{file_suffix}.pdf"
 
 trace_fn_wo_seed_fmt = r"{trace_root}/{case}_e2e_trace_{num_cores}.pkl" 

@@ -341,7 +341,7 @@ class SchedulingTableInt(object):
             if not preempt_en:
                 # check if the task can be executed on the single interval
                 for i in range(len(s)):
-                    if (e[i] - s[i]) >= expected_slot_num and size[i] > req_rsc_size:
+                    if (e[i] - s[i]) >= expected_slot_num and size[i] >= req_rsc_size:
                         # allocate resources 
                         return True, [s[i],], [expected_slot_num,]
                 return False, [], []

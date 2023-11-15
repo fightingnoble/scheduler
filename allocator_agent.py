@@ -355,7 +355,7 @@ def cyclic_sched(task_spec:Spec, affinity,
 
             # simulate the prefetching of the weight
             msg:ContextMsg = ContextMsg.create_weight_ctx()
-            data = Data(_p.pid, 1, (0,), "weight", _p.io_time)
+            data = Data(_p.pid, _p.io_time, (0,), "weight")
             data.ctx = msg
             data.cache_msg_transfer(0)
 
@@ -384,7 +384,7 @@ def cyclic_sched(task_spec:Spec, affinity,
             _p = process_dict[pid]
             # skip data prefetching; put the data into the buffer directly
             msg:ContextMsg = ContextMsg.create_weight_ctx()
-            data = Data(_p.pid, 1, (0,), "weight", _p.io_time)
+            data = Data(_p.pid, _p.io_time, (0,), "weight")
             data.ctx = msg
             data.cache_msg_transfer(0)
 
@@ -560,7 +560,7 @@ if __name__ == "__main__":
     glb_n_task_dict, f_gcd = load_taskint(args.profiling_filename, verbose=args.verbose)
     hyper_p = 1/f_gcd
     logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
-    redist_ert_dll(glb_n_task_dict, logical_graph_nx, temporal_rda_ratio=args.temporal_rda_ratio, profiling_filename=args.profiling_filename, verbose=args.verbose)
+    redist_ert_dll(glb_n_task_dict, logical_graph_nx, exec_t_comp_ratioA=args.exec_t_comp_ratioA, profiling_filename=args.profiling_filename, verbose=args.verbose)
     physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), args.profiling_filename)
     init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
 
@@ -608,14 +608,16 @@ if __name__ == "__main__":
         
         task_spec = Spec(0.1, [1 for _ in glb_p_list]) 
         # process_dict_list = [{pid:init_p_list[pid] for pid in _SchedTab.index_occupy_by_id()} for _SchedTab in bin_list]
-        rsc_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
+        rsc_list = [Resource_model_int(size=sched_tab.num_resources, **jitter_para_dict) for sched_tab in bin_list]
         # curr_cfg_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
         # msg_pipe = Message()
         msg_dispatcher = MsgDispatcher(len(bin_list))
         sensor_pipe = TriggerPipe(len(bin_list))
-        a_data_pipe = DataPipe("activation", len(bin_list))
-        w_data_pipe = DataPipe("weight", len(bin_list))
-        scheduler_list = [Scheduler(_SchedTab, args.e2e_latency, hyper_p, glb_p_list, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
+        a_data_pipe = DataPipe("activation", len(bin_list), jitter_sim_para=args.jitter_sim_para, seed=args.seed)
+        w_data_pipe = DataPipe("weight", len(bin_list), jitter_sim_para=args.jitter_sim_para, seed=args.seed)
+        scheduler_list = [Scheduler(bin_list[idx], args.e2e_latency, hyper_p, glb_p_list, 
+                                    barrier_en=not args.barrier_dis, res_cfg=rsc_list[idx]
+                                    ) for idx in range(len(bin_list))]
         monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
 
         print("sim_step: ", sim_step)
@@ -665,13 +667,15 @@ if __name__ == "__main__":
         
         task_spec = Spec(0.1, [1 for _ in glb_p_list]) 
         # process_dict_list = [{pid:init_p_list[pid] for pid in _SchedTab.index_occupy_by_id()} for _SchedTab in bin_list]
-        rsc_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
+        rsc_list = [Resource_model_int(size=sched_tab.num_resources, **jitter_para_dict) for sched_tab in bin_list]
         # curr_cfg_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
         # msg_pipe = Message()
         msg_dispatcher = MsgDispatcher(len(bin_list))
-        a_data_pipe = DataPipe("activation", len(bin_list))
-        w_data_pipe = DataPipe("weight", len(bin_list))
-        scheduler_list = [Scheduler(_SchedTab, args.e2e_latency, hyper_p, glb_p_list, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
+        a_data_pipe = DataPipe("activation", len(bin_list), jitter_sim_para=args.jitter_sim_para, seed=args.seed)
+        w_data_pipe = DataPipe("weight", len(bin_list), jitter_sim_para=args.jitter_sim_para, seed=args.seed)
+        scheduler_list = [Scheduler(bin_list[idx], args.e2e_latency, hyper_p, glb_p_list, 
+                                    barrier_en=not args.barrier_dis, res_cfg=rsc_list[idx]
+                                    ) for idx in range(len(bin_list))]
         monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
 
         print("sim_step: ", sim_step)
@@ -739,8 +743,8 @@ if __name__ == "__main__":
         # curr_cfg_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
         # msg_pipe = Message()
         msg_dispatcher = MsgDispatcher(len(bin_list))
-        a_data_pipe = DataPipe("activation", len(bin_list))
-        w_data_pipe = DataPipe("weight", len(bin_list))
+        a_data_pipe = DataPipe("activation", len(bin_list), jitter_sim_para=args.jitter_sim_para, seed=args.seed)
+        w_data_pipe = DataPipe("weight", len(bin_list), jitter_sim_para=args.jitter_sim_para, seed=args.seed)
         scheduler_list = [Scheduler(_SchedTab, args.e2e_latency, hyper_p, glb_p_list, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
         monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
 
@@ -750,7 +754,7 @@ if __name__ == "__main__":
             bin_list,
             glb_p_list, affinity_cfg, event_iter_dict,
             num_cores, args.quantum_check_en, quantumSize, 
-            sim_step, hyper_p, args.spatial_rda_ratio, args.temporal_rda_ratio,
+            sim_step, hyper_p, args.jitter_t_comp_ratio, args.exec_t_comp_ratioA,
 
             scheduler_list, monitor_list,
             msg_dispatcher,

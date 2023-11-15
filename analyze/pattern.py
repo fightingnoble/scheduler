@@ -8,7 +8,7 @@ folder_pattern = {
 }
 folder_pattern_keys = {
     "num_cores": ["num_cores",],
-    "cfg_n": ["aux_scale_factor", "e2e_latency", "wsc_slack_ratio", "temporal_rda_ratio", "lateness_mode"], 
+    "cfg_n": ["aux_scale_factor", "e2e_latency", "wsc_slack_ratio", "exec_t_comp_ratioA", "lateness_mode"], 
     "cfg_option": ["cfg_option",]
 }
 folder_type = {

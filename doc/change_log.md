@@ -436,7 +436,7 @@ Apply the size constraint based on parallelism cfg files :
   related files: task_cfg.py,
 
 更新slack预分配机制：
-  slcak 分为spatial slack 和 temporal slack
+  slack 分为spatial slack 和 temporal slack
     - spatial slack: 任务的spatial slack是指任务的最大可用资源和最小可用资源之间的差值（为一些关键任务预留一些冗余资源，这些的任务对冗余资源保留最高优先级的使用权）
     - temporal slack: 任务的temporal slack是指任务的最大可用时间和最小可用时间之间的差值, 给一些任务预分配更多的资源，以得到跟多的时间slack，然后把这些slack均分给所有的任务以应对调度导致的轻微的抖动（若干个slot）
   根据task graph 和预设的slack比例，计算出每个任务的ERT 和相对的ddl（redist_ert_dll， estim_release_dll_time）
@@ -907,7 +907,7 @@ Debug pre-allocation:
         trigger_condB = sched.new_drop_flg
 
         if trigger_condA or trigger_condB: 
-            glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, temporal_rda_ratio, ready_queue, running_queue, rsc_recoder, 
+            glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, exec_t_comp_ratioA, ready_queue, running_queue, rsc_recoder, 
                         rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, n_slot, curr_t, DEBUG_FG=DEBUG_FG, show_warnings=show_warnings)
             sched.new_ready_flg = False
     ```
@@ -930,7 +930,7 @@ throughput scanning script:
 ## 20230803
 
 path fix:
-  args.wsc_slack_ratio-args.temporal_rda_ratio
+  args.wsc_slack_ratio-args.exec_t_comp_ratioA
   trace_path print
   timeline plot add cfg info
 
@@ -1026,13 +1026,13 @@ def manual_defined_reservation(bin_list, glb_p_list, total_cores, _new_bin):
                 size_l.append(_p.task.pre_assigned_resource.main_size)
             name_l.append(_p.task.name)
 
-        rda_size = min(deduce_RDA(req_rsc_size, temporal_rda_ratio, wsc_slack_ratio), taskattr.core_max-req_rsc_size)
+        rda_size = min(deduce_RDA(req_rsc_size, exec_t_comp_ratioA, wsc_slack_ratio), taskattr.core_max-req_rsc_size)
 ```
 
 in attr_deduce module, we have:
 
 ```python
-        rda_size = min(deduce_RDA(req_rsc_size, temporal_rda_ratio, wsc_slack_ratio), taskattr.core_max-req_rsc_size)
+        rda_size = min(deduce_RDA(req_rsc_size, exec_t_comp_ratioA, wsc_slack_ratio), taskattr.core_max-req_rsc_size)
 
 ```
 
@@ -1063,7 +1063,7 @@ fix bug:
 
 sort the task before checking miss (by getting chain deadline by `get_chain_deadline`), and add chain timeout condition (task_agent.py ).
 
-solve WSC-estimation-based allocation, add gurobi based chain slack ditirbution (slcak_estim.py).
+solve WSC-estimation-based allocation, add gurobi based chain slack ditirbution (slack_estim.py).
 
 modifiy budget server (scheduling_table.py, global_sched.py, scheduler_agent.py, resource_agent.py):
   Update:
@@ -1124,7 +1124,7 @@ modifiy budget server (scheduling_table.py, global_sched.py, scheduler_agent.py,
   为WCET的mapping增加了sparse_cores 属性，以及Runtime时候cfg的更新逻辑：
   `_bin.sparse_cores.append([round(prev_t/*timestep*), cores_dict])`
 
-  `size_del_rda = math.ceil(req_size * *wsc_slack_ratio*/(1-*temporal_rda_ratio*))`
+  `size_del_rda = math.ceil(req_size * *wsc_slack_ratio*/(1-*exec_t_comp_ratioA*))`
 
   ```python
   if _SchedTab.alloc_mod != 'exactly':
@@ -1141,3 +1141,22 @@ modifiy budget server (scheduling_table.py, global_sched.py, scheduler_agent.py,
   utils.py: 
     Add force WSC option
     Add comm var (not varified)
+
+## 20231107
+
+debug: preempt_en parameter not working
+
+  ```python
+  ```
+            if not preempt_en:
+                # check if the task can be executed on the single interval
+                for i in range(len(s)):
+                    if (e[i] - s[i]) >= expected_slot_num and size[i] >= req_rsc_size:
+                        # allocate resources 
+                        return True, [s[i],], [expected_slot_num,]
+                return False, [], []
+
+  ```
+
+add a extra priority to item in BP-algo
+wheather has started

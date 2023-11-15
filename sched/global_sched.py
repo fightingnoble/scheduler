@@ -20,7 +20,7 @@ from model.position_table import PosTableInt
 
 from sched.monitor_agent import Monitor
 from sched.scheduler_agent import Scheduler, check_miss, check_complete
-from sched.scheduler_agent import data_pipe_read, pendingToReady, updateRunningQueue
+from sched.scheduler_agent import data_pipe_read, pendingToReady
 from sched.pre_alloc import glb_alloc_new
 from sched.pre_alloc_new import glb_alloc_new2
 from sched.bin_ops import new_bin, get_initlist_and_biniter, static_1_bin
@@ -30,7 +30,7 @@ def push_task_into_bins_new(
         bin_list: List[SchedulingTableInt], 
         glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,
         total_cores:int, quantum_check_en, quantumSize, 
-        timestep, hyper_p, wsc_slack_ratio, temporal_rda_ratio,
+        timestep, hyper_p, wsc_slack_ratio, exec_t_comp_ratioA,
 
         scheduler_list: List[Scheduler], monitor_list:List[Monitor],
         msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
@@ -110,7 +110,7 @@ def push_task_into_bins_new(
         message_trigger_event_new(event_iter_dict, inactive_list, glb_p_list, None, None, None, timestep, curr_t, True) 
         push_step_new(
             sched, msg_dispatcher, a_data_pipe, w_data_pipe, 
-            n_slot, timestep, temporal_rda_ratio, 
+            n_slot, timestep, exec_t_comp_ratioA, 
             event_range, sim_slot_num, curr_t, 
                         
             glb_name_p_dict, None, 
@@ -145,7 +145,7 @@ def push_task_into_bins_new(
 def push_step_new(
         sched: Scheduler, msg_dispatcher: MsgDispatcher,
         a_data_pipe: DataPipe, w_data_pipe: DataPipe,
-        n_slot: int, timestep: float, temporal_rda_ratio, 
+        n_slot: int, timestep: float, exec_t_comp_ratioA, 
         event_range: float, sim_slot_num: int, curr_t: float,
 
         glb_name_p_dict, res_cfg: Resource_model_int,
@@ -178,6 +178,8 @@ def push_step_new(
 
     # (running_queue)
     # check running tasks
+    release_temp_rda = binpack_cfg.get("release_temp_rda", True)
+    # bp_rls_mode = "future" if release_temp_rda else "none"
     bin_event_flg = check_complete(sched, None, timestep, msg_dispatcher, a_data_pipe, curr_t, None, 
                                    running_queue, completed_list, inactive_list, buffer, 
                                    bin_event_flg, bin_name, save_trace=False, 
@@ -230,7 +232,7 @@ def push_step_new(
     trigger_condB = sched.new_drop_flg
 
     if trigger_condA or trigger_condB: 
-        # glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, temporal_rda_ratio, ready_queue, running_queue, rsc_recoder, 
+        # glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, exec_t_comp_ratioA, ready_queue, running_queue, rsc_recoder, 
         #             rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, n_slot, curr_t, 
         #             DEBUG_FG=DEBUG_FG, show_warnings=show_warnings, binpack_cfg=binpack_cfg,)
         glb_alloc_new2(
@@ -264,14 +266,16 @@ def push_step_new(
 
     # =================================================
     for _SchedTab in bin_list:
-        curr_cfg = _SchedTab.scheduling_table[n_slot]
-        updateRunningQueue(timestep, running_queue, curr_cfg) 
+        curr_cfg:Resource_model_int = _SchedTab.scheduling_table[n_slot]
+        curr_cfg.updateRunningQueue(timestep, running_queue) 
+        # curr_cfg.updateRunningQueue(timestep, running_queue, mode="verify" if release_temp_rda else "normal") 
+
 
 def coleasing_alloc(
         bin_list: List[SchedulingTableInt], 
         glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,
         total_cores:int, quantum_check_en, quantumSize, 
-        timestep, hyper_p, wsc_slack_ratio, temporal_rda_ratio,
+        timestep, hyper_p, wsc_slack_ratio, exec_t_comp_ratioB,
 
         scheduler_list: List[Scheduler], monitor_list:List[Monitor],
         msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
@@ -372,7 +376,7 @@ def coleasing_alloc(
                 pid = item[1]
                 start_t, ddl_t = item[4], item[5]
                 size_del_rda = process_dict[pid].task.flops/FLOPS_PER_CORE/(ddl_t-start_t)
-                cores_dict[pid] = int(math.ceil(size_del_rda/(1-temporal_rda_ratio)))
+                cores_dict[pid] = int(math.ceil(size_del_rda/(1-exec_t_comp_ratioB)))
                 if cum_flops[pid] > 0:
                     flops = flops_per_core*math.ceil(size_del_rda)
                     flops = min(flops, cum_flops[pid])

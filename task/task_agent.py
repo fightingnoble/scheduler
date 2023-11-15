@@ -15,7 +15,7 @@ from scipy.stats import truncnorm
 from global_var import *
 from model.message.Context_message import ContextMsg
 from model.resource_agent import DDL_reservation, RT_reservation, dummy_reservation
-from model.event_gen.e2e_latency import jitter_gen
+from model.event_gen.e2e_latency import jitter_gen_biside
 # preemptable?/able to preempt others
 scheduling_attr = {
     "fixed": 0,
@@ -67,6 +67,7 @@ class ProcessBase(object):
         self.prio = task.prio      # priority
 
         self.cpu_time = task.cpu_time     # execution time per I/O burst
+        self.totio = task.totio           # transfer time per I/O burst
         self.io_time = task.io_time       # I/O time
         self.totcpu = task.totcpu         # total cpu time, ++ when cpu burst
 
@@ -589,7 +590,7 @@ class TaskIntAttr(TaskAttr):
     util: float = field(init=False)
     main_size: float = field(init=False)
     rda_size: float = field(init=False)
-    # database: InitVar[Dict] = {'f_gcd': 10, 'hyper_p': 0.1, 'temporal_rda_ratio': 0.05, 'wsc_slack_ratio': 0.8}
+    # database: InitVar[Dict] = {'f_gcd': 10, 'hyper_p': 0.1, 'exec_t_comp_ratioA': 0.05, 'wsc_slack_ratio': 0.8}
 
     def __post_init__(self):
         self.task_flag_num = scheduling_attr[self.task_flag]
@@ -597,7 +598,7 @@ class TaskIntAttr(TaskAttr):
 class TaskBase(object):
     def __init__(self, task_name:str, task_id:int, timing_flag:str,
                  ERT:int, ddl:int, period:int, exp_comp_t:int, i_offset:int, jitter_max:int,
-                 op_io_time:int=0, op_cpu_time:int=0, seq_cpu_time:int=0, priority:int=0, 
+                 op_io_time:int=0, op_cpu_time:int=0, seq_io_time:int=0, seq_cpu_time:int=0, priority:int=0, 
                  criti_flag:str="soft", cbs_en:bool=False, 
                  trigger_mode:bool=False, 
                  parallel_cfg:dict={}, parallel_cfg_compile:dict={}
@@ -655,7 +656,8 @@ class TaskBase(object):
         self.deadline = self.release_time + self.ddl # recored when the process is generated  
         self.cpu_time = op_cpu_time                  # execution time per I/O burst
         self.io_time = op_io_time                    # I/O time
-        self.totcpu = seq_cpu_time                   # total cpu time, ++ when cpu burst
+        self.totcpu = seq_cpu_time                   # total cpu time
+        self.totio = seq_io_time                     # tot io transfer
         self.cbs_en = cbs_en
 
         # =============== 3. statistical properties ===============
@@ -808,7 +810,7 @@ class TaskBase(object):
     def gen_event_modA(self, event_range, jitter_sim_en=False, jitter_sim_para=None, seed=0):
         n_event = int(event_range/self.period)
         if jitter_sim_en:
-            jitter_gen_inst = jitter_gen(1/self.freq, jitter_sim_para, size=1, seed=seed)
+            jitter_gen_inst = jitter_gen_biside(1/self.freq, jitter_sim_para, size=1, seed=seed)
 
         i = 0
         event_time = self.i_offset
@@ -830,7 +832,7 @@ class TaskBase(object):
         n_p = round(event_range/self.period)
         n_event = int(n_p//self.hyper_period_size) * len(self.aval_sub_period) + len([i for i in range(n_p%len(self.aval_sub_period)) if i in self.aval_sub_period])
         if jitter_sim_en:
-            jitter_gen_inst = jitter_gen(1/self.freq, jitter_sim_para, size=1, seed=seed)
+            jitter_gen_inst = jitter_gen_biside(1/self.freq, jitter_sim_para, size=1, seed=seed)
 
         event_no = 0
         event_time = self.i_offset
@@ -899,7 +901,7 @@ class TaskInt(TaskBase):
                     exp_comp_t:Union[int, float], i_offset:Union[int, float], jitter_max:Union[int, float]=0,
                     flops:Union[int, float]=0, task_flag:str="moveable",
                     pre_assigned_resource_flag:bool=False, 
-                    op_io_time:int=0, op_cpu_time:int=0, seq_cpu_time:int=0, priority:int=0, 
+                    op_io_time:int=0, op_cpu_time:int=0, seq_io_time:int=0, seq_cpu_time:int=0, priority:int=0, 
                     criti_flag:str="soft", cbs_en:bool=False, 
                     trigger_mode:str="N",
                     parallel_cfg:dict={}, parallel_cfg_compile:dict={},
@@ -908,7 +910,8 @@ class TaskInt(TaskBase):
         super().__init__(
                             task_name=task_name, task_id=task_id, timing_flag=timing_flag,
                             ERT=ERT, ddl=ddl, period=period, exp_comp_t=exp_comp_t, i_offset=i_offset, jitter_max=jitter_max, 
-                            op_cpu_time=op_cpu_time, op_io_time=op_io_time, seq_cpu_time=seq_cpu_time, priority=priority, 
+                            op_cpu_time=op_cpu_time, op_io_time=op_io_time, seq_io_time=seq_io_time,
+                            seq_cpu_time=seq_cpu_time, priority=priority, 
                             criti_flag=criti_flag, cbs_en=cbs_en,
                             trigger_mode=trigger_mode, parallel_cfg=parallel_cfg,
                             parallel_cfg_compile=parallel_cfg_compile,

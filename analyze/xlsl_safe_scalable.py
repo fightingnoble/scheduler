@@ -22,8 +22,8 @@ aval_idx = (df['method'] == 'glb_dyn') & \
 
 avl_df = pd.DataFrame(df.loc[aval_idx])
 # add ref line
-avl_df.loc[aval_idx, "DDL_ref"] = avl_df["e2e_latency"]# * (1 - avl_df["temporal_rda_ratio"]/100)
-avl_df.loc[aval_idx, "RT_ref"] = 0.1# * (1 - avl_df["temporal_rda_ratio"]/100)
+avl_df.loc[aval_idx, "DDL_ref"] = avl_df["e2e_latency"]# * (1 - avl_df["exec_t_comp_ratioA"]/100)
+avl_df.loc[aval_idx, "RT_ref"] = 0.1# * (1 - avl_df["exec_t_comp_ratioA"]/100)
 
 
 # select the percentile columns

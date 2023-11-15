@@ -94,18 +94,18 @@ if __name__ == "__main__":
     if not os.path.exists(filename):
         # Create a dataframe with the values
         pd.DataFrame(columns=[
-            'e2e_latency', 'wsc_slack_ratio', 'temporal_rda_ratio', 'lateness_mode', 
+            'e2e_latency', 'wsc_slack_ratio', 'exec_t_comp_ratioA', 'lateness_mode', 
             'num_cores', 'method', 'jitter_en', 'throughput', 
         ]).to_csv(filename, index=False)
     else:
         # check the column, if not exist, add it, and clear the content
         df = pd.read_csv(filename)
         if set(df.columns) != set([
-            'e2e_latency', 'wsc_slack_ratio', 'temporal_rda_ratio', 'lateness_mode', 
+            'e2e_latency', 'wsc_slack_ratio', 'exec_t_comp_ratioA', 'lateness_mode', 
             'num_cores', 'method', 'jitter_en', 'throughput', 
         ]):
             pd.DataFrame(columns=[
-                'e2e_latency', 'wsc_slack_ratio', 'temporal_rda_ratio', 'lateness_mode', 
+                'e2e_latency', 'wsc_slack_ratio', 'exec_t_comp_ratioA', 'lateness_mode', 
                 'num_cores', 'method', 'jitter_en', 'throughput', 
             ]).to_csv(filename, index=False)
 

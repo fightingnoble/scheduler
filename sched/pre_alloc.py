@@ -16,7 +16,7 @@ from sched.sort_function import get_process_sort
 from sched.bin_ops import sort_bin_list_EAT, sort_bin_list_by_barycenter, index_preeempt_num_cores_by_interval
 from sched.monitor_agent import get_rsc_2b_released, get_target_bin_id
 
-def glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, temporal_rda_ratio, ready_queue, running_queue, rsc_recoder, 
+def glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, exec_t_comp_ratioA, ready_queue, running_queue, rsc_recoder, 
                   rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list:TaskQueue, bin_name_list, n_slot, curr_t, 
                   DEBUG_FG=False, 
                   show_warnings=True, 
@@ -64,7 +64,7 @@ def glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, tempora
             continue
 
         # try to allocate and preempt
-        state = allocate_rsc_4_process_new(_p, n_slot, process_dict, timestep, temporal_rda_ratio, FLOPS_PER_CORE, quantumSize,  
+        state = allocate_rsc_4_process_new(_p, n_slot, process_dict, timestep, exec_t_comp_ratioA, FLOPS_PER_CORE, quantumSize,  
                                                             rsc_recoder, rsc_recoder_his, preempt_list, iter_next_bin_obj, bin_list, bin_name_list, 
                                                             quantum_check_en, strategy='first_fit', glb_key=process_sort, verbose=False, DEBUG=DEBUG_FG,
                                                             show_warnings=show_warnings, binpack_cfg=binpack_cfg)
@@ -109,7 +109,7 @@ def glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, tempora
 def allocate_rsc_4_process_new(_p:ProcessInt, n_slot:int, 
                 # init_p_list:List[ProcessInt], 
                 process_dict:Dict[int, ProcessInt],
-                timestep, temporal_rda_ratio, FLOPS_PER_CORE, quantumSize, 
+                timestep, exec_t_comp_ratioA, FLOPS_PER_CORE, quantumSize, 
                 rsc_recoder:dict, rsc_recoder_his:Dict[int, LRUCache], 
                 preemption_list:List[ProcessInt],
                 iter_next_bin_obj:Iterator, bin_list:List[SchedulingTableInt], bin_name_list:List[str], 
@@ -126,7 +126,7 @@ def allocate_rsc_4_process_new(_p:ProcessInt, n_slot:int,
     if time_slot_s >= time_slot_e:
         return False
     expected_slot_num = time_slot_e - time_slot_s
-    # time_slot_e = min(time_slot_s + int(np.ceil(expected_slot_num * (temporal_rda_ratio + 1))), time_slot_e)
+    # time_slot_e = min(time_slot_s + int(np.ceil(expected_slot_num * (exec_t_comp_ratioA + 1))), time_slot_e)
 
     # try to push the task into the bins in the bin_list
     state, bin_id, succ_info, fail_info = bin_select(_p, time_slot_s, time_slot_e, req_rsc_size, 

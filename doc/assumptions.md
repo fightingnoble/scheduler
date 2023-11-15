@@ -57,7 +57,7 @@ Redundency mechanism to handle the jitter:
       - typical slack (%)
       - worst slack (%)
 
-   slcak 分为spatial slack 和 temporal slack
+   slack 分为spatial slack 和 temporal slack
       - spatial slack: 任务的spatial slack是指任务的最大可用资源和最小可用资源之间的差值（为一些关键任务预留一些冗余资源，这些的任务对冗余资源保留最高优先级的使用权）
       - temporal slack: 任务的temporal slack是指任务的最大可用时间和最小可用时间之间的差值, 给一些任务预分配更多的资源，以得到跟多的时间slack，然后把这些slack均分给所有的任务以应对调度导致的轻微的抖动（若干个slot）
       在运行时，应对轻微抖动可能导致少量slot的late，具体表现为，time budget 减少。面对少量且频繁抖动，相对于实时的调整core的分配方案，在预分配阶段在时间上保留少量的的冗余（若干slot）显得更加划算——具体表现为：
@@ -69,13 +69,13 @@ Redundency mechanism to handle the jitter:
 
    拆解步骤：
     - a.  Assure typical slack staticly, and worst slack dynamically.
-         shrink the end-to-end slack by the typical slack,``         slcak_rem = (1-temporal_rda_ratio)*1e3*slcak_rem/1e3         ``
+         shrink the end-to-end slack by the typical slack,``         slack_rem = (1-exec_t_comp_ratioA)*1e3*slack_rem/1e3         ``
       - b.  allocate the resource according to the slack distributed to each task,
          and recompute the ERT and DDL of each task.
 
-    ``python          ddl[node] = ert[node] + comp_time[node] *1e7 / (1 - temporal_rda_ratio)/ 1e7          ``
+    ``python          ddl[node] = ert[node] + comp_time[node] *1e7 / (1 - exec_t_comp_ratioA)/ 1e7          ``
       - c.  Preserve resource capacity for the worst slack,
-         ``         deduce_RDA = lambda size, temporal_rda_ratio, wsc_slack_ratio: math.ceil(size * (1-temporal_rda_ratio) / wsc_slack_ratio) - size         ``
+         ``         deduce_RDA = lambda size, exec_t_comp_ratioA, wsc_slack_ratio: math.ceil(size * (1-exec_t_comp_ratioA) / wsc_slack_ratio) - size         ``
       - d.  determin the resource at runtime according to the remaining slack and remaining burst.
 
 Bin-packing algorithm:
@@ -94,7 +94,7 @@ Bin-packing algorithm:
 realtime 不用给冗余 现在都留了
 
 ```python
-            ddl[node] = ert[node] + comp_time[node] *1e7 / (1 - temporal_rda_ratio)/ 1e7
+            ddl[node] = ert[node] + comp_time[node] *1e7 / (1 - exec_t_comp_ratioA)/ 1e7
 ```
 
 mechanism:
@@ -118,15 +118,15 @@ decision:
           - Yes: (时间空间连续)
           - No: (时间连续空间不连续)
       - non-continuous blocks (allowed to change its expected size): ASAP, AEAP
-    - Allow shrinked redundency (安全资源可以不够): release unused resources, allocate all reources in the living interval
-    - Allow allocate resources in best effort, even not enough in its time interval (最低资源都不够)
+    - (release_temp_rda???) Allow shrinked redundency (安全资源可以不够): release unused resources, allocate all reources in the living interval
+    - (partial_alloc_en) Allow allocate resources in best effort, even not enough in its time interval (最低资源都不够)
 
 resource reservation:
    input parameters:
       wsc_slack_ratio
-      temporal_rda_ratio
+      exec_t_comp_ratioA
    deduced parameters:
-      spatial_rda_ratio = (1 - temporal_rda_ratio)/wsc_slack_ratio
+      spatial_rda_ratio = (1 - exec_t_comp_ratioA)/wsc_slack_ratio
 
 单独分割静态placement：
    op1: new_bin: 修改push_task_into_bins_new
@@ -312,7 +312,7 @@ Benchmark params
 
 Scheduler parameters
    wsc_slack_ratio
-   temporal_rda_ratio
+   exec_t_comp_ratioA
    lateness_mode
    test_case
    barrier_dis

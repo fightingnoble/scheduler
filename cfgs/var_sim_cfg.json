@@ -17,5 +17,15 @@
       "maxsize": 30,
       "period": 0.03333333333333333
     }
+  },
+  "jitter": {
+    "loc":0, 
+    "scale":0.2, 
+    "enforce_wc":false
+  },
+  "exec": {
+    "loc":0, 
+    "scale":0.17, 
+    "enforce_wc":false
   }
 }

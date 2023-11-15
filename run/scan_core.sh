@@ -43,8 +43,8 @@ for x in $(seq "$start" "$step" "$end"); do
                     nohup python $p_fn --test_case glb_dynamic --num_cores $x --root_dir ${root_dir} --n_p $n_p ${PY_ARGS} > $dir_path/glb_dyn_${x}_jitter_dis.log.txt 2>&1 
                     echo "finish (glb_static) $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
                 fi
-                if [ -f "$dir_path/glb_dyn_${x}_jitter_en.log.txt" ]; then
-                    rm "$dir_path/glb_dyn_${x}_jitter_en.log.txt"
+                if [ -f "$dir_path/glb_dyn_${x}_jitter_en_seed_$seed.log.txt" ]; then
+                    rm "$dir_path/glb_dyn_${x}_jitter_en_seed_$seed.log.txt"
                 fi
                 echo "start (glb seed_$seed) $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
                 nohup python $p_fn --test_case glb_dynamic --jitter_sim_en --file_suffix var_0.2 --num_cores $x --root_dir ${root_dir} --n_p $n_p ${PY_ARGS} --seed $seed > $dir_path/glb_dyn_${x}_jitter_en_seed_$seed.log.txt 2>&1 
@@ -70,18 +70,20 @@ for x in $(seq "$start" "$step" "$end"); do
                     nohup python $p_fn --test_case dynamic --num_cores $x --root_dir ${root_dir} --n_p $n_p ${PY_ARGS} > $dir_path/dyn_${x}_jitter_dis.log.txt 2>&1 
                     echo "finish (dyn_static) $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
                 fi
-                if [ -f "$dir_path/dyn_${x}_jitter_en.log.txt" ]; then
-                    rm "$dir_path/dyn_${x}_jitter_en.log.txt"
+                if [ -f "$dir_path/dyn_${x}_jitter_en_seed_$seed.log.txt" ]; then
+                    rm "$dir_path/dyn_${x}_jitter_en_seed_$seed.log.txt"
                 fi
-                echo "start (dyn seed_$seed) $cfg/$xd" `date "+%Y-%m-%d %H:%M:%S.%3N"`
+                echo "start (dyn seed_$seed) $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
                 nohup python $p_fn --test_case dynamic --jitter_sim_en --file_suffix var_0.2 --num_cores $x --root_dir ${root_dir} --n_p $n_p ${PY_ARGS} --seed $seed > $dir_path/dyn_${x}_jitter_en_seed_$seed.log.txt 2>&1 
                 echo "finish (dyn seed_$seed) $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
                 echo "finish (dyn) $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
             fi
         }
-        echo "start (stat_num_exec) $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
-        python -m analyze.stat_num_exec --folder ./$dir_path/ --output ./$dir_path/new_bin_pack$x.csv 
-        echo "finish $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
+        # echo "start (stat_num_exec) $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
+        # python -m analyze.stat_num_exec --folder ./$dir_path/ --output ./$dir_path/new_bin_pack$x.csv --n_p ${n_p} --aux_scale_factor $x --get_ref_num_exec
+        # echo "finish $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"`
     }&
 done
 wait
+
+echo "finish $cfg" `date "+%Y-%m-%d %H:%M:%S.%3N"`

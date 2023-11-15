@@ -45,7 +45,14 @@ def glb_alloc_new2(process_dict, quantumSize, timestep,
     # C. priorize the task that has firm affinity with the existing bins
 
     # rearange the task in the ready queue
-    process_sort = get_process_sort(bin_name_list, rsc_recoder_his)
+    def tie_break(_p:ProcessInt):
+        """
+        reverse: 
+            True: 0 -> start
+            False: 1 -> not start
+        """
+        return [float("inf"), _p.pid]
+    process_sort = get_process_sort(bin_name_list, rsc_recoder_his, tie_break)
     sorted_ready_l = ready_queue.queue + running_queue.queue + issue_list.queue
     sorted_ready_queue = TaskQueue(sorted_ready_l, descending=False, sort_f=process_sort)
     del sorted_ready_l
@@ -211,11 +218,19 @@ def bin_select_new(
 
     state, bin_id, succ_info, fail_info = False, -1, None, None
 
+    def tie_break(_p:ProcessInt):
+        if _p.pid in rsc_recoder:
+            alloc_slot_s, alloc_size, allo_slot, bin_id = rsc_recoder[_p.pid]
+            for s, size, l in zip(alloc_slot_s, alloc_size, allo_slot):
+                if s <= n_slot < s+l:
+                    return [s, _p.pid]
+        return [float("inf"), _p.pid]
+
     # 2. the pre-defined resource preservation should be respected 
     #   For the task that is pre-assigned with the resource, the affinity is set to be itself
     if p_name in bin_name_list:
         bin_id = bin_name_list.index(p_name)
-        process_sort = get_process_sort([p_name], rsc_recoder_his)
+        process_sort = get_process_sort([p_name], rsc_recoder_his, tie_break)
         state, succ_info = check_and_preemt_alloc(_p, n_slot, bin_list[bin_id],
                                                 time_slot_s, time_slot_e, timestep,  
                                                 rsc_recoder, _p_index_by_pid,
@@ -266,7 +281,7 @@ def bin_select_new(
         # try to find bin to fit the task
         for bin_id in affinity_tgt_bin_id_list + affinity_search_bin_id_list: 
             # rearange the task in the ready queue
-            process_sort = get_process_sort([bin_name_list[bin_id]], rsc_recoder_his)
+            process_sort = get_process_sort([bin_name_list[bin_id]], rsc_recoder_his, tie_break)
             state, succ_info = check_and_preemt_alloc(_p, n_slot, bin_list[bin_id],
                                                     time_slot_s, time_slot_e, timestep,  
                                                     rsc_recoder, _p_index_by_pid,
@@ -337,16 +352,16 @@ def check_and_preemt_alloc(_p:ProcessInt, n_slot:int, bin:SchedulingTableInt,
     mode = binpack_cfg["mode"]
     quantum_check_en = binpack_cfg.get("quantum_check_en", False)
     partial_alloc_en = binpack_cfg.get("partial_alloc_en", False)
-    release_temp_rda = binpack_cfg.get("release_temp_rda", True)
+    # release_temp_rda = binpack_cfg.get("release_temp_rda", True)
     preempt_en = binpack_cfg.get("preempt_en", True)
     assert mode in ["non-block", "block"]
     rsc_avl = bin.idx_free_by_slot(time_slot_s, time_slot_e, key=_p.pid)
     rsc_avl = np.array(rsc_avl)
 
-    # allow sharing or not
-    if mode == "block":
-        # not allow sharing, the slot in used (i.e., < bin.num_resources) is not available
-        rsc_avl[rsc_avl < bin.num_resources] = 0
+    # # allow sharing or not
+    # if mode == "block":
+    #     # not allow sharing, the slot in used (i.e., < bin.num_resources) is not available
+    #     rsc_avl[rsc_avl < bin.num_resources] = 0
 
     
     s, e, size = bin.interval_sparsifier(rsc_avl)
@@ -410,7 +425,7 @@ def check_and_preemt_alloc(_p:ProcessInt, n_slot:int, bin:SchedulingTableInt,
 
             # find out the actual conflict slot
             conflict_idx = np.nonzero(conflict_slot)[0] + time_slot_s
-            # find out the conflict tasks: contain the conflict slot in its allocation
+            # find out all the conflict tasks: contain the conflict slot in its allocation
             conflict_pid = []
             for pid in preemptable_map:
                 s, size, length = preemptable_map[pid]
@@ -419,15 +434,17 @@ def check_and_preemt_alloc(_p:ProcessInt, n_slot:int, bin:SchedulingTableInt,
                         conflict_pid.append(pid)
                         break
             # perform the preemption: 
-            # mechanism: to preempt the task with the highest priority, i.e., the 1st one
-            # TODO: add an extra priority level for the tasks with the same priority
+            # mechanism: to preempt the task with the lowest priority, i.e., the 1st one, or 
+            # the one with largest score
+            if len(conflict_pid) == 0:
+                break
             _pid_2b_preempt = conflict_pid.pop(0)
             _p_2b_preempt = _p_index_by_pid[_pid_2b_preempt]
             preemption_list.append(_p_2b_preempt)
             # pop the task from the bin
             print(f"pop the task {_p_2b_preempt.task.id}:{_p_2b_preempt.task.name}({_pid_2b_preempt})from the bin {bin_id}")
             # resource to be released
-            if not release_temp_rda:
+            if False: #not release_temp_rda:
                 # A: the resource occupied from time_slot_s to time_slot_e
                 alloc_s_t, alloc_size_t, alloc_len_t = preemptable_map[_pid_2b_preempt]
             else:
@@ -479,6 +496,9 @@ def index_occupy_by_id_chunk_ver(_p, bin, chunk_s, chunk_e, _p_index_by_pid, pro
         rsc_map = bin.scheduling_table[s_i].rsc_map
         for pid in rsc_map:
             # check priority
+            # its doesn't matter to add tie break here, because preemption only happens
+            # when the comming task has higher priority,
+            # i.e. smaller score
             if process_sort(_p_index_by_pid[pid]) <= process_sort(_p):
                 continue
 
@@ -507,7 +527,9 @@ def index_occupy_by_id_chunk_ver(_p, bin, chunk_s, chunk_e, _p_index_by_pid, pro
                     length.append(e_i-s_i)
                     preemptable_map[pid] = [s, size, length] 
 
-    # sort the conflict tasks by their priority, in decending order
+    # sort the conflict tasks by their priority
+    # process_sort: lower score -> higher priority, and reverse to preemption order
+    # use decending order
     preemptable_map = OrderedDict(sorted(preemptable_map.items(), key=lambda item: process_sort(_p_index_by_pid[item[0]]), reverse=True))
     return preemptable_map, preemptable_n
 

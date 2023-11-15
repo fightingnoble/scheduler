@@ -12,7 +12,7 @@ from task.task_agent import TaskInt, TaskIntAttr
 from model.task_queue_agent import TaskQueue 
 from task.task_agent import ProcessInt
 from task.graph_scaling import build_node_relationship
-from sched.slack_estim import estim_release_dll_time, duduce_cfg
+from sched.slack_estim import estim_release_dll_time, deduce_cfg2, deduce_eq_wsc
 
 # 'ID', 'Task (chain) names', 'Flops on path (G)', 'Expected Latency (ms)', 'T release (ms)', 'Freq.', 'DDL (ms)', 'Cores/Req.', 
 # 'Throuput factor (Spat.)', 'Thread factor (S)', 'Min required cores', 'Timing_flag', 'Max required Cores', 'RDA./Req.', 'Resource Type', 'Pre-assigned', 'Priority'
@@ -33,6 +33,13 @@ sink_attr={
     "Sink_control": "deadline",
     "Sink_screen": "realtime"
 }
+src_attr={
+    "LiDAR_pub": 10,
+    "surr_view_camera_pub": 30,
+    "IMU_pub": 240,
+    "streo_camera_pub": 20
+}
+
 task_graph_ops = {   
     "Traffic_light_detection": ["Sink_control"],
     "ImageBB": ["MultiCameraFusion"],
@@ -637,8 +644,9 @@ def load_taskint(profiling_filename:str="profiling/profiling.csv",
                     exp_comp_t=task_attr['Expected Latency (ms)']/1000, i_offset=phase, jitter_max=0,
                     flops=flops_on_path, task_flag=task_attr["Resource Type"], 
                     pre_assigned_resource_flag=task_attr["Pre-assigned"]>0, 
-                    RDA_size=task_attr['RDA./Req.'], main_size=task_attr['Cores/Req.'], seq_cpu_time=flops_on_path,
-                    op_cpu_time=flops_on_path, op_io_time=1e-6,
+                    RDA_size=task_attr['RDA./Req.'], main_size=task_attr['Cores/Req.'], 
+                    op_io_time=1e-6*BW_DRAM, op_cpu_time=flops_on_path, 
+                    seq_io_time=1e-6*BW_DRAM, seq_cpu_time=flops_on_path,
                     criti_flag="soft" if task_attr["Criti_flag"]=='S' else "hard", 
                     cbs_en=True, # if task_attr["Cbs_en"]=='Y' else False, 
                     trigger_mode=task_attr["Trigger_mode"], 
@@ -822,8 +830,8 @@ def gen_taskint_from_cfg(taskattr_dict:Dict[str, TaskIntAttr], f_gcd: int,
                     pre_assigned_resource_flag=task_attr.pre_assigned_resource_flag, 
                     RDA_size=task_attr.rda_size, 
                     main_size=task_attr.main_size, 
-                    seq_cpu_time=flops_on_path,
-                    op_cpu_time=task_attr.flops, op_io_time=1e-6,
+                    op_io_time=1e-6*BW_DRAM, op_cpu_time=flops_on_path, 
+                    seq_io_time=1e-6*BW_DRAM, seq_cpu_time=flops_on_path,
                     criti_flag=task_attr.criticality, 
                     cbs_en=True, # if task_attr["Cbs_en"]=='Y' else False, 
                     trigger_mode=task_attr.trigger_mode, 
@@ -884,17 +892,21 @@ def gen_workloads(args, slack_threshold):
     logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
 
     if args.binpack_cfg["algorithm"] == "coalescing":
-        temporal_rda_ratio = 1-args.wsc_slack_ratio
-        abs_reserve_en = True
+        # temporal_abs_en = True
+        algorithm = 'gurobi'
+        wsc_slack_ratio = 1 - args.exec_t_comp_ratioA
     else:
-        temporal_rda_ratio = args.temporal_rda_ratio
-        abs_reserve_en = False
-    duduce_cfg(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, task_graph_srcs, 
-                task_graph_sinks, sink_attr, slack_threshold, args.e2e_latency, 
-                temporal_rda_ratio, args.wsc_slack_ratio, abs_reserve_en=abs_reserve_en)
+        # temporal_abs_en = False
+        algorithm = 'avg'
+        wsc_slack_ratio = args.wsc_slack_ratio
+    deduce_cfg2(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, task_graph_srcs, 
+                task_graph_sinks, sink_attr, src_attr, slack_threshold, args.e2e_latency, 
+                args.exec_t_comp_ratioA, args.jitter_t_comp_ratio, 
+                wsc_slack_ratio, algorithm, args.timestepxus)
     glb_n_task_dict = gen_taskint_from_cfg(taskattr_dict, f_gcd)
     physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), taskattr_dict=taskattr_dict)
     init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
+    print(deduce_eq_wsc(logical_graph_nx, task_graph_srcs, task_graph_sinks, src_attr, args.jitter_t_comp_ratio))
     return hyper_p,glb_n_task_dict,physical_graph_nx
 
 
@@ -1027,7 +1039,7 @@ def init_affinity(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Unio
     return pos_affinity_cfg, neg_affinity_cfg
 
 def redist_ert_dll(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[TaskInt,ProcessInt]]],
-        logical_graph_nx:nx.DiGraph=None, temporal_rda_ratio=0, temporal_abs_en=0, 
+        logical_graph_nx:nx.DiGraph=None, exec_t_comp_ratioA=0, temporal_abs_en=0, 
         comm_compen_en=False, profiling_filename:str="profiling/profiling.csv", verbose=False):
 
     df:pd.DataFrame = pd.read_csv(profiling_filename, sep=",", index_col=0) 
@@ -1036,7 +1048,7 @@ def redist_ert_dll(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Uni
     task_type: Dict[str, str] = {task_n:df.loc[task_n, "Timing_flag"] for task_n in df.T}
 
     ert, ddl = estim_release_dll_time(logical_graph_nx, comp_time, io_time, task_type,
-                                      temporal_rda_ratio, temporal_abs_en, {}, comm_compen_en, profiling_filename, verbose)
+                                      exec_t_comp_ratioA, temporal_abs_en, {}, comm_compen_en, profiling_filename, verbose)
     # if taskJobs is a list, convert it to a dict
     if isinstance(taskJobs, list):
         if taskJobs[0].__class__.__name__ == "ProcessInt":

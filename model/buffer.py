@@ -14,7 +14,7 @@ if typing.TYPE_CHECKING:
 
 class Data(object):
     def __init__(self, pid:int, size:int, data_id:typing.Tuple, data_type:str, 
-                 io_time, processed_done_time=0, life_time=float('inf'), period:float=0,
+                 processed_done_time=0, life_time=float('inf'), period:float=0,
                  event_time=0) -> None:
         self.pid = pid
         self.size = size
@@ -22,7 +22,7 @@ class Data(object):
         self.data_type = data_type
         self.valid = False
         self.waitTime = 0
-        self.io_time = io_time
+        self.io_time = None
         self.processed_done_time = processed_done_time
         self.event_time = event_time
         self.life_time = life_time

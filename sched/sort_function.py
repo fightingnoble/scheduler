@@ -12,7 +12,10 @@ from global_var import *
 # how does task affinity match with the existing bins
 def get_target_bin_score(_p:ProcessInt, bin_name_list:List[str], rsc_recoder_his:Dict[int, LRUCache], reverse=True): 
     """
-    measure how well the affinity target matches with the existing bins
+    measure how well the affinity target matches with the existing bins, 
+    reverse: 
+        True, lower score means higher priority
+        False, lower scores means lower priority
     """
     pre_alloc_flg = False
     # case 1: task is pre-assigned with the resource
@@ -61,12 +64,18 @@ def get_target_bin_score(_p:ProcessInt, bin_name_list:List[str], rsc_recoder_his
         return (1-score0, 1-score1, 1-score2)
     return (score0, score1, score2)
 
-def get_process_sort(bin_name_list, rsc_recoder_his):
+def get_process_sort(bin_name_list, rsc_recoder_his, ex_fn=None):
+    """
+        lower score means higher priority
+    """
     cond_fn1 = lambda x: round(x.deadline, numerical_tol_bit)
     cond_fn2 = lambda x: get_target_bin_score(x, bin_name_list, rsc_recoder_his, reverse=True)
     def sort_fn(x):
         a = cond_fn1(x)
         b,c,d = cond_fn2(x)
-        return (b,c,a,d,)
+        if ex_fn is not None: 
+            return (b,c,a,d, *ex_fn(x))
+        else:
+            return (b,c,a,d,)
     return sort_fn
 

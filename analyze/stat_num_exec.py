@@ -5,6 +5,26 @@ import re
 from task.task_cfg import load_taskattrib, creat_logical_graph
 from task.task_cfg import task_graph_srcs, task_graph_ops, task_graph_sinks
 from sched.slack_estim import deduce_num_exec
+from analyze.pattern import folder_pattern, folder_pattern_keys, folder_type, get_path_var_scaner
+
+# log content pattern
+# (lateness detected)TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) COMPLETED @ {curr_t:.6f}/{_p.event_time:.6f}!!
+# \t\tTASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) COMPLETED @ {curr_t:.6f}/{_p.event_time:.6f}!!
+
+completed_pattern1 = r'\t\tTASK (\d+):([\w_]+)\((\d+)\) COMPLETED @ ([\d.]+)/([\d.]+)!!'
+completed_pattern2 = r'\(lateness detected\)TASK (\d+):([\w_]+)\((\d+)\) COMPLETED @ ([\d.]+)/([\d.]+)!!'
+
+# TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!
+miss_pattern = r'\t\tTASK (\d+):([\w_]+)\((\d+)\) MISSED DEADLINE @ ([\d.]+)/([\d.]+)!!'
+
+# f"		{_p.task.name} triggered @ {ingestion_time:.6f}/{event_time:.6f}"
+trigger_pattern = r'\t\t([\w_]+) triggered @ ([\d.]+)/([\d.]+)'
+pattern = r'(?P<task>\w+)\s+triggered\s+@\s+(?P<time>\d+\.\d+)'
+
+# file name pattern
+jitter_en_log_fn_pattern = r"(glb_dyn|dyn)(_\d+)?_jitter_en_seed_(\d+).log.txt"
+false_jitter_en_log_fn_pattern = r"(glb_dyn|dyn)(_\d+)?_jitter_en.log.txt"
+
 
 def extract_num_exec(profiling_filename, aux_scale_factor, n_p, warmup_dis, mode=""):
     taskattr_dict, f_gcd = load_taskattrib(profiling_filename, verbose=False) 
@@ -41,41 +61,21 @@ def extract_num_cores(filename):
     else:
         return -1
 
-if __name__ == "__main__":
-    argparser = argparse.ArgumentParser()
-    argparser.add_argument("--folder", type=str, default="./log", help="path to log folder")
-    argparser.add_argument("--output", type=str, default="./log/analyze.csv", help="path to output csv file")
-    argparser.add_argument("--profiling_filename", type=str, default="profiling/profiling_light.csv", help="path to task profiling file")
-    argparser.add_argument("--aux_scale_factor", type=float, default=1, help="auxiliary scaling factor")
-    argparser.add_argument("--n_p", type=int, default=1, help="number of processors")
-    argparser.add_argument("--get_ref_num_exec", action="store_true", help="get the reference number of execution")
-    argparser.add_argument("--warmup_dis", type=bool, default=False, help="whether to warm up the system")
-    args = argparser.parse_args()
-    folder = args.folder # log 文件夹路径
-    print(f"===========folder: {folder}===========")
+def count_miss_comp(folder, output, get_ref_num_exec=False,
+                    profiling_filename="", aux_scale_factor=0, n_p=0, warmup_dis=False 
+                    ):
 
     completed_list = []  # 用于存储已完成任务及其计数
     miss_list = []  # 用于存储未完成任务及其计数
     filename_list = []  # 用于存储文件名
     trigger_list = []
 
-    # (lateness detected)TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) COMPLETED @ {curr_t:.6f}/{_p.event_time:.6f}!!
-    # \t\tTASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) COMPLETED @ {curr_t:.6f}/{_p.event_time:.6f}!!
-
-    completed_pattern1 = r'\t\tTASK (\d+):([\w_]+)\((\d+)\) COMPLETED @ ([\d.]+)/([\d.]+)!!'
-    completed_pattern2 = r'\(lateness detected\)TASK (\d+):([\w_]+)\((\d+)\) COMPLETED @ ([\d.]+)/([\d.]+)!!'
-
-
-    # TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!
-    miss_pattern = r'\t\tTASK (\d+):([\w_]+)\((\d+)\) MISSED DEADLINE @ ([\d.]+)/([\d.]+)!!'
-
-    # f"		{_p.task.name} triggered @ {ingestion_time:.6f}/{event_time:.6f}"
-    trigger_pattern = r'\t\t([\w_]+) triggered @ ([\d.]+)/([\d.]+)'
-    pattern = r'(?P<task>\w+)\s+triggered\s+@\s+(?P<time>\d+\.\d+)'
-
     # 遍历指定文件夹下的所有 .log.txt 文件, 按照文件名排序
     # for filename in os.listdir(folder):
+
     for filename in sorted(os.listdir(folder)):
+        if re.match(false_jitter_en_log_fn_pattern, filename):
+            continue
         if filename.endswith(".log.txt"):
             completed_dict = {}  # 用于存储已完成任务及其时间
             miss_dict = {}  # 用于存储未完成任务及其时间
@@ -123,21 +123,25 @@ if __name__ == "__main__":
             trigger_list.append(trigger_dict)
 
     # find the common trigger event
-    # "bin_pack_new_256.log.txt", 
-    # "dyn_256_jitter_dis.log.txt", "dyn_256_jitter_en.log.txt", 
-    # "glb_dyn_256_jitter_dis.log.txt", "glb_dyn_256_jitter_en.log.txt", 
+    # glb_dyn_${x}_ideal.log.txt
+    # glb_dyn_${x}_jitter_dis.log.txt
+    # bin_pack_new_$x.log.txt
+    # dyn_${x}_jitter_dis.log.txt
+
+    # glb_dyn_${x}_jitter_en_seed_$seed.log.txt
+    # dyn_${x}_jitter_en_seed_$seed.log.txt
 
     jitter_dis_index = []
     jitter_en_index = []
+    groups = {}
     for i in range(len(trigger_list)):
-        if filename_list[i].endswith("jitter_dis.log.txt"):
-            jitter_dis_index.append(i)
-        elif filename_list[i].endswith("jitter_en.log.txt"):
-            jitter_en_index.append(i)
+        if match:=re.match(jitter_en_log_fn_pattern, filename_list[i]):
+            seed_id = int(match.group(3))
+            groups[seed_id] = groups.get(seed_id, []) + [i]
         else:
-            jitter_dis_index.append(i)
+            groups["static"] = groups.get("static", []) + [i]
 
-    for group in [jitter_dis_index, jitter_en_index]:
+    for group in groups.values():
         # print group
         print("=====================================")
         print("group:", [filename_list[idx] for idx in group])
@@ -178,8 +182,8 @@ if __name__ == "__main__":
     df.loc["sum"] = df.sum(axis=0)
     df = df.fillna(0).astype(int)
 
-    if args.get_ref_num_exec:
-        num_exec = extract_num_exec(args.profiling_filename, args.aux_scale_factor, args.n_p, args.warmup_dis)
+    if get_ref_num_exec:
+        num_exec = extract_num_exec(profiling_filename, aux_scale_factor, n_p, warmup_dis)
         # add num_exec row, and set it to the last row
         # add num_exc for every column
         # 创建一个包含 num_exec 值的 Series，索引与 df.columns 相同
@@ -189,4 +193,55 @@ if __name__ == "__main__":
         df.loc["num_exec"] = num_exec_series
 
     # save to csv
-    df.to_csv(args.output, index=True, header=True, encoding="utf-8-sig")
+    df.to_csv(output, index=True, header=True, encoding="utf-8-sig")
+
+
+def test_mode():
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument("--folder", type=str, default="./log", help="path to log folder")
+    argparser.add_argument("--output", type=str, default="./log/analyze.csv", help="path to output csv file")
+    argparser.add_argument("--profiling_filename", type=str, default="profiling/profiling_light.csv", help="path to task profiling file")
+    argparser.add_argument("--aux_scale_factor", type=float, default=1, help="auxiliary scaling factor")
+    argparser.add_argument("--n_p", type=int, default=1, help="number of processors")
+    argparser.add_argument("--get_ref_num_exec", action="store_true", help="get the reference number of execution")
+    argparser.add_argument("--warmup_dis", type=bool, default=False, help="whether to warm up the system")
+    args = argparser.parse_args()
+    print(f"===========folder: {args.folder}===========")
+    count_miss_comp(args.folder, args.output, args.get_ref_num_exec,
+                    args.profiling_filename, args.aux_scale_factor, args.n_p, args.warmup_dis)
+
+def get_scaner_warap(args):
+    def scaner_warp(df, folder, info_dict):
+        output = os.path.join(folder, args.stat_csv_filename)
+        count_miss_comp(folder, output, True, 
+                            args.profiling_filename, info_dict["aux_scale_factor"], args.n_p, args.warmup_dis)
+    return scaner_warp
+
+def scan_mode():    
+    parser = argparse.ArgumentParser(description="profiling")
+    parser.add_argument("--profiling_filename", type=str, default="profiling/profiling_light.csv", help="profiling filename")
+    parser.add_argument("--root_dir", default=".", type=str, help="root directory")
+    parser.add_argument("--filename", type=str, default="throughput", help="filename")
+    parser.add_argument("--stat_csv_filename", type=str, default="new_bin_pack.csv", help="csv filename")
+    parser.add_argument("--folder_search_seq", type=str, default="num_cores,cfg_n", help="core list")
+    parser.add_argument("--n_p", type=int, default=3, help="number of processors")
+    parser.add_argument("--warmup_dis", type=bool, default=False, help="whether to warm up the system")
+
+    args = parser.parse_args()
+    root_dir = args.root_dir
+    search_seq = args.folder_search_seq.split(",")
+
+    # Load the dataframe
+    df = None
+    root_path = os.path.join('log', root_dir)
+    action_fn = get_scaner_warap(args)
+    scanner = get_path_var_scaner([action_fn,], folder_pattern, folder_pattern_keys, folder_type, search_seq)
+    scanner(df, root_path, len(search_seq), dict(), 0)
+
+if __name__ == "__main__":
+    # python -m analyze.stat_num_exec --folder /home/zhangchg/git_repo/scheduler/log/hist/before_asplos24summer/barycenter/core_scan/x3_0.09s_rda-80.00%\(T\)_5.00%\(S\)_all_soft/285 --output new_bin_pack.csv --n_p 3 --aux_scale_factor 3 --get_ref_num_exec
+    # test_mode()
+    # python -m analyze.stat_num_exec --root_dir hist/before_asplos24summer/barycenter/core_scan --folder_search_seq cfg_n,num_cores
+    # python -m analyze.stat_num_exec --root_dir hist/before_asplos24summer/barycenter/aux_scan --folder_search_seq num_cores,cfg_n
+    scan_mode()
+    
