@@ -5,7 +5,8 @@ import re
 from task.task_cfg import load_taskattrib, creat_logical_graph
 from task.task_cfg import task_graph_srcs, task_graph_ops, task_graph_sinks
 from sched.slack_estim import deduce_num_exec
-from analyze.pattern import folder_pattern, folder_pattern_keys, folder_type, get_path_var_scaner
+from analyze.pattern import get_path_var_scaner
+from analyze.pattern import folder_pattern, folder_pattern_keys, folder_type, seed_re
 
 # log content pattern
 # (lateness detected)TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) COMPLETED @ {curr_t:.6f}/{_p.event_time:.6f}!!
@@ -22,14 +23,14 @@ trigger_pattern = r'\t\t([\w_]+) triggered @ ([\d.]+)/([\d.]+)'
 pattern = r'(?P<task>\w+)\s+triggered\s+@\s+(?P<time>\d+\.\d+)'
 
 # file name pattern
-jitter_en_log_fn_pattern = r"(glb_dyn|dyn)(_\d+)?_jitter_en_seed_(\d+).log.txt"
+jitter_en_log_fn_pattern = r"(glb_dyn|dyn)(_\d+)?_jitter_en_seed_("+seed_re+r").log.txt"
 false_jitter_en_log_fn_pattern = r"(glb_dyn|dyn)(_\d+)?_jitter_en.log.txt"
 
 
 def extract_num_exec(profiling_filename, aux_scale_factor, n_p, warmup_dis, mode=""):
     taskattr_dict, f_gcd = load_taskattrib(profiling_filename, verbose=False) 
     num_exec = 0
-    if aux_scale_factor > 1:
+    if aux_scale_factor != 1:
         for node, taskattr in taskattr_dict.items():
             # scale up the thread scaling factor
             if taskattr.timing_flag == "realtime":

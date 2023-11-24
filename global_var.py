@@ -62,7 +62,7 @@ routing_table_save_fmt = os.path.join(cache_root_fmt, routing_table_fn_fmt)
 
 # case: cyclic, sta_dyn, glb_dyn
 
-plt_fn_w_seed_fmt = r"{plot_root}/seed_{seed}/{case}_{plt_size}_{num_cores}{file_suffix}.pdf"
+plt_fn_w_seed_fmt = r"{plot_root}/{case}_{plt_size}_{num_cores}_seed_{seed}{file_suffix}.pdf"
 plt_fn_wo_seed_fmt = r"{plot_root}/{case}_{plt_size}_{num_cores}{file_suffix}.pdf"
 
 trace_fn_wo_seed_fmt = r"{trace_root}/{case}_e2e_trace_{num_cores}.pkl" 

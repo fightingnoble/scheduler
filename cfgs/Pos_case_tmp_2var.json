@@ -20,12 +20,12 @@
   },
   "jitter": {
     "loc":0, 
-    "scale":0.2, 
+    "scale":0.49, 
     "enforce_wc":false
   },
   "exec": {
     "loc":0, 
-    "scale":0.3, 
+    "scale":0.2, 
     "enforce_wc":false
   }
 }

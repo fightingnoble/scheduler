@@ -35,7 +35,6 @@ def main():
         cfg_n = f"x{args.aux_scale_factor}_{args.e2e_latency}s_rda-{(args.wsc_slack_ratio):.2%}(T)_{args.exec_t_comp_ratioA:.2%}(S)"
     num_cores = args.num_cores
     num_periods = args.n_p
-    slack_threshold = args.slack_threshold
     
     if args.jitter_sim_en: 
         if args.jitter_sim_para == {}:
@@ -61,7 +60,7 @@ def main():
     else:
         binpack_cfg = args.bin_pack_para
 
-    hyper_p, glb_n_task_dict, physical_graph_nx = gen_workloads(args, slack_threshold)
+    hyper_p, glb_n_task_dict, physical_graph_nx = gen_workloads(args)
 
     # generate the process list
     glb_p_list = create_init_p_list(glb_n_task_dict, args.verbose)

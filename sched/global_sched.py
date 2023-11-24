@@ -464,3 +464,46 @@ def coleasing_alloc(
     assert max_core_num == sum(max_core_layout[1].values()), "max_core_num should be equal to the sum of the core size of the current items"
     print("max_core_num:", max_core_num)
     return max_core_layout
+
+
+def naive_iso(
+        bin_list: List[SchedulingTableInt], 
+        glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,
+        total_cores:int, quantum_check_en, quantumSize, 
+        timestep, hyper_p, wsc_slack_ratio, exec_t_comp_ratioB,
+
+        scheduler_list: List[Scheduler], monitor_list:List[Monitor],
+        msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
+        a_data_pipe:DataPipe=None,
+        w_data_pipe:DataPipe=None, 
+
+        n_p=1, binpack_cfg:Dict={
+            "sort":"EAT", "sort_reverse":True, "mode": 'non-block', "partial_alloc_en":False, 
+            "quantum_check_en":False, "release_temp_rda":True, "reservation_policy": "manual",
+            "algorithm": "coalescing"
+            },
+        show_warnings=True, 
+        verbose=False, DEBUG_FG=False, *, 
+        warmup=False, drain=False,                     
+        ):
+    event_range = hyper_p * (n_p+warmup)
+    sim_range = hyper_p * (n_p+warmup+drain)
+    tab_temp_size = int(hyper_p//timestep)
+    # assert math.isclose(hyper_p, tab_temp_size*timestep, abs_tol=numerical_error_tol_abs), \
+    #         "hyper_p should be the multiple of timestep"
+    sim_slot_num = int(sim_range/timestep)
+    tab_spatial_size = total_cores
+    # glb_name_p_dict = {p.task.name:p for p in glb_p_list}
+
+    def _new_bin(id, size=tab_spatial_size, name=None): 
+        if name is None:
+            name = "bin"+str(id)
+        print("Create a new bin: ", id, "name:", name, "size:", size)
+        return new_bin(size, sim_slot_num, id=id, name=name)
+
+    from task.task_cfg import pre_assign_priority
+    iter_next_bin_obj, bin_name_list = get_initlist_and_biniter(
+        bin_list, glb_p_list, 0, 
+        _new_bin, "all_isolation", pre_assign_priority)
+    print(bin_list)
+    

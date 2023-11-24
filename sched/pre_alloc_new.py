@@ -140,7 +140,7 @@ def allocate_rsc_4_process_new2(
         ):
 
     # expected rsc_size and slot number
-    time_slot_s, time_slot_e, req_rsc_size = _p.rsc_req_estm(n_slot, timestep, FLOPS_PER_CORE)
+    time_slot_s, time_slot_e, req_rsc_size = _p.rsc_req_estm(n_slot, timestep, FLOPS_PER_CORE, over_provision_rate=binpack_cfg.get("exec_t_comp_ratioB", 0))
     if time_slot_s >= time_slot_e:
         return False
     expected_slot_num = time_slot_e - time_slot_s

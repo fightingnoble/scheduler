@@ -50,6 +50,7 @@ class Resource_model_int(object):
         if exec_var_en:
             self.var_gen = exp_jitter(1, exec_var_para, size=1, seed=seed) 
             self.get_real_ops = lambda exp_ops: (1-self.var_gen()) * exp_ops
+        self.event_list = []
         
     def add_rsc_num(self, num:int):
         self.size += num
@@ -123,7 +124,7 @@ class Resource_model_int(object):
         return col
 
     def updateRunningQueue(res_cfg:Resource_model_int, timestep, running_queue:TaskQueue, update_budget=False, bin_id=None, 
-                           mode="verify"):
+                           mode="verify", skiped_tasks:List[ProcessInt]=[]):
         """
         verify: True:
                     running queue is assumed to have same task id as the res_cfg.rsc_map, we use res_cfg.rsc_map to update 
@@ -138,6 +139,8 @@ class Resource_model_int(object):
             if mode!="verify" and pid not in _p_dict.keys():
                 continue
             _p:ProcessInt = _p_dict[pid]
+            if _p in skiped_tasks:
+                continue
             ops = res_cfg.rsc_map[_p.pid]*timestep*FLOPS_PER_CORE
             # ops can not exceed the (totcpu-totburst) and (_p.rem_flop_budget[bin_id])
             # total _p.rem_flop_budget may exceed the totcpu, 
@@ -146,7 +149,7 @@ class Resource_model_int(object):
             if res_cfg.exec_var_en:
                 ops = elim_error(res_cfg.get_real_ops(ops), numerical_tol_bit, numerical_error_tol_abs, 'up') 
             if update_budget:
-                ops = min(ops, _p.rem_flop_budget[bin_id])
+                ops = min(ops, _p.rem_flop_budget[bin_id], _p.totcpu-_p.totburst)
             else:
                 ops = min(ops, _p.totcpu-_p.totburst)
             _p.currentburst += ops
@@ -156,8 +159,7 @@ class Resource_model_int(object):
             _p.cumulative_executed_time += timestep
             if update_budget:
                 assert bin_id is not None
-                _p.rem_flop_budget[bin_id] -= ops
-
+                _p.rem_flop_budget[bin_id] = elim_nume_error(_p.rem_flop_budget[bin_id]-ops)
 
 
 class DDL_reservation(object):

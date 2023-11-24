@@ -176,13 +176,13 @@ def GurobiDistributeSlack(task_dict:Dict[str, TaskBase], chains:List[Tuple[List[
         #     state, ops_rem, slack_rem = alloc_func(rsc_map_w, task_dict, flops_dict, ops_rem, slack_rem, threshold)
         if (K:=len(flops_dict)) == 0:
             continue
-        tot_cores = 120
+        tot_cores = 150
         flops = list(flops_dict.values())
         node_list = list(flops_dict.keys())
         constr_core = [{"mode":task_dict[node].parallel_mode, "max":task_dict[node].core_max_compile, 
                         "min":task_dict[node].core_min_compile, "list":task_dict[node].core_list_compile
                         } for node in node_list]
-        solver = GurobiRscSlackEstim(K, flops, slack_rem, [margin[node] for node in node_list], constr_core, tot_cores)
+        solver = GurobiRscSlackEstim(K, flops, slack_rem, [margin[node] for node in node_list], constr_core, tot_cores) # , verbose=True
         solver.create_variables()
         solver.define_constraints()
         sol = solver.solve()
@@ -546,7 +546,7 @@ def deduce_cfg2(taskattr_dict, f_gcd, hyper_p,
     # use abs comp for coalecing and use rel comp for ours
     exec_t_comp_abs = {node: 5* timestep_size * 1e-6 for node in taskattr_dict} if algorithm=='gurobi' else 0.
     exec_t_comp_rel = exec_t_comp_ratioA if algorithm == 'avg' else {
-        node: exec_t_comp_ratioA if taskattr_dict[node].trigger_mode=='N' else 0 for node in taskattr_dict}
+        node: exec_t_comp_ratioA for node in taskattr_dict}
     rsc_map_w = rsc_slack_estim(taskattr_dict, logical_graph_nx, task_graph_srcs, 
                          task_graph_sinks, exec_t_comp_rel, slack_threshold, 
                          temporal_abs=exec_t_comp_abs, algorithm=algorithm) 
@@ -556,8 +556,16 @@ def deduce_cfg2(taskattr_dict, f_gcd, hyper_p,
         logical_graph_nx, 
         comp_time={node:slack_estm for node, (_, slack_estm, _) in rsc_map_w.items()},
         temporal_rel=exec_t_comp_rel, temporal_abs=exec_t_comp_abs)
+
+    # legality check: all sink node and their preds enforce the deadline constraint
+    for sink in task_graph_sinks:
+        e2e_constr = logical_graph_nx.nodes[sink]['ddl']
+        for pred in logical_graph_nx.pred[sink]:
+            assert ddl[pred] <= e2e_constr
+            ddl[pred] = e2e_constr
     if verbose:
         print(ert, ddl) 
+
     # update ert, ddl, exp_comp_t to graph as well as the taskattr_dict
     for node, (req_rsc_size, slack_estm, constr) in rsc_map_w.items():
         taskattr:TaskIntAttr = taskattr_dict[node]
@@ -568,15 +576,19 @@ def deduce_cfg2(taskattr_dict, f_gcd, hyper_p,
         logical_graph_nx.nodes[node]["ert"] = ert[node]
         logical_graph_nx.nodes[node]["ddl"] = ddl[node]
         logical_graph_nx.nodes[node]["exp_comp_t"] = slack_estm
+    
+    # propagate the chain_criticality to all nodes from the sink nodes
+    for sink in task_graph_sinks:
+        # sort if sink_attr[sink] != "deadline"
+        if sink_attr[sink] != "deadline":
+            for node in nx.ancestors(logical_graph_nx, sink):
+                logical_graph_nx.nodes[node]["chain_criticality"] = True
+                if node in taskattr_dict:
+                    taskattr_dict[node].chain_criticality = 'soft'
 
     if plot:
         plot_timeline_graph(logical_graph_nx)
 
-    # legality check: all sink node and their preds enforce the deadline constraint
-    for sink in task_graph_sinks:
-        e2e_constr = logical_graph_nx.nodes[sink]['ddl']
-        for pred in logical_graph_nx.pred[sink]:
-            assert ddl[pred] <= e2e_constr
     if verbose:
         for node, taskattr in taskattr_dict.items():
             print(node, taskattr)
@@ -595,7 +607,7 @@ def deduce_eq_wsc(task_graph, start_nodes, end_nodes, src_attr,jitter_t_comp_rat
         wcs.append(jitter_t_comp/e2e_constr)
     return max(wcs)
 
-def plot_timeline_graph(logical_graph_nx):
+def plot_timeline_graph(logical_graph_nx, path=f"plot/jobTask_graph_dbg.pdf"):
     fig = plt.figure(figsize=(20, 10))
     ax1 = fig.add_subplot(111)
 
@@ -619,7 +631,7 @@ def plot_timeline_graph(logical_graph_nx):
     for _, t in text.items():
         t.set_rotation(60)
     fig.tight_layout()
-    plt.savefig(f"plot/jobTask_graph_dbg.pdf", format="pdf")
+    plt.savefig(path, format="pdf")
     plt.close()  
 
 
@@ -641,7 +653,7 @@ def test():
     from task.task_cfg import load_taskattrib, gen_taskint_from_cfg
     taskattr_dict, f_gcd = load_taskattrib(args.profiling_filename, verbose=args.verbose) 
     hyper_p = 1/f_gcd
-    if args.aux_scale_factor > 1:
+    if args.aux_scale_factor != 1:
         for node, taskattr in taskattr_dict.items():
             # scale up the thread scaling factor
             if taskattr.timing_flag == "realtime":

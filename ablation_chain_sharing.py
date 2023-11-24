@@ -2,7 +2,7 @@ import os, re
 from task.task_cfg import create_init_p_list, gen_workloads
 from task.task_cfg import affinity_cfg
 from task.task_cfg import init_affinity
-from sched.global_sched import push_task_into_bins_new, coleasing_alloc, naive_iso
+from sched.global_sched import push_task_into_bins_new, coleasing_alloc
 from task.task_agent import TaskInt 
 from task.task_agent import TaskInt
 from task.spec import Spec
@@ -34,21 +34,102 @@ def main():
     cfg_para_dict, para_scan_group1, para_scan_group2, path_para_dict, trace_root, \
     bin_path_format, trace_path_para, plot_path_para, csv_xlxs_root = args_postprocess(args)
 
-    hyper_p, glb_n_task_dict, physical_graph_nx = gen_workloads(args)
+    # hyper_p, glb_n_task_dict, physical_graph_nx = gen_workloads(args)    
+    from task.task_cfg import load_taskattrib, deduce_cfg2, gen_taskint_from_cfg, \
+        creat_logical_graph, creat_physical_graph, init_depen, deduce_eq_wsc
+    from task.load_cfg.loadA import task_graph_srcs, task_graph_ops, task_graph_sinks, sink_attr, src_attr
+    from task.load_cfg import load_chain
+    taskattr_dict, f_gcd = load_taskattrib(args.profiling_filename, verbose=args.verbose) 
+    hyper_p = 1/f_gcd
+    assert args.aux_scale_factor >= 0
+    if args.aux_scale_factor != 1:
+        for node, taskattr in taskattr_dict.items():
+            # scale up the thread scaling factor
+            if taskattr.timing_flag == "realtime":
+                taskattr.thread_scaling_factor *= args.aux_scale_factor
+
+    print(f"Ops per second of Workload: {sum([(v.flops*v.var_factor*v.thread_scaling_factor*v.freq) for n,v in taskattr_dict.items()]):.2f} T")
+    logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
+
+
+    if args.binpack_cfg["algorithm"] == "coalescing":
+        # temporal_abs_en = True
+        algorithm = 'gurobi'
+        wsc_slack_ratio = 1 - args.exec_t_comp_ratioA
+    else:
+        # temporal_abs_en = False
+        algorithm = 'avg'
+        wsc_slack_ratio = args.wsc_slack_ratio
+    deduce_cfg2(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, task_graph_srcs, 
+                task_graph_sinks, sink_attr, src_attr, args.slack_threshold, args.e2e_latency, 
+                args.exec_t_comp_ratioA, args.jitter_t_comp_ratio, 
+                wsc_slack_ratio, algorithm, args.timestepxus)
+    if args.binpack_cfg["algorithm"] == "coalescing":
+        print("deduced_eq_wsc:", deduce_eq_wsc(logical_graph_nx, task_graph_srcs, task_graph_sinks, src_attr, args.jitter_t_comp_ratio))
+    glb_n_task_dict = gen_taskint_from_cfg(taskattr_dict, f_gcd)
+    physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), taskattr_dict=taskattr_dict)
+
+    # ***************** artifiact: chain split *******************************
+    hyper_p = 0.1
+    op_filter = load_chain.task_graph_ops
+    sink_filter = load_chain.task_graph_sinks
+    src_filter = load_chain.task_graph_srcs
+    # filter the process and the node in physical graph, logic graph by the function
+    # x.split('_')[-1] == "0" and "_".join(x.split('_')[0:-2]) in op_filter
+    # remove the exceptions
+    filter_fn = lambda x: x.split('_')[-1] == "0" and "_".join(x.split('_')[0:-2]) in op_filter
+    glb_n_task_dict = {k:v for k,v in glb_n_task_dict.items() if filter_fn(k)}
+    logical_graph_nx = logical_graph_nx.subgraph(list(glb_n_task_dict.keys())+list(src_filter.keys())+list(sink_filter.keys()))
+    physical_graph_nx = physical_graph_nx.subgraph(list(glb_n_task_dict.keys())+list(src_filter.keys())+list(sink_filter.keys()))
+    # ***************** artifiact：chain split *******************************
+
+    init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
 
     # generate the process list
     glb_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
     init_affinity(glb_p_list, mode='job', job_graph_nx=physical_graph_nx, verbose=args.verbose)
+    process_dict_tmp = {p.pid:p for p in glb_p_list}
+    # _p1, _p2 shares the deadline, 
+    # ddl1 = _p1.task.exp_comp_t / speed_down_rate + 5e-5 + 1/30*jitter_rate
+    # ddl2 = _p2.task.exp_comp_t / speed_down_rate + 5e-5 
+    # ddl1 + ddl2 keeps the same
+    # given speed_down_rate
 
-        # assert all the process has hard deadline
+    # ***************** artifiact: statistic *******************************
+    # args.jitter_sim_para, a truncnorm dist
+    # args.exec_var_para, a truncexpon dist
+    from model.event_gen.e2e_latency import get_truncexpon_param, get_truncnorm_para
+    from scipy.stats import truncnorm, truncexpon
+    loc, scale, myclip_b, a, b = get_truncnorm_para(1, {"scale": 0.5})
+    scope, loc, scale, b = get_truncexpon_param(1, {"scale": 0.5}, lamda_exp=15)
+    jitter_cdf = lambda x: truncnorm.cdf(x, a, b, loc=loc, scale=scale)
+    exec_cdf = lambda x: truncexpon.cdf(x, b, loc=loc, scale=scale)
+
+    _p0, _p1 = process_dict_tmp[0], process_dict_tmp[1]
+    pair_list = []
+    for speed_down_rate1 in np.arange(0.18,0.37,0.01):
+        # slack = _p1.task.ddl - (_p1.process_dict[1].task.exp_comp_t / (1-speed_down_rate) + 5e-5)
+        # jitter_rate = (_p1.task.ddl + slack- 5e-5 - _p2.task.exp_comp_t / (1-speed_down_rate)) * 30
+        speed_down_rate1 = round(speed_down_rate1, 2)
+        jitter_rate = _p0.task.ddl + _p1.task.ddl - (_p0.task.exp_comp_t / (1-speed_down_rate1) + _p1.task.exp_comp_t / (1-speed_down_rate1))
+        jitter_rate = jitter_rate * 30
+        if jitter_rate <0 or jitter_rate > 0.5:
+            continue
+        pair_list.append((speed_down_rate1, jitter_rate))
+    print(pair_list)
+    cum_p_sharing = jitter_cdf(pair_list[0][1]) * exec_cdf(pair_list[0][0]) + \
+            sum([jitter_cdf(pair_list[i][1]) * (exec_cdf(pair_list[i][0]) - exec_cdf(pair_list[i-1][0])) for i in range(1, len(pair_list))])
+    cum_p_coalescing = jitter_cdf(0.2) * exec_cdf(0.3) 
+    print("inner chain sharing improves confidence level at least from {:.2f}% to {:.2f}%".format(cum_p_coalescing*100, cum_p_sharing*100))
+    # ***************** artifiact: statistic *******************************
+
+    # assert all the process has hard deadline
     if args.lateness_mode == "all_hard":
         for _p in glb_p_list:
             _p.task.criticality = "hard"
-            _p.chain_criticality = "hard"
     elif args.lateness_mode == "all_soft":
         for _p in glb_p_list:
             _p.task.criticality = "soft"
-            _p.chain_criticality = "soft"
     elif args.lateness_mode == "ignore":
         pass
 
@@ -160,23 +241,6 @@ def main():
 
             bin_list_save_path = bin_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
             routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
-        
-        elif args.binpack_cfg["algorithm"] == "naive_iso":
-            naive_iso(
-                bin_list,
-                glb_p_list, affinity_cfg, event_iter_dict,
-                num_cores, args.quantum_check_en, quantumSize, 
-                sim_step, hyper_p, args.wsc_slack_ratio, args.exec_t_comp_ratioB,
-
-                scheduler_list, monitor_list,
-                msg_dispatcher,
-                a_data_pipe, w_data_pipe,
-
-                num_periods, binpack_cfg=args.binpack_cfg,
-                verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
-                warmup=True, drain=True, 
-                )
-        
         else:
             raise NotImplementedError(f"binpack algorithm {args.binpack_cfg['algorithm']} is not implemented")
 

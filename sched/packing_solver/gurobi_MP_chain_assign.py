@@ -95,13 +95,14 @@ class GurobiRscSlackEstim():
             print("status:", self.model.status)
             print("obj:", self.model.objVal)
             # build solution dic of (core, lat)
+            # print(self.model.display())
             sol = {}
             for i in range(self.K):
                 if constr:=self.constr_core[i]:
                     constr = self.check_constr(i, constr)
                 n_core = round(self.core[i].x)
                 lat = elim_nume_error(self.flops[i] / (n_core * FLOPS_PER_CORE))
-                sol[i] = (int(self.core[i].x), lat, constr)
+                sol[i] = (n_core, lat, constr)
             return sol
         except gp.GurobiError as e:
             print('Error code ' + str(e.errno) + ': ' + str(e))
@@ -139,7 +140,7 @@ class GurobiRscSlackEstim():
 #     slack_threshold = args.slack_threshold
 #     taskattr_dict, f_gcd = load_taskattrib(args.profiling_filename, verbose=args.verbose) 
 #     hyper_p = 1/f_gcd
-#     if args.aux_scale_factor > 1:
+#     if args.aux_scale_factor != 1:
 #         for node, taskattr in taskattr_dict.items():
 #             # scale up the thread scaling factor
 #             if taskattr.timing_flag == "realtime":

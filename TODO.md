@@ -6,3 +6,4 @@
 4. get a convergent scheduling table in a hyperperiod
 5. distinguish the tile flops, task flops, and flops on path
 6. gen_event_modB, gen_event_modA 现在第一个输出就是有用的，不兼容预激活携程
+7. Jitter_en 的flag 在trace和log中定义的不一样

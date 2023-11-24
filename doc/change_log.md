@@ -1160,3 +1160,16 @@ debug: preempt_en parameter not working
 
 add a extra priority to item in BP-algo
 wheather has started
+
+## 20231121
+redefine skip task: 
+  the tasks is not executed in this slot, including the task that gets illegel allocation
+  ```
+    skiped_task.append(_p)
+    sorted_queue.pop(0)
+    continue
+  ```
+  also the tasks that is allocated but is passed in this slot
+  ```
+    skiped_task.append(_p)
+  ```

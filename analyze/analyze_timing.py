@@ -7,7 +7,7 @@ from analyze.stat_num_exec import extract_num_exec
 from model.message.Context_message import trace_analyser
 
 from analyze.pattern import folder_pattern, folder_pattern_keys, folder_type, get_path_var_scaner
-from analyze.pattern import trace_pattern, trace_pattern_keys, trace_pattern_type
+from analyze.pattern import trace_pattern, trace_pattern_keys, trace_pattern_type, case_name_dyn, case_name_glb
 from utils import update_df
 
 folder_search_seq = ["cfg_n"]
@@ -31,7 +31,8 @@ def set_percetile(df, data, e2e_latency_list, miss_rate):
                                 'miss_rate': ','.join([f'{x:.3f}' for x in miss_rate]) if isinstance(miss_rate, list) else miss_rate})
     return df
 
-def get_e2e_checker(file_pattern, file_pattern_keys, file_pattern_type, timing_flag_dict, profiling_filename=None, n_p=None, warmup_dis=None, stat_csv_filename=None, index_seq=None):
+def get_e2e_checker(file_pattern, file_pattern_keys, file_pattern_type, timing_flag_dict, profiling_filename=None, n_p=None, 
+                    warmup_dis=None, stat_csv_filename=None, index_seq=None, trace_and_log_check_en=True):
     def e2e_checker(df, folder, info_dict):
         aux_scale_factor = info_dict['aux_scale_factor']
         num_exec, sink_pred = extract_num_exec(profiling_filename, aux_scale_factor, n_p, warmup_dis, "e2e")
@@ -53,16 +54,25 @@ def get_e2e_checker(file_pattern, file_pattern_keys, file_pattern_type, timing_f
                 if 'seed' not in data:
                     data['seed'] = ""
 
+                # false log output: the ones with jitter_en == True but seed == "" and the ones with jitter_en == False but seed != ""
                 if data['jitter_en'] and data['seed'] == "" or data['jitter_en'] == False and data['seed'] != "":
                     continue
+                
+                # representation:
+                # len(e2e_latency_list[0]) + len(e2e_latency_list[1])
+                # n_exec
+                # n_comp, n_miss
 
-                if data["lateness_mode"] == "all_soft" and data['method'] == 'glb_dyn':
-                    e2e_latency_list, n_violation = trace_analyser(timing_flag_dict, file_path, data["e2e_latency"], data["lateness_mode"], True)
-                    assert num_exec == len(e2e_latency_list[0]) + len(e2e_latency_list[1])
-                    miss_rate = n_violation / num_exec
-                else:
-                    e2e_latency_list = trace_analyser(timing_flag_dict, file_path, data["e2e_latency"], data["lateness_mode"])
+                # definitly
+                # save trace if and only if job is completed
+                # n_comp == len(e2e_latency_list[0]) + len(e2e_latency_list[1])
 
+                # if all soft: all compelete:
+                # n_comp == n_exec == len(e2e_latency_list[0]) + len(e2e_latency_list[1])
+                # else
+                # not all tasks are issued, num_exec is not necessary equal to n_comp+n_miss or len(e2e_latency_list[0]) + len(e2e_latency_list[1])
+
+                if trace_and_log_check_en:
                     if stat_csv_filename is not None:
                         log_folder_t = folder.replace('trace', 'log').split('/')
                         log_folder = os.path.join(*log_folder_t[0:-1])
@@ -82,22 +92,42 @@ def get_e2e_checker(file_pattern, file_pattern_keys, file_pattern_type, timing_f
                             print(f"!!! Warning: no stat file in {log_folder} !!!")
                             return df
                         log_path = os.path.join(log_folder, log_fn)
-                        print(file_path)
                         stat_df = pd.read_csv(log_path, index_col=0, header=[0, 1])
                         # r"(dyn|glb_dyn)(_\d+)?_jitter_(dis|en)\.log\.txt"
-                        index_name = 'dyn' if data['method'] == 'dynamic' else 'glb_dyn'
+                        index_name = 'dyn' if data['method'] == case_name_dyn else case_name_glb
                         index_name += f"_{data['num_cores']}" 
                         index_name += '_jitter_dis' if not data['jitter_en'] else '_jitter_en'
                         index_name += f'_seed_{data["seed"]}' if data["seed"]!='' and data['jitter_en'] else ''
                         index_name += '.log.txt'
-                        num_comp = 0 
+                        n_comp = 0 
                         for idx in stat_df.loc[:, index_name]["Completed Count"].index:
                             if "_".join(idx.split('_')[0:-2]) in sink_pred:
-                                num_comp += stat_df.loc[:, index_name]["Completed Count"][idx]
-                        assert num_comp == len(e2e_latency_list[0]) + len(e2e_latency_list[1])
+                                n_comp += stat_df.loc[:, index_name]["Completed Count"][idx]
+                    if data["lateness_mode"] == "all_soft":
+                        n_miss = 0
+                        for idx in stat_df.loc[:, index_name]["Missed Count"].index:
+                            if "_".join(idx.split('_')[0:-2]) in sink_pred:
+                                n_miss += stat_df.loc[:, index_name]["Missed Count"][idx] 
+                        # assert n_miss == 0 
+
+                if data["lateness_mode"] == "all_soft" and data['method'] == 'glb_dyn':
+                    e2e_latency_list, n_violation = trace_analyser(timing_flag_dict, file_path, data["e2e_latency"], data["lateness_mode"], True)
+                    # glb_dyn: missed jobs are also completed
+                    # dyn: some jobs may failed to be placed
+                    # bool checking is failed, check the miss rate by timing directly
+                    if trace_and_log_check_en:
+                        assert num_exec == len(e2e_latency_list[0]) + len(e2e_latency_list[1])
+                    miss_rate = n_violation / num_exec
+                else:
+                    # missed jobs are not completed, and some tasks are even not issued (i.e., either not completed or missed)
+                    e2e_latency_list = trace_analyser(timing_flag_dict, file_path, data["e2e_latency"], data["lateness_mode"])                        
                     miss_rate = 1- (len(e2e_latency_list[0]) + len(e2e_latency_list[1])) / num_exec
 
+                if trace_and_log_check_en:
+                    assert n_comp == len(e2e_latency_list[0]) + len(e2e_latency_list[1]) 
+                                
                 if data['jitter_en']:
+                    # record the latency and miss rate data before histogram analysis
                     idx = (data['method'], data['num_cores'])
                     if idx not in dist_recoder:
                         dist_recoder[idx] = []
@@ -153,7 +183,8 @@ if __name__ == "__main__":
         # Create a dataframe with the values
         pd.DataFrame(columns=
             [key for search_key in folder_search_seq for key in folder_pattern_keys[search_key]]
-            + ["method", "num_cores", "jitter_en"]
+            # keys in trace pattern except seed, to acheive distribution statistics
+            + ['method', "num_cores", "jitter_en"] 
             +['confidence', 'ddl_percentile', 'rt_percentile', 'miss_rate']).to_csv(filename, index=False)
     
     # Load the dataframe

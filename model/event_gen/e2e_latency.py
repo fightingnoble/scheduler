@@ -59,12 +59,7 @@ def discrete_event_sim(event_list:List, size=1,
 def jitter_gen_biside(ref_value, jitter_sim_para:Dict, size=1, 
                seed:Union[None, int, np.random.Generator, np.random.RandomState]=None):
     enforce_wc = jitter_sim_para.get("enforce_wc", False) 
-    scope = ref_value * jitter_sim_para["scale"]
-    loc = 0
-    scale = scope/3
-    myclip_a = -scope
-    myclip_b = scope
-    a, b = (myclip_a - loc) / scale, (myclip_b - loc) / scale
+    loc, scale, myclip_b, a, b = get_truncnorm_para(ref_value, jitter_sim_para)
     if enforce_wc:
         return lambda: np.full(size, myclip_b) if size>1 else np.float64(myclip_b)
     generator = np.random.default_rng(seed)
@@ -74,13 +69,23 @@ def jitter_gen_biside(ref_value, jitter_sim_para:Dict, size=1,
         jitter_gen_inst = lambda: truncnorm.rvs(a, b, loc=loc, scale=scale, size=size, random_state=generator)
     return jitter_gen_inst
 
+def get_truncnorm_para(ref_value, jitter_sim_para, sigma=3):
+    # scope = ref_value * jitter_sim_para["scale"]
+    # loc = 0
+    # scale = scope/3
+    # myclip_a = -scope
+    # myclip_b = scope
+    # a, b = (myclip_a - loc) / scale, (myclip_b - loc) / scale
+    half_len = ref_value * jitter_sim_para["scale"]
+    loc = 0
+    scale=half_len/sigma
+    a, b = -sigma, sigma
+    return loc,scale,half_len,a,b
+
 def exp_jitter(ref_value, jitter_sim_para:Dict, size=1, 
                seed:Union[None, int, np.random.Generator, np.random.RandomState]=None, lamda_exp:float=100.):
     enforce_wc = jitter_sim_para.get("enforce_wc", False) 
-    scope = ref_value * jitter_sim_para["scale"]
-    loc = 0
-    scale=1/lamda_exp
-    b = scope/scale
+    scope, loc, scale, b = get_truncexpon_param(ref_value, jitter_sim_para, lamda_exp)
     if enforce_wc:
         return lambda: np.full(size, scope) if size>1 else np.float64(scope)
     generator = np.random.default_rng(seed)
@@ -89,6 +94,13 @@ def exp_jitter(ref_value, jitter_sim_para:Dict, size=1,
     else:
         jitter_gen_inst = lambda: truncexpon.rvs(b, loc=loc, scale=scale, size=size, random_state=generator)
     return jitter_gen_inst
+
+def get_truncexpon_param(ref_value, jitter_sim_para, lamda_exp:float=100.):
+    scope = ref_value * jitter_sim_para["scale"]
+    loc = 0
+    scale=1/lamda_exp
+    b = scope/scale
+    return scope,loc,scale,b
 
 # lambda maxsize, seq_len, seed: np.random.default_rng(np.random.default_rng(seed)).integers(0, maxsize, size=seq_len)
 def get_intger_gen(maxsize, seq_len, seed):

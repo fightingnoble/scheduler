@@ -317,6 +317,27 @@ def trace_analyser(timing_flag_dict, trace_path, e2e_latency, lateness_mode, get
         else:
             sink_dict[trace["process_info"]["name"]] = [trace]
         
+    # For debug
+    # check number of timeout for each task
+    timein_dt = {}
+    for sink_key in sink_dict:
+        timein_dt[sink_key] = 0
+        for trace in sink_dict[sink_key]:
+            dict_o, end_time, nx_graph = ContextMsg.find_sensor(trace)
+            matched_pair = np.array([trigger["event_time"] for trigger in dict_o.values()])
+            event_time = max(matched_pair)
+            # assert event_time == trace["time_stamp"]
+            active_path = matched_pair >= event_time
+            trace_e2e_latency = end_time - matched_pair[active_path] 
+            task_name = "_".join(trace["process_info"]["name"].split("_")[0:-2])
+            if timing_flag_dict[task_name] == "realtime":
+                # index the item > e2e_latency
+                index = np.where(trace_e2e_latency > 0.1)
+            else:
+                # index the item > e2e_latency
+                index = np.where(trace_e2e_latency > e2e_latency)
+            timein_dt[sink_key] += 1 if not len(index[0]) else 0
+
     e2e_latency_list = [[], []]
     for sink_key in sink_dict:
         hist_seri_ctx = None

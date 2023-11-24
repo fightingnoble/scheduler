@@ -16,90 +16,8 @@ from sched.slack_estim import estim_release_dll_time, deduce_cfg2, deduce_eq_wsc
 
 # 'ID', 'Task (chain) names', 'Flops on path (G)', 'Expected Latency (ms)', 'T release (ms)', 'Freq.', 'DDL (ms)', 'Cores/Req.', 
 # 'Throuput factor (Spat.)', 'Thread factor (S)', 'Min required cores', 'Timing_flag', 'Max required Cores', 'RDA./Req.', 'Resource Type', 'Pre-assigned', 'Priority'
-__all__ = ['task_graph_srcs', 'task_graph_ops', 'task_graph_sinks', 'affinity_cfg']
-
-task_graph_srcs = {
-    # "Entry": ["surr_view_camera_pub", "streo_camera_pub", "LiDAR_pub"],
-    "LiDAR_pub": ["Lidar_based_3dDet"],
-    "surr_view_camera_pub": ["Traffic_light_detection", "ImageBB", ],
-    "IMU_pub": ["Steering_speed"],
-    "streo_camera_pub": ["Stereo_feature_enc"],
-}
-task_graph_sinks = {
-    "Sink_control": [],
-    "Sink_screen": [],
-}
-sink_attr={
-    "Sink_control": "deadline",
-    "Sink_screen": "realtime"
-}
-src_attr={
-    "LiDAR_pub": 10,
-    "surr_view_camera_pub": 30,
-    "IMU_pub": 240,
-    "streo_camera_pub": 20
-}
-
-task_graph_ops = {   
-    "Traffic_light_detection": ["Sink_control"],
-    "ImageBB": ["MultiCameraFusion"],
-    "MultiCameraFusion": ["Pure_camera_path_head"],
-    "Pure_camera_path_head": ["Prediction"],
-    "Prediction": ["Planning"],
-    "Planning": ["Steering_speed"],
-    "Steering_speed": ["Sink_control"],
-    "Stereo_feature_enc": ["Semantic_segm", "Lane_drivable_area_det", "Optical_Flow", "Depth_estimation"],
-    "Semantic_segm": ["Lidar_based_3dDet","Sink_screen"],
-    "Lidar_based_3dDet": ["Prediction"],
-    "Lane_drivable_area_det": ["Sink_screen"],
-    "Optical_Flow": ["Sink_screen"],
-    "Depth_estimation": ["Sink_screen"],
-}
-
-
-
-# task_graph = {   
-#     "Traffic_light_detection": [],
-#     "ImageBB": ["MultiCameraFusion"],
-#     "MultiCameraFusion": ["Pure_camera_path_head"],
-#     "Pure_camera_path_head": ["Prediction"],
-#     "Prediction": ["Planning"],
-#     "Planning": ["Steering_speed"],
-#     "Steering_speed": [],
-#     "Stereo_feature_enc": ["Semantic_segm", "Lane_drivable_area_det", "Optical_Flow", "Depth_estimation"],
-#     "Semantic_segm": ["Lidar_based_3dDet"],
-#     "Lidar_based_3dDet": ["Prediction"],
-#     "Lane_drivable_area_det": [],
-#     "Optical_Flow": [],
-#     "Depth_estimation": [],
-# }
-
-# affnity of a task is set to be a list that contains user-specified tasks, itself, it predecessors and its successors.
-affinity_cfg = {
-    "Traffic_light_detection": [],
-    "ImageBB": ["MultiCameraFusion"],
-    "MultiCameraFusion": ["ImageBB", "Pure_camera_path_head"],
-    "Pure_camera_path_head": ["MultiCameraFusion", "Prediction"],
-    "Prediction": ["Pure_camera_path_head", "Lidar_based_3dDet", "Planning"],
-    "Planning": ["Prediction", "Steering_speed"],
-    "Steering_speed": ["Planning"],
-    "Stereo_feature_enc": ["Semantic_segm", "Lane_drivable_area_det", "Optical_Flow", "Depth_estimation"],
-    "Semantic_segm": ["Stereo_feature_enc", "LiDAR_based_3dDet"],
-    "Lidar_based_3dDet": ["Stereo_feature_enc", "Semantic_segm", "Prediction"],
-    "Lane_drivable_area_det": ["Stereo_feature_enc"],
-    "Optical_Flow": ["Stereo_feature_enc", "Lane_drivable_area_det",],
-    "Depth_estimation": ["Stereo_feature_enc", "Lane_drivable_area_det",],
-}
-# post-processing
-# For the task that is pre-assigned with the resource, the affinity is set to be itself
-
-pre_assign_priority = {
-    "ImageBB", 
-    "Semantic_segm",
-    "Traffic_light_detection",
-    "Lane_drivable_area_det",
-}
-
+from task.load_cfg.loadA import task_graph_srcs, task_graph_ops, task_graph_sinks, affinity_cfg, sink_attr, src_attr, pre_assign_priority
+# from task.load_cfg.load_chain import *
 
 # def vis_task_static_timeline(task_list, show=False, save=False, save_path="task_static_timeline.pdf", **kwargs):
 #     sim_time = 0.2
@@ -715,7 +633,6 @@ def load_taskattrib(profiling_filename:str="profiling/profiling.csv", verbose: b
         task_attr["Timing_flag"] = "deadline" if task_attr["Timing_flag"]=="DDL" else "realtime"
         task_attr["Resource Type"] = "stationary" if task_attr["Resource Type"]=="S" else "moveable"
         task_attr["Pre-assigned"] = False if task_attr["Pre-assigned"]=="N" else True
-        thread_scaling_factor = task_attr["Thread factor (Spat.)"]
         parallel_cfg = extract_parallel_cfg(task_attr, "runtime")
         parallel_cfg_compile = extract_parallel_cfg(task_attr, "compile")
         period = 1/task_attr["Freq."]
@@ -783,7 +700,11 @@ def load_taskattrib(profiling_filename:str="profiling/profiling.csv", verbose: b
 
     return task_dict, f_gcd
 
+def decide_division_mod(f_gcd, task_attr):
+    return 'interleave' if task_attr.freq/f_gcd <= task_attr.freq_division_factor else 'repeat'
+
 def gen_taskint_from_cfg(taskattr_dict:Dict[str, TaskIntAttr], f_gcd: int,
+                         div_mod_fn:Callable[[int, TaskIntAttr], str]=decide_division_mod,
                  plot:bool = False, verbose: bool = False) -> Dict[str, TaskInt]:
 
     task_dict = {}
@@ -833,6 +754,7 @@ def gen_taskint_from_cfg(taskattr_dict:Dict[str, TaskIntAttr], f_gcd: int,
                     op_io_time=1e-6*BW_DRAM, op_cpu_time=flops_on_path, 
                     seq_io_time=1e-6*BW_DRAM, seq_cpu_time=flops_on_path,
                     criti_flag=task_attr.criticality, 
+                    chain_criti_flag=task_attr.chain_criticality,
                     cbs_en=True, # if task_attr["Cbs_en"]=='Y' else False, 
                     trigger_mode=task_attr.trigger_mode, 
                     parallel_cfg={"max":task_attr.core_max, "min":task_attr.core_min, "list":task_attr.core_list, "mode":task_attr.parallel_mode},
@@ -847,7 +769,7 @@ def gen_taskint_from_cfg(taskattr_dict:Dict[str, TaskIntAttr], f_gcd: int,
                 task.required_resource_size = task_attr.main_size
 
                 division_factor = task_attr.freq_division_factor
-                freq_div_mode = 'interleave' if task_attr.freq/f_gcd <= task_attr.freq_division_factor else 'repeat'
+                freq_div_mode = div_mod_fn(f_gcd, task_attr)
                 task_list = task.freq_division(division_factor, hyper_p, mode=freq_div_mode)
 
                 if plot:
@@ -879,7 +801,7 @@ def gen_taskint_from_cfg(taskattr_dict:Dict[str, TaskIntAttr], f_gcd: int,
 
     return task_dict
 
-def gen_workloads(args, slack_threshold):
+def gen_workloads(args):
     taskattr_dict, f_gcd = load_taskattrib(args.profiling_filename, verbose=args.verbose) 
     hyper_p = 1/f_gcd
     assert args.aux_scale_factor >= 0
@@ -889,9 +811,10 @@ def gen_workloads(args, slack_threshold):
             if taskattr.timing_flag == "realtime":
                 taskattr.thread_scaling_factor *= args.aux_scale_factor
 
+    print(f"Ops per second of Workload: {sum([(v.flops*v.var_factor*v.thread_scaling_factor*v.freq) for n,v in taskattr_dict.items()]):.2f} T")
     logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
 
-    if args.binpack_cfg["algorithm"] == "coalescing":
+    if args.binpack_cfg["algorithm"] in ["coalescing", "naive_iso"]:
         # temporal_abs_en = True
         algorithm = 'gurobi'
         wsc_slack_ratio = 1 - args.exec_t_comp_ratioA
@@ -900,13 +823,15 @@ def gen_workloads(args, slack_threshold):
         algorithm = 'avg'
         wsc_slack_ratio = args.wsc_slack_ratio
     deduce_cfg2(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, task_graph_srcs, 
-                task_graph_sinks, sink_attr, src_attr, slack_threshold, args.e2e_latency, 
+                task_graph_sinks, sink_attr, src_attr, args.slack_threshold, args.e2e_latency, 
                 args.exec_t_comp_ratioA, args.jitter_t_comp_ratio, 
                 wsc_slack_ratio, algorithm, args.timestepxus)
+    if args.binpack_cfg["algorithm"] == "coalescing":
+        print("deduced_eq_wsc:", deduce_eq_wsc(logical_graph_nx, task_graph_srcs, task_graph_sinks, src_attr, args.jitter_t_comp_ratio))
+
     glb_n_task_dict = gen_taskint_from_cfg(taskattr_dict, f_gcd)
     physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), taskattr_dict=taskattr_dict)
     init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
-    print(deduce_eq_wsc(logical_graph_nx, task_graph_srcs, task_graph_sinks, src_attr, args.jitter_t_comp_ratio))
     return hyper_p,glb_n_task_dict,physical_graph_nx
 
 
@@ -964,8 +889,7 @@ def init_depen(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[T
             elif dep_t == "control":
                 job.succ_ctrl.update({succ_n:attr})
             else:
-                raise Exception("Unknown dependency type")
-        
+                raise Exception("Unknown dependency type")    
         if verbose:
             print(job_n, job.pred_data, job.pred_ctrl, job.succ_data, job.succ_ctrl)
 

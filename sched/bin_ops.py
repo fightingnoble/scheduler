@@ -167,11 +167,14 @@ def index_preeempt_num_cores_by_interval(_p, _bin, chunk_s, _p_index_by_pid, pro
                 preemptable_n[i] += rsc_map[pid]
     return preemptable_n
 
-def get_initlist_and_biniter(bin_list, glb_p_list, total_cores, _new_bin, method="manual"):
+def get_initlist_and_biniter(bin_list, glb_p_list, total_cores, _new_bin, method="manual", name_list=[]):
     if method == "static_1_bin":
         iter_next_bin_obj,bin_name_list = static_1_bin(bin_list, glb_p_list, total_cores, _new_bin)
     elif method == "manual":
         iter_next_bin_obj,bin_name_list = manual_defined_reservation(bin_list, glb_p_list, total_cores, _new_bin)
+    elif method == "all_isolation":
+        assert name_list != []
+        iter_next_bin_obj,bin_name_list = all_isolation(bin_list, glb_p_list, name_list, _new_bin)
     else:
         raise NotImplementedError
     return iter_next_bin_obj,bin_name_list
@@ -189,6 +192,19 @@ def manual_defined_reservation(bin_list, glb_p_list, total_cores, _new_bin):
 
     iter_next_bin_obj = bin_iter_uniform_dist(_new_bin, total_cores, size_l, name_l)
     bin_list.extend(list(iter_next_bin_obj)) 
+    bin_name_list = [bin.name for bin in bin_list]
+    return iter_next_bin_obj,bin_name_list
+
+def all_isolation(bin_list, glb_p_list, name_list, _new_bin):
+    # if "_".join(_p.task.name.split('_')[0:-2]) in name_list add a new bin
+    size_l = []
+    name_l = []
+    for _p in  glb_p_list:
+        if "_".join(_p.task.name.split('_')[0:-2]) in name_list:
+            size_l.append(_p.task.pre_assigned_resource.main_size + _p.task.pre_assigned_resource.RDA_size)
+            name_l.append(_p.task.name)
+    iter_next_bin_obj = bin_iter_list(_new_bin, size_l, name_l)
+    bin_list.extend(list(iter_next_bin_obj))
     bin_name_list = [bin.name for bin in bin_list]
     return iter_next_bin_obj,bin_name_list
 

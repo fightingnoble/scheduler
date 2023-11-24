@@ -6,7 +6,7 @@ import os
 from functools import reduce
 
 from analyze.pattern import folder_pattern, folder_pattern_keys, folder_type, get_path_var_scaner
-from analyze.pattern import log_pattern, log_pattern_keys, log_pattern_type
+from analyze.pattern import log_pattern, log_pattern_keys, log_pattern_type, seed_re
 from utils import update_df
 
 search_seq = ["num_cores", "cfg_n"]
@@ -50,11 +50,12 @@ def get_throughput_extracter(stat_csv_filename, profiling_filename, n_p, warmup_
             aux_scale_factor = info_dict['aux_scale_factor']
             num_exec = extract_num_exec(profiling_filename, aux_scale_factor, n_p, warmup_dis)
         item_name = stat_df.columns.get_level_values(0).unique().values
-        group_glb = [i for i in item_name if re.match(r"glb_dyn(_\d+)?_jitter_en(_seed_(\d+))\.log\.txt", i)]
-        group_dyn = [i for i in item_name if re.match(r"dyn(_\d+)?_jitter_en(_seed_(\d+))\.log\.txt", i)]
+        # TODO: use pattern in analyze.pattern 
+        group_glb = [i for i in item_name if re.match(r"glb_dyn(_\d+)?_jitter_en(_seed_("+seed_re+r"))\.log\.txt", i)]
+        group_dyn = [i for i in item_name if re.match(r"dyn(_\d+)?_jitter_en(_seed_("+seed_re+r"))\.log\.txt", i)]
         group_dyn_stat = [i for i in item_name if re.match(r"dyn(_\d+)?_jitter_dis\.log\.txt", i) or i.startswith("bin")]
         group_glb_stat = [i for i in item_name if re.match(r"glb_dyn(_\d+)?(_ideal|_jitter_dis)\.log\.txt", i)]
-
+        
         assert len(group_dyn_stat) == 2 or len(group_dyn_stat) == 0
         assert len(group_glb_stat) == 2 or len(group_glb_stat) == 0
 

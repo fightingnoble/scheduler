@@ -80,7 +80,7 @@ class AllocatorInt(object):
         else: 
             pass
 
-from sched.scheduling_table import SchedulingTableInt
+from sched.scheduling_table import SchedulingTableInt, get_sparse_flops
 from model.resource_agent import Resource_model_int
 import matplotlib.pyplot as plt
 from global_var import *
@@ -403,7 +403,11 @@ def cyclic_sched(task_spec:Spec, affinity,
                 _p.set_state("suspend")
                 print("		TASK {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
         print("")
-
+    if [sched._SchedTab.alloc_mod=='exactly' for sched in scheduler_list][0]: 
+            try:
+                get_sparse_flops([sched._SchedTab for sched in scheduler_list], glb_p_list, timestep, event_range)
+            except:
+                print("CodingError: pass the get_sparse_flops")
 
     for n_slot in range(sim_slot_num):
         curr_t = n_slot * timestep

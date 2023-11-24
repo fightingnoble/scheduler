@@ -2,7 +2,7 @@ import math
 import numpy as np
 import pandas as pd
 from scipy.optimize import lsq_linear
-from typing import List, Dict, Tuple, Union, Optional, Iterable, Iterator
+from typing import List, Dict, Tuple, Union, Optional, Iterable, Iterator, Collection
 from collections import OrderedDict
 from model.resource_agent import Resource_model_int
 from functools import reduce
@@ -18,6 +18,7 @@ import os
 from model.resource_agent import RscMapInt
 import networkx as nx
 from global_var import fork_pid_base
+from global_var import *
 
 class SchedulingTableInt(object): 
     """
@@ -49,6 +50,7 @@ class SchedulingTableInt(object):
         self.alloc_mod = "exactly" 
         self.sparse_flops = list()
         self.sparse_cores = list()
+        self.sparse_event = list()
 
         # available when used as a recorder
         self.wr_pointer = 0
@@ -542,6 +544,8 @@ class SchedulingTableInt(object):
             self.sparse_flops = list()
         if not hasattr(self, "sparse_cores"):
             self.sparse_cores = list()
+        if not hasattr(self, "sparse_event"):
+            self.sparse_event = list()
 
 
     # add spase inded by 1
@@ -950,24 +954,6 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], pid2name:Dict[int
             fig.add_trace(go.Scatter(x=[e, e], y=[bin_vertical_offset, bin_vertical_offset+bin_spatial_size*vertical_grid_size], mode='lines',
                                         line=dict(color='black', width=0.5)), row=len(bin_list)-_SchedTab.id, col=1)
 
-        # set the axis and title
-        vs = int((bin_vertical_offset-base_vertical_offset)//vertical_grid_size)
-        ticks = np.linspace(vs, vs+bin_spatial_size-1, 4, dtype=int)
-        if tool == "matplotlib":
-            ax.set_xlim(plot_start-x_margin, plot_end+x_margin)
-            ax.set_ylim(bin_vertical_offset-y_margin, bin_vertical_offset+bin_spatial_size*vertical_grid_size+y_margin)
-            ax.set_yticks(ticks)
-            ax.set_yticklabels(ticks, fontsize=txt_size)
-        elif tool == "bokeh":
-            ax.x_range = Range1d(plot_start-x_margin, plot_end+x_margin)
-            ax.y_range = Range1d(bin_vertical_offset-y_margin, bin_vertical_offset+bin_spatial_size*vertical_grid_size+y_margin)
-            ax.yaxis.ticker = ticks
-            ax.yaxis.major_label_overrides = {i: str(i) for i in ticks}
-            ax.yaxis.major_label_text_font_size = f"{txt_size}pt"
-        elif tool == "plotly":            
-            fig.update_xaxes(range=[plot_start-x_margin, plot_end+x_margin], row=len(bin_list)-_SchedTab.id, col=1)
-            fig.update_yaxes(range=[bin_vertical_offset-y_margin, bin_vertical_offset+bin_spatial_size*vertical_grid_size+y_margin],
-                                tickvals=ticks, ticktext=ticks, row=len(bin_list)-_SchedTab.id, col=1)
             
         # set yticks
         # add bin name
@@ -991,6 +977,38 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], pid2name:Dict[int
     # remove y axis
     # ax.get_yaxis().set_visible(False)
 
+    if tool == "matplotlib":
+        bin_vertical_offset = base_vertical_offset
+        for bin_idx, _SchedTab in enumerate(bin_list): 
+            # bin_temp_size = len(_SchedTab.scheduling_table)
+            # bin_spatial_size = _SchedTab.scheduling_table[0].size
+            bin_spatial_size = _SchedTab.num_resources
+            bin_temp_size = _SchedTab.temp_size
+
+            vs = int((bin_vertical_offset-base_vertical_offset)//vertical_grid_size)
+            y_ticks = np.linspace(vs, vs+bin_spatial_size-1, 4, dtype=int)
+            ax.set_xlim(plot_start-x_margin, plot_end+x_margin)
+            ax.set_ylim(bin_vertical_offset-y_margin, bin_vertical_offset+bin_spatial_size*vertical_grid_size+y_margin)
+            ax.set_yticks(y_ticks)
+            ax.set_yticklabels(y_ticks, fontsize=txt_size)
+            bin_vertical_offset += bin_spatial_size* vertical_grid_size 
+
+
+        # reset x ticks: text size 30, rotation 45, distance time_grid_size * 2
+        # ticks format: .3f
+        ax = fig.axes[0]
+        x_ticks = [str(round(t, 3)) for t in np.arange(plot_start, plot_end, time_grid_size*tick_dens)] + [str(round(plot_end, 3))]
+        ax.set_xticks(np.arange(plot_start, plot_end, time_grid_size*tick_dens).tolist()+[plot_end])
+        ax.set_xticklabels(x_ticks, fontsize=txt_size, rotation=45)
+        ax.tick_params(axis='x', which='major', pad=time_grid_size * tick_dens)
+        ax.set_xlabel("Time (s)", fontsize=txt_size) 
+        # remove frame
+        # ax.spines['top'].set_visible(False)
+        # ax.spines['right'].set_visible(False)
+        # ax.spines['bottom'].set_visible(False)
+        # ax.spines['left'].set_visible(False)
+        # set x axis label as Time (s), text size 30
+
     if plot_legend:
         if tool == "matplotlib":
             # add legend
@@ -1002,20 +1020,6 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], pid2name:Dict[int
                 legend_elements.append(Line2D([0], [0], color=mcolors.XKCD_COLORS[colors[i]], lw=4, label=pid2name[pid]))
             ax.legend(handles=legend_elements, loc='lower center', bbox_to_anchor=(0.5, 1.2),
             ncol=4, fancybox=True, shadow=True, fontsize=txt_size)
-            # reset x ticks: text size 30, rotation 45, distance time_grid_size * 2
-            # ticks format: .3f
-            ax = fig.axes[0]
-            ticks = [str(round(t, 3)) for t in np.arange(plot_start, plot_end, time_grid_size*tick_dens)] + [str(round(plot_end, 3))]
-            ax.set_xticks(np.arange(plot_start, plot_end, time_grid_size*tick_dens).tolist()+[plot_end])
-            ax.set_xticklabels(ticks, fontsize=txt_size, rotation=45)
-            ax.tick_params(axis='x', which='major', pad=time_grid_size * tick_dens)
-            # remove frame
-            # ax.spines['top'].set_visible(False)
-            # ax.spines['right'].set_visible(False)
-            # ax.spines['bottom'].set_visible(False)
-            # ax.spines['left'].set_visible(False)
-            # set x axis label as Time (s), text size 30
-            ax.set_xlabel("Time (s)", fontsize=txt_size) 
         elif tool == "bokeh":
             # add legend
             legend_it = []
@@ -1128,6 +1132,7 @@ def get_task_layout(bin_list:List[SchedulingTableInt], init_p_list:List[ProcessI
     if "format" not in kwargs and save_path.split(".")[-1] == "pdf" and save:
         kwargs["format"] = "pdf"
     plt.savefig(save_path, **kwargs)
+    print("save figure to", save_path)
 
 def get_task_layout_sparse(bin_list:List[SchedulingTableInt], pid2name:Dict[int, str], time_step:float = 1e-6,
                     show=False, save=False, save_path="task_layout_compact.pdf", 
@@ -1465,6 +1470,188 @@ def dense_to_sparse(scheduling_table:np.ndarray):
         # sparse_dict[pre_idx] = [pre_rsc, len(self.scheduling_table)-pre_idx]
         sparse_list.append([pre_idx, pre_rsc, len(scheduling_table)-pre_idx])
     return sparse_list
+
+def get_sparse_flops(bin_list:List[SchedulingTableInt], glb_p_list: List[ProcessInt], timestep, event_range):
+
+    process_dict = {_p.pid:_p for _p in glb_p_list}
+    # build event list
+    process_stim_dict = OrderedDict()
+    for pid, _p in process_dict.items():
+        _p:ProcessInt
+        stimu_tab = _p.task.extract_sensor_event(event_range, verbose=False)
+        l = []
+        for stimu_t in stimu_tab:
+            start_t, ddl_t = elim_nume_error(stimu_t+_p.task.ERT), elim_nume_error(stimu_t+_p.task.ERT+_p.task.ddl)
+            # quantize the start time and ddl time
+            slot_s = int(math.ceil(start_t/timestep)) 
+            slot_e = int(math.floor(ddl_t/timestep))
+            l.append([_p.pid, slot_s, slot_e, _p.task.name, stimu_t]) 
+        process_stim_dict[pid] = l
+
+    rsc_recoder = {}
+    for _bin in bin_list:
+        _bin:SchedulingTableInt
+        # # [task_id] = (s, size, l)
+        # bin_pack_result:Dict[int, Tuple[List[int], List[int], List[int]]] = _bin.index_occupy_by_id()
+        # # merge the result to the recoder, also add a extra item of bin_id 
+        # for pid, item in bin_pack_result.items():
+        #     bin_id = [_bin.id] * len(item[0])
+        #     if pid in rsc_recoder:
+        #         s, size, l, b_id = rsc_recoder[pid]
+        #         rsc_recoder[pid] = [s+item[0], size+item[1], l+item[2], b_id+bin_id]
+        #     else:
+        #         rsc_recoder[pid] = [item[0], item[1], item[2], bin_id]
+
+        # update the rsc_recoder by the sparse list
+        sparse_list = _bin.sparse_list
+        for pre_idx, pre_rsc, slot_num in sparse_list:
+            for pid, size in pre_rsc.items():
+                if pid in rsc_recoder:
+                    s, size_l, l, b_id = rsc_recoder[pid]
+                    rsc_recoder[pid] = [s+[pre_idx], size_l+[size], l+[slot_num], b_id+[_bin.id]]
+                else:
+                    rsc_recoder[pid] = [[pre_idx], [size], [slot_num], [_bin.id]]
+
+
+    for pid, item in rsc_recoder.items():
+        s, size, l, b_id = item
+        # sort the result by the start time
+        # sort s and update the size and l
+        s, size, l, b_id = zip(*sorted(zip(s, size, l, b_id), key=lambda x: x[0]))
+        rsc_recoder[pid] = [s, size, l, b_id]
+    # sort the record by pid
+    rsc_recoder = OrderedDict(sorted(rsc_recoder.items(), key=lambda item: item[0]))
+    
+    # inner dict is indexed by slot index
+    # outter dict is indexed by bin index
+    sparse_flops_dict = OrderedDict()
+    sparse_cores_dict = OrderedDict()
+    sparse_event_dict = OrderedDict()
+    # init the above dict
+    for bin_idx in range(len(bin_list)):
+        sparse_flops_dict[bin_idx] = {}
+        sparse_cores_dict[bin_idx] = {}
+        sparse_event_dict[bin_idx] = {}
+    # event pattern:
+    # f"start-{pid:d}_{j:d}", f"complete-{pid:d}_{j:d}", f"migrate-{pid:d}_from_{pre_bin_idx}", f"migrate-{pid:d}_to_{next_bin_idx}"
+    #  start
+    #  ts
+    #  complete
+    #  migrate
+    
+    # check legelty
+    assert set(rsc_recoder.keys()) == set(process_stim_dict.keys())
+    for pid in rsc_recoder.keys():
+        alloc_item = rsc_recoder[pid]
+        stim_item = process_stim_dict[pid]
+        i=0
+        cum_ops = 0
+        ref_flops = process_dict[pid].totcpu
+        s_j_istart = 0 # the start index of chunk, allocated to the jth stimulus
+        for j in range(len(stim_item)):
+            s_j = stim_item[j][1]
+            e_j = stim_item[j][2]
+            pid = stim_item[j][0]
+            s_j_istart = i
+            if i < len(alloc_item[0]):
+                s_i = alloc_item[0][i]
+                bin_idx = alloc_item[3][i]
+                update_sparse_dict(bin_idx, pid, s_i, sparse_event_dict, item={f"start-{pid:d}_{j:d}"}, item_type=set)
+            while i < len(alloc_item[0]):
+                s_i = alloc_item[0][i]
+                size_i = alloc_item[1][i]
+                l_i = alloc_item[2][i]
+                e_i = alloc_item[0][i] + alloc_item[2][i]
+                pre_bin_idx = alloc_item[3][i-1 if i>0 else 0]
+                bin_idx = alloc_item[3][i]
+                next_bin_idx = alloc_item[3][i+1 if i<len(alloc_item[0])-1 else len(alloc_item[0])-1]
+                if pre_bin_idx != bin_idx and i > s_j_istart:
+                    update_sparse_dict(bin_idx, pid, s_i, sparse_event_dict, 
+                                       item={f"migrate-{pid:d}_from_{pre_bin_idx}"}, item_type=set)
+                if cum_ops >= ref_flops:
+                    cum_ops = 0
+                    break
+                if e_i <= e_j:
+                    ops = size_i * l_i * timestep * FLOPS_PER_CORE
+                    ops_tbd = min(ops, ref_flops-cum_ops)
+                    cum_ops += ops
+                    update_sparse_dict(bin_idx, pid, s_i, sparse_flops_dict, item=ops_tbd, item_type=float)
+                    update_sparse_dict(bin_idx, pid, s_i, sparse_cores_dict, item=size_i, item_type=int)
+                    if ops>ops_tbd:
+                        update_sparse_dict(bin_idx, pid, s_i, sparse_event_dict, item={f"complete-{pid:d}_{j:d}"}, item_type=set)
+                    elif next_bin_idx != bin_idx:
+                        update_sparse_dict(bin_idx, pid, s_i, sparse_event_dict, 
+                                        item={f"migrate-{pid:d}_to_{next_bin_idx:d}"}, item_type=set)
+
+                    i += 1
+                else:
+                    assert cum_ops >= ref_flops
+                    cum_ops = 0
+                    break
+        # NOTE: check if all the allocation are found the corresponding stimulus
+        assert i == len(alloc_item[0])
+    # NOTE:check whether the sparse_cores and the sparse_flops have the same length with the sparse_list
+    for bin_idx in range(len(bin_list)):
+        # verify the sparse index matching
+        assert set(sparse_flops_dict[bin_idx].keys()) == set(sparse_cores_dict[bin_idx].keys()) 
+        # event keys is a subset of slot keys
+        assert set(sparse_event_dict[bin_idx].keys()) <= set(sparse_flops_dict[bin_idx].keys())
+
+        # sort the dict by key
+        sorted_slot_n = sorted(sparse_flops_dict[bin_idx].keys())
+        sparse_cores = [sparse_cores_dict[bin_idx][k] for k in sorted_slot_n]
+        sparse_flops = [sparse_flops_dict[bin_idx][k] for k in sorted_slot_n]
+        sparse_event = [sparse_event_dict[bin_idx][k] if k in sparse_event_dict[bin_idx] else {} for k in sorted_slot_n ]
+
+        sparse_list = bin_list[bin_idx].sparse_list
+        assert len(sparse_flops) == len(sparse_list)
+        assert len(sparse_cores) == len(sparse_list)
+        # check have same keys
+        for i in range(len(sparse_list)): 
+            # has the same slot index
+            assert sparse_list[i][0] == sorted_slot_n[i]
+            # has the same task id
+            assert set(sparse_list[i][1].keys()) == set(sparse_flops[i].keys())
+            slot_n = sparse_list[i][0]
+            assert set(sparse_list[i][1].keys()) >= set(sparse_event[i].keys())
+        # sort the dict by key
+        sparse_flops_dict[bin_idx] = OrderedDict(zip(sorted_slot_n, sparse_flops))
+        sparse_cores_dict[bin_idx] = OrderedDict(zip(sorted_slot_n, sparse_cores))
+        sparse_event_dict[bin_idx] = OrderedDict(zip(sorted_slot_n, sparse_event))
+        bin_list[bin_idx].sparse_flops = list(zip(sorted_slot_n, sparse_flops))
+        bin_list[bin_idx].sparse_cores = list(zip(sorted_slot_n, sparse_cores))
+        bin_list[bin_idx].sparse_event = list(zip(sorted_slot_n, sparse_event))
+        bin_list[bin_idx].alloc_mod = "proper"
+    return sparse_flops_dict, sparse_cores_dict, sparse_event_dict
+
+# event msg parser
+def parse_event_msg(msg:str):
+    """
+    use re to match event pattern, and extract 
+     start, ts, complete, migrate
+    f"start-{pid:d}_{j:d}", 
+    f"complete-{pid:d}_{j:d}", 
+    f"migrate-{pid:d}_from_{pre_bin_idx}", 
+    f"migrate-{pid:d}_to_{next_bin_idx}"
+    """ 
+    import re
+    pattern = re.compile(r"^(?P<event_type>\w+)-(?P<pid>\d+)(_(?P<ts>\d+))?(_from_(?P<from>\d+))?(_to_(?P<to>\d+))?$")
+    match = pattern.match(msg)
+    # {k: t(v) for k,v,t in zip(pattern_keys, match.groups(), pattern_type) if v is not None}
+    group_dict = match.groupdict()
+    pattern_type = {"event_type":str, "pid":int, "ts":int, "from":int, "to":int}
+    result = {k: t(v) for k,v,t in zip(group_dict.keys(), group_dict.values(), pattern_type.values()) if v is not None}
+    return result
+
+def update_sparse_dict(bin_idx, pid, s_i, sparse_dict, item, item_type):
+    if s_i not in sparse_dict[bin_idx]:
+        sparse_dict[bin_idx][s_i] = {}
+    if hasattr(item_type, "update"):
+        old = sparse_dict[bin_idx][s_i].get(pid, item_type())
+        old.update(item)
+        sparse_dict[bin_idx][s_i].update({pid:old})
+    else:
+        sparse_dict[bin_idx][s_i].update({pid:item})
 
 def calc_free_spaces(items, bin_height, bin_width):
     # Sort by start  

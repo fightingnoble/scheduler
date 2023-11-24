@@ -4,6 +4,8 @@ from functools import wraps, reduce
 from global_var import cfg_dir
 from typing import Dict, Callable
 import pandas as pd
+import json
+from global_var import *
 
 def dump_and_check(save_path, obj2save):
     check_parents_path(save_path)
@@ -96,7 +98,93 @@ def input_parser():
     
     parser.add_argument("--max_core_stat", default=False, type=bool, help="max core stat")
     args = parser.parse_args()
+
+    if args.jitter_sim_en: 
+        if args.jitter_sim_para == {}:
+            jitter_sim_para = args.jitter_sim_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['jitter']
+        else:
+            jitter_sim_para = args.jitter_sim_para
+
+    if args.exec_var_en: 
+        if args.exec_var_para == {}:
+            exec_var_para = args.exec_var_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['exec']
+        else:
+            exec_var_para = args.exec_var_para
+
+    if args.load_var_sim_en:
+        if args.load_var_sim_para == {}:
+            load_var_sim_para = args.load_var_sim_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['load_var']
+        else:
+            load_var_sim_para = args.load_var_sim_para
+    
+    if args.e2e_var_sim_en:
+        assert args.gen_benchmark == True
+        if args.e2e_var_sim_para == {}:
+            e2e_var_sim_para = args.e2e_var_sim_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['e2e_var']
+        else:
+            e2e_var_sim_para = args.e2e_var_sim_para
+
+    if args.bin_pack_para == {}:
+        args.binpack_cfg = binpack_cfg = json.load(open(os.path.join(cfg_dir, args.bin_pack_cfg), "r"))
+    else:
+        binpack_cfg = args.bin_pack_para
+
     return args
+
+def args_postprocess(args):
+    root_dir = args.root_dir
+    args.binpack_cfg.update({"exec_t_comp_ratioB": args.exec_t_comp_ratioB}) 
+    cfg_para_dict = {
+        "wsc_slack_ratio": args.wsc_slack_ratio, "exec_t_comp_ratioA": args.exec_t_comp_ratioA, 
+        "lateness_mode": args.lateness_mode
+        }
+    para_scan_group1 = {"aux_scale_factor": args.aux_scale_factor, "e2e_latency": args.e2e_latency}
+    para_scan_group2 = {"num_cores": args.num_cores}
+
+    if not args.gen_benchmark:
+        if args.profiling_filename == "profiling/profiling.csv":
+            cfg_n = "heavy"
+        else:
+            cfg_n = args.profiling_filename.split(".")[-2].split("_")[-1] 
+        cfg_n += f"_{args.lateness_mode}"
+    else:
+        cfg_n = cfg_root_fmt.format(**cfg_para_dict, **para_scan_group1)
+    path_para_dict = {"root_dir": root_dir, "cfg_n": cfg_n, "i_file_suffix": args.i_file_suffix}
+    # remain parameters in group1 unfilled
+    cfg_n_format = cfg_root_fmt.format(**cfg_para_dict, **{}.fromkeys(para_scan_group1, r"{}"))
+
+    plot_root = plot_root_fmt.format(**path_para_dict, **para_scan_group2)
+    trace_root = trace_root_fmt.format(**path_para_dict, **para_scan_group2)
+    bin_path_format = os.path.join('cache', root_dir, cfg_n_format, r"bin_list_{}"+f"{args.i_file_suffix}.pkl")
+    # remaining parameters in group2 unfilled
+    bin_save_fmt.format(**{**path_para_dict, 'cfg_n': cfg_n_format, "num_cores": r"{}"})
+
+    trace_path_para = {
+        "trace_root": trace_root, "num_cores": args.num_cores, 
+        "seed": args.seed, "file_suffix": args.file_suffix, 
+        }
+    plot_path_para = {"plot_root": plot_root, "num_cores": args.num_cores, "seed": args.seed, "file_suffix": args.file_suffix}
+    
+    # worst case: state seed = -1, seed value is not used but set to 0, print as -1
+
+    if args.seed == -1:
+        args.seed = 0
+        # set enforce_wc
+        args.jitter_sim_para.update({"enforce_wc": True})
+        args.exec_var_para.update({"enforce_wc": True})
+        
+    if args.jitter_sim_en: 
+        enforce_wc = args.jitter_sim_para.get("enforce_wc", False) 
+    else:
+        enforce_wc = False
+
+    if enforce_wc:
+        assert args.jitter_sim_en
+        plot_path_para.update({"seed": "-1"})
+        trace_path_para.update({"seed": "-1"})
+
+    csv_xlxs_root = os.path.join(log_dir, root_dir)
+    return cfg_para_dict,para_scan_group1,para_scan_group2,path_para_dict,trace_root,bin_path_format,trace_path_para,plot_path_para,csv_xlxs_root
 
 # define a wrapper for displaying current function, start time, end time, and execution time
 def time_cnt(description:str):
@@ -126,7 +214,7 @@ def update_df(df, index_dict:Dict, info_dict:Dict, update_fn:Callable=lambda x,y
     if df.loc[data_idx].size:
         for key in info_dict.keys():
             origin = df.loc[data_idx, key]
-            df.loc[data_idx, key] = update_fn(origin, info_dict[key])
+            df.loc[data_idx, key] = update_fn(origin.values, info_dict[key])
     else:
         index_dict.update(info_dict)
         df = pd.concat([df, pd.DataFrame(index_dict, index=[0])], ignore_index=True)

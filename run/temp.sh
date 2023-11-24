@@ -4,7 +4,7 @@
 tp_start=${1:-1}
 tp_step=${2:-1}
 tp_end=${3:-10}
-root_dir=${4:-"aux_scan"}
+root_dir=${4:-"coalescing"}
 scan_param=${5:-"False"}
 scan_seed=${6:-"False"}
 plot=${7:-'dis'}

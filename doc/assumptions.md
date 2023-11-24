@@ -317,6 +317,12 @@ Scheduler parameters
    test_case
    barrier_dis
 
+## CBS
+
+budget是最大的资源约束
+
+planed flops是计划的任务量
+
 # Numerical error
 
 wrong syntex: int(a//b) -> int(a/b)
@@ -324,3 +330,29 @@ wrong syntex: int(a//b) -> int(a/b)
 q_time = math.floor(time/timestamp) * timestamp
 
 q_time / timestamp 由于数值误差应该用round 而非 int 才能得到和之前相同的结果
+
+1. CBS
+    1. 补充的：q → Q
+    2. bound的：q/(d-t) < Q/T
+    3. 消耗的：q
+    4. alloc的：time
+2. Our
+    1. 补充的：flops
+    2. bound的：lat → n_core
+    3. 消耗的：flops
+    4. alloc的：time, core
+
+flops 以及 budget一起更新，flops是＋，budget是覆盖
+
+仅仅当rem_flops 或者 compensated flops 不为零的时候才执行上述操作
+
+执行的时候减去flops，当执行完（pop item，可选）
+
+后续冗余的 flops=0 budget到来的时候，并不会刷新recoder中的budget
+
+后续任务如果提前到来，可以通过flops判断（没pop），或者有无budget判断（pop了）
+
+补充时机：
+
+清空时机：
+   

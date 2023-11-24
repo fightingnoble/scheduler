@@ -422,6 +422,36 @@ class ProcessBase(object):
             _str = f"		TASK {self.task.id:d}:{self.task.name:s}({self.pid:d}) is activated @ {curr_t:.6f}/{self.msg_cache[0].get_timestamp():.6f}!!"
             print(_str)
 
+    def throttle_util(_p, running_queue, ready_queue, throttle_list, sched,
+                      curr_t=None, verbose=True):
+        if verbose:
+            assert curr_t is not None
+            # warnings.warn("		TASK {:d}:{:s}({:d}) THROTTLED!!".format(_p.task.id, _p.task.name, _p.pid))
+            print("		TASK {:d}:{:s}({:d}) is THROTTLED @ {:.6f} !!".format(_p.task.id, _p.task.name, _p.pid, curr_t))
+        # update statistics 
+        _p.task.throttle_count += 1
+
+        # suppose kill strategy
+        # current tile should be reloaded and re-executed
+        # other wise, modify the io time
+        _p.ready = False
+        _p.ready_time = -1
+        _p.currentburst = 0
+        # _p.burst = 0
+
+        _p.waitTime = 0
+        # _p.cumulative_executed_time = 0
+
+        if _p in running_queue.queue:
+            sched.res_release(_p.pid)
+            # budget_recoder.pop(_p.pid)
+            running_queue.remove(_p)
+        elif _p in ready_queue.queue:
+            ready_queue.remove(_p)
+        else:
+            raise ValueError("Task is not in the running queue or ready queue")
+        throttle_list.append(_p)
+
 class ProcessInt(ProcessBase):
     def __init__(self, task:TaskBase, release_t, deadline_abs, pid):
         super().__init__(task, release_t, deadline_abs, pid)
@@ -449,7 +479,7 @@ class ProcessInt(ProcessBase):
         self.is_starving = False
         
 
-    def rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE, time_slot_s=None, time_slot_e=None, mode='rt-wsc'):
+    def rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE, time_slot_s=None, time_slot_e=None, mode='rt-wsc', over_provision_rate=0.):
         assert mode in ['rt-wsc', 'expected']
         if time_slot_e is None or time_slot_s is None:
             time_slot_s, time_slot_e = _p.quant_release_deadline(n_slot, timestep)
@@ -460,7 +490,7 @@ class ProcessInt(ProcessBase):
             if time_slot_e <= time_slot_s:
                 req_rsc_size = 0
             else:
-                req_rsc_size = int(np.ceil(_p.remburst/(time_slot_e-time_slot_s)/timestep/FLOPS_PER_CORE))
+                req_rsc_size = int(np.ceil(_p.remburst/(time_slot_e-time_slot_s)/timestep/FLOPS_PER_CORE/(1-over_provision_rate)))
         return time_slot_s,time_slot_e,req_rsc_size
 
     def quant_release_deadline(_p, n_slot, timestep):
@@ -557,6 +587,7 @@ class TaskAttr:
     criticality: str
     trigger_mode: str
     
+    chain_criticality: str = 'hard'
     core_max: int = 0  # Maximum core
     core_min: int = 0  # Minimum core
     core_list: List[int] = None  # Core list
@@ -601,7 +632,8 @@ class TaskBase(object):
                  op_io_time:int=0, op_cpu_time:int=0, seq_io_time:int=0, seq_cpu_time:int=0, priority:int=0, 
                  criti_flag:str="soft", cbs_en:bool=False, 
                  trigger_mode:bool=False, 
-                 parallel_cfg:dict={}, parallel_cfg_compile:dict={}
+                 parallel_cfg:dict={}, parallel_cfg_compile:dict={},
+                 chain_criti_flag:str="hard",
                  ):
         self.id = task_id
         self.name = task_name
@@ -612,6 +644,7 @@ class TaskBase(object):
         self.timing_flag = timing_flag
         self.timing_flag_num = task_timing_type[timing_flag]
         self.criticality = criti_flag # soft or hard
+        self.chain_criticality = chain_criti_flag # soft or hard
         assert self.criticality in criticality.keys()
         assert self.timing_flag in task_timing_type.keys()
         self.trigger_mode = trigger_mode # event-triggered or periodic
@@ -865,10 +898,11 @@ class TaskBase(object):
             else:
                 return self.gen_event_modA(event_range, jitter_sim_en, jitter_sim_para, seed)
 
-    def delegate_event_generator(self, **kwargs):
+    def delegate_event_generator(self, verbose=True, **kwargs):
         while True:
             n_event = yield from self.event_generator(**kwargs)
-            print(f"{n_event} events of {self.name} are generated")
+            if verbose:
+                print(f"{n_event} events of {self.name} are generated")
 
     @classmethod
     def get_event_generator(cls, glb_n_task_dict:Dict[str, TaskBase], hyper_p, n_p, warmup, **kwargs): 
@@ -882,8 +916,8 @@ class TaskBase(object):
                 event_iter_dict[task_n] = [ingestion_time_iter, event_time_iter]
         return event_iter_dict
 
-    def extract_sensor_event(_task, event_range):
-        event_gen = _task.delegate_event_generator(event_range=event_range)
+    def extract_sensor_event(_task, event_range, verbose=True):
+        event_gen = _task.delegate_event_generator(verbose, event_range=event_range)
         l = [next(event_gen)]
         while True:
             event_time = event_gen.send(0)
@@ -905,6 +939,7 @@ class TaskInt(TaskBase):
                     criti_flag:str="soft", cbs_en:bool=False, 
                     trigger_mode:str="N",
                     parallel_cfg:dict={}, parallel_cfg_compile:dict={},
+                    chain_criti_flag:str="hard",
                     **kwargs
                 ) -> None:
         super().__init__(
@@ -915,6 +950,7 @@ class TaskInt(TaskBase):
                             criti_flag=criti_flag, cbs_en=cbs_en,
                             trigger_mode=trigger_mode, parallel_cfg=parallel_cfg,
                             parallel_cfg_compile=parallel_cfg_compile,
+                            chain_criti_flag=chain_criti_flag,
                         )
         
         # =============== 1. task properties ===============

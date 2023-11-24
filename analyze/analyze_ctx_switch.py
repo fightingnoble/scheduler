@@ -46,13 +46,17 @@ def get_ctx_extracter(file_pattern, file_pattern_keys, file_pattern_type):
                 if 'seed' not in data:
                     data['seed'] = ""
 
-                if data['jitter_en'] and data['seed'] == "":
+                # NOTE: Jitter_en flag is defined differently in 
+                # trace and log name, "var_[\d\.]+" and "dis|en", respectively.
+                if data['jitter_en'] == "en" and data['seed'] == "":
+                    print(f"(Passed!) Warning: no seed in {file_path.split('/')[-1]}")
                     continue
                         
                 number_of_context_switch, cumulative_context_switch_time = get_ctx_switch_info(file_path)
                 df = update_df(df, data, {'n_ctx_switch': number_of_context_switch,
                                             'cum_time': cumulative_context_switch_time,
                                             'throughput': -1})
+                1+1
         return df
     return extract_ctx_num
 

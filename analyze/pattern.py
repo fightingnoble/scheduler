@@ -17,18 +17,27 @@ folder_type = {
     "cfg_option": str
 }
 
-trace_pattern = r"(?P<method>dynamic|glb_dyn)_e2e_trace_(?P<num_cores>\d+)?(_seed_(?P<seed>\d+))?(?P<jitter_en>var_[\d\.]+)?\.pkl"
+# regular match expression for path
+case_name_glb = r"glb_dyn"
+case_name_dyn = r"dyn"
+case_name_cyc = r"cyclic"
+
+# case_re = r"(?P<method>cyclic|sta_dyn|glb_dyn|dyn|dynamic)"
+case_re = r"(?P<method>cyclic|glb_dyn|dyn)"
+seed_re = r"-?\d+"
+seed_re_wn = r"(_seed_(?P<seed>-?\d+))?"
+
+trace_pattern = case_re+r"_e2e_trace_(?P<num_cores>\d+)?"+seed_re_wn+r"(?P<jitter_en>var_[\d\.]+)?\.pkl"
 #  (dynamic|glb_dyn)_e2e_trace_(\d+)?(_seed_(\d+))?(var_[\d\.]+)?\.pkl
-trace_pattern_keys = ["method", "num_cores", "", "seed", "jitter_en"]
+trace_pattern_keys = ['method', "num_cores", "", "seed", "jitter_en"]
 trace_pattern_type = [str, int, str, int, bool]
 # dynamic_e2e_trace_250.pkl  dynamic_e2e_trace_300var_0.2.pkl
 # glb_dyn_e2e_trace_250.pkl  glb_dyn_e2e_trace_300var_0.2.pkl
 # dynamic_e2e_trace_250.pkl  dynamic_e2e_trace_275_seed_7var_0.2.pkl  
 # glb_dyn_e2e_trace_250.pkl  glb_dyn_e2e_trace_325_seed_3var_0.2.pkl
 
-log_pattern = r"(dyn|glb_dyn)(_\d+)?_jitter_(dis|en)(_seed_(\d+))?\.log\.txt"
-# file_pattern = r"(glb_dyn)(_\d+)?_jitter_(dis|en)\.log\.txt"
-log_pattern_keys = ["method", "", "jitter_en", "", "seed"]
+log_pattern = case_re+r"(_\d+)?_jitter_(dis|en)(_seed_("+seed_re+r"))?\.log\.txt"# file_pattern = r"(glb_dyn)(_\d+)?_jitter_(dis|en)\.log\.txt"
+log_pattern_keys = ['method', "", "jitter_en", "", "seed"]
 log_pattern_type = [str, str, str, str, int]
 # bin_pack_new_{x}.log.txt
 # glb_dyn_{x}_ideal.log.txt
@@ -41,6 +50,7 @@ log_pattern_type = [str, str, str, str, int]
 # dyn_jitter_en.log.txt         dyn_jitter_en_seed_3.log.txt  dyn_jitter_en_seed_7.log.txt  glb_dyn_jitter_dis.log.txt    glb_dyn_jitter_en_seed_2.log.txt  glb_dyn_jitter_en_seed_6.log.txt  new_bin_pack.csv
 # dyn_jitter_en_seed_0.log.txt  dyn_jitter_en_seed_4.log.txt  dyn_jitter_en_seed_8.log.txt  glb_dyn_jitter_en.log.txt     glb_dyn_jitter_en_seed_3.log.txt  glb_dyn_jitter_en_seed_7.log.txt
 
+get_group_dict = lambda pattern_keys, match, pattern_type: {k: t(v) for k,v,t in zip(pattern_keys, match.groups(), pattern_type) if v is not None}
 
 
 def get_path_var_scaner(hook_list: List[Callable], match_pattern: dict, match_pattern_keys: dict, match_type, search_seq: list):
