@@ -562,7 +562,9 @@ def deduce_cfg2(taskattr_dict, f_gcd, hyper_p,
         e2e_constr = logical_graph_nx.nodes[sink]['ddl']
         for pred in logical_graph_nx.pred[sink]:
             assert ddl[pred] <= e2e_constr
-            ddl[pred] = e2e_constr
+            # if the sink is it unique succ, then set the ddl of the pred to the sink's ddl
+            if len(logical_graph_nx.succ[pred]) == 1:
+                ddl[pred] = e2e_constr
     if verbose:
         print(ert, ddl) 
 

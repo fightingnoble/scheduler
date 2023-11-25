@@ -5,7 +5,9 @@ mkdir -p log/barycenter/lat_scan
 echo "========================start (barycenter) $cfg/$x" `date "+%Y-%m-%d %H:%M:%S.%3N"` "========================" 
 
 # nohup ./run/sweep_seed.sh > log/barycenter/seed_scan.log.txt 2>&1&
-nohup ./run/sweep_seed.sh 0 9 True > log/barycenter/seed_scan.log.txt 2>&1&
+nohup ./run/sweep_seed.sh 9 True True > log/barycenter/seed_scan.log.txt 2>&1&
+# nohup ./run/sweep_seed.sh 9 False True > log/barycenter/seed_scan.log.txt 2>&1&
+
 wait
 
 python -m analyze.stat_num_exec --root_dir barycenter/core_scan --folder_search_seq cfg_n,num_cores

@@ -56,8 +56,8 @@ def get_throughput_extracter(stat_csv_filename, profiling_filename, n_p, warmup_
         group_dyn_stat = [i for i in item_name if re.match(r"dyn(_\d+)?_jitter_dis\.log\.txt", i) or i.startswith("bin")]
         group_glb_stat = [i for i in item_name if re.match(r"glb_dyn(_\d+)?(_ideal|_jitter_dis)\.log\.txt", i)]
         
-        assert len(group_dyn_stat) == 2 or len(group_dyn_stat) == 0
-        assert len(group_glb_stat) == 2 or len(group_glb_stat) == 0
+        assert len(group_dyn_stat) in [0, 1, 2]
+        assert len(group_glb_stat) in [0, 1, 2]
 
         if len(group_glb_stat):
             df = read_tp(df, info_dict, stat_df, num_exec, [], group_glb_stat, 'dis', 'glb_dyn')

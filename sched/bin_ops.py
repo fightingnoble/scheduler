@@ -200,9 +200,13 @@ def all_isolation(bin_list, glb_p_list, name_list, _new_bin):
     size_l = []
     name_l = []
     for _p in  glb_p_list:
-        if "_".join(_p.task.name.split('_')[0:-2]) in name_list:
+        split_l = _p.task.name.split('_')
+        if "_".join(split_l[0:-2]) in name_list[0]:
             size_l.append(_p.task.pre_assigned_resource.main_size + _p.task.pre_assigned_resource.RDA_size)
             name_l.append(_p.task.name)
+        elif "_".join(split_l[0:-2]) in name_list[1] and split_l[-1] == '0':
+            size_l.append(_p.task.pre_assigned_resource.main_size + _p.task.pre_assigned_resource.RDA_size)
+            name_l.append(_p.task.name)            
     iter_next_bin_obj = bin_iter_list(_new_bin, size_l, name_l)
     bin_list.extend(list(iter_next_bin_obj))
     bin_name_list = [bin.name for bin in bin_list]
