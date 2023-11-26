@@ -181,21 +181,21 @@ def main():
             raise NotImplementedError(f"binpack algorithm {args.binpack_cfg['algorithm']} is not implemented")
 
         pid2name = {_p.pid:_p.task.name for _p in glb_p_list}
-        from sched.scheduling_table import get_task_layout_compact, get_task_layout_sparse
+        from sched.scheduling_table import get_task_layout_compact, get_task_layout_compact1bin
         
         for _SchedTab in bin_list:
                 _SchedTab.print_alloc_detail(pid2name, sim_step)
         if args.plot:
             # f"{plot_root}/new_task_bin_pack_cyclic_{num_cores}{args.file_suffix}.pdf"
             get_task_layout_compact(bin_list, pid2name, save= True, time_step= sim_step,
-            hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
+            hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=False, plot_legend=True, format=args.plt_fmt, 
             txt_size=40, tick_dens=2, plot_start=hyper_p*(num_periods-1), plot_end=hyper_p*num_periods,
             save_path=plt_fn_wo_seed_fmt.format(**plot_path_para, **{"case": "new_task_bin_pack", "plt_size": "cyclic"})) 
             
             # f"{plot_root}/new_task_bin_pack_full_{num_cores}{args.file_suffix}.pdf"
-            get_task_layout_compact(bin_list, pid2name, save= True, time_step= sim_step,
-            hyper_p=hyper_p, n_p=num_periods, plot_start=0, warmup=False, drain=True, plot_legend=False, format=["svg","pdf"], 
-            txt_size=40, tick_dens=4, 
+            get_task_layout_compact1bin(bin_list, pid2name, save= True, time_step= sim_step,
+            hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=args.plt_fmt, 
+            txt_size=40, tick_dens=4, plot_start=0,  
             save_path=plt_fn_wo_seed_fmt.format(**plot_path_para, **{"case": "new_task_bin_pack", "plt_size": "full"}))
         
 
@@ -318,7 +318,7 @@ def main():
 
             from sched.scheduling_table import get_task_layout_compact, get_task_layout_sparse
             get_task_layout_compact(actual_sched_record, pid2name, save= True, time_step= sim_step,
-            hyper_p=hyper_p, n_p=num_periods, warmup=False, drain=True, plot_legend=False, format=["svg","pdf"], 
+            hyper_p=hyper_p, n_p=num_periods, warmup=False, drain=True, plot_legend=False, format=args.plt_fmt, 
             txt_size=40, tick_dens=4, plot_start=0, save_path=plot_path)
 
         if args.jitter_sim_en:
@@ -406,7 +406,7 @@ def main():
                 plot_path=plt_fn_w_seed_fmt.format(**plot_path_para, **{"case": "glb_dyn", "plt_size": "full"})
 
             get_task_layout_compact(actual_sched_record, pid2name, save= True, time_step= sim_step,
-            hyper_p=hyper_p, n_p=num_periods, warmup=False, drain=True, plot_legend=False, format=["svg","pdf"], 
+            hyper_p=hyper_p, n_p=num_periods, warmup=False, drain=True, plot_legend=False, format=args.plt_fmt, 
             txt_size=40, tick_dens=4, plot_start=0, save_path=plot_path)
 
         # f"{trace_root}/glb_dyn_e2e_trace_{num_cores}"

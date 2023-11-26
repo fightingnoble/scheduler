@@ -43,6 +43,7 @@ def input_parser():
     parser.add_argument("--verbose", action="store_true", help="verbose")
     parser.add_argument("--test_case", type=str, default="all", help="task name")
     parser.add_argument("--plot", type=bool, default=False, help="plot")
+    parser.add_argument("--plot_fmt", type=str, default="svg,pdf", help="plot format")
     parser.add_argument("--test_all", default=False, help="test all the task")
     parser.add_argument("--num_cores", default=266, type=int, help="number of cores")
     parser.add_argument("--num_bins", default=-1, type=int, help="number of bins")
@@ -128,7 +129,7 @@ def input_parser():
         args.binpack_cfg = binpack_cfg = json.load(open(os.path.join(cfg_dir, args.bin_pack_cfg), "r"))
     else:
         binpack_cfg = args.bin_pack_para
-
+    args.plt_fmt = args.plot_fmt.split(",")
     return args
 
 def args_postprocess(args):

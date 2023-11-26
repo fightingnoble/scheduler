@@ -19,6 +19,8 @@ from model.resource_agent import RscMapInt
 import networkx as nx
 from global_var import fork_pid_base
 from global_var import *
+import matplotlib.colors as mcolors
+import matplotlib as mpl
 
 class SchedulingTableInt(object): 
     """
@@ -668,8 +670,6 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], pid2name:Dict[int
     if plot_end is None:
         plot_end = hyper_p * (n_p+warmup+drain)
 
-    import matplotlib.colors as mcolors
-    import matplotlib as mpl
     colors=list(mcolors.XKCD_COLORS.keys())
     
     base_vertical_offset = 0
@@ -683,13 +683,7 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], pid2name:Dict[int
         fig_size = (40, 50)
     else:
         fig_size = (60, 30)
-    if tool == "matplotlib":
-        fig = plt.figure(figsize=fig_size)
-    elif tool == "bokeh":
-        fig = []
-    elif tool == "plotly":
-        fig = make_subplots(rows=len(bin_list), cols=1, shared_xaxes=True, vertical_spacing=0.01)
-    
+    fig, axes = plt.subplots(nrows=len(bin_list),ncols=1,sharex=True,figsize=fig_size) 
 
     vertical_grid_size = 1
     bin_vertical_offset = base_vertical_offset
@@ -700,25 +694,12 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], pid2name:Dict[int
         bin_spatial_size = _SchedTab.num_resources
         bin_temp_size = _SchedTab.temp_size
 
-        if tool == "matplotlib":
-            ax = fig.add_subplot(len(bin_list), 1, len(bin_list)-_SchedTab.id)
-        elif tool == "bokeh":
-            ax = figure()
-            fig.append(ax)
-        elif tool == "plotly":
-            pass
-                        
+        ax = axes[len(bin_list)-bin_idx-1]                        
 
         empty_boader_s = []
         empty_boader_e = []
         title_line = False
-        try:
-            pre_rsc = _SchedTab.scheduling_table[0].rsc_map
-        except IndexError:
-            print(_SchedTab.name, _SchedTab.id, _SchedTab.num_resources, _SchedTab.temp_size)
-            print(bin_list.index(_SchedTab))
-            print(len(bin_list), id(bin_list))
-            assert False
+        pre_rsc = _SchedTab.scheduling_table[0].rsc_map
         # build a position dict
         position_dict = {}
         cum_pos = 0
@@ -741,10 +722,6 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], pid2name:Dict[int
             s, e = pre_idx*time_step, rsc_map_idx*time_step
             if s < plot_start:
                 s = plot_start
-            if e > plot_end:
-                e = plot_end
-            if s >= plot_end or e <= plot_start: 
-                continue
 
             if rsc_map == pre_rsc:
                 continue
@@ -763,33 +740,15 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], pid2name:Dict[int
                             bar_vertical_offset = bin_vertical_offset + vertical_s*vertical_grid_size
                             text_vertical_offset = bar_vertical_offset + 0.5*vertical_size*vertical_grid_size
                             # plot the horizontal bar: from s to e, with height vertical_size*vertical_grid_size, and vertical offset bar_vertical_offset
-                            if tool == "matplotlib":
-                                ax.broken_barh([(s, e-s)], (bar_vertical_offset, vertical_size*vertical_grid_size), facecolors=_p_color)
-                            elif tool == "bokeh":
-                                ax.rect(x=s, y=bar_vertical_offset, width=e-s, height=vertical_size*vertical_grid_size, color=_p_color)
-                            elif tool == "plotly":
-                                fig.add_trace(go.Bar(x=[e-s], y=[bar_vertical_offset], marker_color=_p_color, orientation='h',
-                                                     width=vertical_size*vertical_grid_size, base=s), row=len(bin_list)-_SchedTab.id, col=1)
+                            ax.broken_barh([(s, e-s)], (bar_vertical_offset, vertical_size*vertical_grid_size), facecolors=_p_color)
                             # plot the text
                             if not plot_legend:
                                 if is_new:
                                     position_dict[pid][-1] = False
-                                    if tool == "matplotlib":
-                                        ax.text((s+e)/2, text_vertical_offset, _p_name, ha='center', va='center', color='black', fontsize=10)
-                                    elif tool == "bokeh":
-                                        ax.text(x=(s+e)/2, y=text_vertical_offset, text=_p_name, text_color='black', text_font_size='10pt', text_align='center')
-                                    elif tool == "plotly":
-                                        fig.add_annotation(x=(s+e)/2, y=text_vertical_offset, text=_p_name, showarrow=False, font=dict(color='black', size=txt_size), 
-                                                                                            xref='x', yref='y', row=len(bin_list)-_SchedTab.id, col=1)
+                                    ax.text((s+e)/2, text_vertical_offset, _p_name, ha='center', va='center', color='black', fontsize=10)
 
                 # the vertical grid at the end of the bar
-                if tool == "matplotlib":
-                    ax.axvline(e, color='black', linestyle='-', linewidth=0.5)
-                elif tool == "bokeh": 
-                    ax.line(x=[e, e], y=[bin_vertical_offset, bin_vertical_offset+bin_spatial_size*vertical_grid_size], color='black', line_width=0.5)
-                elif tool == "plotly":
-                    fig.add_trace(go.Scatter(x=[e, e], y=[bin_vertical_offset, bin_vertical_offset+bin_spatial_size*vertical_grid_size], mode='lines', 
-                                             line=dict(color='black', width=0.5)), row=len(bin_list)-_SchedTab.id, col=1)
+                ax.axvline(e, color='black', linestyle='-', linewidth=0.5)
 
                 # update the position dict
                 new_pid = set(rsc_map.keys()) - set(pre_rsc.keys())
@@ -904,157 +863,81 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], pid2name:Dict[int
         #   if part of the task is in the warmup cycle or drain cycle, 
             # set the start and end time to the start and end time of the plot
         s, e = pre_idx*time_step, bin_temp_size*time_step
-        if s < plot_start:
-            s = plot_start
-        if e > plot_end:
-            e = plot_end
-        if s >= plot_end or e <= plot_start: 
-            continue
+        if s < plot_end or e > plot_start: 
+            if s < plot_start:
+                s = plot_start
+            if e > plot_end:
+                e = plot_end
 
-        if empty_flag:
-            empty_boader_e.append(bin_temp_size)
-        else:
-            # plot the task layout
-            for pid, size in pre_rsc.items():
-                _p_name = pid2name[pid]
-                _p_color = mcolors.XKCD_COLORS[[colors[pid%len(colors)]]]
-                is_new = position_dict[pid][-1]
+            if empty_flag:
+                empty_boader_e.append(bin_temp_size)
+            else:
+                # plot the task layout
+                for pid, size in pre_rsc.items():
+                    _p_name = pid2name[pid]
+                    _p_color = mcolors.XKCD_COLORS[[colors[pid%len(colors)]]]
+                    is_new = position_dict[pid][-1]
 
-                for vertical_s, vertical_size in zip(*position_dict[pid][:-1]):
-                    # culculate the position of the bar
-                    bar_vertical_offset = bin_vertical_offset + vertical_s*vertical_grid_size
-                    text_vertical_offset = bar_vertical_offset + 0.5*vertical_size*vertical_grid_size
-                    # plot the bar
-                    if tool == "matplotlib":
+                    for vertical_s, vertical_size in zip(*position_dict[pid][:-1]):
+                        # culculate the position of the bar
+                        bar_vertical_offset = bin_vertical_offset + vertical_s*vertical_grid_size
+                        text_vertical_offset = bar_vertical_offset + 0.5*vertical_size*vertical_grid_size
+                        # plot the bar
                         ax.broken_barh([(s, e-s)], (bar_vertical_offset, vertical_size*vertical_grid_size), facecolors=_p_color)
-                    elif tool == "bokeh":
-                        ax.rect(x=s, y=bar_vertical_offset, width=e-s, height=vertical_size*vertical_grid_size, color=_p_color)
-                    elif tool == "plotly":
-                        fig.add_trace(go.Bar(x=[e-s], y=[bar_vertical_offset], marker_color=_p_color, orientation='h',
-                                                width=vertical_size*vertical_grid_size, base=s), row=len(bin_list)-_SchedTab.id, col=1, show_trace_name=False)
 
-                    # plot the text
-                    if not plot_legend:
-                        if is_new:
-                            position_dict[pid][-1] = False
-                            if tool == "matplotlib":
+                        # plot the text
+                        if not plot_legend:
+                            if is_new:
+                                position_dict[pid][-1] = False
                                 ax.text((s+e)/2, text_vertical_offset, _p_name, ha='center', va='center', color='black', fontsize=10)
-                            elif tool == "bokeh": 
-                                ax.text(x=(s+e)/2, y=text_vertical_offset, text=_p_name, text_color='black', text_font_size='10pt', text_align='center')
-                            elif tool == "plotly":
-                                fig.add_annotation(x=(s+e)/2, y=text_vertical_offset, text=_p_name, showarrow=False, font=dict(color='black', size=txt_size), 
-                                                    xref='x', yref='y', row=len(bin_list)-_SchedTab.id, col=1)
 
-        # the vertical grid at the end of the bar
-        if tool == "matplotlib":
+            # the vertical grid at the end of the bar
             ax.axvline(e, color='black', linestyle='-', linewidth=0.5)
-        elif tool == "bokeh":
-            ax.line(x=[e, e], y=[bin_vertical_offset, bin_vertical_offset+bin_spatial_size*vertical_grid_size], color='black', line_width=0.5)
-        elif tool == "plotly":
-            fig.add_trace(go.Scatter(x=[e, e], y=[bin_vertical_offset, bin_vertical_offset+bin_spatial_size*vertical_grid_size], mode='lines',
-                                        line=dict(color='black', width=0.5)), row=len(bin_list)-_SchedTab.id, col=1)
 
-            
+        # set the axis and title
+        vs = int((bin_vertical_offset-base_vertical_offset)//vertical_grid_size)
+        ticks = np.linspace(vs, vs+bin_spatial_size-1, 4, dtype=int)
+        ax.set_ylim(bin_vertical_offset-y_margin, bin_vertical_offset+bin_spatial_size*vertical_grid_size+y_margin)
+        ax.set_yticks(ticks)
+        ax.set_yticklabels(ticks, fontsize=txt_size, rotation=45)
+
         # set yticks
         # add bin name
         # ax.set_title(f"bin: {_SchedTab.name}({_SchedTab.id})", fontsize=txt_size)
         bin_vertical_offset += bin_spatial_size* vertical_grid_size 
-        if tool == "matplotlib":
-            ax.text(plot_start, bin_vertical_offset, f"bin: {_SchedTab.name}({_SchedTab.id})", ha='left', va='top', fontsize=txt_size)
-        elif tool == "bokeh":
-            ax.text(x=plot_start, y=bin_vertical_offset, text=f"bin: {_SchedTab.name}({_SchedTab.id})", text_font_size=f"{txt_size}pt", text_align='left')
-        elif tool == "plotly":
-            fig.add_annotation(x=plot_start, y=bin_vertical_offset, text=f"bin: {_SchedTab.name}({_SchedTab.id})", showarrow=False, 
-                                font=dict(color='black',), xref='x', yref='y', row=len(bin_list)-_SchedTab.id, col=1)
-            
-    # sub-figures shares the same x-axis
-    # fig.subplots_adjust(hspace=0)
-    if tool == "matplotlib":
-        plt.setp([a.get_xticklabels() for a in fig.axes[1:]], visible=False)
-    elif tool == "bokeh":
-        pass
+        ax.text(plot_start, bin_vertical_offset, f"bin: {_SchedTab.name}({_SchedTab.id})", ha='left', va='top', fontsize=txt_size)
 
-    # remove y axis
-    # ax.get_yaxis().set_visible(False)
-
-    if tool == "matplotlib":
-        bin_vertical_offset = base_vertical_offset
-        for bin_idx, _SchedTab in enumerate(bin_list): 
-            # bin_temp_size = len(_SchedTab.scheduling_table)
-            # bin_spatial_size = _SchedTab.scheduling_table[0].size
-            bin_spatial_size = _SchedTab.num_resources
-            bin_temp_size = _SchedTab.temp_size
-
-            vs = int((bin_vertical_offset-base_vertical_offset)//vertical_grid_size)
-            y_ticks = np.linspace(vs, vs+bin_spatial_size-1, 4, dtype=int)
-            ax.set_xlim(plot_start-x_margin, plot_end+x_margin)
-            ax.set_ylim(bin_vertical_offset-y_margin, bin_vertical_offset+bin_spatial_size*vertical_grid_size+y_margin)
-            ax.set_yticks(y_ticks)
-            ax.set_yticklabels(y_ticks, fontsize=txt_size)
-            bin_vertical_offset += bin_spatial_size* vertical_grid_size 
-
-
-        # reset x ticks: text size 30, rotation 45, distance time_grid_size * 2
-        # ticks format: .3f
-        ax = fig.axes[0]
-        x_ticks = [str(round(t, 3)) for t in np.arange(plot_start, plot_end, time_grid_size*tick_dens)] + [str(round(plot_end, 3))]
-        ax.set_xticks(np.arange(plot_start, plot_end, time_grid_size*tick_dens).tolist()+[plot_end])
-        ax.set_xticklabels(x_ticks, fontsize=txt_size, rotation=45)
-        ax.tick_params(axis='x', which='major', pad=time_grid_size * tick_dens)
-        ax.set_xlabel("Time (s)", fontsize=txt_size) 
-        # remove frame
-        # ax.spines['top'].set_visible(False)
-        # ax.spines['right'].set_visible(False)
-        # ax.spines['bottom'].set_visible(False)
-        # ax.spines['left'].set_visible(False)
-        # set x axis label as Time (s), text size 30
+    # only set x axis for the bottom plot
+    ax = axes[len(bin_list)-1]
+    ax.set_xlim(plot_start-x_margin, plot_end+x_margin)
+    ticks = [str(round(t, 3)) for t in np.arange(plot_start, plot_end, time_grid_size*tick_dens)] + [str(round(plot_end, 3))]
+    ax.set_xticks(np.arange(plot_start, plot_end, time_grid_size*tick_dens).tolist()+[plot_end])
+    ax.set_xticklabels(ticks, fontsize=txt_size, rotation=45)
+    ax.tick_params(axis='x', which='major', pad=time_grid_size * tick_dens)
+    ax.set_xlabel("Time (s)", fontsize=txt_size) 
 
     if plot_legend:
-        if tool == "matplotlib":
-            # add legend
-            ax = fig.axes[-1]
-            from matplotlib.lines import Line2D
-            legend_elements = []
-            # for i in range(len(init_p_list)): 
-            for i, pid in enumerate(pid2name.keys()):
-                legend_elements.append(Line2D([0], [0], color=mcolors.XKCD_COLORS[colors[i]], lw=4, label=pid2name[pid]))
-            ax.legend(handles=legend_elements, loc='lower center', bbox_to_anchor=(0.5, 1.2),
-            ncol=4, fancybox=True, shadow=True, fontsize=txt_size)
-        elif tool == "bokeh":
-            # add legend
-            legend_it = []
-            for i, pid in enumerate(pid2name.keys()):
-                legend_it.append((pid2name[pid], [fig.circle(x=[], y=[], color=colors[i], size=10)]))
-            legend = Legend(items=legend_it, location=(0, 0))
-            fig.add_layout(legend, 'right')
-            # reset x ticks: text size 30, rotation 45, distance time_grid_size * 2
-            # ticks format: .3f
-            ax = fig.axes[0]
-            ticks = [str(round(t, 3)) for t in np.arange(plot_start, plot_end, time_grid_size*tick_dens)] + [str(round(plot_end, 3))]
-            ax.xaxis.ticker = np.arange(plot_start, plot_end, time_grid_size*tick_dens).tolist()+[plot_end]
-            ax.xaxis.major_label_overrides = {t: str(round(t, 3)) for t in np.arange(plot_start, plot_end, time_grid_size*tick_dens).tolist()+[plot_end]}
-            ax.xaxis.major_label_text_font_size = f"{txt_size}pt"
-            ax.xaxis.major_label_orientation = np.pi/4
-            ax.xaxis.major_label_standoff = time_grid_size * tick_dens
-            # remove frame
-            # ax.outline_line_color = None
-            # set x axis label as Time (s), text size 30
-            ax.xaxis.axis_label = "Time (s)"
-            ax.xaxis.axis_label_text_font_size = f"{txt_size}pt"
+        # add legend to the top plot
+        ax = axes[0]
+        from matplotlib.lines import Line2D
+        legend_elements = []
+        # for i in range(len(init_p_list)): 
+        for i, pid in enumerate(pid2name.keys()):
+            legend_elements.append(Line2D([0], [0], color=mcolors.XKCD_COLORS[colors[i]], lw=4, label=pid2name[pid]))
+        ax.legend(handles=legend_elements, loc='lower center', bbox_to_anchor=(0.5, 1.2),
+        ncol=4, fancybox=True, shadow=True, fontsize=txt_size)
             
 
     # plot the result
     if show:
         if tool == "matplotlib":
             plt.show()
-        elif tool == "bokeh":
-            show(column(fig))
     # save the figure
     if save: 
         # if format is given in file name, use it
         # by default, use pdf
         path_parse = save_path.split(".")
-        if tool == "matplotlib" or tool == "plotly":
+        if tool == "matplotlib":
             if "format" in kwargs and isinstance(kwargs["format"], list):
                 fmt_list = kwargs.pop("format")
                 if path_parse[-1] not in fmt_list:
@@ -1063,8 +946,6 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], pid2name:Dict[int
                     save_path = ".".join(path_parse[:-1]) + "." + f
                     if tool == "matplotlib":
                         plt.savefig(save_path, bbox_inches='tight', format=f,**kwargs)
-                    elif tool == "plotly":
-                        fig.write_image(save_path)
             elif "format" not in kwargs and len(path_parse) > 1: 
                 kwargs["format"] = path_parse[-1]
             else:
@@ -1072,15 +953,312 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], pid2name:Dict[int
                 save_path = save_path + ".pdf"        
                 if tool == "matplotlib":
                     plt.savefig(save_path, bbox_inches='tight', **kwargs)
-                elif tool == "plotly":
-                    fig.write_image(save_path)
 
-        elif tool == "bokeh":
-            # export svg
-            # activate the SVG backend
-            from bokeh.io import export_svgs, export_png
-            export_svgs(column(fig), filename=save_path+".svg")
-            export_png(column(fig), filename=save_path+".png")
+def get_task_layout_compact1bin(bin_list:List[SchedulingTableInt], pid2name:Dict[int, str], time_step:float = 1e-6,
+                    show=False, save=False, save_path="task_layout_compact.pdf", 
+                    hyper_p=0.1, n_p=1, warmup=False, drain=False,
+                    plot_legend=False,
+                    plot_start=None, plot_end=None, 
+                    tick_dens = 1, txt_size = 30, *, tool="matplotlib",
+                    **kwargs):
+
+    dir_path = os.path.dirname(save_path)
+
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path)
+
+    event_range = hyper_p * (n_p+warmup)
+    sim_range = hyper_p * (n_p+warmup+drain)
+    if plot_start is None:
+        plot_start = hyper_p * (warmup)
+    if plot_end is None:
+        plot_end = hyper_p * (n_p+warmup+drain)
+
+    colors=list(mcolors.XKCD_COLORS.keys())
+    
+    base_vertical_offset = 0
+    y_margin = 0.5 
+    time_grid_size = 0.004
+    x_margin = time_grid_size
+
+    # plot timeline and task name bin by bin
+    # and select color for the task automatically
+    if plot_legend:
+        fig_size = (40, 50)
+    else:
+        fig_size = (60, 30)
+    fig, axes = plt.subplots(nrows=1,ncols=1,sharex=True,figsize=fig_size) 
+
+    vertical_grid_size = 1
+    bin_vertical_offset = base_vertical_offset
+
+    ax = axes           
+    for bin_idx, _SchedTab in enumerate(bin_list): 
+        # bin_temp_size = len(_SchedTab.scheduling_table)
+        # bin_spatial_size = _SchedTab.scheduling_table[0].size
+        bin_spatial_size = _SchedTab.num_resources
+        bin_temp_size = _SchedTab.temp_size
+
+
+        empty_boader_s = []
+        empty_boader_e = []
+        title_line = False
+        pre_rsc = _SchedTab.scheduling_table[0].rsc_map
+        # build a position dict
+        position_dict = {}
+        cum_pos = 0
+        for k,v in pre_rsc.items():
+            position_dict[k] = [[cum_pos], [v], True] 
+            cum_pos += v
+
+        pre_idx = 0
+        empty_flag = len(pre_rsc) == 0
+
+        if empty_flag:
+            empty_boader_s.append(0)
+        
+        for rsc_map_idx in range(bin_temp_size):
+            rsc_map = _SchedTab.scheduling_table[rsc_map_idx].rsc_map
+
+            # set start and end time for each task: 
+            #   if part of the task is in the warmup cycle or drain cycle, 
+                # set the start and end time to the start and end time of the plot
+            s, e = pre_idx*time_step, rsc_map_idx*time_step
+            if s < plot_start:
+                s = plot_start
+
+            if rsc_map == pre_rsc:
+                continue
+            else:
+                if empty_flag:
+                    empty_boader_e.append(rsc_map_idx)
+                else:
+                    # plot the task layout
+                    for pid, size in pre_rsc.items():
+                        _p_name = pid2name[pid]
+                        _p_color = mcolors.XKCD_COLORS[colors[pid%len(colors)]]
+                        is_new = position_dict[pid][-1]
+
+                        for vertical_s, vertical_size in zip(*position_dict[pid][:-1]):
+                            # culculate the position of the bar
+                            bar_vertical_offset = bin_vertical_offset + vertical_s*vertical_grid_size
+                            text_vertical_offset = bar_vertical_offset + 0.5*vertical_size*vertical_grid_size
+                            # plot the horizontal bar: from s to e, with height vertical_size*vertical_grid_size, and vertical offset bar_vertical_offset
+                            ax.broken_barh([(s, e-s)], (bar_vertical_offset, vertical_size*vertical_grid_size), facecolors=_p_color)
+                            # plot the text
+                            if not plot_legend:
+                                if is_new:
+                                    position_dict[pid][-1] = False
+                                    ax.text((s+e)/2, text_vertical_offset, _p_name, ha='center', va='center', color='black', fontsize=10)
+
+                # the vertical grid at the end of the bar
+                ax.axvline(e, color='black', linestyle='-', linewidth=0.5)
+
+                # update the position dict
+                new_pid = set(rsc_map.keys()) - set(pre_rsc.keys())
+                expired_pid = set(pre_rsc.keys()) - set(rsc_map.keys())
+                old_pid = set(pre_rsc.keys()) - expired_pid
+
+                used_position = []
+                for pid in old_pid:
+                    p_size = rsc_map[pid]
+                    for s, size in zip(*position_dict[pid][:-1]):
+                        e = s + size
+                        used_position += [i for i in range(s, e)]
+
+                # remove the expired task from the position dict
+                for pid in expired_pid:
+                    position_dict.pop(pid)
+                
+                aval_pos = [i for i in range(bin_spatial_size) if i not in used_position]
+                # check if the old task's allocation is changed
+
+                size_plus = []
+                size_minus = []
+                for pid in sorted(old_pid):
+                    old_size = pre_rsc[pid]
+                    new_size = rsc_map[pid]
+                    if new_size > old_size:
+                        size_plus.append(pid)
+                    elif new_size < old_size:
+                        size_minus.append(pid)
+
+                for group in [size_minus, size_plus]:
+                    for pid in group: 
+                        old_size = pre_rsc[pid]
+                        new_size = rsc_map[pid]
+
+                        # release the old position
+                        for s, size in zip(*position_dict[pid][:-1]):
+                            e = s + size
+                            aval_pos += [i for i in range(s, e)]
+                        aval_pos.sort()
+                        # get the start position of the old task
+                        cum_pos = position_dict[pid][0][0]
+                        # divide the available position into two parts
+                        left_pos = aval_pos[:aval_pos.index(cum_pos)]
+                        right_pos = aval_pos[aval_pos.index(cum_pos):]
+                        # select the leftmost position from cum_pos
+                        interval_picked = aval_pos[aval_pos.index(cum_pos):aval_pos.index(cum_pos)+new_size]
+                        if len(interval_picked) < new_size:
+                            # select the leftmost position from left_pos
+                            interval_picked = left_pos[-(new_size-len(interval_picked)):] + interval_picked
+                        # check if the position is continuous
+                        interval_picked.sort()
+                        # remove selected position from aval_pos
+                        aval_pos = [i for i in aval_pos if i not in interval_picked]
+                        start = [interval_picked[0]]
+                        size = []
+                        for i in range(new_size-1):
+                            if interval_picked[i] != interval_picked[i+1]-1:
+                                size.append(interval_picked[i]-start[-1]+1)
+                                start.append(interval_picked[i+1])
+                        size.append(interval_picked[-1]-start[-1]+1)
+                        position_dict[pid] = [start, size, position_dict[pid][-1]]
+
+                # pick a proper position for the new task in the available position
+                for pid in new_pid:
+                    p_size = rsc_map[pid]
+                    # search for a gap in the available positions that can accommodate the task's new size
+                    gap_start = None
+                    gap_size = 0
+                    for pos in aval_pos:
+                        if gap_start is None:
+                            gap_start = pos
+                        gap_size += 1
+                        if gap_size == p_size:
+                            break
+                        if pos + 1 not in aval_pos:
+                            gap_start = None
+                            gap_size = 0
+
+                    if gap_start is not None and gap_size == p_size:
+                        # allocate the task to the found gap
+                        start = [gap_start]
+                        size = [gap_size]
+                        position_dict[pid] = [start, size, True]
+                        # remove the selected positions from aval_pos
+                        aval_pos = [i for i in aval_pos if not gap_start <= i < gap_start + gap_size]
+                    else:
+                        # select the leftmost position
+                        interval_picked = aval_pos[:p_size]
+                        # check if the position is continuous
+                        interval_picked.sort()
+                        # remove selected position from aval_pos
+                        aval_pos = [i for i in aval_pos if i not in interval_picked]
+                        start = [interval_picked[0]]
+                        size = []
+                        for i in range(p_size-1):
+                            if interval_picked[i] != interval_picked[i+1]-1:
+                                size.append(interval_picked[i]-start[-1]+1)
+                                start.append(interval_picked[i+1])
+                        size.append(interval_picked[-1]-start[-1]+1)
+                        position_dict[pid] = [start, size, True]
+                
+                # update the pre_rsc                                                
+                pre_idx = rsc_map_idx
+                pre_rsc = rsc_map
+                empty_flag = len(pre_rsc) == 0
+                if empty_flag:
+                    empty_boader_s.append(rsc_map_idx)
+
+
+        # set start and end time for each task: 
+        #   if part of the task is in the warmup cycle or drain cycle, 
+            # set the start and end time to the start and end time of the plot
+        s, e = pre_idx*time_step, bin_temp_size*time_step
+        if s < plot_end or e > plot_start: 
+            if s < plot_start:
+                s = plot_start
+            if e > plot_end:
+                e = plot_end
+
+            if empty_flag:
+                empty_boader_e.append(bin_temp_size)
+            else:
+                # plot the task layout
+                for pid, size in pre_rsc.items():
+                    _p_name = pid2name[pid]
+                    _p_color = mcolors.XKCD_COLORS[[colors[pid%len(colors)]]]
+                    is_new = position_dict[pid][-1]
+
+                    for vertical_s, vertical_size in zip(*position_dict[pid][:-1]):
+                        # culculate the position of the bar
+                        bar_vertical_offset = bin_vertical_offset + vertical_s*vertical_grid_size
+                        text_vertical_offset = bar_vertical_offset + 0.5*vertical_size*vertical_grid_size
+                        # plot the bar
+                        ax.broken_barh([(s, e-s)], (bar_vertical_offset, vertical_size*vertical_grid_size), facecolors=_p_color)
+
+                        # plot the text
+                        if not plot_legend:
+                            if is_new:
+                                position_dict[pid][-1] = False
+                                ax.text((s+e)/2, text_vertical_offset, _p_name, ha='center', va='center', color='black', fontsize=10)
+
+            # the vertical grid at the end of the bar
+            ax.axvline(e, color='black', linestyle='-', linewidth=0.5)
+
+        # add a horizontal line to seperate bins
+        ax.axhline(bin_vertical_offset, color='black', linestyle='-', linewidth=0.5)
+        # set yticks
+        # add bin name
+        # ax.set_title(f"bin: {_SchedTab.name}({_SchedTab.id})", fontsize=txt_size)
+        bin_vertical_offset += bin_spatial_size* vertical_grid_size 
+        ax.text(plot_start, bin_vertical_offset, f"bin: {_SchedTab.name}({_SchedTab.id})", ha='left', va='top', fontsize=txt_size)
+
+    # only set x axis for the bottom plot
+    ax.set_xlim(plot_start-x_margin, plot_end+x_margin)
+    ticks = [str(round(t, 3)) for t in np.arange(plot_start, plot_end, time_grid_size*tick_dens)] + [str(round(plot_end, 3))]
+    ax.set_xticks(np.arange(plot_start, plot_end, time_grid_size*tick_dens).tolist()+[plot_end])
+    ax.set_xticklabels(ticks, fontsize=txt_size, rotation=45)
+    ax.tick_params(axis='x', which='major', pad=time_grid_size * tick_dens)
+    ax.set_xlabel("Time (s)", fontsize=txt_size) 
+
+    # set the axis and title
+    vs = int((bin_vertical_offset-base_vertical_offset)//vertical_grid_size)
+    ticks = np.linspace(0, vs, 4, dtype=int)
+    ax.set_ylim(-y_margin, bin_vertical_offset+y_margin)
+    ax.set_yticks(ticks)
+    ax.set_yticklabels(ticks, fontsize=txt_size, rotation=45)
+
+    if plot_legend:
+        # add legend to the top plot
+        from matplotlib.lines import Line2D
+        legend_elements = []
+        # for i in range(len(init_p_list)): 
+        for i, pid in enumerate(pid2name.keys()):
+            legend_elements.append(Line2D([0], [0], color=mcolors.XKCD_COLORS[colors[i]], lw=4, label=pid2name[pid]))
+        ax.legend(handles=legend_elements, loc='lower center', bbox_to_anchor=(0.5, 1.2),
+        ncol=4, fancybox=True, shadow=True, fontsize=txt_size)
+            
+
+    # plot the result
+    if show:
+        if tool == "matplotlib":
+            plt.show()
+    # save the figure
+    if save: 
+        # if format is given in file name, use it
+        # by default, use pdf
+        path_parse = save_path.split(".")
+        if tool == "matplotlib":
+            if "format" in kwargs and isinstance(kwargs["format"], list):
+                fmt_list = kwargs.pop("format")
+                if path_parse[-1] not in fmt_list:
+                    kwargs["format"].append(path_parse[-1])
+                for f in fmt_list:
+                    save_path = ".".join(path_parse[:-1]) + "." + f
+                    if tool == "matplotlib":
+                        plt.savefig(save_path, bbox_inches='tight', format=f,**kwargs)
+            elif "format" not in kwargs and len(path_parse) > 1: 
+                kwargs["format"] = path_parse[-1]
+            else:
+                kwargs["format"] = "pdf"
+                save_path = save_path + ".pdf"        
+                if tool == "matplotlib":
+                    plt.savefig(save_path, bbox_inches='tight', **kwargs)
+
+
 
 def get_task_layout(bin_list:List[SchedulingTableInt], init_p_list:List[ProcessInt]
                         , show:bool=False, save:bool=False, save_path:str="task_layout.pdf", **kwargs):

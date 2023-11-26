@@ -139,7 +139,9 @@ def push_task_into_bins_new(
     print("=====================================\n")
     for _SchedTab in bin_list:
         _SchedTab.print_alloc_detail(pid2name, timestep)
-    
+    layout = {_bin.name:_bin.num_resources for _bin in bin_list}
+    print("max_core_num:", sum(layout.values()))
+    print(f"max_core_layout: {layout}")
     return bin_list
 
 def push_step_new(
