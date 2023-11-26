@@ -124,6 +124,7 @@ def get_e2e_checker(file_pattern, file_pattern_keys, file_pattern_type, timing_f
                     miss_rate = 1- (len(e2e_latency_list[0]) + len(e2e_latency_list[1])) / num_exec
 
                 if trace_and_log_check_en:
+                    print(f"n_comp: {n_comp}, len_trace:{len(e2e_latency_list[0]) + len(e2e_latency_list[1])}")
                     assert n_comp == len(e2e_latency_list[0]) + len(e2e_latency_list[1]) 
                                 
                 if data['jitter_en']:

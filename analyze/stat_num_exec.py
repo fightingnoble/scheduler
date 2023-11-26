@@ -28,6 +28,11 @@ false_jitter_en_log_fn_pattern = r"(glb_dyn|dyn)(_\d+)?_jitter_en.log.txt"
 
 
 def extract_num_exec(profiling_filename, aux_scale_factor, n_p, warmup_dis, mode=""):
+    """
+    mode: e2e, or empty
+    e2e: only count the number of execution of the sink nodes
+    empty: count the number of execution of all nodes
+    """
     taskattr_dict, f_gcd = load_taskattrib(profiling_filename, verbose=False) 
     num_exec = 0
     if aux_scale_factor != 1:

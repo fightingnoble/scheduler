@@ -364,7 +364,7 @@ def trace_analyser(timing_flag_dict, trace_path, e2e_latency, lateness_mode, get
             n_violation += len(index[0])
             if len(index[0]) > 0 and lateness_mode != "all_soft":
                 name_array = np.array(list(dict_o.keys()))
-                df = pd.DataFrame({'sensor': name_array, 'time': matched_pair, 'T_e2e': trace_e2e_latency}, )
+                df = pd.DataFrame({'sensor': name_array[active_path] , 'time': matched_pair[active_path], 'T_e2e': trace_e2e_latency}, )
                 print(df)
                 print(f"{trace['process_info']['name']} end time: {end_time:.6f}\n")
 
