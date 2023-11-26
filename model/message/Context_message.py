@@ -250,6 +250,93 @@ class ContextMsg(object):
         return dict_o, _root.get_end_time(), nx_graph
 
 
+def trace_analyser(timing_flag_dict, trace_path, e2e_latency, lateness_mode, get_n_violation=False):
+    with open(trace_path, "rb") as f:
+        trace_list = pickle.load(f)
+    print("="*20, trace_path, "="*20)
+    n_violation = 0
+    row_list = ['sensor', 'time', 'T_e2e']
+    sink_dict = {}
+    for trace in trace_list:
+        if trace["process_info"]["name"] in sink_dict:
+            sink_dict[trace["process_info"]["name"]].append(trace)
+        else:
+            sink_dict[trace["process_info"]["name"]] = [trace]
+        
+    # For debug
+    # check number of timeout for each task
+    timein_dt = {}
+    for sink_key in sink_dict:
+        timein_dt[sink_key] = 0
+        for trace in sink_dict[sink_key]:
+            dict_o, end_time, nx_graph = ContextMsg.find_sensor(trace)
+            matched_pair = np.array([trigger["event_time"] for trigger in dict_o.values()])
+            event_time = max(matched_pair)
+            # assert event_time == trace["time_stamp"]
+            active_path = matched_pair >= event_time
+            trace_e2e_latency = end_time - matched_pair[active_path] 
+            task_name = "_".join(trace["process_info"]["name"].split("_")[0:-2])
+            if timing_flag_dict[task_name] == "realtime":
+                # index the item > e2e_latency
+                index = np.where(trace_e2e_latency > 0.1)
+            else:
+                # index the item > e2e_latency
+                index = np.where(trace_e2e_latency > e2e_latency)
+            timein_dt[sink_key] += 1 if not len(index[0]) else 0
+
+    e2e_latency_list = [[], []]
+    for sink_key in sink_dict:
+        hist_seri_ctx = None
+        for trace in sorted(sink_dict[sink_key], key=lambda x: x["process_info"]["end_time"]): 
+            dict_o, end_time, nx_graph = ContextMsg.find_sensor(trace, hist_seri_ctx)
+                # print("name: ", trace["process_info"]["name"])
+                # print(dict_o)
+                # print(f"end time: {end_time:.6f}\n")
+            matched_pair = np.array([trigger["event_time"] for trigger in dict_o.values()])
+            event_time = max(matched_pair)
+            # assert event_time == trace["time_stamp"]
+            active_path = matched_pair >= event_time
+            trace_e2e_latency = end_time - matched_pair[active_path] 
+            task_name = "_".join(trace["process_info"]["name"].split("_")[0:-2])
+            if timing_flag_dict[task_name] == "realtime":
+                e2e_latency_list[0].append(trace_e2e_latency[0])
+                # index the item > e2e_latency
+                index = np.where(trace_e2e_latency > 0.1)
+            else:
+                e2e_latency_list[1].append(trace_e2e_latency[0])
+                # index the item > e2e_latency
+                index = np.where(trace_e2e_latency > e2e_latency)
+
+            n_violation += len(index[0])
+            if len(index[0]) > 0 and lateness_mode != "all_soft":
+                name_array = np.array(list(dict_o.keys()))
+                df = pd.DataFrame({'sensor': name_array[active_path] , 'time': matched_pair[active_path], 'T_e2e': trace_e2e_latency}, )
+                print(df)
+                print(f"{trace['process_info']['name']} end time: {end_time:.6f}\n")
+
+                dest = trace["process_info"]["name"]
+                for src in name_array[index]:
+                        # 找到节点1到节点3之间的最短路径
+                    shortest_path = nx.algorithms.shortest_paths.weighted.dijkstra_path(nx_graph, source=src, target=dest, weight='weight')
+
+                        # 打印每个节点和边的属性，以及边的权重
+                    print(f'Node: {shortest_path[0]}, attr: {nx_graph.nodes[shortest_path[0]]}') 
+                    for i in range(len(shortest_path) - 1):
+                        source = shortest_path[i]
+                        target = shortest_path[i + 1]
+                        edge_data = nx_graph.get_edge_data(source, target)
+                        print(f'Edge: {source} -> {target}, Weight: {edge_data["weight"]: .6f}')
+                        print(f'Node: {target}, Start Time: {nx_graph.nodes[target]["start_time"]: .6f}, End Time: {nx_graph.nodes[target]["end_time"]: .6f}')
+
+                    print(f'Shortest Path Length: {nx.algorithms.shortest_paths.weighted.dijkstra_path_length(nx_graph, source=src, target=dest, weight="weight")}')
+
+            hist_seri_ctx = copy.deepcopy(trace)
+    print(f"total violation: {n_violation}\n")
+    if get_n_violation:
+        return e2e_latency_list, n_violation
+    else:
+        return e2e_latency_list
+
 if __name__ == "__main__":
     from model.trace_example import trace_example
     dict_o, end_time, nx_graph = ContextMsg.find_sensor(trace_example)

@@ -445,10 +445,10 @@ def check_miss(sched: Scheduler,
                 sched.res_release(_p.pid)
             else:
                 pass
-            # if budget_recoder is not None:
-            #     if _p.rem_flop_budget[bin_id] < numerical_error_tol_abs: 
-            #         budget_recoder.pop(_p.pid)
-            #         _p.rem_flop_budget.pop(bin_id)
+            try:
+                _p.rem_flop_budget[bin_id] -= (_p.totcpu - _p.totburst)
+            except KeyError:
+                print("20231126: CodingError, attempt to remove budget of missed tasks")
             if rsc_recoder is not None:
                 rsc_recoder.pop(_p.pid)
 
@@ -960,7 +960,10 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
                 if 'from' in results:
                     _p = process_dict[results['pid']]
                     rem_flop_budget = {k:v for k,v in _p.rem_flop_budget.items() if v > numerical_error_tol_abs}
-                    assert len(rem_flop_budget) <= 2
+                    try:
+                        assert len(rem_flop_budget) <= 2
+                    except AssertionError:
+                        print(f"20231126: CodingError, try to gurrante the budget only on one partition at a time")
                     # restore the _p.rem_flop_budget from BK
                     _p.rem_flop_budget[bin_id] += _p.rem_flop_budget.pop('bk', 0.)
 

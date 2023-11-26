@@ -44,11 +44,11 @@ def main():
     if args.lateness_mode == "all_hard":
         for _p in glb_p_list:
             _p.task.criticality = "hard"
-            _p.chain_criticality = "hard"
+            _p.task.chain_criticality = "hard"
     elif args.lateness_mode == "all_soft":
         for _p in glb_p_list:
             _p.task.criticality = "soft"
-            _p.chain_criticality = "soft"
+            _p.task.chain_criticality = "soft"
     elif args.lateness_mode == "ignore":
         pass
 
