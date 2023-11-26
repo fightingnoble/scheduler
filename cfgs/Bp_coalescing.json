@@ -6,6 +6,7 @@
     "mode": "block",
     "release_temp_rda":false,
     "reservation_policy": "static_1_bin",
+    "slack_sharing": false,
     "algorithm": "coalescing",
     "preempt_en": false
 }

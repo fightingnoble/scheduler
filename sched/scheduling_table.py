@@ -983,10 +983,12 @@ def get_task_layout_compact1bin(bin_list:List[SchedulingTableInt], pid2name:Dict
 
     # plot timeline and task name bin by bin
     # and select color for the task automatically
+    tot_cores = sum([_SchedTab.num_resources for _SchedTab in bin_list])
+    height = math.ceil(tot_cores//256)
     if plot_legend:
-        fig_size = (40, 50)
+        fig_size = (40, 20+30*height)
     else:
-        fig_size = (60, 30)
+        fig_size = (60, 30*height)
     fig, axes = plt.subplots(nrows=1,ncols=1,sharex=True,figsize=fig_size) 
 
     vertical_grid_size = 1

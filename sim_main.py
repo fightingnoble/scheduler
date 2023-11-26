@@ -318,7 +318,7 @@ def main():
 
             from sched.scheduling_table import get_task_layout_compact, get_task_layout_sparse
             get_task_layout_compact(actual_sched_record, pid2name, save= True, time_step= sim_step,
-            hyper_p=hyper_p, n_p=num_periods, warmup=False, drain=True, plot_legend=False, format=args.plt_fmt, 
+            hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=args.plt_fmt, 
             txt_size=40, tick_dens=4, plot_start=0, save_path=plot_path)
 
         if args.jitter_sim_en:
@@ -406,7 +406,7 @@ def main():
                 plot_path=plt_fn_w_seed_fmt.format(**plot_path_para, **{"case": "glb_dyn", "plt_size": "full"})
 
             get_task_layout_compact(actual_sched_record, pid2name, save= True, time_step= sim_step,
-            hyper_p=hyper_p, n_p=num_periods, warmup=False, drain=True, plot_legend=False, format=args.plt_fmt, 
+            hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=args.plt_fmt, 
             txt_size=40, tick_dens=4, plot_start=0, save_path=plot_path)
 
         # f"{trace_root}/glb_dyn_e2e_trace_{num_cores}"

@@ -6,6 +6,7 @@
     "mode": "block",
     "release_temp_rda":true,
     "reservation_policy": "manual",
+    "slack_sharing": true,
     "algorithm": "reside",
     "preempt_en": true
 }

@@ -814,7 +814,7 @@ def gen_workloads(args):
     print(f"Ops per second of Workload: {sum([(v.flops*v.var_factor*v.thread_scaling_factor*v.freq) for n,v in taskattr_dict.items()]):.2f} T")
     logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
 
-    if args.binpack_cfg["algorithm"] in ["coalescing", "naive_iso"]:
+    if not args.binpack_cfg["slack_sharing"]:
         # temporal_abs_en = True
         algorithm = 'gurobi'
         wsc_slack_ratio = 1 - args.exec_t_comp_ratioA
