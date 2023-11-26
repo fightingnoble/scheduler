@@ -1,5 +1,6 @@
 import pandas as pd
 import argparse, os
+from analyze.pattern import case_name_glb, case_name_dyn, case_name_cyc
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--filename", type=str, default="timing", help="filename")
@@ -10,7 +11,7 @@ args = parser.parse_args()
 def extract_glb(args):
     df = pd.read_csv(os.path.join(args.root_dir_glb, args.filename + ".csv"))
     # Filter for lateness_mode == 'ignore'
-    aval_idx = (df['method'] == 'glb_dyn') 
+    aval_idx = (df['method'] == case_name_glb) 
 
     avl_df = df.loc[aval_idx]
     glb_df_soft = avl_df.loc[(df['jitter_en'] == True) & (avl_df['lateness_mode'] == 'all_soft')]
@@ -28,7 +29,7 @@ def extract_glb(args):
 def extract_dyn(args):
     df = pd.read_csv(os.path.join(args.root_dir_dyn, args.filename + ".csv"))
     # Filter for lateness_mode == 'ignore'
-    aval_idx = (df['method'] == 'dynamic') & \
+    aval_idx = (df['method'] == case_name_dyn) & \
         (df['lateness_mode'] == 'ignore') 
 
     avl_df = pd.DataFrame(df.loc[aval_idx])

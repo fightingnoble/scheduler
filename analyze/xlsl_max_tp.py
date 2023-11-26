@@ -1,5 +1,7 @@
 import pandas as pd
 import argparse, os
+from analyze.pattern import case_name_glb, case_name_dyn, case_name_cyc
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--filename", type=str, default="throughput", help="filename")
@@ -8,8 +10,8 @@ parser.add_argument("--root_dir_dyn", type=str, default="log", help="output dire
 args = parser.parse_args()
 
 # filter columns: lateness_mode == 'ignore' 
-def extract_max_tp(args, root_dir, method='glb_dyn', jitter_en='en'):
-    assert method in ['glb_dyn', 'dyn']
+def extract_max_tp(args, root_dir, method=case_name_glb, jitter_en='en'):
+    assert method in [case_name_glb, case_name_dyn]
     df = pd.read_csv(os.path.join(root_dir, args.filename + ".csv"))
     # Filter for lateness_mode == 'ignore'
     aval_idx = (df['lateness_mode'] == 'ignore') & \
@@ -22,10 +24,10 @@ def extract_max_tp(args, root_dir, method='glb_dyn', jitter_en='en'):
     avl_df.sort_index(ascending=[False, True], inplace=True)
     return avl_df
 
-max_tp_df_glb_en = extract_max_tp(args, args.root_dir_glb, method='glb_dyn', jitter_en='en')
-max_tp_df_glb_dis = extract_max_tp(args, args.root_dir_glb, method='glb_dyn', jitter_en='dis')
-max_tp_df_dyn_en = extract_max_tp(args, args.root_dir_dyn, method='dyn', jitter_en='en')
-max_tp_df_dyn_dis = extract_max_tp(args, args.root_dir_dyn, method='dyn', jitter_en='dis')
+max_tp_df_glb_en = extract_max_tp(args, args.root_dir_glb, method=case_name_glb, jitter_en='en')
+max_tp_df_glb_dis = extract_max_tp(args, args.root_dir_glb, method=case_name_glb, jitter_en='dis')
+max_tp_df_dyn_en = extract_max_tp(args, args.root_dir_dyn, method=case_name_dyn, jitter_en='en')
+max_tp_df_dyn_dis = extract_max_tp(args, args.root_dir_dyn, method=case_name_dyn, jitter_en='dis')
 
 # get common index
 idx = max_tp_df_glb_en.index.intersection(max_tp_df_dyn_en.index)

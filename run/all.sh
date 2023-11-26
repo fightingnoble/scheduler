@@ -15,13 +15,13 @@ python -m analyze.stat_num_exec --root_dir barycenter/aux_scan --folder_search_s
 
 python -m analyze.analyze_tp --output_dir log/barycenter --root_dir barycenter/aux_scan --folder_search_seq num_cores,cfg_n 
 python -m analyze.analyze_ctx_switch --output_dir log/barycenter --root_dir barycenter/core_scan --folder_search_seq cfg_n,num_cores --filename min_core 
-# python -m analyze.analyze_timing --output_dir log/barycenter --root_dir barycenter/core_scan --index_seq cfg_n,num_cores
+python -m analyze.analyze_timing --output_dir log/barycenter --root_dir barycenter/core_scan --index_seq cfg_n,num_cores
 # python -m analyze.analyze_tp --output_dir log/barycenter --root_dir barycenter/lat_scan --filename tp_w_fx_n_core
-# wait
+wait
 
 python analyze/xlsl_max_tp.py --root_dir_dyn log/barycenter --root_dir_glb log/barycenter
 python analyze/xlsl_min_core.py --root_dir_dyn log/barycenter --root_dir_glb log/barycenter
-# python analyze/xlsl_e2e_latency.py --root_dir_dyn log/barycenter --root_dir_glb log/barycenter
+python analyze/xlsl_e2e_latency.py --root_dir_dyn log/barycenter --root_dir_glb log/barycenter
 # python analyze/xlsl_safe_scalable.py --root_dir_dyn log/barycenter --root_dir_glb log/barycenter
 
 wait
