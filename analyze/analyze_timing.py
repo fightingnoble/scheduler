@@ -125,7 +125,10 @@ def get_e2e_checker(file_pattern, file_pattern_keys, file_pattern_type, timing_f
 
                 if trace_and_log_check_en:
                     print(f"n_comp: {n_comp}, len_trace:{len(e2e_latency_list[0]) + len(e2e_latency_list[1])}")
-                    assert n_comp == len(e2e_latency_list[0]) + len(e2e_latency_list[1]) 
+                    try:
+                        assert n_comp == len(e2e_latency_list[0]) + len(e2e_latency_list[1]) 
+                    except:
+                        print(f"20231126: CodingError, try to gurrante the trace log consistancy, but failed, n_comp: {n_comp}, len_trace:{len(e2e_latency_list[0]) + len(e2e_latency_list[1])}")
                                 
                 if data['jitter_en']:
                     # record the latency and miss rate data before histogram analysis

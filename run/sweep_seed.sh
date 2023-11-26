@@ -43,6 +43,7 @@ for ((seed=0; seed<=$seed_end; seed++)); do
         echo "nohup ./run/exp_cmd_min_core.sh barycenter/core_scan $pre_alloc $static_sim $glb_dyn $dyn $seed $PY_ARGS > log/barycenter/$core_scan_dir/cmd_seed_$seed.log.txt 2>&1&"
         nohup ./run/exp_cmd_min_core.sh barycenter/core_scan $pre_alloc $static_sim $glb_dyn $dyn $seed $PY_ARGS > log/barycenter/$core_scan_dir/cmd_seed_$seed.log.txt 2>&1&
         echo "nohup ./run/exp_cmd_max_tp.sh 0 25 200 0 1 9 $pre_alloc $static_sim $glb_dyn $dyn barycenter/aux_scan $seed $PY_ARGS > log/barycenter/$aux_scan_dir/cmd_seed_$seed.log.txt 2>&1&"
+        nohup ./run/exp_cmd_max_tp.sh 0 25 200 0 1 9 $pre_alloc $static_sim $glb_dyn $dyn barycenter/aux_scan $seed $PY_ARGS > log/barycenter/$aux_scan_dir/cmd_seed_$seed.log.txt 2>&1&
         wait
     }
 done
