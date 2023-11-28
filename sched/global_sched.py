@@ -685,10 +685,9 @@ def coleasing_alloc_cluster(
             name = "bin"+str(id)
         print("Create a new bin: ", id, "name:", name, "size:", size)
         return new_bin(size, sim_slot_num, id=id, name=name)
-    planed_bin_list = []
-    iter_next_bin_obj, bin_name_list = get_initlist_and_biniter(
-        planed_bin_list, glb_p_list, total_cores, 
-        _new_bin, "manual")
+    # iter_next_bin_obj, bin_name_list = get_initlist_and_biniter(
+    #     planed_bin_list, glb_p_list, total_cores, 
+    #     _new_bin, "manual")
     layout = {_bin.name:_bin.num_resources for _bin in bin_list}
     print("max_core_num:", sum(layout.values()))
     print(f"max_core_layout: {layout}")
@@ -702,12 +701,9 @@ def coleasing_alloc_cluster(
     sched:Scheduler = scheduler_list[0]
     rsc_recoder_his = sched.rsc_recoder_his
 
-    M = len(planed_bin_list)
-    bin_size = {_bin.id:_bin.num_resources for _bin in planed_bin_list}
     probs = [list(cfg.keys()) for slot_s, cfg, slot_num in _bin_tb_split.sparse_list]
     J = len(probs)
     duation = [slot_num for slot_s, cfg, slot_num in _bin_tb_split.sparse_list]
-
     # collect used items from problems
     from functools import reduce
     col_pid = set(reduce(lambda x,y: x+y, probs))
@@ -723,7 +719,21 @@ def coleasing_alloc_cluster(
     rt_chains, ddl_chains = get_chains(job_graph, src_nodes, end_nodes, {
         _p.task.name:_p.task.flops for pid, _p in process_dict.items()
     })
-    n_partition = len(bin_name_list)
+
+    # create bins
+    # get allowed Bin names and sizes
+    allowed_bin_name = []
+    for _p in glb_p_list:
+        if _p.task.pre_assigned_resource_flag:
+            allowed_bin_name.append(_p.task.name)
+
+    # iter_next_bin_obj = bin_iter_uniform_dist(_new_bin, total_cores, size_l, name_l)
+    # bin_list.extend(list(iter_next_bin_obj)) 
+    # bin_name_list = [bin.name for bin in bin_list]
+    from sched.bin_ops import bin_iter_list
+
+    # generate the bin name list, as wella as deduce the mapping relation from pid to bins by priority of chains
+    bin_name_list = []
     for chain, tot_ops, slack in ddl_chains+rt_chains:
         # search the target bin
         tgt_bin_id = None
@@ -731,8 +741,12 @@ def coleasing_alloc_cluster(
             pid = name2pid[node]
             if pid in placed_p: # the node has been placed in another chain, skip, also skip the partition
                 continue
-            if node in bin_name_list:
-                tgt_bin_id = bin_name_list.index(node)
+            # if node in bin_name_list:
+            #     tgt_bin_id = bin_name_list.index(node)
+            #     break
+            if node in allowed_bin_name:
+                tgt_bin_id = len(bin_name_list)
+                bin_name_list.append(node)
                 break
         # set the placement
         if tgt_bin_id is not None:
@@ -748,7 +762,6 @@ def coleasing_alloc_cluster(
             n_partition -= 1
         if n_partition == 0:
             break
-
     # mark others as tbd
     for pid, _p in process_dict.items():
         if pid not in col_pid:
@@ -758,6 +771,7 @@ def coleasing_alloc_cluster(
             size = _p.task.pre_assigned_resource.main_size+_p.task.pre_assigned_resource.RDA_size
             tbd_p.update({pid:size})
 
+    M = len(bin_name_list)
     N = len(tbd_p)
     K = len(placed_p)
 
@@ -773,9 +787,10 @@ def coleasing_alloc_cluster(
         assert pid not in sol
         sol.update({pid:bin_id})
     # print(sol)
-    # update the bin size
-    for _bin in planed_bin_list:
-        _bin.add_rsc_num(bin_size[_bin.id] - _bin.num_resources)
+
+    # create the bins from the bin size and the bin name    
+    iter_next_bin_obj =bin_iter_list(_new_bin, bin_size, bin_name_list)
+    planed_bin_list = list(iter_next_bin_obj)
 
     # rebuild the scheduling table list
     for cfg_slot_s, cached_cfg, cfg_slot_num in _bin_tb_split.sparse_list:

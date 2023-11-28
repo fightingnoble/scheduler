@@ -194,7 +194,8 @@ def main():
                 a_data_pipe, w_data_pipe,
 
                 num_periods, binpack_cfg=args.binpack_cfg,
-                job_graph=physical_graph_nx, src_nodes=task_graph_srcs, end_nodes=task_graph_sinks,
+                job_graph=physical_graph_nx, src_nodes=task_graph_srcs, end_nodes=task_graph_sinks, 
+                n_partition = args.num_bins if args.num_bins != -1 else 9999,
                 verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
                 warmup=True, drain=True, 
                 )
