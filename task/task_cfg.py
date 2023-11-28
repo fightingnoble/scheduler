@@ -265,19 +265,19 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filen
 
 
     # add nodes
-    for node_n, t in logical_graph_nx.nodes(data="type"):
+    for node_n, node_attr in logical_graph_nx.nodes(data=True):
         if node_n in node_parall_dict:
             copy_n, factor, freq = node_parall_dict[node_n]
             for copy_j in range(copy_n):
                 for exe_k in range(factor):
                     node_name = node_n+"_"+str(copy_j)+"_"+str(exe_k)
-                    physical_graph_nx.add_node(node_name, type=t)
+                    physical_graph_nx.add_node(node_name, **node_attr)
                     # add control dependency
                     if exe_k < factor-1:
                         # physical_graph_nx.add_edge(node_name, node_n+"_"+str(copy_j)+"_"+str(exe_k+1))
                         pass
         else:
-            physical_graph_nx.add_node(node_n, type=t)
+            physical_graph_nx.add_node(node_n, **node_attr)
 
     # add data dependency, rescale the parallelism
     for pred_n, succ_n, edge_attr in logical_graph_nx.edges(data=True):

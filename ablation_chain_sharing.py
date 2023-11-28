@@ -2,7 +2,7 @@ import os, re
 from task.task_cfg import create_init_p_list, gen_workloads
 from task.task_cfg import affinity_cfg
 from task.task_cfg import init_affinity
-from sched.global_sched import push_task_into_bins_new, coleasing_alloc
+from sched.global_sched import push_task_into_bins_new, coleasing_alloc_1bin
 from task.task_agent import TaskInt 
 from task.task_agent import TaskInt
 from task.spec import Spec
@@ -212,7 +212,7 @@ def main():
                 )
 
         elif args.binpack_cfg["algorithm"] == "coalescing":
-            max_core_layout = coleasing_alloc(
+            max_core_layout = coleasing_alloc_1bin(
                 bin_list,
                 glb_p_list, affinity_cfg, event_iter_dict,
                 num_cores, args.quantum_check_en, quantumSize, 

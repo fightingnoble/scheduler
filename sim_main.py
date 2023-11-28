@@ -2,7 +2,7 @@ import os, re
 from task.task_cfg import create_init_p_list, gen_workloads
 from task.task_cfg import affinity_cfg
 from task.task_cfg import init_affinity
-from sched.global_sched import push_task_into_bins_new, coleasing_alloc, naive_iso
+from sched.global_sched import push_task_into_bins_new, coleasing_alloc_1bin, naive_iso
 from task.task_agent import TaskInt 
 from task.task_agent import TaskInt
 from task.spec import Spec
@@ -131,7 +131,7 @@ def main():
                 )
 
         elif args.binpack_cfg["algorithm"] == "coalescing":
-            max_core_layout = coleasing_alloc(
+            max_core_layout = coleasing_alloc_1bin(
                 bin_list,
                 glb_p_list, affinity_cfg, event_iter_dict,
                 num_cores, args.quantum_check_en, quantumSize, 
@@ -154,6 +154,7 @@ def main():
             # Load the dataframe                        
             df = pd.read_csv(filename)
             num_cores = sum(max_core_layout[1].values())
+            plot_path_para.update({"num_cores": num_cores})
             df = update_df(df, {**cfg_para_dict, **para_scan_group1}, 
                            {"num_cores": num_cores})
             df.to_csv(filename, index=False)
@@ -176,7 +177,28 @@ def main():
                 verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
                 warmup=True, drain=True, 
                 )
-        
+
+        elif args.binpack_cfg["algorithm"] == "bin_split":
+            from sched.global_sched import coleasing_alloc_split_bin_new, coleasing_alloc_cluster
+            from task.task_cfg import task_graph_srcs, task_graph_sinks
+            bin_list_save_path = bin_save_fmt.format(**path_para_dict, **para_scan_group2)
+            routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **para_scan_group2)
+            coleasing_alloc_cluster(
+                bin_list,
+                glb_p_list, affinity_cfg, event_iter_dict,
+                num_cores, args.quantum_check_en, quantumSize, 
+                sim_step, hyper_p, args.wsc_slack_ratio, args.exec_t_comp_ratioB,
+
+                scheduler_list, monitor_list,
+                msg_dispatcher,
+                a_data_pipe, w_data_pipe,
+
+                num_periods, binpack_cfg=args.binpack_cfg,
+                job_graph=physical_graph_nx, src_nodes=task_graph_srcs, end_nodes=task_graph_sinks,
+                verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
+                warmup=True, drain=True, 
+                )
+
         else:
             raise NotImplementedError(f"binpack algorithm {args.binpack_cfg['algorithm']} is not implemented")
 

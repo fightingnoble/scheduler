@@ -278,6 +278,26 @@ def rsc_slack_estim(taskJobs:Union[Dict[str, Union[TaskBase,ProcessBase]], List[
     else:
         return GurobiDistributeSlack(task_dict, chains, temporal_rel, temporal_abs)
 
+def get_chains(task_graph:DiGraph, start_nodes, end_nodes, flops_dict):
+    chains = []
+    for start_node in start_nodes:
+        chains += decompose_dag_into_chains(task_graph, start_node, end_nodes)
+    
+    # classify the chains by its sink types
+    ddl_chains = []
+    rt_chains = []
+    for chain in chains:
+        # task_graph_nx.nodes[node]['jitter']
+        slack = task_graph.nodes[chain[-1]]['ddl'] - task_graph.nodes[chain[0]]['jitter']
+        tot_ops = sum([flops_dict[node] for node in chain[1:-1]])
+        if task_graph.nodes[chain[-1]]["chain_criticality"]:
+            ddl_chains.append((chain[1:-1], tot_ops, slack))
+        else:
+            rt_chains.append((chain[1:-1], tot_ops, slack))
+    rt_chains.sort(key=lambda x: (-x[1]/x[2], *x[0][-1].split("_")[-2:]))
+    ddl_chains.sort(key=lambda x: (-x[1]/x[2], *x[0][-1].split("_")[-2:]))
+    return rt_chains, ddl_chains
+
 def estim_release_dll_time(task_graph_nx:DiGraph, 
                             comp_time: Dict[str, float]={},
                             io_time: Dict[str, float]={}, 
@@ -400,7 +420,9 @@ def init_graph_time_attr(task_graph_nx:DiGraph,
                     wifes_ddl = max(wifes) if len(wifes) > 0 else 0
                     ert[succ] -= min(task_graph_nx.nodes[node]['exp_comp_t'], ert[succ]-wifes_ddl)
                 ddl[node] = 0
+                task_graph_nx.nodes[node]['jitter'] = elim_nume_error(task_graph_nx.nodes[node]['exp_comp_t'])
                 task_graph_nx.nodes[node]['exp_comp_t'] = 0
+                task_graph_nx.nodes[node]['ddl'] = 0
 
     # eliminate the numerical error
     for node in ddl:
@@ -580,11 +602,18 @@ def deduce_cfg2(taskattr_dict, f_gcd, hyper_p,
         logical_graph_nx.nodes[node]["exp_comp_t"] = slack_estm
     
     # propagate the chain_criticality to all nodes from the sink nodes
+    # init all node attr chain_criticality as True
+    for node in logical_graph_nx:
+        logical_graph_nx.nodes[node]["chain_criticality"] = True
+        # TODO: double check
+        # if node in taskattr_dict:
+        #     taskattr_dict[node].chain_criticality = 'hard'
     for sink in task_graph_sinks:
         # sort if sink_attr[sink] != "deadline"
         if sink_attr[sink] != "deadline":
+            logical_graph_nx.nodes[sink]["chain_criticality"] = False
             for node in nx.ancestors(logical_graph_nx, sink):
-                logical_graph_nx.nodes[node]["chain_criticality"] = True
+                logical_graph_nx.nodes[node]["chain_criticality"] = False
                 if node in taskattr_dict:
                     taskattr_dict[node].chain_criticality = 'soft'
 
