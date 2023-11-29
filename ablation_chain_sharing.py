@@ -329,7 +329,7 @@ def main():
                 a_data_pipe, w_data_pipe, 
                 bin_path_format,
                 args.verbose, warmup=True, drain=True, 
-                cyclic=args.test_case == "cyclic",)
+                case=args.test_case,)
 
         tot_cores = 0
         n_switch = 0

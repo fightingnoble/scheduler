@@ -206,7 +206,7 @@ def main():
         dump_and_check(bin_list_save_path, bin_list)
         # dump_and_check(routing_table_save_path, scheduler_list[0].detail_alloc_info)
 
-    elif args.test_case == "dynamic" or args.test_all or args.test_case == "cyclic":
+    elif args.test_all or args.test_case in ["cyclic", "dynamic", "partitioned_glb_dynamic"]:
         if args.binpack_cfg["algorithm"] == "coalescing":
             folder = cache_root_fmt.format(**path_para_dict)
             root,dirs,files = os.walk(folder).__next__()
@@ -265,7 +265,7 @@ def main():
                 a_data_pipe, w_data_pipe, 
                 bin_path_format,
                 args.verbose, warmup=True, drain=True, 
-                cyclic=args.test_case == "cyclic",)
+                case=args.test_case,)
 
         tot_cores = 0
         n_switch = 0
@@ -307,7 +307,12 @@ def main():
             dump_and_check(f"cache/dyn_max_core_stat.pkl", core_max_dict)
             return
 
-        case_pth = "cyclic" if args.test_case == "cyclic" else "dyn"
+        if args.test_case == case_name_pglb_input:
+            case_pth = case_name_pglb
+        elif args.test_case == case_name_cyc_input:
+            case_pth = case_name_cyc
+        elif args.test_case == case_name_dyn_input:
+            case_pth = case_name_dyn
         if args.plot:
             if not args.jitter_sim_en:
                 # "{plot_root}/seed_{args.seed}/cyclic_full_{num_cores}{args.file_suffix}.pdf"

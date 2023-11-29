@@ -327,7 +327,21 @@ class Scheduler(object):
         # scheduler_step(sched, msg_dispatcher, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, DEBUG_FG)
         return scheduler_step_cyclic(self, msg_dispatcher, a_data_pipe, data_pipe, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, 
                               res_cfg, msg_queue, a_msg_queue, sensor_msg_queue, monitor, DEBUG_FG)
-    
+
+    def pglb_step(self, msg_dispatcher:MsgDispatcher, a_data_pipe: DataPipe, data_pipe: DataPipe,
+                       n_slot: int, timestep: int, event_range: List[int], 
+                        sim_slot_num: int, curr_t: int, glb_name_p_dict: Dict[str, List[int]], 
+                        res_cfg: Dict[str, int], 
+                        msg_queue:Queue, a_msg_queue:TaskQueue,
+                        sensor_msg_queue:Queue,
+                        monitor:Monitor,
+                        DEBUG_FG: bool) -> None:
+
+        # scheduler_step(sched, msg_dispatcher, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, DEBUG_FG)
+        return scheduler_step_pglb(self, msg_dispatcher, a_data_pipe, data_pipe, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, 
+                              res_cfg, msg_queue, a_msg_queue, sensor_msg_queue, monitor, DEBUG_FG)
+
+
 # =================== intergrated into scheduler class ===================
 def throttleToReady(sched, curr_t, budget_recoder, ready_queue, throttle_list, bin_name:str="", bin_event_flg:bool=False):
     l_res_ready:List[ProcessInt] = []
@@ -791,14 +805,14 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
     bin_event_flg = check_complete(
         sched, budget_recoder, timestep, msg_dispatcher, a_data_pipe, curr_t, 
         res_cfg, running_queue, completed_list, 
-        inactive_list, buffer, bin_event_flg, bin_name, n_slot=n_slot, process_dict=process_dict
+        inactive_list, buffer, bin_event_flg, bin_name, process_dict=process_dict
         )
 
     # check whether the task is miss
     # TODO: other ready tasks shoud be checked
     # TODO: cache eviction
     read_msg_queue(sched, curr_t, msg_queue, ready_queue, throttle_list, inactive_list, active_list, 
-                   running_queue, process_dict, bin_name, bin_id, res_cfg, budget_recoder,)
+                   running_queue, process_dict, bin_name, bin_id)
 
     bin_event_flg = check_miss(sched, budget_recoder, msg_dispatcher, curr_t, res_cfg, weight_wait_queue, ready_queue, running_queue, miss_list, 
                             throttle_list, active_list, inactive_list, buffer, bin_event_flg, bin_name, show_warnings=show_warnings)
@@ -1804,11 +1818,24 @@ def scheduler_step_cyclic(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_
     weight_wait_queue, ready_queue, running_queue, \
         miss_list, preempt_list, issue_list, completed_list, throttle_list,\
             inactive_list, active_list = sched.get_queues()
+    # the tasks is not executed in this slot, including the task that gets illegel allocation
+    # ```
+    #     skiped_task.append(_p)
+    #     sorted_queue.pop(0)
+    #     continue
+    # ```
+    # also the tasks that is allocated but is passed in this slot
+    # ```
+    #     skiped_task.append(_p)
+    # ```
+    skiped_tasks = []
+
     position_dict=sched.position_dict
     ctx_switch_list:List[ProcessInt] = sched.ctx_switch_list
     barrier = sched.barrier
 
     curr_cfg, _SchedTab, budget_recoder, rsc_recoder_his, process_dict = sched.get_state()
+    _SchedTab:SchedulingTableInt
     buffer:Buffer = sched.get_buffer()
     res_cfg:Resource_model_int = sched.res_cfg
     event_cache:EventCache = sched.event_cache
@@ -1853,14 +1880,12 @@ def scheduler_step_cyclic(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_
     # check release
     # check the dependencies of the tasks in inactive list
     # if the dependencies are satisfied, move the task to the wait queue
-    # bin_event_flg = chk_release(sched, event_range, curr_t, inactive_list, active_list, _SchedTab, timestep, 
-    #                             event_cache, trigger_cache,
-    #                             bin_event_flg, bin_name) 
     bin_event_flg = WatermarkStrategy.chk_release(curr_t, inactive_list, active_list, 
                                                   event_cache, trigger_cache,
                                                   bin_event_flg, bin_name)
 
 
+    # At the end of each cfg chunk
     # logic for updating the cfg and replenish the budget
     if curr_cfg.slot_e < n_slot or n_slot == 0: 
         # print(f"		cfg of bin {bin_name:s} is updated @ {curr_t:.6f}")
@@ -1883,15 +1908,14 @@ def scheduler_step_cyclic(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_
 
     new_cfg_ld = False
     if curr_cfg.slot_s == n_slot:
-        new_cfg_ld = True
         # cfg_slot_s, next_cfg, cfg_slot_num = _SchedTab.sparse_list[_SchedTab.sparse_idx]
         cfg_slot_s, next_cfg, cfg_slot_num = curr_cfg.slot_s, curr_cfg.rsc_map, curr_cfg.slot_num
 
-        # TODO: Queue for the weight prefetching
         # instruction prefetching
         cfg_slot_s, cached_cfg, cfg_slot_num  = _SchedTab.sparse_list[_SchedTab.sparse_idx_next]
 
         # weight prefetching based on the scheduling table
+        # TODO: Queue for the weight prefetching
         # TODO: how to represent the tile prefetching: when to start, when to check
         data_prefetching(sched, process_dict, w_data_pipe, curr_t, bin_id, cached_cfg=cached_cfg)
 
@@ -2004,6 +2028,360 @@ def scheduler_step_cyclic(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_
             if np.logical_xor(curr_cfg_ref != next_cfg, curr_cfg.slot_s == n_slot+1 or curr_cfg.slot_e == n_slot):
                 print("ERROR: cfg not match")
 
+def scheduler_step_pglb(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:DataPipe, w_data_pipe:DataPipe, 
+                           n_slot:int, timestep:float, 
+                           event_range:float, sim_slot_num:int, curr_t:float, 
+                           glb_name_p_dict, res_cfg:Resource_model_int, msg_queue:Queue, a_msg_queue, sensor_msg_queue, 
+                           monitor:Monitor, DEBUG_FG=False, 
+                    quantum_check_en:bool = False, quantumSize=None, 
+		    preemption_en:bool=True,
+                    o3_boost_util_en:bool=False,
+		    show_warnings=True):
+    weight_wait_queue, ready_queue, running_queue, \
+        miss_list, preempt_list, issue_list, completed_list, throttle_list,\
+            inactive_list, active_list = sched.get_queues()
+    position_dict=sched.position_dict
+    ctx_switch_list:List[ProcessInt] = sched.ctx_switch_list
+    barrier = sched.barrier
+
+    curr_cfg, _SchedTab, budget_recoder, rsc_recoder_his, process_dict = sched.get_state()
+    _SchedTab:SchedulingTableInt
+    buffer:Buffer = sched.get_buffer()
+    res_cfg:Resource_model_int = sched.res_cfg
+    event_cache:EventCache = sched.event_cache
+    trigger_cache:TriggerCache = sched.trigger_cache
+
+    # extract the scheduling table
+    # tab_temp_size = len(_SchedTab.scheduling_table)
+    # tab_pointer = n_slot % tab_temp_size
+    # hyper_p_n = int(n_slot/tab_temp_size)
+    # curr_cfg_ref = _SchedTab.scheduling_table[tab_pointer] 
+    bin_name = _SchedTab.name
+    bin_id = _SchedTab.id
+    bin_event_flg = False
+    a_msg_queue = a_data_pipe.queues[bin_id]
+    w_msg_queue = w_data_pipe.queues[bin_id]
+    bin_spatial_size = _SchedTab.num_resources
+
+    if sched.assert_barrier:
+        barrier_state = barrier.update(timestep)
+        if not barrier_state:
+            print(f"		Barrier is satisfied at {curr_t:.6f}")
+            sched.assert_barrier = False
+        barrier.cumulative_time += timestep
+
+    pre_rsc_bk = deepcopy(res_cfg.rsc_map)
+
+    # (running_queue)
+    # check running tasks
+    bin_event_flg = check_complete(
+        sched, None, timestep, msg_dispatcher, a_data_pipe, curr_t, 
+        res_cfg, running_queue, completed_list, 
+        inactive_list, buffer, bin_event_flg, bin_name, process_dict=process_dict
+        )
+
+    # check whether the task is miss
+    # TODO: other ready tasks shoud be checked
+    # TODO: cache eviction
+    read_msg_queue(sched, curr_t, msg_queue, ready_queue, throttle_list, inactive_list, active_list, 
+                   running_queue, process_dict, bin_name, bin_id)
+
+    bin_event_flg = check_miss(sched, None, msg_dispatcher, curr_t, res_cfg, weight_wait_queue, ready_queue, running_queue, miss_list, 
+                            throttle_list, active_list, inactive_list, buffer, bin_event_flg, bin_name, show_warnings=show_warnings)
+
+    a_data_pipe.data_tranfer_sim(curr_t)
+    # out of order originated from data transfering 
+    bin_event_flg = data_pipe_read(curr_t, glb_name_p_dict, process_dict, buffer, bin_name, bin_event_flg, a_msg_queue, event_cache)
+
+    trigger_read(inactive_list, sensor_msg_queue, trigger_cache, process_dict, timestep, curr_t, True)
+
+    # check release
+    # check the dependencies of the tasks in inactive list
+    # if the dependencies are satisfied, move the task to the wait queue
+    bin_event_flg = WatermarkStrategy.chk_release(curr_t, inactive_list, active_list, 
+                                                  event_cache, trigger_cache,
+                                                  bin_event_flg, bin_name)
+
+    # TODO: simulate the congestion and the latency of the network
+    w_data_pipe.data_tranfer_sim(curr_t)
+    # read out all message and clear the message pipe
+    for data in w_msg_queue:
+        buffer.put(data)
+    w_msg_queue.clear()
+
+    # check data availability: some tasks may be prefetched
+    # TODO: model the runtime weight and feature map transfering 
+    pendingToReady(sched, active_list, ready_queue, buffer, curr_t, glb_name_p_dict, bin_name, ) 
+
+    # free resource index
+    aval_rsc = res_cfg.get_available_rsc()
+    assert isinstance(aval_rsc, int) or isinstance(aval_rsc, np.integer)
+
+    # sort the tasks in the ready queue and the running queue
+    sort_fn = lambda x: x.deadline
+
+    # Scheduler is triggered when:
+    # either the aval_rsc or the candidate changes, i.e.,
+        # 1. new tasks join the ready queue, preemption may happen
+        # 2. some tasks leave the running queue, replenishment and curveup may happen
+        # 1+2. both 1 and 2 happen: ressignment-in-turn, preemption, curveup, and replenishment may happen
+
+    # compare the new cfg with the old one to decide the preemption
+    pre_rsc = res_cfg.rsc_map
+    trigger_condA = sched.new_ready_flg
+    trigger_condB = set(pre_rsc.keys()) != set(pre_rsc_bk.keys()) 
+
+    if trigger_condA or trigger_condB: 
+        # filtter the preemptable jobs
+        preemptable_list = []
+        if quantum_check_en: 
+            assert quantumSize is not None
+            for _p_2b_preempt in running_queue.queue:
+                cum_exec_quantum = _p_2b_preempt.cumulative_executed_time / quantumSize
+                reach_preempt_grain = math.isclose(cum_exec_quantum, round(cum_exec_quantum), abs_tol=1e-2)
+                if _p_2b_preempt.currentburst > 0 and not reach_preempt_grain: 
+                    continue
+                else:
+                    preemptable_list.append(_p_2b_preempt)
+        else:
+            preemptable_list = running_queue.queue
+
+        sorted_queue = sorted(ready_queue.queue + preemptable_list, key=sort_fn)
+
+        rsc_map = OrderedDict() # record the resource allocation
+        score_dict = OrderedDict() # record the process allocated with resources and unbouned by constraints
+        constr_dict = OrderedDict() # record the resource constraint applied to current allocation
+        slack_dict = OrderedDict()
+        curr_aval_rsc = res_cfg.size
+       
+        # build score dict refer to remaining slack
+        for _p in sorted_queue:
+            time_slot_s, time_slot_e = _p.quant_release_deadline(n_slot, timestep) 
+            if time_slot_s >= time_slot_e:
+                slack_dict[_p.pid] = 0
+            else:
+                slack_dict[_p.pid] = time_slot_e - time_slot_s
+        
+        while len(sorted_queue) > 0:
+            _p:ProcessInt = sorted_queue.pop(0)
+            assert _p.remburst > 0
+            # alloc resource depending to the number of resources
+            # if curr_t < _p.deadline:
+            if slack_dict[_p.pid] != 0:
+                # estimate the runtime and the resource requirement
+                req_rsc_size, got_latency, constr = EstimCoreNums4Process(_p, _p.remburst, slack_dict[_p.pid]*timestep, 
+                                                                            "ceil", curr_aval_rsc)
+            else:
+                req_rsc_size, constr = _p.get_available_cfg(curr_aval_rsc, curr_aval_rsc)
+                got_latency = _p.remburst/req_rsc_size/FLOPS_PER_CORE
+            # check if process has no solution
+            if req_rsc_size == 0 and constr == "N/A":
+                # the process (we call it as failure) get no cores due to the resource constraint
+                # but it is the process with higher priority rather the lower one blocking it
+                # so we allow the search to continue, 
+                # the process with lower priority is allowed to get the resource. 
+                # Once the higher priority process release the resource,
+                # and failures can get enough resource to run, 
+                # failures can preempt the lower priority process anytime.
+                continue
+            assert req_rsc_size > 0
+            curr_aval_rsc -= req_rsc_size
+            rsc_map[_p.pid] = req_rsc_size
+            constr_dict[_p.pid] = constr
+            score_dict[_p.pid] = 1/slack_dict[_p.pid] if slack_dict[_p.pid] != 0 else float("inf")
+            if curr_aval_rsc <= 0:
+                break
+        
+        if curr_aval_rsc > 0:
+            # if there are still resources left, 
+            # it means no late process is waiting for resources
+            assert sum([score == float('inf') and constr_dict[pid] != "upb" for pid, score in score_dict.items()]) == 0
+            # also, there is no process waiting for resources in the ready queue
+            assert len(sorted_queue) == 0
+
+            while curr_aval_rsc > 0 and len(score_dict) > 0:
+                for pid in list(score_dict.keys()):
+                    if constr_dict[pid] == "upb":
+                        score_dict.pop(pid)
+                
+                if len(score_dict) > 0:
+                    # allocate the remaining resources proportionally to the score
+                    cum_score_reverse = np.cumsum(list(reversed(score_dict.values())))
+                    cum_size = [curr_aval_rsc * s / cum_score_reverse[-1] for s in cum_score_reverse]
+                    for i, pid in enumerate(reversed(score_dict.keys())):
+                        if i == 0:
+                            size = int(cum_size[0])
+                            rsc_map[pid] += size
+                            cum_size[0] = size
+                        else:
+                            size = int(cum_size[i] - cum_size[i - 1])
+                            rsc_map[pid] += size
+                            cum_size[i] = size + cum_size[i - 1]
+                    curr_aval_rsc = 0
+                # check the rsc_size is valid
+                # compare with the core_max, core_min, core_list, parallel_mode
+                for pid in score_dict:
+                    _p = process_dict[pid]
+                    aval_size, constr = _p.get_available_cfg(rsc_map[pid], rsc_map[pid])
+                    assert constr in ["upb", "none"]
+                    curr_aval_rsc += rsc_map[pid] - aval_size
+                    constr_dict[pid] = constr
+                    rsc_map[pid] = aval_size
+
+        sched.new_ready_flg = False
+        
+        if rsc_map != pre_rsc:
+            # layout strategy: 
+            #   Currently, we only consider 1D layout, with a huristic algorithm: 
+            #   reallocating the position from the original base position, i.e., cum_pos, 
+            #   looking left and right, and select the leftmost position from left_pos, then, rightmost position from right_pos. 
+            #   the task decrease the size is handled at first. 
+            new_pid = set(rsc_map.keys()) - set(pre_rsc.keys())
+            expired_pid = set(pre_rsc.keys()) - set(rsc_map.keys())
+            old_pid = set(pre_rsc.keys()) - expired_pid
+
+            # update the position dict
+            used_position = []
+            for pid in old_pid:
+                p_size = rsc_map[pid]
+                # set the is_new flag to False
+                position_dict[pid][-1] = False
+                for s, size in zip(*position_dict[pid][:-1]):
+                    e = s + size
+                    used_position += [i for i in range(s, e)]
+
+            # remove the expired task from the position dict
+            for pid in expired_pid:
+                position_dict.pop(pid)
+                
+                preempt_list.append(process_dict[pid])
+            
+            aval_pos = [i for i in range(bin_spatial_size) if i not in used_position]
+            
+            # check if the old task's allocation is changed
+            # if so, release the old position and allocate the new one
+            # to release the data transfering overhead, we try to allocate the new position as close as possible to the old one
+            # TODO: consider the data transfering overhead
+            size_plus = []
+            size_minus = []
+            for pid in old_pid:
+                old_size = pre_rsc[pid]
+                new_size = rsc_map[pid]
+                if new_size > old_size:
+                    size_plus.append(pid)
+                elif new_size < old_size:
+                    size_minus.append(pid)
+
+            for group in [size_minus, size_plus]:
+                for pid in group: 
+                    old_size = pre_rsc[pid]
+                    new_size = rsc_map[pid]
+                    # release the old position
+                    for s, size in zip(*position_dict[pid][:-1]):
+                        e = s + size
+                        aval_pos += [i for i in range(s, e)]
+                    aval_pos.sort()
+                    # get the start position of the old task
+                    cum_pos = position_dict[pid][0][0]
+                    # divide the available position into two parts
+                    left_pos = aval_pos[:aval_pos.index(cum_pos)]
+                    right_pos = aval_pos[aval_pos.index(cum_pos):]
+                    # select the leftmost position from cum_pos
+                    interval_picked = aval_pos[aval_pos.index(cum_pos):aval_pos.index(cum_pos)+new_size]
+                    if len(interval_picked) < new_size:
+                        # select the leftmost position from left_pos
+                        interval_picked = left_pos[-(new_size-len(interval_picked)):] + interval_picked
+                    # check if the position is continuous
+                    interval_picked.sort()
+                    # remove selected position from aval_pos
+                    aval_pos = [i for i in aval_pos if i not in interval_picked]
+                    start = [interval_picked[0]]
+                    size = []
+                    for i in range(new_size-1):
+                        if interval_picked[i] != interval_picked[i+1]-1:
+                            size.append(interval_picked[i]-start[-1]+1)
+                            start.append(interval_picked[i+1])
+                    size.append(interval_picked[-1]-start[-1]+1)
+                    position_dict[pid] = [start, size, True]
+                
+                    ctx_switch_list.append(process_dict[pid])
+
+            # pick a proper position for the new task in the available position
+            for pid in new_pid:
+                p_size = rsc_map[pid]
+                # select the leftmost position
+                interval_picked = aval_pos[:p_size]
+                # check if the position is continuous
+                interval_picked.sort()
+                # remove selected position from aval_pos
+                aval_pos = [i for i in aval_pos if i not in interval_picked]
+                start = [interval_picked[0]]
+                size = []
+                for i in range(p_size-1):
+                    if interval_picked[i] != interval_picked[i+1]-1:
+                        size.append(interval_picked[i]-start[-1]+1)
+                        start.append(interval_picked[i+1])
+                size.append(interval_picked[-1]-start[-1]+1)
+                position_dict[pid] = [start, size, True]
+
+                issue_list.append(process_dict[pid])
+
+            # update the resource configuration
+            for _p in preempt_list:
+                print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) preempted at {curr_t:.6f};")
+                running_queue.remove(_p)
+                ready_queue.put(_p)
+                res_cfg.release(_p.pid)
+            preempt_list.clear()
+            
+            for _p in ctx_switch_list:
+                print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) ctx switch at {curr_t:.6f}({pre_rsc[_p.pid]} -> {rsc_map[_p.pid]});")
+                res_cfg.release(_p.pid)
+                res_cfg.allocate(_p.pid, rsc_map[_p.pid])
+            ctx_switch_list.clear()
+
+            for _p in issue_list:
+                running_queue.put(_p)
+                ready_queue.remove(_p)
+                _p.set_state("running")
+                res_cfg.allocate(_p.pid, rsc_map[_p.pid])
+                _p.waitTime = 0 
+                _str = f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) issued and "
+                if _p.totburst==0:
+                    _p.start_time = curr_t
+                    _str += f"start at {curr_t:.6f}; "
+                else:
+                    _str += f"resume at {curr_t:.6f}; "
+                _p.curr_start_time = curr_t
+                if bin_name and not bin_event_flg:
+                    bin_event_flg = True 
+                    print(f"({bin_name})")
+                print(_str)
+            issue_list.clear()
+
+            # assert a barrier
+            # data movement: 
+            # size: 40MB
+            # bandwidth: 100GB/s
+            # direction: off-chip -> on-chip, on-chip -> off-chip
+            # latency: 100ns
+            if sched.barrier_en:
+                off_size = sum(pre_rsc.values()) * 1/3
+                on_size = sum(rsc_map.values()) * 2/3
+                x = (on_size+off_size)
+                barrier.assert_barrier(sched.get_ctx_lat(x))
+                print(f"		Barrier asserted at {curr_t:.6f}; Counter {barrier.reset_time}s")
+                sched.assert_barrier = True
+
+    # execute the task in running list
+    # update the running task
+    if not barrier.state():
+        res_cfg.updateRunningQueue(timestep, running_queue) 
+
+    if not sched.assert_barrier:
+        monitor.add_a_record(res_cfg)
+    else:
+        monitor.add_a_placehold_record()
 
 
 def trigger_read(inactive_list:List[ProcessInt], sensor_msg_queue:List, 

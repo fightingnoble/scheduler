@@ -67,3 +67,12 @@ plt_fn_wo_seed_fmt = r"{plot_root}/{case}_{plt_size}_{num_cores}{file_suffix}.pd
 
 trace_fn_wo_seed_fmt = r"{trace_root}/{case}_e2e_trace_{num_cores}.pkl" 
 trace_fn_w_seed_fmt = r"{trace_root}/{case}_e2e_trace_{num_cores}_seed_{seed}{file_suffix}.pkl" 
+
+case_name_glb = r"glb_dyn"
+case_name_dyn = r"dyn"
+case_name_cyc = r"cyclic"
+case_name_pglb = r"pglb"
+case_name_glb_input = r"cyclic"
+case_name_dyn_input = r"glb_dynamic"
+case_name_cyc_input = r"dynamic"
+case_name_pglb_input = r"partitioned_glb_dynamic"

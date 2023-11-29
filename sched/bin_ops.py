@@ -151,9 +151,11 @@ def sort_bin_list_by_barycenter(_p:ProcessInt, time_slot_s, time_slot_e, timeste
             bary_x = bary_x + time_slot_s
             # index 1st non-zero element
             available_start = free_spaces[0][0]+time_slot_s 
-        bin_feature_list.append([_bin_id, available_start, free_area, bary_x, bary_y])
+        free_percent = free_area / _bin.num_resources/(time_slot_e - time_slot_s)
+        bin_feature_list.append([_bin_id, available_start, free_area, bary_x, bary_y, free_percent])
     # sort the bin according to the feature
-    itr = filter(lambda x: x[2]*timestep*FLOPS_PER_CORE>_p.remburst, sorted(bin_feature_list, key=lambda x: (x[3], x[4]),))
+    # as early as possible, as large as possible, as empty as possible
+    itr = filter(lambda x: x[2]*timestep*FLOPS_PER_CORE>_p.remburst, sorted(bin_feature_list, key=lambda x: (x[3], -x[2], x[5]),))
     affinity_search_bin_id_list = [x[0] for x in itr]
     return affinity_search_bin_id_list
 

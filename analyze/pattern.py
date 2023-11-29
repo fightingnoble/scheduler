@@ -18,9 +18,7 @@ folder_type = {
 }
 
 # regular match expression for path
-case_name_glb = r"glb_dyn"
-case_name_dyn = r"dyn"
-case_name_cyc = r"cyclic"
+from global_var import case_name_cyc, case_name_dyn, case_name_glb
 
 # case_re = r"(?P<method>cyclic|sta_dyn|glb_dyn|dyn|dynamic)"
 case_re = r"(?P<method>cyclic|glb_dyn|dyn)"

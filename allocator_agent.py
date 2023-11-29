@@ -249,7 +249,7 @@ def sched_step(task_spec:Spec,
                 total_cores:int, n_slot, 
                 glb_p_list:List[ProcessInt],
                 timestep, hyper_p, n_p=1, verbose=False, *, warmup=False, drain=False, 
-                cyclic=False,):
+                case="dynamic",):
         
     """
     implement a step of runtime scheduling
@@ -293,12 +293,17 @@ def sched_step(task_spec:Spec,
         message_trigger_event_new(event_iter_dict, inactive_list, glb_p_list, 
                                   sensor_pipe, ddl_stream, load_var_sim_para,
                                   timestep, curr_t, True) 
-        if not cyclic:
+        assert case in ["cyclic", "dynamic", "partitioned_glb_dynamic"]
+        if case == "dynamic":
             sched.scheduler_step(msg_dispatcher, a_data_pipe, w_data_pipe, 
                                 n_slot, timestep, event_range, sim_slot_num, curr_t, 
                                 glb_name_p_dict, res_cfg, msg_queue, a_msg_queue, sensor_msg_queue, monitor, DEBUG_FG)
-        else:
+        elif case == "cyclic":
             sched.cyclic_step(msg_dispatcher, a_data_pipe, w_data_pipe, 
+                                n_slot, timestep, event_range, sim_slot_num, curr_t, 
+                                glb_name_p_dict, res_cfg, msg_queue, a_msg_queue, sensor_msg_queue, monitor, DEBUG_FG)
+        elif case == "partitioned_glb_dynamic":
+            sched.pglb_step(msg_dispatcher, a_data_pipe, w_data_pipe, 
                                 n_slot, timestep, event_range, sim_slot_num, curr_t, 
                                 glb_name_p_dict, res_cfg, msg_queue, a_msg_queue, sensor_msg_queue, monitor, DEBUG_FG)
     # update the wait task
@@ -321,7 +326,7 @@ def cyclic_sched(task_spec:Spec, affinity,
                 a_data_pipe:DataPipe=None,
                 w_data_pipe:DataPipe=None, 
                 bin_path_format:str=None,
-                verbose=False, *, warmup=False, drain=False, cyclic=False,):
+                verbose=False, *, warmup=False, drain=False, case="dynamic",):
     """
     partition the scheduling table
     """
@@ -450,7 +455,7 @@ def cyclic_sched(task_spec:Spec, affinity,
                     total_cores, n_slot, 
                     glb_p_list, 
                     timestep, hyper_p, n_p, verbose, warmup=warmup, drain=drain, 
-                    cyclic=cyclic) 
+                    case=case) 
 
 
 def glb_sched(task_spec:Spec, affinity, 

@@ -261,11 +261,17 @@ def bin_select_new(
         bin_sort = binpack_cfg.get("sort", "EAT")
         if bin_sort == "EAT":
             bin_sort_fn = sort_bin_list_EAT
+            affinity_tgt_bin_id_list = bin_sort_fn(_p, time_slot_s, time_slot_e, timestep, _p_index_by_pid,
+                                                                    bin_list, affinity_tgt_bin_id_list,
+                                                                    bin_name_list, rsc_recoder_his)
             affinity_search_bin_id_list = bin_sort_fn(_p, time_slot_s, time_slot_e, timestep, _p_index_by_pid,
                                                         bin_list, affinity_search_bin_id_list,
                                                         bin_name_list, rsc_recoder_his)
         elif bin_sort == "barycenter":
             bin_sort_fn = sort_bin_list_by_barycenter
+            affinity_tgt_bin_id_list = bin_sort_fn(_p, time_slot_s, time_slot_e, timestep, _p_index_by_pid,
+                                                                    bin_list, affinity_tgt_bin_id_list,
+                                                                    bin_name_list, rsc_recoder_his)
             affinity_search_bin_id_list = bin_sort_fn(_p, time_slot_s, time_slot_e, timestep, _p_index_by_pid,
                                                         bin_list, affinity_search_bin_id_list,
                                                         bin_name_list, rsc_recoder_his)
