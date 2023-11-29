@@ -181,9 +181,7 @@ def main():
         elif args.binpack_cfg["algorithm"] == "bin_split":
             from sched.global_sched import coleasing_alloc_split_bin_new, coleasing_alloc_cluster
             from task.task_cfg import task_graph_srcs, task_graph_sinks
-            bin_list_save_path = bin_save_fmt.format(**path_para_dict, **para_scan_group2)
-            routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **para_scan_group2)
-            coleasing_alloc_cluster(
+            max_core_layout = coleasing_alloc_cluster(
                 bin_list,
                 glb_p_list, affinity_cfg, event_iter_dict,
                 num_cores, args.quantum_check_en, quantumSize, 
@@ -199,6 +197,22 @@ def main():
                 verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
                 warmup=True, drain=True, 
                 )
+            filename = os.path.join(csv_xlxs_root, 'coalescing_req_cores.csv')
+            check_parents_path(filename)
+            import pandas as pd
+            if not os.path.exists(filename):
+                pd.DataFrame(columns=list(cfg_para_dict.keys())+list(para_scan_group1.keys())+["num_bins","num_cores"]).to_csv(filename, index=False)
+            
+            # Load the dataframe                        
+            df = pd.read_csv(filename)
+            num_cores = sum(max_core_layout[1].values())
+            plot_path_para.update({"num_cores": num_cores})
+            df = update_df(df, {**cfg_para_dict, **para_scan_group1, "num_bins": args.num_bins}, 
+                           {"num_cores": num_cores})
+            df.to_csv(filename, index=False)
+
+            bin_list_save_path = bin_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
+            routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
 
         else:
             raise NotImplementedError(f"binpack algorithm {args.binpack_cfg['algorithm']} is not implemented")

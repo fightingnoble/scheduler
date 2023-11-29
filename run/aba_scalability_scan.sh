@@ -1,15 +1,24 @@
 #!/bin/bash
 # set -x
 
-tp_start=${1:-0}
-tp_step=${2:-1}
-tp_end=${3:-9}
-scan_seed=${4:-"False"}
-plot=${5:-"dis"}
-seed_start=${6:-0}
-seed_end=${7:-9}
-root_dir=${8:-"coalescing_scan"}
+tp_scan=${1:-"False"}
+tp_start=${2:-0}  
+tp_step=${3:-1}
+tp_end=${4:-9}
+scan_seed=${5:-"False"}
+plot=${6:-"dis"}
+seed_start=${7:-0}  
+seed_end=${8:-9}
+root_dir=${9:-"coalescing_scan"}
 
+if [ $tp_scan != "True" ]; then
+    tp_start=9
+    tp_step=1
+    tp_end=9
+    list_n_bin_cfg=(24 22 20 18 16 14 12 10 8 6 4 2 1) 
+else
+    list_n_bin_cfg=(26) 
+fi
 
 # plot_args, "--plot ''", if plot is 'dis', else " --plot True "
 if [ $plot == "dis" ]; then
@@ -18,7 +27,7 @@ else
     PY_ARGS="--plot True"
 fi
 n_p=3
-PY_ARGS="$PY_ARGS --profiling_filename profiling/profiling_light.csv --n_p $n_p --root_dir $root_dir --gen_benchmark"
+PY_ARGS="$PY_ARGS --profiling_filename profiling/profiling_light.csv --n_p $n_p --gen_benchmark --bin_pack_cfg "Bp_split.json""
 
 echo "********************************************"
 
@@ -31,7 +40,7 @@ list_wsc_slack_ratio=(1 1)
 list_exec_var_en=(True False)
 list_suffix=("var_0.2_0.3" "var_0.2")
 list_var_sim_cfg=("var_sim_cfg.json" "var_sim_cfg.json")
-
+    
 for i in {0..1}; do
   {
     exec_t_comp_ratioA=${list_exec_t_comp_ratioA[$i]}
@@ -41,9 +50,14 @@ for i in {0..1}; do
     suffix=${list_suffix[$i]}
     var_sim_cfg=${list_var_sim_cfg[$i]}
 
-        RATE_CFG="--bin_pack_cfg "Bp_coalescing.json" --wsc_slack_ratio $wsc_slack_ratio --exec_t_comp_ratioA $exec_t_comp_ratioA --exec_t_comp_ratioB $exec_t_comp_ratioB"
-        echo "./run/abla_scalablility.sh $tp_start $tp_step $tp_end $root_dir sim_main.py True False $VAR_ARGS "xx" $PY_ARGS $RATE_CFG"
-        ./run/abla_scalablility.sh $tp_start $tp_step $tp_end $root_dir sim_main.py True False "xx" "xx" $PY_ARGS $RATE_CFG
+    for n_bin in ${list_n_bin_cfg[@]}; do
+        echo "********************************************"
+        echo "n_bin: $n_bin"
+        echo "********************************************"
+
+        RATE_CFG="--wsc_slack_ratio $wsc_slack_ratio --exec_t_comp_ratioA $exec_t_comp_ratioA --exec_t_comp_ratioB $exec_t_comp_ratioB --num_bins $n_bin --root_dir "$root_dir/n_bins_${n_bin}" "
+        echo "./run/abla_scalablility.sh $tp_start $tp_step $tp_end "$root_dir/n_bins_${n_bin}" sim_main.py True False $VAR_ARGS "xx" $PY_ARGS $RATE_CFG"
+        ./run/abla_scalablility.sh $tp_start $tp_step $tp_end "$root_dir/n_bins_${n_bin}" sim_main.py True False "xx" "xx" $PY_ARGS $RATE_CFG
 
         if [ $scan_seed == True ]; then
             VAR_ARGS="--var_sim_cfg $var_sim_cfg --file_suffix $suffix --jitter_sim_en"
@@ -60,6 +74,7 @@ for i in {0..1}; do
                 wait
             done
         fi
+    done
   }
 done
 wait

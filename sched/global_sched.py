@@ -27,7 +27,9 @@ from sched.bin_ops import new_bin, get_initlist_and_biniter, static_1_bin
 from sched.sort_function import get_process_sort
 from sched.packing_solver.gurobi_MP_semi2DClst import ClusterGurobiSolverSemi2D
 from sched.monitor_agent import get_rsc_2b_released, get_target_bin_id
+from sched.bin_ops import bin_iter_list
 from networkx import DiGraph
+from functools import reduce
 
 # ==================== top-level scheduling procedure ====================
 def push_task_into_bins_new(
@@ -685,35 +687,6 @@ def coleasing_alloc_cluster(
             name = "bin"+str(id)
         print("Create a new bin: ", id, "name:", name, "size:", size)
         return new_bin(size, sim_slot_num, id=id, name=name)
-    # iter_next_bin_obj, bin_name_list = get_initlist_and_biniter(
-    #     planed_bin_list, glb_p_list, total_cores, 
-    #     _new_bin, "manual")
-    layout = {_bin.name:_bin.num_resources for _bin in bin_list}
-    print("max_core_num:", sum(layout.values()))
-    print(f"max_core_layout: {layout}")
-    max_core_num = sum(layout.values())
-
-    # use a gurobi solver to determine the placement of the tasks
-    # for cfg_slot_s, cached_cfg, cfg_slot_num in _bin.sparse_flops:
-
-    process_dict = OrderedDict(sorted([(p.pid, p) for p in glb_p_list]))
-    name2pid = {p.task.name:p.pid for p in glb_p_list}
-    sched:Scheduler = scheduler_list[0]
-    rsc_recoder_his = sched.rsc_recoder_his
-
-    probs = [list(cfg.keys()) for slot_s, cfg, slot_num in _bin_tb_split.sparse_list]
-    J = len(probs)
-    duation = [slot_num for slot_s, cfg, slot_num in _bin_tb_split.sparse_list]
-    # collect used items from problems
-    from functools import reduce
-    col_pid = set(reduce(lambda x,y: x+y, probs))
-
-    placed_p = {}
-    tbd_p = {}
-    affinity_mode = "search" 
-    affinity_dict2 = {}
-    affinity_dict1 = {}
-    assert affinity_mode in ["manual", "search"]
 
     from sched.slack_estim import get_chains
     rt_chains, ddl_chains = get_chains(job_graph, src_nodes, end_nodes, {
@@ -727,10 +700,53 @@ def coleasing_alloc_cluster(
         if _p.task.pre_assigned_resource_flag:
             allowed_bin_name.append(_p.task.name)
 
-    # iter_next_bin_obj = bin_iter_uniform_dist(_new_bin, total_cores, size_l, name_l)
-    # bin_list.extend(list(iter_next_bin_obj)) 
-    # bin_name_list = [bin.name for bin in bin_list]
-    from sched.bin_ops import bin_iter_list
+    # use a gurobi solver to determine the placement of the tasks
+    placed_p, bin_name_list, sol, bin_size = split_affinity_first(glb_p_list, scheduler_list, n_partition, _bin_tb_split, rt_chains, ddl_chains, allowed_bin_name)
+
+    # update the placed items to the sol
+    for pid, (size, bin_id) in placed_p.items():
+        assert pid not in sol
+        sol.update({pid:bin_id})
+    # print(sol)
+
+    # create the bins from the bin size and the bin name    
+    iter_next_bin_obj =bin_iter_list(_new_bin, bin_size, bin_name_list)
+    planed_bin_list = list(iter_next_bin_obj)
+
+    # rebuild the scheduling table list
+    for cfg_slot_s, cached_cfg, cfg_slot_num in _bin_tb_split.sparse_list:
+        for pid, size in cached_cfg.items():
+            _bin:SchedulingTableInt = planed_bin_list[sol[pid]]
+            _bin.allocate(pid, [cfg_slot_s,], [size,], [cfg_slot_num,], False)
+    for _bin in planed_bin_list:
+        _bin: SchedulingTableInt
+        _bin.to_sparse_dict()
+    bin_list.clear()
+    bin_list.extend(planed_bin_list)
+
+    layout = {_bin.name:_bin.num_resources for _bin in bin_list}
+    print("max_core_num:", sum(layout.values()))
+    print(f"max_core_layout: {layout}")
+    max_core_num = sum(layout.values())
+    return [0, layout]
+
+def split_affinity_first(glb_p_list, scheduler_list, n_partition, _bin_tb_split, rt_chains, ddl_chains, allowed_bin_name):
+    process_dict = OrderedDict(sorted([(p.pid, p) for p in glb_p_list]))
+    name2pid = {p.task.name:p.pid for p in glb_p_list}
+    sched:Scheduler = scheduler_list[0]
+
+    probs = [list(cfg.keys()) for slot_s, cfg, slot_num in _bin_tb_split.sparse_list]
+    J = len(probs)
+    duation = [slot_num for slot_s, cfg, slot_num in _bin_tb_split.sparse_list]
+    # collect used items from problems
+    col_pid = set(reduce(lambda x,y: x+y, probs))
+
+    placed_p = {}
+    tbd_p = {}
+    affinity_mode = "search" 
+    affinity_dict2 = {}
+    affinity_dict1 = {}
+    assert affinity_mode in ["manual", "search"]
 
     # generate the bin name list, as wella as deduce the mapping relation from pid to bins by priority of chains
     bin_name_list = []
@@ -781,27 +797,78 @@ def coleasing_alloc_cluster(
     solver.create_variables()
     solver.create_constraints()
     sol, bin_size = solver.solve()
+    return placed_p,bin_name_list,sol,bin_size
 
-    # update the placed items to the sol
-    for pid, (size, bin_id) in placed_p.items():
-        assert pid not in sol
-        sol.update({pid:bin_id})
-    # print(sol)
+def split_size_first(glb_p_list, scheduler_list, n_partition, _bin_tb_split, rt_chains, ddl_chains, allowed_bin_name):
+    process_dict = OrderedDict(sorted([(p.pid, p) for p in glb_p_list]))
+    name2pid = {p.task.name:p.pid for p in glb_p_list}
+    sched:Scheduler = scheduler_list[0]
 
-    # create the bins from the bin size and the bin name    
-    iter_next_bin_obj =bin_iter_list(_new_bin, bin_size, bin_name_list)
-    planed_bin_list = list(iter_next_bin_obj)
+    probs = [list(cfg.keys()) for slot_s, cfg, slot_num in _bin_tb_split.sparse_list]
+    J = len(probs)
+    duation = [slot_num for slot_s, cfg, slot_num in _bin_tb_split.sparse_list]
+    # collect used items from problems
+    col_pid = set(reduce(lambda x,y: x+y, probs))
 
-    # rebuild the scheduling table list
-    for cfg_slot_s, cached_cfg, cfg_slot_num in _bin_tb_split.sparse_list:
-        for pid, size in cached_cfg.items():
-            _bin:SchedulingTableInt = planed_bin_list[sol[pid]]
-            _bin.allocate(pid, [cfg_slot_s,], [size,], [cfg_slot_num,], False)
-    for _bin in planed_bin_list:
-        _bin: SchedulingTableInt
-        _bin.to_sparse_dict()
-    bin_list.clear()
-    bin_list.extend(planed_bin_list)
+    placed_p = {}
+    tbd_p = {}
+    affinity_mode = "search" 
+    affinity_dict2 = {}
+    affinity_dict1 = {}
+    assert affinity_mode in ["manual", "search"]
+
+    # generate the bin name list, as wella as deduce the mapping relation from pid to bins by priority of chains
+    bin_name_list = []
+    for chain, tot_ops, slack in ddl_chains+rt_chains:
+        # search the target bin
+        tgt_bin_id = None
+        for node in chain:
+            pid = name2pid[node]
+            if pid in placed_p: # the node has been placed in another chain, skip, also skip the partition
+                continue
+            # if node in bin_name_list:
+            #     tgt_bin_id = bin_name_list.index(node)
+            #     break
+            if node in allowed_bin_name:
+                tgt_bin_id = len(bin_name_list)
+                bin_name_list.append(node)
+                break
+        # set the placement
+        if tgt_bin_id is not None:
+            # the placed items
+            for node in chain:
+                pid = name2pid[node]
+                if pid not in placed_p:
+                    _p:ProcessInt = process_dict[pid]
+                    size = _p.task.pre_assigned_resource.main_size+_p.task.pre_assigned_resource.RDA_size
+                    placed_p.update({pid:[size, tgt_bin_id]})
+                    print(f"{node} -> {bin_name_list[tgt_bin_id]}")
+            print(f"Bin {tgt_bin_id}:{bin_name_list[tgt_bin_id]} is used for the chain {chain}")
+            n_partition -= 1
+        if n_partition == 0:
+            break
+    # mark others as tbd
+    for pid, _p in process_dict.items():
+        if pid not in col_pid:
+            continue
+        _p:ProcessInt
+        if pid not in placed_p:
+            size = _p.task.pre_assigned_resource.main_size+_p.task.pre_assigned_resource.RDA_size
+            tbd_p.update({pid:size})
+
+    M = len(bin_name_list)
+    N = len(tbd_p)
+    K = len(placed_p)
+
+    solver = ClusterGurobiSolverSemi2D(
+        M, N, K, J, tbd_p, placed_p, probs, duation, 1000, affinity_dict1, affinity_dict2
+    )
+    solver.create_variables()
+    solver.create_constraints()
+    sol, bin_size = solver.solve()
+    return placed_p,bin_name_list,sol,bin_size
+
+
 
 def solver_1round(planed_bin_list, bin_name_list, process_dict, rsc_recoder_his, M, probs, J, duation, col_pid, placed_p, tbd_p, affinity_mode, affinity_dict2, affinity_dict1):
     if affinity_mode == "manual":

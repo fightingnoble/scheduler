@@ -122,10 +122,11 @@ class ClusterGurobiSolverSemi2D:
         #   score1 = sum([self.x[n, m] * self.affinity1[n, m] for (n, m) in self.affinity1])/self.N
         # for affiniry2:
         #   score2 = sum([x[n1, m] * x[n2, m] * affinity2[n1, n2] for n1 in range(N) for (n1, n2) in self.affinity2])/self.N
-        self.model.addConstr(
-           (gp.quicksum((self.x[n, m] * self.affinity1[n, m]) for n, m in self.affinity1.keys()) + \
-            gp.quicksum([self.x[n1, m] * self.x[n2, m] * self.affinity2[n1, n2] for m in range(self.M) for (n1, n2) in self.affinity2])/self.N) == self.affinity_score,
-            name="affinity_score")
+        if self.N > 0:
+            self.model.addConstr(
+            (gp.quicksum((self.x[n, m] * self.affinity1[n, m]) for n, m in self.affinity1.keys()) + \
+                gp.quicksum([self.x[n1, m] * self.x[n2, m] * self.affinity2[n1, n2] for m in range(self.M) for (n1, n2) in self.affinity2])/self.N) == self.affinity_score,
+                name="affinity_score")
 
         # for m in range(self.M):
             #     sum([self.x[(i, m)] * self.Items_tbd_size[i] for i in item_idx]) + self.used_size[j][m]
