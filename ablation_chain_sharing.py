@@ -2,8 +2,7 @@ import os, re
 from task.task_cfg import create_init_p_list, gen_workloads
 from task.task_cfg import affinity_cfg
 from task.task_cfg import init_affinity
-from sched.global_sched import push_task_into_bins_new, coleasing_alloc_1bin
-from task.task_agent import TaskInt 
+from sched.global_sched import push_task_into_bins_new, coleasing_alloc_1bin, naive_iso
 from task.task_agent import TaskInt
 from task.spec import Spec
 from model.message.msg_dispatcher import MsgDispatcher
@@ -127,9 +126,11 @@ def main():
     if args.lateness_mode == "all_hard":
         for _p in glb_p_list:
             _p.task.criticality = "hard"
+            _p.task.chain_criticality = "hard"
     elif args.lateness_mode == "all_soft":
         for _p in glb_p_list:
             _p.task.criticality = "soft"
+            _p.task.chain_criticality = "soft"
     elif args.lateness_mode == "ignore":
         pass
 
@@ -235,31 +236,85 @@ def main():
             # Load the dataframe                        
             df = pd.read_csv(filename)
             num_cores = sum(max_core_layout[1].values())
+            plot_path_para.update({"num_cores": num_cores})
             df = update_df(df, {**cfg_para_dict, **para_scan_group1}, 
                            {"num_cores": num_cores})
             df.to_csv(filename, index=False)
 
             bin_list_save_path = bin_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
             routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
+        
+        elif args.binpack_cfg["algorithm"] == "naive_iso":
+            naive_iso(
+                bin_list,
+                glb_p_list, affinity_cfg, event_iter_dict,
+                num_cores, args.quantum_check_en, quantumSize, 
+                sim_step, hyper_p, args.wsc_slack_ratio, args.exec_t_comp_ratioB,
+
+                scheduler_list, monitor_list,
+                msg_dispatcher,
+                a_data_pipe, w_data_pipe,
+
+                num_periods, binpack_cfg=args.binpack_cfg,
+                verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
+                warmup=True, drain=True, 
+                )
+
+        elif args.binpack_cfg["algorithm"] == "bin_split":
+            from sched.global_sched import coleasing_alloc_split_bin_new, coleasing_alloc_cluster
+            from task.task_cfg import task_graph_srcs, task_graph_sinks
+            pid2_bin_id, bin_size_list = coleasing_alloc_cluster(
+                bin_list,
+                glb_p_list, affinity_cfg, event_iter_dict,
+                num_cores, args.quantum_check_en, quantumSize, 
+                sim_step, hyper_p, args.wsc_slack_ratio, args.exec_t_comp_ratioB,
+
+                scheduler_list, monitor_list,
+                msg_dispatcher,
+                a_data_pipe, w_data_pipe,
+
+                num_periods, binpack_cfg=args.binpack_cfg,
+                job_graph=physical_graph_nx, src_nodes=task_graph_srcs, end_nodes=task_graph_sinks, 
+                n_partition = args.num_bins if args.num_bins != -1 else 9999,
+                verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
+                warmup=True, drain=True, 
+                )
+            filename = os.path.join(csv_xlxs_root, 'coalescing_req_cores.csv')
+            check_parents_path(filename)
+            import pandas as pd
+            if not os.path.exists(filename):
+                pd.DataFrame(columns=list(cfg_para_dict.keys())+list(para_scan_group1.keys())+["num_bins","num_cores"]).to_csv(filename, index=False)
+            
+            # Load the dataframe                        
+            df = pd.read_csv(filename)
+            num_cores = sum(max_core_layout[1].values())
+            plot_path_para.update({"num_cores": num_cores})
+            df = update_df(df, {**cfg_para_dict, **para_scan_group1, "num_bins": args.num_bins}, 
+                           {"num_cores": num_cores})
+            df.to_csv(filename, index=False)
+
+            bin_list_save_path = bin_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
+            routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
+
         else:
             raise NotImplementedError(f"binpack algorithm {args.binpack_cfg['algorithm']} is not implemented")
 
         pid2name = {_p.pid:_p.task.name for _p in glb_p_list}
-        from sched.scheduling_table import get_task_layout_compact, get_task_layout_sparse
+        from sched.scheduling_table import get_task_layout_compact, get_task_layout_compact1bin
         
         for _SchedTab in bin_list:
                 _SchedTab.print_alloc_detail(pid2name, sim_step)
         if args.plot:
             # f"{plot_root}/new_task_bin_pack_cyclic_{num_cores}{args.file_suffix}.pdf"
             get_task_layout_compact(bin_list, pid2name, save= True, time_step= sim_step,
-            hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
+            hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=False, plot_legend=True, format=args.plt_fmt, 
             txt_size=40, tick_dens=2, plot_start=hyper_p*(num_periods-1), plot_end=hyper_p*num_periods,
             save_path=plt_fn_wo_seed_fmt.format(**plot_path_para, **{"case": "new_task_bin_pack", "plt_size": "cyclic"})) 
             
             # f"{plot_root}/new_task_bin_pack_full_{num_cores}{args.file_suffix}.pdf"
-            get_task_layout_compact(bin_list, pid2name, save= True, time_step= sim_step,
-            hyper_p=hyper_p, n_p=num_periods, plot_start=0, warmup=False, drain=True, plot_legend=False, format=["svg","pdf"], 
-            txt_size=40, tick_dens=4, 
+            get_task_layout_compact1bin(bin_list, pid2name, save= True, time_step= sim_step,
+            hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=args.plt_fmt, 
+            txt_size=40, tick_dens=4, plot_start=0,  
             save_path=plt_fn_wo_seed_fmt.format(**plot_path_para, **{"case": "new_task_bin_pack", "plt_size": "full"}))
         
 
@@ -270,8 +325,8 @@ def main():
         dump_and_check(bin_list_save_path, bin_list)
         # dump_and_check(routing_table_save_path, scheduler_list[0].detail_alloc_info)
 
-    elif args.test_case == "dynamic" or args.test_all or args.test_case == "cyclic":
-        if args.binpack_cfg["algorithm"] == "coalescing":
+    elif args.test_all or args.test_case in ["cyclic", "dynamic", "partitioned_glb_dynamic"]:
+        if args.binpack_cfg["core_size"] == "induced":
             folder = cache_root_fmt.format(**path_para_dict)
             root,dirs,files = os.walk(folder).__next__()
             assert len(dirs) == 0
@@ -371,7 +426,12 @@ def main():
             dump_and_check(f"cache/dyn_max_core_stat.pkl", core_max_dict)
             return
 
-        case_pth = "cyclic" if args.test_case == "cyclic" else "dyn"
+        if args.test_case == case_name_pglb_input:
+            case_pth = case_name_pglb
+        elif args.test_case == case_name_cyc_input:
+            case_pth = case_name_cyc
+        elif args.test_case == case_name_dyn_input:
+            case_pth = case_name_dyn
         if args.plot:
             if not args.jitter_sim_en:
                 # "{plot_root}/seed_{args.seed}/cyclic_full_{num_cores}{args.file_suffix}.pdf"
@@ -382,7 +442,7 @@ def main():
 
             from sched.scheduling_table import get_task_layout_compact, get_task_layout_sparse
             get_task_layout_compact(actual_sched_record, pid2name, save= True, time_step= sim_step,
-            hyper_p=hyper_p, n_p=num_periods, warmup=False, drain=True, plot_legend=False, format=["svg","pdf"], 
+            hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=args.plt_fmt, 
             txt_size=40, tick_dens=4, plot_start=0, save_path=plot_path)
 
         if args.jitter_sim_en:
@@ -470,7 +530,7 @@ def main():
                 plot_path=plt_fn_w_seed_fmt.format(**plot_path_para, **{"case": "glb_dyn", "plt_size": "full"})
 
             get_task_layout_compact(actual_sched_record, pid2name, save= True, time_step= sim_step,
-            hyper_p=hyper_p, n_p=num_periods, warmup=False, drain=True, plot_legend=False, format=["svg","pdf"], 
+            hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=args.plt_fmt, 
             txt_size=40, tick_dens=4, plot_start=0, save_path=plot_path)
 
         # f"{trace_root}/glb_dyn_e2e_trace_{num_cores}"

@@ -139,22 +139,60 @@ def allocate_rsc_4_process_new2(
         verbose:bool=False, DEBUG:bool=False,
         ):
 
+    # Step1: initialize the resource request parameters
     # expected rsc_size and slot number
     time_slot_s, time_slot_e, req_rsc_size = _p.rsc_req_estm(n_slot, timestep, FLOPS_PER_CORE, over_provision_rate=binpack_cfg.get("exec_t_comp_ratioB", 0))
     if time_slot_s >= time_slot_e:
         return False
     expected_slot_num = time_slot_e - time_slot_s
 
-    # try to push the task into the bins in the bin_list
-    state, bin_id, succ_info = bin_select_new(
-        _p, n_slot, time_slot_s, time_slot_e, req_rsc_size, 
-        process_dict, rsc_recoder, rsc_recoder_his, 
-        iter_next_bin_obj, bin_list, bin_name_list, 
-        timestep, quantumSize, 
-        binpack_cfg,
-        preemption_list, 
-        verbose=verbose, DEBUG=DEBUG
+    def tie_break(_p:ProcessInt):
+        if _p.pid in rsc_recoder:
+            alloc_slot_s, alloc_size, allo_slot, bin_id = rsc_recoder[_p.pid]
+            for s, size, l in zip(alloc_slot_s, alloc_size, allo_slot):
+                if s <= n_slot < s+l:
+                    return [s, _p.pid]
+        return [float("inf"), _p.pid]
+
+    # Step2: select bin or give a search list
+    bin_sel_mod = binpack_cfg.get("bin_sel_mod", "search")
+    if bin_sel_mod == "pre_defined":
+        assert binpack_cfg['mapping'] is not None
+        pid2bin_id:Dict[int, int] = binpack_cfg['mapping']
+        bin_id = pid2bin_id[_p.pid]
+        affinity_tgt_bin_id_list = [bin_id,]
+        affinity_search_bin_id_list = []
+    else:
+        affinity_tgt_bin_id_list, affinity_search_bin_id_list = bin_sel(_p, time_slot_s, time_slot_e, req_rsc_size, rsc_recoder_his, 
+                                                                    bin_list, bin_name_list, timestep, binpack_cfg, process_dict)
+
+    # Step: try to push the task into the bins in the bin_list
+    state, bin_id, succ_info, fail_info = False, -1, None, None
+    # try to find bin to fit the task
+    for bin_id in affinity_tgt_bin_id_list + affinity_search_bin_id_list: 
+        # rearange the task in the ready queue
+        process_sort = get_process_sort([bin_name_list[bin_id]], rsc_recoder_his, tie_break)
+        state, succ_info = check_and_preemt_alloc(_p, n_slot, bin_list[bin_id],
+                                                time_slot_s, time_slot_e, timestep,  
+                                                rsc_recoder, process_dict,
+                                                req_rsc_size, expected_slot_num, 
+                                                quantumSize,
+                                                binpack_cfg,
+                                                process_sort,
+                                                preemption_list,
+                                                verbose, DEBUG
         )
+        if state: 
+            break
+        else:
+            bin_id = -1
+
+    if not state:
+        try:
+            bin = next(iter_next_bin_obj)
+            bin_id = bin.id
+        except StopIteration:
+            warnings.warn("No more bin can be created")
 
 
     if state:
@@ -166,6 +204,19 @@ def allocate_rsc_4_process_new2(
             rsc_recoder_his[_p.pid] = LRUCache(3)
         rsc_recoder_his[_p.pid].put(bin_id, [alloc_slot_s, alloc_size, allo_slot])
 
+    Bp_print_util(_p, bin_name_list, 
+                  time_slot_s, time_slot_e, req_rsc_size, expected_slot_num, 
+                  bin_id, state, succ_info, 
+                  show_warnings, verbose, DEBUG)
+    return state
+
+def Bp_print_util(_p, bin_name_list, 
+                  time_slot_s, time_slot_e, req_rsc_size, expected_slot_num, 
+                  bin_id, state, succ_info, 
+                  show_warnings, verbose, DEBUG):
+    if state:
+        alloc_slot_s, alloc_size, allo_slot, total_alloc_unit, total_FLOPS_alloc = succ_info
+    
         # print the allocation result
         if verbose:
             print(f"TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) tries to allocate\n")
@@ -184,7 +235,6 @@ def allocate_rsc_4_process_new2(
             print("\t[{:s}]\n".format("FAILED" if not state else "SUCCESS"))
         if show_warnings:
             Warning("TASK {:d}:{:s}({:d}) IS DELAY ISSUED!!".format(_p.task.id, _p.task.name, _p.pid))
-    return state
 
 def bin_select_new(
         # request parameters
@@ -209,44 +259,36 @@ def bin_select_new(
     # 6. the resource should be allocated as compact as possible
     # 7. the resource should be allocated as balanced as possible
 
-    # initialize the resource request parameters
+    bin_sel_mod = binpack_cfg.get("bin_sel_mod", "search")
+    if bin_sel_mod == "pre_defined":
+        assert binpack_cfg['mapping'] is not None
+        pid2bin_id:Dict[int, int] = binpack_cfg['mapping']
+        bin_id = pid2bin_id[_p.pid]
+        affinity_tgt_bin_id_list = [bin_id,]
+        affinity_search_bin_id_list = []
+    else:
+        affinity_tgt_bin_id_list, affinity_search_bin_id_list = bin_sel(_p, time_slot_s, time_slot_e, req_rsc_size, rsc_recoder_his, 
+                                                                    bin_list, bin_name_list, timestep, binpack_cfg, process_dict)
+
+
+    return affinity_tgt_bin_id_list, affinity_search_bin_id_list
+
+def bin_sel(_p:ProcessInt, time_slot_s, time_slot_e, req_rsc_size:Dict, rsc_recoder_his:Dict[int, LRUCache], 
+            bin_list:List[SchedulingTableInt], bin_name_list:List[str], timestep, binpack_cfg, _p_index_by_pid):
+    """
+    1. For the task that is pre-assigned with the resource, the affinity is set to be itself
+    2. the pre-defined resource preservation should be respected 
+    3. the affinity settings of all the tasks should be respected 
+    """
     p_name = _p.task.name
-    expected_slot_num = time_slot_e-time_slot_s 
-    # _p_index_by_pid = {_p.pid: _p for _p in init_p_list}
-    _p_index_by_pid = process_dict
-    # TODO: arange the bin_list according to the affinity of the class
-
-    state, bin_id, succ_info, fail_info = False, -1, None, None
-
-    def tie_break(_p:ProcessInt):
-        if _p.pid in rsc_recoder:
-            alloc_slot_s, alloc_size, allo_slot, bin_id = rsc_recoder[_p.pid]
-            for s, size, l in zip(alloc_slot_s, alloc_size, allo_slot):
-                if s <= n_slot < s+l:
-                    return [s, _p.pid]
-        return [float("inf"), _p.pid]
-
-    # 2. the pre-defined resource preservation should be respected 
-    #   For the task that is pre-assigned with the resource, the affinity is set to be itself
     if p_name in bin_name_list:
         bin_id = bin_name_list.index(p_name)
-        process_sort = get_process_sort([p_name], rsc_recoder_his, tie_break)
-        state, succ_info = check_and_preemt_alloc(_p, n_slot, bin_list[bin_id],
-                                                time_slot_s, time_slot_e, timestep,  
-                                                rsc_recoder, _p_index_by_pid,
-                                                req_rsc_size, expected_slot_num, 
-                                                quantumSize,
-                                                binpack_cfg,
-                                                process_sort,
-                                                preemption_list,
-                                                verbose, DEBUG
-        )
-
+        affinity_tgt_bin_id_list = [bin_id,]
+        affinity_search_bin_id_list = []
     else: 
-
         # index free resources in each bins
         # rsc_avl_list = [sum(_bin.idx_free_by_slot(time_slot_s, time_slot_e, key=_p.pid)) for _bin in bin_list]
-
+        # NOTE: arange the bin_list according to the affinity of the class
         affinity_tgt_bin_id_list = get_target_bin_id(_p, bin_name_list, rsc_recoder_his)
         # if _p.pid in rsc_recoder_his:
         #     hate_bin_id_list = list(rsc_recoder_his[_p.pid].dict_neg.keys())
@@ -281,35 +323,7 @@ def bin_select_new(
         else:
             # arrange the targets of the search in the order of the reverse fitness of the size
             affinity_search_bin_id_list.sort(key=lambda x: abs(bin_list[x].num_resources - req_rsc_size), reverse=True)
-
-
-        # 3. the affinity settings of all the tasks should be respected 
-        # try to find bin to fit the task
-        for bin_id in affinity_tgt_bin_id_list + affinity_search_bin_id_list: 
-            # rearange the task in the ready queue
-            process_sort = get_process_sort([bin_name_list[bin_id]], rsc_recoder_his, tie_break)
-            state, succ_info = check_and_preemt_alloc(_p, n_slot, bin_list[bin_id],
-                                                    time_slot_s, time_slot_e, timestep,  
-                                                    rsc_recoder, _p_index_by_pid,
-                                                    req_rsc_size, expected_slot_num, 
-                                                    quantumSize,
-                                                    binpack_cfg,
-                                                    process_sort,
-                                                    preemption_list,
-                                                    verbose, DEBUG
-            )
-            if state: 
-                break
-            else:
-                bin_id = -1
-        
-        if not state:
-            try:
-                bin = next(iter_next_bin_obj)
-                bin_id = bin.id
-            except StopIteration:
-                warnings.warn("No more bin can be created")
-    return state, bin_id, succ_info
+    return affinity_tgt_bin_id_list,affinity_search_bin_id_list
 
 def push_into_bin(_p, bin:SchedulingTableInt, 
                   time_slot_s, req_rsc_size, expected_slot_num, preempt_en,

@@ -31,6 +31,11 @@ from sched.bin_ops import bin_iter_list
 from networkx import DiGraph
 from functools import reduce
 
+default_binpack_cfg = {
+            "sort":"EAT", "sort_reverse":True, "mode": 'non-block', "partial_alloc_en":False, 
+            "quantum_check_en":False, "release_temp_rda":True, "reservation_policy": "manual", 
+            "algorithm": "coalescing"
+}
 # ==================== top-level scheduling procedure ====================
 def push_task_into_bins_new(
         
@@ -44,10 +49,7 @@ def push_task_into_bins_new(
         a_data_pipe:DataPipe=None,
         w_data_pipe:DataPipe=None, 
 
-        n_p=1, binpack_cfg:Dict={
-            "sort":"EAT", "sort_reverse":True, "mode": 'non-block', "partial_alloc_en":False, 
-            "quantum_check_en":False, "release_temp_rda":True, "reservation_policy": "manual"
-            },
+        n_p=1, binpack_cfg:Dict=default_binpack_cfg,
         show_warnings=True, 
         verbose=False, DEBUG_FG=False, *, 
         warmup=False, drain=False,                     
@@ -290,11 +292,7 @@ def naive_iso(
         a_data_pipe:DataPipe=None,
         w_data_pipe:DataPipe=None, 
 
-        n_p=1, binpack_cfg:Dict={
-            "sort":"EAT", "sort_reverse":True, "mode": 'non-block', "partial_alloc_en":False, 
-            "quantum_check_en":False, "release_temp_rda":True, "reservation_policy": "manual",
-            "algorithm": "coalescing"
-            },
+        n_p=1, binpack_cfg:Dict=default_binpack_cfg,
         show_warnings=True, 
         verbose=False, DEBUG_FG=False, *, 
         warmup=False, drain=False,                     
@@ -332,11 +330,7 @@ def coleasing_alloc_1bin(
         a_data_pipe:DataPipe=None,
         w_data_pipe:DataPipe=None, 
 
-        n_p=1, binpack_cfg:Dict={
-            "sort":"EAT", "sort_reverse":True, "mode": 'non-block', "partial_alloc_en":False, 
-            "quantum_check_en":False, "release_temp_rda":True, "reservation_policy": "manual",
-            "algorithm": "coalescing"
-            },
+        n_p=1, binpack_cfg:Dict=default_binpack_cfg,
         show_warnings=True, 
         verbose=False, DEBUG_FG=False, *, 
         warmup=False, drain=False,                     
@@ -527,11 +521,7 @@ def coleasing_alloc_split_bin_new(
         a_data_pipe:DataPipe=None,
         w_data_pipe:DataPipe=None, 
 
-        n_p=1, binpack_cfg:Dict={
-            "sort":"EAT", "sort_reverse":True, "mode": 'non-block', "partial_alloc_en":False, 
-            "quantum_check_en":False, "release_temp_rda":True, "reservation_policy": "manual",
-            "algorithm": "coalescing"
-            },
+        n_p=1, binpack_cfg:Dict=default_binpack_cfg,
         show_warnings=True, 
         verbose=False, DEBUG_FG=False, *, 
         warmup=False, drain=False,                     
@@ -648,11 +638,7 @@ def coleasing_alloc_cluster(
         a_data_pipe:DataPipe=None,
         w_data_pipe:DataPipe=None, 
 
-        n_p=1, binpack_cfg:Dict={
-            "sort":"EAT", "sort_reverse":True, "mode": 'non-block', "partial_alloc_en":False, 
-            "quantum_check_en":False, "release_temp_rda":True, "reservation_policy": "manual",
-            "algorithm": "coalescing"
-            },
+        n_p=1, binpack_cfg:Dict=default_binpack_cfg,
         job_graph:DiGraph=None, src_nodes:List=None, end_nodes:List=None, n_partition:int=9999,
         show_warnings=True, 
         verbose=False, DEBUG_FG=False, *, 
@@ -680,7 +666,7 @@ def coleasing_alloc_cluster(
     tab_spatial_size = total_cores
     assert len(bin_list) == 1
     _bin_tb_split = bin_list[0]
-        
+    process_dict = OrderedDict(sorted([(p.pid, p) for p in glb_p_list]))
 
     def _new_bin(id, size=tab_spatial_size, name=None): 
         if name is None:
@@ -724,11 +710,14 @@ def coleasing_alloc_cluster(
     bin_list.clear()
     bin_list.extend(planed_bin_list)
 
-    layout = {_bin.name:_bin.num_resources for _bin in bin_list}
-    print("max_core_num:", sum(layout.values()))
-    print(f"max_core_layout: {layout}")
-    max_core_num = sum(layout.values())
-    return [0, layout]
+    # layout format: start slot, allocation map, duation slot
+    bin_size_list = {_bin.id:_bin.num_resources for _bin in bin_list}
+    pid2_bin_id = sol
+    print("max_core_num:", sum(bin_size_list.values()))
+    print(f"max_core_layout: {bin_size_list}")
+    print(f"pid2_bin_id: {pid2_bin_id}")
+    max_core_num = sum(bin_size_list.values())
+    return pid2_bin_id, bin_size_list
 
 def split_affinity_first(glb_p_list, scheduler_list, n_partition, _bin_tb_split, rt_chains, ddl_chains, allowed_bin_name):
     process_dict = OrderedDict(sorted([(p.pid, p) for p in glb_p_list]))
@@ -869,7 +858,6 @@ def split_size_first(glb_p_list, scheduler_list, n_partition, _bin_tb_split, rt_
     return placed_p,bin_name_list,sol,bin_size
 
 
-
 def solver_1round(planed_bin_list, bin_name_list, process_dict, rsc_recoder_his, M, probs, J, duation, col_pid, placed_p, tbd_p, affinity_mode, affinity_dict2, affinity_dict1):
     if affinity_mode == "manual":
         for pid, _p in process_dict.items():
@@ -937,11 +925,7 @@ def coleasing_alloc_split_bin(
         a_data_pipe:DataPipe=None,
         w_data_pipe:DataPipe=None, 
 
-        n_p=1, binpack_cfg:Dict={
-            "sort":"EAT", "sort_reverse":True, "mode": 'non-block', "partial_alloc_en":False, 
-            "quantum_check_en":False, "release_temp_rda":True, "reservation_policy": "manual",
-            "algorithm": "coalescing"
-            },
+        n_p=1, binpack_cfg:Dict=default_binpack_cfg,
         show_warnings=True, 
         verbose=False, DEBUG_FG=False, *, 
         warmup=False, drain=False,                     

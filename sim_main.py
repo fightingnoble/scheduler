@@ -3,7 +3,6 @@ from task.task_cfg import create_init_p_list, gen_workloads
 from task.task_cfg import affinity_cfg
 from task.task_cfg import init_affinity
 from sched.global_sched import push_task_into_bins_new, coleasing_alloc_1bin, naive_iso
-from task.task_agent import TaskInt 
 from task.task_agent import TaskInt
 from task.spec import Spec
 from model.message.msg_dispatcher import MsgDispatcher
@@ -181,7 +180,7 @@ def main():
         elif args.binpack_cfg["algorithm"] == "bin_split":
             from sched.global_sched import coleasing_alloc_split_bin_new, coleasing_alloc_cluster
             from task.task_cfg import task_graph_srcs, task_graph_sinks
-            max_core_layout = coleasing_alloc_cluster(
+            pid2_bin_id, bin_size_list = coleasing_alloc_cluster(
                 bin_list,
                 glb_p_list, affinity_cfg, event_iter_dict,
                 num_cores, args.quantum_check_en, quantumSize, 
@@ -244,7 +243,7 @@ def main():
         # dump_and_check(routing_table_save_path, scheduler_list[0].detail_alloc_info)
 
     elif args.test_all or args.test_case in ["cyclic", "dynamic", "partitioned_glb_dynamic"]:
-        if args.binpack_cfg["algorithm"] == "coalescing":
+        if args.binpack_cfg["core_size"] == "induced":
             folder = cache_root_fmt.format(**path_para_dict)
             root,dirs,files = os.walk(folder).__next__()
             assert len(dirs) == 0

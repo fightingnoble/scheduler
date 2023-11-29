@@ -137,7 +137,7 @@ def args_postprocess(args):
     args.binpack_cfg.update({"exec_t_comp_ratioB": args.exec_t_comp_ratioB}) 
     cfg_para_dict = {
         "wsc_slack_ratio": args.wsc_slack_ratio, "exec_t_comp_ratioA": args.exec_t_comp_ratioA, 
-        "lateness_mode": args.lateness_mode
+        "lateness_mode": args.lateness_mode, "jitter_t_comp_ratio": args.jitter_t_comp_ratio,
         }
     para_scan_group1 = {"aux_scale_factor": args.aux_scale_factor, "e2e_latency": args.e2e_latency}
     para_scan_group2 = {"num_cores": args.num_cores}

@@ -8,5 +8,7 @@
     "reservation_policy": "static_1_bin",
     "slack_sharing": false,
     "algorithm": "coalescing",
-    "preempt_en": false
+    "preempt_en": false,
+    "core_size": "induced"
+
 }

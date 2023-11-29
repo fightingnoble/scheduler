@@ -57,7 +57,7 @@ for i in {0..1}; do
 
         RATE_CFG="--wsc_slack_ratio $wsc_slack_ratio --exec_t_comp_ratioA $exec_t_comp_ratioA --exec_t_comp_ratioB $exec_t_comp_ratioB --num_bins $n_bin --root_dir "$root_dir/n_bins_${n_bin}" "
         echo "./run/abla_scalablility.sh $tp_start $tp_step $tp_end "$root_dir/n_bins_${n_bin}" sim_main.py True False $VAR_ARGS "xx" $PY_ARGS $RATE_CFG"
-        ./run/abla_scalablility.sh $tp_start $tp_step $tp_end "$root_dir/n_bins_${n_bin}" sim_main.py True False "xx" "xx" $PY_ARGS $RATE_CFG
+        ./run/abla_scalablility.sh $tp_start $tp_step $tp_end "$root_dir/n_bins_${n_bin}" sim_main.py True False "xx" "xx" $PY_ARGS $RATE_CFG 
 
         if [ $scan_seed == True ]; then
             VAR_ARGS="--var_sim_cfg $var_sim_cfg --file_suffix $suffix --jitter_sim_en"
