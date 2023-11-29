@@ -45,7 +45,7 @@ affinity_cfg = {
     "ImageBB": ["MultiCameraFusion"],
     "MultiCameraFusion": ["ImageBB", "Pure_camera_path_head"],
     "Pure_camera_path_head": ["MultiCameraFusion", "Prediction"],
-    "Prediction": ["Pure_camera_path_head", "Lidar_based_3dDet", "Planning"],
+    "Prediction": ["Lidar_based_3dDet", "Pure_camera_path_head", "Planning"],
     "Planning": ["Prediction", "Steering_speed"],
     "Steering_speed": ["Planning"],
     "Stereo_feature_enc": ["Semantic_segm", "Lane_drivable_area_det", "Optical_Flow", "Depth_estimation"],

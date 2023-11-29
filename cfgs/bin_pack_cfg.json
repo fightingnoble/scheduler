@@ -3,9 +3,10 @@
     "sort_reverse":true, 
     "quantum_check_en": false,
     "partial_alloc_en": false,
-    "mode": "non-block",
-    "release_temp_rda":true,
-    "reservation_policy": "manual",
-    "algorithm": "reside",
-    "preempt_en": "true"
+    "mode": "block",
+    "release_temp_rda":false,
+    "reservation_policy": "static_1_bin",
+    "slack_sharing": false,
+    "algorithm": "bin_split",
+    "preempt_en": false
 }
