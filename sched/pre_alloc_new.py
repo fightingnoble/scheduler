@@ -52,7 +52,9 @@ def glb_alloc_new2(process_dict, quantumSize, timestep,
             False: 1 -> not start
         """
         return [float("inf"), _p.pid]
-    process_sort = get_process_sort(bin_name_list, rsc_recoder_his, tie_break)
+    affinity_en = binpack_cfg.get("affinity_en", True)
+    affinity_level = binpack_cfg.get("affinity_level", 2)
+    process_sort = get_process_sort(bin_name_list, rsc_recoder_his, tie_break, affinity_en, affinity_level)
     sorted_ready_l = ready_queue.queue + running_queue.queue + issue_list.queue
     sorted_ready_queue = TaskQueue(sorted_ready_l, descending=False, sort_f=process_sort)
     del sorted_ready_l
@@ -171,7 +173,9 @@ def allocate_rsc_4_process_new2(
     # try to find bin to fit the task
     for bin_id in affinity_tgt_bin_id_list + affinity_search_bin_id_list: 
         # rearange the task in the ready queue
-        process_sort = get_process_sort([bin_name_list[bin_id]], rsc_recoder_his, tie_break)
+        affinity_en = binpack_cfg.get("affinity_en", True)
+        affinity_level = binpack_cfg.get("affinity_level", 2)
+        process_sort = get_process_sort([bin_name_list[bin_id]], rsc_recoder_his, tie_break, affinity_en, affinity_level)
         state, succ_info = check_and_preemt_alloc(_p, n_slot, bin_list[bin_id],
                                                 time_slot_s, time_slot_e, timestep,  
                                                 rsc_recoder, process_dict,

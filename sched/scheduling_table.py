@@ -1,26 +1,24 @@
-import math
-import numpy as np
-import pandas as pd
-from scipy.optimize import lsq_linear
 from typing import List, Dict, Tuple, Union, Optional, Iterable, Iterator, Collection
 from collections import OrderedDict
-from model.resource_agent import Resource_model_int
-from functools import reduce
-from task.task_agent import ProcessInt, TaskInt
-from matplotlib import pyplot as plt
-from bokeh.plotting import figure, show
-from bokeh.models import ColumnDataSource, HoverTool, Range1d, LabelSet, Label, Legend
-from bokeh.layouts import row, column, gridplot
-import plotly.graph_objects as go
-import plotly.express as px
-from plotly.subplots import make_subplots
+import math
 import os
-from model.resource_agent import RscMapInt
-import networkx as nx
+import numpy as np
+from model.resource_agent import Resource_model_int
+from task.task_agent import ProcessInt, TaskInt
 from global_var import fork_pid_base
 from global_var import *
+from utils import load_pickle
+
 import matplotlib.colors as mcolors
-import matplotlib as mpl
+from matplotlib import pyplot as plt
+# import networkx as nx
+# import matplotlib as mpl
+# from bokeh.plotting import figure, show
+# from bokeh.models import ColumnDataSource, HoverTool, Range1d, LabelSet, Label, Legend
+# from bokeh.layouts import row, column, gridplot
+# import plotly.graph_objects as go
+# import plotly.express as px
+# from plotly.subplots import make_subplots
 
 class SchedulingTableInt(object): 
     """
@@ -420,6 +418,11 @@ class SchedulingTableInt(object):
             for i in range(len(curr_alloc)):
                 for rsc_map in self.scheduling_table[time_slot_s[i]:time_slot_s[i]+curr_slot[i]]:
                     rsc_map.release(task.pid, curr_alloc[i], verbose)
+    
+    def clear(self):
+        for rsc_map in self.scheduling_table:
+            rsc_map:Resource_model_int
+            rsc_map.clear()
 
     def allocate(self, pid:int, time_slot_s:List[int], curr_alloc:List[int], curr_slot:List[int], verbose: bool = False):
         assert len(curr_alloc) == len(curr_slot) == len(time_slot_s)
@@ -1576,8 +1579,6 @@ def get_task_layout_sparse(bin_list:List[SchedulingTableInt], pid2name:Dict[int,
     if show:
         if tool == "matplotlib":
             plt.show()
-        elif tool == "bokeh":
-            show(column(fig))
     # save the figure
     if save: 
         # if format is given in file name, use it
@@ -1915,7 +1916,15 @@ def new_bin(spatial_size:int, temporal_size:int, id:int = 0, name:str = "bin"):
     SchedTab = SchedulingTableInt(spatial_size, temporal_size, id=id, name=name)
     return SchedTab
             
-    
+def load_bin_list(bin_list_save_path, min_num_bins=-1):
+    bin_list = load_pickle(bin_list_save_path)
+    min_num_bins = len(bin_list) if min_num_bins == -1 else min_num_bins
+    for bin_id in range(min_num_bins):
+        if bin_id >= len(bin_list):
+            bin_list.append(SchedulingTableInt(0, bin_id, 0, f'dummy_bin_{bin_id}'))
+    return bin_list
+
+
 if __name__ == "__main__": 
     import argparse
     parser = argparse.ArgumentParser(description='Process some integers.') 

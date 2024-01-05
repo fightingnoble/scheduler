@@ -64,15 +64,25 @@ def get_target_bin_score(_p:ProcessInt, bin_name_list:List[str], rsc_recoder_his
         return (1-score0, 1-score1, 1-score2)
     return (score0, score1, score2)
 
-def get_process_sort(bin_name_list, rsc_recoder_his, ex_fn=None):
+def get_process_sort(bin_name_list, rsc_recoder_his, ex_fn=None, affinity_en=True, affinity_level=2):
     """
-        lower score means higher priority
+        lower score means higher priority,
+        affinity_en: whether to consider affinity
+        affinity_level: 0, 1, 2, means whether use b, c, d in the score function
     """
     cond_fn1 = lambda x: round(x.deadline, numerical_tol_bit)
     cond_fn2 = lambda x: get_target_bin_score(x, bin_name_list, rsc_recoder_his, reverse=True)
     def sort_fn(x):
         a = cond_fn1(x)
-        b,c,d = cond_fn2(x)
+        if affinity_en:
+            assert affinity_level in [0,1,2]
+            b,c,d = cond_fn2(x)
+            if affinity_level == 0: 
+                c,d=0,0
+            elif affinity_level == 1: 
+                d = 0
+        else:
+            b,c,d = 0,0,0
         if ex_fn is not None: 
             return (b,c,a,d, *ex_fn(x))
         else:

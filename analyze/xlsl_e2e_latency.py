@@ -99,6 +99,10 @@ miss_static = static_df_comm[['mean', 'min', 'max']]
 miss_df = pd.concat([miss_soft, miss_ignore, miss_static, miss_dyn], axis=1)
 # add a hierarchical index
 miss_df.columns = pd.MultiIndex.from_product([['glb_soft', 'glb_ignore', 'dyn_s', 'dyn'], ['mean', 'min', 'max']])
+# swap the row index 
+miss_df = miss_df.swaplevel(axis=1)
+# sort the columns by level 0, i.e., mean, min, max
+miss_df = miss_df.sort_index(axis=1, level=0)
 # merge the miss_df with merged_df
 merged_df = pd.concat([merged_df, miss_df], axis=1)
 

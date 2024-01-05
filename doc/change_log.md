@@ -1173,3 +1173,16 @@ redefine skip task:
   ```
     skiped_task.append(_p)
   ```
+
+## 20231225
+
+main_sim.py:
+  sort the case into:
+    a. compile time reservation
+    b. runtime scheduling
+  
+script: 
+  change 
+  `echo "$exec_t_comp_ratioB + $ratioB"|bc` to 
+  echo $exec_t_comp_ratioB $ratioB | awk '{ printf "%0.2f\n", $1+$2}
+  to aviod issue: 0.25 is shown as .25

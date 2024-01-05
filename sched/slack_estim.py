@@ -636,7 +636,7 @@ def deduce_eq_wsc(task_graph, start_nodes, end_nodes, src_attr,jitter_t_comp_rat
         jitter_t_comp = 1/src_attr[src]*jitter_t_comp_ratio 
         e2e_constr = task_graph.nodes[sink]['ddl']
         wcs.append(jitter_t_comp/e2e_constr)
-    return max(wcs)
+    return 1-max(wcs)
 
 def plot_timeline_graph(logical_graph_nx, path=f"plot/jobTask_graph_dbg.pdf"):
     fig = plt.figure(figsize=(20, 10))

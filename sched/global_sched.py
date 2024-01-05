@@ -34,7 +34,11 @@ from functools import reduce
 default_binpack_cfg = {
             "sort":"EAT", "sort_reverse":True, "mode": 'non-block', "partial_alloc_en":False, 
             "quantum_check_en":False, "release_temp_rda":True, "reservation_policy": "manual", 
-            "algorithm": "coalescing"
+            "algorithm": "coalescing",
+            "bin_sel_mod": "search", # "pre_defined", "search"
+            "affinity_en": True, 
+            "affinity_level": 2,
+            "mapping": {}
 }
 # ==================== top-level scheduling procedure ====================
 def push_task_into_bins_new(
@@ -42,7 +46,7 @@ def push_task_into_bins_new(
         bin_list: List[SchedulingTableInt], 
         glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,
         total_cores:int, quantum_check_en, quantumSize, 
-        timestep, hyper_p, wsc_slack_ratio, exec_t_comp_ratioA,
+        timestep, hyper_p, wsc_slack_ratio, exec_t_comp_ratioB,
 
         scheduler_list: List[Scheduler], monitor_list:List[Monitor],
         msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
@@ -100,9 +104,14 @@ def push_task_into_bins_new(
         _, _, req_rsc_size = _p.rsc_req_estm(0, timestep, FLOPS_PER_CORE)
         return req_rsc_size
 
-    iter_next_bin_obj, bin_name_list = get_initlist_and_biniter(
-        bin_list, glb_p_list, total_cores, 
-        _new_bin, binpack_cfg["reservation_policy"])
+    bin_sel_mod = binpack_cfg.get("bin_sel_mod", "search")
+    if bin_sel_mod != "pre_defined":
+        iter_next_bin_obj, bin_name_list = get_initlist_and_biniter(
+            bin_list, glb_p_list, total_cores, 
+            _new_bin, binpack_cfg["reservation_policy"])
+    else:
+        bin_name_list = [_bin.name for _bin in bin_list]
+        iter_next_bin_obj = iter([])
 
     for n_slot in range(sim_slot_num):
         curr_t = n_slot * timestep
@@ -119,7 +128,7 @@ def push_task_into_bins_new(
         message_trigger_event_new(event_iter_dict, inactive_list, glb_p_list, None, None, None, timestep, curr_t, True) 
         push_step_new(
             sched, msg_dispatcher, a_data_pipe, w_data_pipe, 
-            n_slot, timestep, exec_t_comp_ratioA, 
+            n_slot, timestep, exec_t_comp_ratioB, 
             event_range, sim_slot_num, curr_t, 
                         
             glb_name_p_dict, None, 
@@ -156,7 +165,7 @@ def push_task_into_bins_new(
 def push_step_new(
         sched: Scheduler, msg_dispatcher: MsgDispatcher,
         a_data_pipe: DataPipe, w_data_pipe: DataPipe,
-        n_slot: int, timestep: float, exec_t_comp_ratioA, 
+        n_slot: int, timestep: float, exec_t_comp_ratioB: float, 
         event_range: float, sim_slot_num: int, curr_t: float,
 
         glb_name_p_dict, res_cfg: Resource_model_int,
@@ -186,6 +195,7 @@ def push_step_new(
     bin_name = ""
     _SchedTab = sched._SchedTab
     bin_spatial_size = _SchedTab.num_resources
+    binpack_cfg["exec_t_comp_ratioB"] = exec_t_comp_ratioB
 
     # (running_queue)
     # check running tasks
@@ -318,7 +328,56 @@ def naive_iso(
         _new_bin, "all_isolation", pre_assign_priority)
     print(bin_list)
     
+def test_mem_planner(
+        bin_list: List[SchedulingTableInt], 
+        glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,
+        total_cores:int, quantum_check_en, quantumSize, 
+        timestep, hyper_p, wsc_slack_ratio, exec_t_comp_ratioB,
 
+        scheduler_list: List[Scheduler], monitor_list:List[Monitor],
+        msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
+        a_data_pipe:DataPipe=None,
+        w_data_pipe:DataPipe=None, 
+
+        n_p=1, binpack_cfg:Dict=default_binpack_cfg,
+        show_warnings=True, 
+        verbose=False, DEBUG_FG=False, *, 
+        warmup=False, drain=False,                     
+):
+    
+    event_range = hyper_p * (n_p+warmup)
+
+    from mapper.mem_planner import Block, MemMap, scan_overlap_2d, layout_plot
+
+    # build block list
+    block_list = []
+    block_idx = 0 
+    for _p in glb_p_list:
+        _p:ProcessInt
+        stimu_tab = _p.task.extract_sensor_event(event_range)
+        # (task_name, pid, req_size, stimu_t, start_t, ddl_t, exp_comp_t)
+        for stimu_t in stimu_tab:
+            item = (_p.task.name, _p.pid, 
+              _p.task.pre_assigned_resource.main_size + _p.task.pre_assigned_resource.RDA_size, 
+              stimu_t, stimu_t+_p.task.ERT, stimu_t+_p.task.ERT+_p.task.ddl, _p.task.exp_comp_t)
+            start_t, ddl_t = item[4], item[5]
+            # quantize the start time and ddl time
+            slot_s = elim_nume_error(int(math.ceil(start_t/timestep)) * timestep)
+            slot_e = elim_nume_error(int(math.floor(ddl_t/timestep)) * timestep)
+            # s:float # size
+            # r:float # release time
+            # c:float # deadline
+            # idx:int # index
+            block_list.append(Block(item[2], slot_s, slot_e, block_idx))
+            block_idx += 1
+            
+    mapper:MemMap = MemMap()
+    position_recoder, conflict_graph = mapper.prority_mapper(block_list, timestep, sort_fn=lambda x: (x.s*x.lifetime**2, x.lifetime, x.s, -x.r, x.idx))
+    status = scan_overlap_2d(mapper.position_recoder, block_list)
+    layout_plot(position_recoder, block_list, show=True, tick_dens=4)
+    print(position_recoder)
+    
+    
 def coleasing_alloc_1bin(
         bin_list: List[SchedulingTableInt], 
         glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,

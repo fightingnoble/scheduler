@@ -1,4 +1,5 @@
 import re
+from analyze.pattern import *
 from functools import reduce
 import pandas as pd
 import os
@@ -6,8 +7,6 @@ import numpy as np
 from analyze.stat_num_exec import extract_num_exec
 from model.message.Context_message import trace_analyser
 
-from analyze.pattern import folder_pattern, folder_pattern_keys, folder_type, get_path_var_scaner
-from analyze.pattern import trace_pattern, trace_pattern_keys, trace_pattern_type, case_name_dyn, case_name_glb
 from utils import update_df
 
 folder_search_seq = ["cfg_n"]
@@ -32,7 +31,7 @@ def set_percetile(df, data, e2e_latency_list, miss_rate):
     return df
 
 def get_e2e_checker(file_pattern, file_pattern_keys, file_pattern_type, timing_flag_dict, profiling_filename=None, n_p=None, 
-                    warmup_dis=None, stat_csv_filename=None, index_seq=None, trace_and_log_check_en=True):
+                    warmup_dis=None, stat_csv_filename=None, index_seq=None, trace_and_log_check_en=False):
     def e2e_checker(df, folder, info_dict):
         aux_scale_factor = info_dict['aux_scale_factor']
         num_exec, sink_pred = extract_num_exec(profiling_filename, aux_scale_factor, n_p, warmup_dis, "e2e")
@@ -94,11 +93,35 @@ def get_e2e_checker(file_pattern, file_pattern_keys, file_pattern_type, timing_f
                         log_path = os.path.join(log_folder, log_fn)
                         stat_df = pd.read_csv(log_path, index_col=0, header=[0, 1])
                         # r"(dyn|glb_dyn)(_\d+)?_jitter_(dis|en)\.log\.txt"
-                        index_name = 'dyn' if data['method'] == case_name_dyn else case_name_glb
+                        # index_name = 'dyn' if data['method'] == case_name_dyn else case_name_glb
+
+                        # if args.test_case == case_name_pglb_input:
+                        #     case_pth = case_name_pglb
+                        # elif args.test_case == case_name_cyc_input:
+                        #     case_pth = case_name_cyc
+                        # elif args.test_case == case_name_dyn_input:
+                        #     case_pth = case_name_dyn
+
+                        if data['method'] == case_name_dyn:
+                            case_name = case_name_dyn
+                        elif data['method'] == case_name_glb:
+                            case_name = case_name_glb
+                        elif data['method'] == case_name_cyc:
+                            case_name = case_name_cyc
+                        elif data['method'] == case_name_pglb:
+                            case_name = case_name_pglb
+
+                        # !@!@!@!@!@!@!@!@!@!@!@!@!@!@!@!@!@!@!@!@
                         index_name += f"_{data['num_cores']}" 
                         index_name += '_jitter_dis' if not data['jitter_en'] else '_jitter_en'
                         index_name += f'_seed_{data["seed"]}' if data["seed"]!='' and data['jitter_en'] else ''
                         index_name += '.log.txt'
+                        # @#@#@#@#@#@#@#@#@#@#@#@#@#@#@#@#@#@#@#@#@
+                        # case_name + jitter_en_${suffix[@]:4}_seed_$seed
+                        # index_name = f"{case_name}_jitter_{'en' if data['jitter_en'] else 'dis'}"
+
+                        if data['seed'] != '':
+                            index_name += f"_seed_{data['seed']}"
                         n_comp = 0 
                         for idx in stat_df.loc[:, index_name]["Completed Count"].index:
                             if "_".join(idx.split('_')[0:-2]) in sink_pred:
@@ -147,6 +170,7 @@ def get_e2e_checker(file_pattern, file_pattern_keys, file_pattern_type, timing_f
         # merge the list of each key
         for method, num_cores in dist_recoder.keys():
             data = {**info_dict, **{'method': method, 'num_cores': num_cores, 'jitter_en': True}}
+            data.pop("", None)
             e2e_latency_list = reduce(lambda x, y: [x[0]+y[0], x[1]+y[1]], dist_recoder[(method, num_cores)])
             miss_rate = miss_rate_recoder[(method, num_cores)]
             df = set_percetile(df, data, e2e_latency_list, miss_rate)
@@ -186,7 +210,7 @@ if __name__ == "__main__":
     if not os.path.exists(filename):
         # Create a dataframe with the values
         pd.DataFrame(columns=
-            [key for search_key in folder_search_seq for key in folder_pattern_keys[search_key]]
+            [key for search_key in folder_search_seq for key in folder_pattern_keys[search_key] if key != ""]
             # keys in trace pattern except seed, to acheive distribution statistics
             + ['method', "num_cores", "jitter_en"] 
             +['confidence', 'ddl_percentile', 'rt_percentile', 'miss_rate']).to_csv(filename, index=False)

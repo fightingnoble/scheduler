@@ -282,6 +282,9 @@ def sched_step(task_spec:Spec,
     # Each partition maintains a scheduling table, a task monitor, and a scheduler. 
     for res_cfg, sched, monitor,  msg_queue, a_msg_queue, sensor_msg_queue in zip(rsc_list, scheduler_list, monitor_list, msg_dispatcher.queues, a_data_pipe.queues, sensor_pipe.queues):
 
+        # pass the empty sched table
+        if sched._SchedTab.num_resources <= 0 or len(sched._SchedTab.sparse_list) == 0:
+            continue
         # print(f"	Bin {_SchedTab.id:d}:")
         # extract scheudler, including queues and lists from scheduler_list
         glb_name_p_dict: Dict[str, ProcessInt]
@@ -336,6 +339,9 @@ def cyclic_sched(task_spec:Spec, affinity,
 
     # pre_ready stage for the initial tasks
     for sched in scheduler_list:
+        # pass the empty sched table
+        if sched._SchedTab.num_resources <= 0 or len(sched._SchedTab.sparse_list) == 0:
+            continue
         # extract scheudler, including queues and lists from scheduler_list
         ready_queue:TaskQueue = sched.ready_queue
         wait_queue:TaskQueue = sched.weight_wait_queue
@@ -419,10 +425,6 @@ def cyclic_sched(task_spec:Spec, affinity,
 
         period_boader_display(timestep, hyper_p, n_p, warmup, event_range, n_slot)
         
-        # TODO: detect the spec change
-            # modify the exp_comp_t and deadline of the tasks
-
-        # print(f"Slot {n_slot:d}, time {curr_t:.6f}")
         # get ddl
         if ddl_update_iter is not None:
             period_trigger_event(ddl_update_iter, curr_t, ddl_stream)

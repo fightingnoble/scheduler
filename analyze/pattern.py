@@ -3,25 +3,28 @@ from typing import Callable, List
 
 folder_pattern = {
     "num_cores": r"(\d+)",
-    "cfg_n": r"x(\d+)_(\d+\.\d+)s_rda-(\d+\.\d+)%\(T\)_(\d+\.\d+)%\(S\)_(\w+)", 
-    "cfg_option": r"(soft|heavy|medium)"
-}
+    "cfg_n": r"x(\d+)_(\d+\.\d+)s_rda-((\d+\.\d+)%\(J\)_)?(\d+\.\d+)%\(T\)_(\d+\.\d+)%\(S\)_(\w+)", 
+    "cfg_option": r"(soft|heavy|medium)",
+    "num_bins": r"n_bins_(\d+)",
+}#x0_0.1s_rda-20.00%(J)_80.00%(T)_5.00%(S)_ignore
 folder_pattern_keys = {
     "num_cores": ["num_cores",],
-    "cfg_n": ["aux_scale_factor", "e2e_latency", "wsc_slack_ratio", "exec_t_comp_ratioA", "lateness_mode"], 
-    "cfg_option": ["cfg_option",]
+    "cfg_n": ["aux_scale_factor", "e2e_latency", "", "jitter_t_comp_ratio", "wsc_slack_ratio", "exec_t_comp_ratioA", "lateness_mode"], 
+    "cfg_option": ["cfg_option",],
+    "num_bins": ["num_bins",],
 }
 folder_type = {
     "num_cores": [int,],
-    "cfg_n": [int, float, float, float, str],
-    "cfg_option": str
+    "cfg_n": [int, float, str, float, float, float, str],
+    "cfg_option": [str],
+    "num_bins": [int],
 }
 
 # regular match expression for path
 from global_var import case_name_cyc, case_name_dyn, case_name_glb
 
 # case_re = r"(?P<method>cyclic|sta_dyn|glb_dyn|dyn|dynamic)"
-case_re = r"(?P<method>cyclic|glb_dyn|dyn)"
+case_re = r"(?P<method>cyclic|glb_dyn|dyn|pglb)"
 seed_re = r"-?\d+"
 seed_re_wn = r"(_seed_(?P<seed>-?\d+))?"
 

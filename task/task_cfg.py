@@ -826,7 +826,7 @@ def gen_workloads(args):
                 task_graph_sinks, sink_attr, src_attr, args.slack_threshold, args.e2e_latency, 
                 args.exec_t_comp_ratioA, args.jitter_t_comp_ratio, 
                 wsc_slack_ratio, algorithm, args.timestepxus)
-    if args.binpack_cfg["algorithm"] == "coalescing":
+    if not args.binpack_cfg["slack_sharing"]:
         print("deduced_eq_wsc:", deduce_eq_wsc(logical_graph_nx, task_graph_srcs, task_graph_sinks, src_attr, args.jitter_t_comp_ratio))
 
     glb_n_task_dict = gen_taskint_from_cfg(taskattr_dict, f_gcd)

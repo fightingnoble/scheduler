@@ -135,21 +135,9 @@ def input_parser():
 def args_postprocess(args):
     root_dir = args.root_dir
     args.binpack_cfg.update({"exec_t_comp_ratioB": args.exec_t_comp_ratioB}) 
-    cfg_para_dict = {
-        "wsc_slack_ratio": args.wsc_slack_ratio, "exec_t_comp_ratioA": args.exec_t_comp_ratioA, 
-        "lateness_mode": args.lateness_mode, "jitter_t_comp_ratio": args.jitter_t_comp_ratio,
-        }
-    para_scan_group1 = {"aux_scale_factor": args.aux_scale_factor, "e2e_latency": args.e2e_latency}
     para_scan_group2 = {"num_cores": args.num_cores}
 
-    if not args.gen_benchmark:
-        if args.profiling_filename == "profiling/profiling.csv":
-            cfg_n = "heavy"
-        else:
-            cfg_n = args.profiling_filename.split(".")[-2].split("_")[-1] 
-        cfg_n += f"_{args.lateness_mode}"
-    else:
-        cfg_n = cfg_root_fmt.format(**cfg_para_dict, **para_scan_group1)
+    cfg_para_dict, para_scan_group1, cfg_n = get_cfg_n(args)
     path_para_dict = {"root_dir": root_dir, "cfg_n": cfg_n, "i_file_suffix": args.i_file_suffix}
     # remain parameters in group1 unfilled
     cfg_n_format = cfg_root_fmt.format(**cfg_para_dict, **{}.fromkeys(para_scan_group1, r"{}"))
@@ -158,7 +146,7 @@ def args_postprocess(args):
     trace_root = trace_root_fmt.format(**path_para_dict, **para_scan_group2)
     bin_path_format = os.path.join('cache', root_dir, cfg_n_format, r"bin_list_{}"+f"{args.i_file_suffix}.pkl")
     # remaining parameters in group2 unfilled
-    bin_save_fmt.format(**{**path_para_dict, 'cfg_n': cfg_n_format, "num_cores": r"{}"})
+    # bin_save_fmt.format(**{**path_para_dict, 'cfg_n': cfg_n_format, "num_cores": r"{}"})
 
     trace_path_para = {
         "trace_root": trace_root, "num_cores": args.num_cores, 
@@ -185,7 +173,37 @@ def args_postprocess(args):
         trace_path_para.update({"seed": "-1"})
 
     csv_xlxs_root = os.path.join(log_dir, root_dir)
-    return cfg_para_dict,para_scan_group1,para_scan_group2,path_para_dict,trace_root,bin_path_format,trace_path_para,plot_path_para,csv_xlxs_root
+    return cfg_para_dict,para_scan_group1,para_scan_group2,path_para_dict,bin_path_format,trace_path_para,plot_path_para,csv_xlxs_root
+
+def get_cfg_n(args):
+    cfg_para_dict = {
+        "wsc_slack_ratio": args.wsc_slack_ratio, "exec_t_comp_ratioA": args.exec_t_comp_ratioA, 
+        "lateness_mode": args.lateness_mode, "jitter_t_comp_ratio": args.jitter_t_comp_ratio,
+        }
+    para_scan_group1 = {"aux_scale_factor": args.aux_scale_factor, "e2e_latency": args.e2e_latency}
+    if not args.gen_benchmark:
+        if args.profiling_filename == "profiling/profiling.csv":
+            cfg_n = "heavy"
+        else:
+            cfg_n = args.profiling_filename.split(".")[-2].split("_")[-1] 
+        cfg_n += f"_{args.lateness_mode}"
+    else:
+        cfg_n = cfg_root_fmt.format(**cfg_para_dict, **para_scan_group1)
+    return cfg_para_dict, para_scan_group1, cfg_n
+
+def get_case_path_str(args):
+    if args.test_case == case_name_pglb_input:
+        case_pth = case_name_pglb
+    elif args.test_case == case_name_cyc_input:
+        case_pth = case_name_cyc
+    elif args.test_case == case_name_dyn_input:
+        case_pth = case_name_dyn
+    elif args.test_case == case_name_glb_input:
+        case_pth = case_name_glb
+    elif args.test_case == case_name_bp_input:
+        case_pth = case_name_bp
+    return case_pth
+
 
 # define a wrapper for displaying current function, start time, end time, and execution time
 def time_cnt(description:str):

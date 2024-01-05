@@ -3,16 +3,8 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(parent_dir)
 sys.path.append('.')
 
-from utils import input_parser
+from utils import input_parser, get_cfg_n
 args = input_parser() 
-# print(args)
-if not args.gen_benchmark:
-    if args.profiling_filename == "profiling/profiling.csv":
-        cfg_n = "heavy"
-    else:
-        cfg_n = args.profiling_filename.split(".")[-2].split("_")[-1]
-else:
-    cfg_n = f"x{args.aux_scale_factor}_{args.e2e_latency}s_rda-{(args.wsc_slack_ratio):.2%}(T)_{args.exec_t_comp_ratioA:.2%}(S)"
-cfg_n += f"_{args.lateness_mode}"
+_, _, cfg_n = get_cfg_n(args)
 
 print(f"{cfg_n}")

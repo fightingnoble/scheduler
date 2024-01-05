@@ -479,7 +479,7 @@ class ProcessInt(ProcessBase):
         self.is_starving = False
         
 
-    def rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE, time_slot_s=None, time_slot_e=None, mode='rt-wsc', over_provision_rate=0.):
+    def rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE, time_slot_s=None, time_slot_e=None, mode='rt-wsc', over_provision_rate=0., max_size=float("inf")):
         assert mode in ['rt-wsc', 'expected']
         if time_slot_e is None or time_slot_s is None:
             time_slot_s, time_slot_e = _p.quant_release_deadline(n_slot, timestep)
@@ -491,6 +491,10 @@ class ProcessInt(ProcessBase):
                 req_rsc_size = 0
             else:
                 req_rsc_size = int(np.ceil(_p.remburst/(time_slot_e-time_slot_s)/timestep/FLOPS_PER_CORE/(1-over_provision_rate)))
+                if req_rsc_size > max_size and max_size != float("inf"):
+                    req_rsc_size = max_size
+                    Warning(f"req_rsc_size({req_rsc_size}) is greater than max_size({max_size})")
+                    time_slot_e = time_slot_s + int(np.ceil(_p.remburst/req_rsc_size/timestep/FLOPS_PER_CORE))
         return time_slot_s,time_slot_e,req_rsc_size
 
     def quant_release_deadline(_p, n_slot, timestep):

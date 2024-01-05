@@ -251,6 +251,12 @@ B. deadline assignment
          minus n_fork by 1
          delete the process
 
+    (old version)
+    integrated in to virtual sensor related source operator
+    if the handler find the var scaling factor is greater than 1, it spawns(wake up) x(factor-1) of new threads, 
+    which is marked as "spawned"
+    the "spawned" thread will be terminated as soon as they finish their job 
+
 19. e2e var sim, load scheduling table, adjust allocation
     Old table will not assign budget to any task
 

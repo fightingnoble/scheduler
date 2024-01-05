@@ -50,7 +50,7 @@ trace_dir = "./trace"
 cache_dir = "./cache"
 
 import os 
-cfg_root_fmt = r"x{aux_scale_factor}_{e2e_latency}s_rda-{wsc_slack_ratio:.2%}(T)_{exec_t_comp_ratioA:.2%}(S)_{lateness_mode}"
+cfg_root_fmt = r"x{aux_scale_factor}_{e2e_latency}s_rda-{jitter_t_comp_ratio:.2%}(J)_{wsc_slack_ratio:.2%}(T)_{exec_t_comp_ratioA:.2%}(S)_ignore"
 cache_root_fmt = os.path.join(cache_dir, r"{root_dir}", r"{cfg_n}")
 plot_root_fmt = os.path.join(plot_dir, r"{root_dir}", r"{cfg_n}", r"{num_cores}")
 trace_root_fmt = os.path.join(trace_dir, r"{root_dir}", r"{cfg_n}")
@@ -68,11 +68,16 @@ plt_fn_wo_seed_fmt = r"{plot_root}/{case}_{plt_size}_{num_cores}{file_suffix}.pd
 trace_fn_wo_seed_fmt = r"{trace_root}/{case}_e2e_trace_{num_cores}.pkl" 
 trace_fn_w_seed_fmt = r"{trace_root}/{case}_e2e_trace_{num_cores}_seed_{seed}{file_suffix}.pkl" 
 
+core_stat_fn_fmt = r"{cache_root}/{case}_max_core_stat.pkl" # dyn_max_core_stat.pkl
+
+case_name_bp = r"bin_pack_new"
 case_name_glb = r"glb_dyn"
 case_name_dyn = r"dyn"
 case_name_cyc = r"cyclic"
 case_name_pglb = r"pglb"
-case_name_glb_input = r"cyclic"
-case_name_dyn_input = r"glb_dynamic"
-case_name_cyc_input = r"dynamic"
+
+case_name_bp_input = r"bin_pack_new"
+case_name_glb_input = r"glb_dynamic"
+case_name_dyn_input = r"dynamic"
+case_name_cyc_input = r"cyclic"
 case_name_pglb_input = r"partitioned_glb_dynamic"
