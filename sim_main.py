@@ -142,6 +142,7 @@ def main():
                 verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
                 warmup=True, drain=True, 
                 )
+            return
         elif args.binpack_cfg["algorithm"] == "coalescing":
             max_core_layout = coleasing_alloc_1bin(
                 bin_list,

@@ -347,7 +347,7 @@ def test_mem_planner(
     
     event_range = hyper_p * (n_p+warmup)
 
-    from mapper.mem_planner import Block, MemMap, scan_overlap_2d, layout_plot
+    from mapper.mem_planner import Block, test_priority_mapper, test_seq_mapper, CyclicBlock, test_cyclic_mapper
 
     # build block list
     block_list = []
@@ -368,14 +368,15 @@ def test_mem_planner(
             # r:float # release time
             # c:float # deadline
             # idx:int # index
-            block_list.append(Block(item[2], slot_s, slot_e, block_idx))
+            # block_list.append(Block(item[2], slot_s, slot_e, block_idx))
+            # pid:int # process id 
+            block_list.append(CyclicBlock(item[2], slot_s, slot_e, block_idx, pid=item[1]))
             block_idx += 1
             
-    mapper:MemMap = MemMap()
-    position_recoder, conflict_graph = mapper.prority_mapper(block_list, timestep, sort_fn=lambda x: (x.s*x.lifetime**2, x.lifetime, x.s, -x.r, x.idx))
-    status = scan_overlap_2d(mapper.position_recoder, block_list)
-    layout_plot(position_recoder, block_list, show=True, tick_dens=4)
-    print(position_recoder)
+    test_priority_mapper(timestep, block_list)
+    test_seq_mapper(timestep, block_list)
+    # test_cyclic_mapper(timestep, block_list)
+
     
     
 def coleasing_alloc_1bin(

@@ -238,3 +238,27 @@ def update_df(df, index_dict:Dict, info_dict:Dict, update_fn:Callable=lambda x,y
         index_dict.update(info_dict)
         df = pd.concat([df, pd.DataFrame(index_dict, index=[0])], ignore_index=True)
     return df
+
+from pyinstrument import Profiler
+
+# profiler = Profiler()
+# profiler.start()
+
+# # code you want to profile
+
+# profiler.stop()
+
+# profiler.print()
+def pyinstr_profiler(description:str):
+    def pyinstr_profiler_decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            print("="*10+description+"="*10)
+            profiler = Profiler(interval=0.0001)
+            profiler.start()
+            result = func(*args, **kwargs)
+            profiler.stop()
+            profiler.print()
+            return result
+        return wrapper
+    return pyinstr_profiler_decorator

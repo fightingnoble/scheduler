@@ -21,18 +21,20 @@ Objective:
     minimize the highest point of the packing
 """
 
-from typing import List, Dict, Set
+from __future__ import annotations
+from typing import List, Dict, Set, Union
 from dataclasses import dataclass, field
 from collections import OrderedDict
 import os 
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-
+from utils import time_cnt, pyinstr_profiler
+from global_var import *
 
 @dataclass
 class Block(object):
-    s:float # size
+    s:int # size
     r:float # release time
     c:float # deadline
     idx:int # index
@@ -40,7 +42,25 @@ class Block(object):
     lifetime:int = field(init=False) 
 
     def __post_init__(self):
-        self.lifetime = self.c - self.r
+        self.lifetime = elim_nume_error(self.c - self.r)
+    
+    # hash function
+    def __hash__(self) -> int:
+        return hash(self.idx)
+
+    def __eq__(self, other):
+        return self.idx == other.idx
+    
+@dataclass
+class CyclicBlock(Block):
+    pid: int = -1 # the parent cyclic process id
+
+    # hash function
+    def __hash__(self) -> int:
+        return hash(self.idx)
+    
+    def __eq__(self, other):
+        return self.idx == other.idx
         
 @dataclass
 class ContentionGroup(object):
@@ -52,9 +72,10 @@ class ContentionGroup(object):
 def stat_overlapping(
     block_list:List[Block], 
     timestep:float, 
-    block_contention:Dict[int, int],
-    conflict_graph:Dict[int, Set[int]] = None,
-    event_list:List[float] = None
+    block_contention:Dict[int, int] = dict(),
+    conflict_graph:Dict[int, Set[Block]] = dict(),
+    sparse_list:List[ContentionGroup] = [],
+    mapper:MemMap = None, sort_fn:callable=lambda x: x.s, strategy:str='first_fit'
     ):
     """
     Input: block list I: [(s1, r1, c1), (s2, r2, c2), ...]
@@ -89,22 +110,26 @@ def stat_overlapping(
         curr_slot_n = int(curr_t/timestep)
 
         if prev_t < curr_t and curr_items:
-            sparse_list.append(ContentionGroup(prev_t, curr_t - prev_t, max_core_num, curr_items.copy()))
-            # set block contention
-            for item in curr_items:
-                s, r, c, idx = item.s, item.r, item.c, item.idx
-                # record the max degree of contention of each block and set of conflicted blocks
-                block_contention[idx] = max(block_contention.get(idx, 0), len(curr_items))
-                # get the union of the conflicted blocks, and remove the current block
-                conflict_graph[idx] = conflict_graph.get(idx, set()).union(set([item.idx for item in curr_items]))#.remove(idx)
-                conflict_graph[idx].remove(idx)
+            if sparse_list is not None:
+                sparse_list.append(ContentionGroup(prev_t, curr_t - prev_t, max_core_num, curr_items.copy()))
+
+            if block_contention is not None or conflict_graph is not None:
+                # set block contention
+                for item in curr_items:
+                    s, r, c, idx = item.s, item.r, item.c, item.idx
+                    if block_contention is not None:
+                        # record the max degree of contention of each block and set of conflicted blocks
+                        block_contention[idx] = max(block_contention.get(idx, 0), len(curr_items))
+                    if conflict_graph is not None:
+                        # get the union of the conflicted blocks, and remove the current block
+                        conflict_graph[idx] = conflict_graph.get(idx, set()).union(set([item for item in curr_items])).difference(set([item]))
         
         # get the pending items
         while len(block_list):
             s, r, c, idx = block_list[0].s, block_list[0].r, block_list[0].c, block_list[0].idx
             if r <= curr_t:
                 pending_items.append(block_list.pop(0))
-                print("s:", s, "r:", r, "c:", c, "idx:", idx)
+                # print("s:", s, "r:", r, "c:", c, "idx:", idx)
             else:
                 break
 
@@ -113,9 +138,13 @@ def stat_overlapping(
             s, r, c, idx = curr_items[0].s, curr_items[0].r, curr_items[0].c, curr_items[0].idx
             if c <= curr_t:
                 curr_items.pop(0)
-                print("pop item: s:", s, "r:", r, "c:", c, "idx:", idx)
+                # print("pop item: s:", s, "r:", r, "c:", c, "idx:", idx)
+                if mapper is not None:
+                    # pop the old block
+                    mapper.remove(idx)
             else:
                 break
+            1+1
         
         all_items = curr_items + pending_items
         max_core_num_tmp = sum([item.s for item in all_items])
@@ -126,39 +155,102 @@ def stat_overlapping(
             max_core_num = max_core_num_tmp
 
         # place the pending items into the bin
+        if mapper is not None:
+            pending_items.sort(key=sort_fn, reverse=True)
+            
+        
         while len(pending_items):
             item = pending_items.pop(0)
             curr_items.append(item)
-            print("place item: s:", item.s, "r:", item.r, "c:", item.c, "idx:", item.idx)
+            if mapper is not None:
+                # get the best position for the block
+                offset, interv_idx = mapper.try_to_place(item, strategy)
+                # insert the block into the position
+                mapper.insert(item.idx, offset, item.s, interv_idx)
+                1+1
+            
+            
+            # print("place item: s:", item.s, "r:", item.r, "c:", item.c, "idx:", item.idx)
             
         # sort the current items and pending items by the ddl
         curr_items.sort(key=lambda x: x.c)
         prev_t = curr_t
         prev_slot_n = curr_slot_n
     
-    return max_core_num, sparse_list
+    return max_core_num
 
-@dataclass
-class Memalloc:
-    offset: int
-    size: int
-    nextoffset: int = field(init=False)
 
-    def __post_init__(self):
-        self.nextoffset = self.offset + self.size
+def scan_conflict(block_list, time_step):
+    # perform a shallow copy
+    block_list_copy = block_list.copy()
+    block_contention:Dict[int, int] = dict()
+    conflict_graph:Dict[int, Set[Block]] = dict()
+    sparse_list:List[ContentionGroup] = []
+    max_core_num = stat_overlapping(block_list_copy, time_step, block_contention, conflict_graph, sparse_list)
+    # update the block_contention to the blocks
+    for item in block_list:
+        # update the block contention
+        item.n_conflict = block_contention.get(item.idx, 0)
+    return conflict_graph, sparse_list, max_core_num
 
-@dataclass
+
 class MemRegion:
-    offset: int
-    nextoffset: int
-    size: int = field(init=False)
+    # offset: int
+    # nextoffset: int
+    # size: int = field(init=False)
 
-    def __post_init__(self):
+    # def __post_init__(self):
+    #     self.size = self.nextoffset - self.offset
+    def __init__(self, offset, nextoffset):
+        self.offset = offset
+        self.nextoffset = nextoffset
         self.size = self.nextoffset - self.offset
     
     def update_size(self):
         self.size = self.nextoffset - self.offset
+    
+    def copy(self):
+        return MemRegion(self.offset, self.nextoffset)
 
+# @dataclass
+# class Memalloc:
+#     offset: int
+#     size: int
+#     nextoffset: int = field(init=False)
+
+#     def __post_init__(self):
+#         self.nextoffset = self.offset + self.size
+    
+#     def to_mem_region(self):
+#         return MemRegion(self.offset, self.nextoffset)
+
+class Memalloc(MemRegion):
+    def __init__(self, offset, size):
+        self.offset = offset
+        self.size = size
+        self.nextoffset = self.offset + self.size
+    
+
+class AllocMap(list): 
+    def __init__(self):
+        self.position_recoder = OrderedDict()
+    
+    @time_cnt("priority_mapper")
+    @pyinstr_profiler("priority_mapper")
+    def prority_mapper(self, block_list, time_step, sort_fn:callable=lambda x: x.s, strategy:str='first_fit'):
+        # get block confliction
+        conflict_graph,_,_ = scan_conflict(block_list, time_step)
+
+        block_list.sort(key=sort_fn, reverse=True)
+        i=0
+        for i, item in enumerate(block_list):
+            # get the best position for the block
+            offset = search_interval(item, conflict_graph, self.position_recoder, strategy)
+            # insert the block into the position
+            self.position_recoder[item.idx] = Memalloc(offset, item.s)
+            i+=1
+        return self.position_recoder, conflict_graph
+    
 class MemMap(list): 
     def __init__(self, max_size=0):
         self.position_recoder = OrderedDict()
@@ -171,15 +263,24 @@ class MemMap(list):
         # update the free interval
         region = self.free_interv[free_interv_idx]
         # if size is smaller than the free interval
+        assert offset >= region.offset and offset + size <= region.nextoffset
         if size < region.size:
-            if offset > region.offset:
+            if offset == region.offset:
+                # left
+                region.offset = offset + size
+                region.update_size()
+            else:
+                # not left
                 region.nextoffset = offset
                 region.update_size()
-            if offset + size < region.nextoffset:
-                self.free_interv.insert(free_interv_idx+1, MemRegion(offset+size, region.nextoffset))
+                # check if middle                          
+                if offset + size < region.nextoffset:
+                    self.free_interv.insert(free_interv_idx+1, MemRegion(offset+size, region.nextoffset))
+        else:
+            self.free_interv.pop(free_interv_idx)
                 
     def remove(self, idx):
-        region = self.position_recoder.pop(idx)
+        region = self.position_recoder[idx].copy() #.to_mem_region()
         # update the free interval
         free_interv_idx = -1
         if len(self.free_interv) == 0:
@@ -318,77 +419,71 @@ class MemMap(list):
             interv_idx = len(self.free_interv) - 1
         return offset, interv_idx
         
-    # lambda x: (x.n_conflict, -x.r, -x.s)
-    # lambda x: x.s
-    def seq_mapper(self, block_list, time_step, sort_fn:callable=lambda x: x.s):
+    @time_cnt("seq_mapper")
+    def seq_mapper_old(self, block_list, time_step, sort_fn:callable=lambda x: x.s, strategy:str='first_fit'):
         # get block confliction
-        block_contention = {}
-        # perform a shallow copy
-        block_list_copy = block_list.copy()
-        contention_graph = {}
-        event_list = []
-        max_core_num, sparse_list = stat_overlapping(block_list_copy, time_step, block_contention, contention_graph, event_list)
-        # update the block_contention to the blocks
-        for item in block_list:
-            # update the block contention
-            item.n_conflict = block_contention.get(item.idx, 0)
+        _, sparse_list, _ = scan_conflict(block_list, time_step)
             
-        for contention_group in sparse_list:
+        pre_block_group = []
+        for group_idx, contention_group in enumerate(sparse_list):
             block_group = contention_group.block_list
             block_group.sort(key=sort_fn, reverse=True)
-            # compare previous block with the current block
-            # pop the old block
-            # for idx in self.position_recoder:
-            #     if block_list[idx] not in block_group:
-            #         self.remove(idx)
-            for idx in self.position_recoder:
-                
-            # insert the new block
+                # compare previous block with the current block
+                # pop the old block
+            for block in pre_block_group:
+                assert block.idx in self.position_recoder
+                if block not in block_group:
+                    self.remove(block.idx)
+                    
+                # insert the new block
             for block in block_group:
                 if block.idx not in self.position_recoder:
-                    # get the best position for the block
-                    offset, interv_idx = self.try_to_place(block, str)
-                    # insert the block into the position
+                        # get the best position for the block
+                    offset, interv_idx = self.try_to_place(block, strategy)
+                        # insert the block into the position
                     self.insert(block.idx, offset, block.s, interv_idx)
-                            
-        # sort by xx
-        block_list.sort(key=sort_fn, reverse=True)
-        for item in block_list:
-            # get the best position for the block
-            offset, interv_idx = self.try_to_place(item)
-            # insert the block into the position
-            self.insert(item.idx, offset, item.s, interv_idx)
+            pre_block_group = block_group
         return self.position_recoder
 
-    def prority_mapper(self, block_list, time_step, sort_fn:callable=lambda x: x.s):
-        # get block confliction
-        block_contention = {}
+    @time_cnt("seq_mapper")
+    @pyinstr_profiler("seq_mapper")
+    def seq_mapper(self, block_list, time_step, sort_fn:callable=lambda x: x.s, strategy:str='first_fit'):
         # perform a shallow copy
         block_list_copy = block_list.copy()
-        conflict_graph = {}
-        event_list = []
-        max_core_num, sparse_list = stat_overlapping(block_list_copy, time_step, block_contention, conflict_graph, event_list)
-        # update the block_contention to the blocks
-        for item in block_list:
-            # update the block contention
-            item.n_conflict = block_contention.get(item.idx, 0)
-        # sort by xx
-        block_list.sort(key=sort_fn, reverse=True)
-        i=0
-        for item in block_list:
-            # get the best position for the block
-            offset = search_interval(item, block_list, conflict_graph, self.position_recoder)
-            
-            # insert the block into the position
-            self.position_recoder[item.idx] = Memalloc(offset, item.s)
-            i+=1
-        return self.position_recoder, conflict_graph
+        stat_overlapping(block_list_copy, time_step, None, None, None, 
+                         self, sort_fn, strategy)
+        return self.position_recoder
 
-    # def check_conflict(self, confict_graph:Dict[int, Set[int]]):
+    # @time_cnt("cyclic_mapper")
+    # def cyclic_mapper(self, cyclic_block_list:List[CyclicBlock], time_step, sort_fn:callable=lambda x: x.s, strategy:str='first_fit'):
+    #     # get block confliction
+    #     conflict_graph,_,_ = scan_conflict(block_list, time_step)
+        
+    #     cyclic_conflict_graph = {}
+    #     # rewrite the confict graph, merge the block confliction
+    #     for block in block_list:
+    #         block_conflict = conflict_graph[block.idx]
+    #         cyclic_conflict = set([blk.pid for blk in block_conflict])
+    #         cyclic_conflict_graph[block.pid] = cyclic_conflict_graph.get(block.pid, set()).union(cyclic_conflict)
+        
+        
+                
+
+    #     block_list.sort(key=sort_fn, reverse=True)
+    #     i=0
+    #     for i, item in enumerate(block_list):
+    #         # get the best position for the block
+    #         offset = search_interval(item, conflict_graph, self.position_recoder, strategy)
+    #         # insert the block into the position
+    #         self.position_recoder[item.idx] = Memalloc(offset, item.s)
+    #         i+=1
+    #     return self.position_recoder, conflict_graph
+
+    # def check_conflict(self, conflict_graph:Dict[int, Set[int]]):
     #     """
     #     check if the placement is legal, 
     #     """
-    #     tmp_graph = confict_graph.copy()
+    #     tmp_graph = conflict_graph.copy()
     #     while len(tmp_graph):
     #         idx, conflict_idx_list = tmp_graph.popitem()  
     #         Block_A = self.position_recoder[idx]
@@ -410,20 +505,21 @@ class MemMap(list):
     #         if sorted_memalloc[i].nextoffset > sorted_memalloc[i+1].offset:
     #             return False
     
-        
 
-def search_interval(block, block_list:List[Block], confict_graph:Dict[int, Set[int]], 
+
+def search_interval(block, conflict_graph:Dict[int, Set[Block]], 
                         position_dict:Dict[int, Memalloc], strategy:str='first_fit'):
     """
     get the free interval among the blocks
     """
     # get the confict blocks
-    confict_idx_list:List[int] = list(confict_graph[block.idx])
+    confict_blocks:List[int] = list(conflict_graph[block.idx])
     overlapping_blocks = []
-    for confict_idx in confict_idx_list:
-        if confict_idx in position_dict:
-            block = block_list[confict_idx]
-            overlapping_blocks.append(position_dict[confict_idx])
+    # 20240106: fix the bug: the block_list is not sorted by the idx
+    for confict in confict_blocks:
+        if confict.idx in position_dict:
+            overlapping_blocks.append(position_dict[confict.idx])
+        
     overlapping_blocks.sort(key=lambda x: x.offset)
     if len(overlapping_blocks) == 0:
         return 0
@@ -461,17 +557,18 @@ def scan_overlap_2d(position_recoder:Dict[int, Memalloc], block_list:List[Block]
     check if the placement is legal: 
     check the any two Memallocs if they overlap with each other in both x and y axis
     """
-    idx_list = list(position_recoder.keys())
-    for i in range(len(idx_list)-1):
-        idx_a = idx_list[i]
+    assert len(position_recoder) >= len(block_list)
+    
+    for i in range(len(block_list)-1):
+        idx_a = block_list[i].idx
+        a_ed, a_st = block_list[i].c, block_list[i].r
         a_bot, a_top = position_recoder[idx_a].offset, position_recoder[idx_a].nextoffset
-        a_ed, a_st = block_list[idx_a].c, block_list[idx_a].r
-        for j in range(i+1, len(idx_list)):
-            idx_b = idx_list[j]
+        for j in range(i+1, len(block_list)):
+            idx_b = block_list[j].idx
+            b_ed, b_st = block_list[j].c, block_list[j].r
             b_bot, b_top = position_recoder[idx_b].offset, position_recoder[idx_b].nextoffset
             x_overlap = a_bot < b_top and b_bot < a_top
-            b_ed, b_st = block_list[idx_b].c, block_list[idx_b].r
-            y_overlap = a_ed < b_st and b_ed < a_st
+            y_overlap = a_ed > b_st and b_ed > a_st
             if x_overlap and y_overlap:
                 return False
     return True
@@ -512,10 +609,12 @@ def layout_plot(position_recoder:Dict[int, Memalloc], block_list:List[Block],
     colors=list(mcolors.XKCD_COLORS.keys())
     fig, ax = plt.subplots(nrows=1,ncols=1,sharex=True,figsize=(20, 10)) 
     # plot the task layout
-    for idx, memalloc in position_recoder.items():
+    for block in block_list:
+        idx = block.idx
+        memalloc = position_recoder[idx]
         color = mcolors.XKCD_COLORS[colors[idx%len(colors)]]
-        w = block_list[idx].lifetime
-        l, r = block_list[idx].r, block_list[idx].c
+        w = block.lifetime
+        l, r = block.r, block.c
         h = memalloc.size
         b, t = memalloc.offset, memalloc.nextoffset
         # convert the l, r, b, t to the plot coordinate
@@ -551,3 +650,28 @@ def layout_plot(position_recoder:Dict[int, Memalloc], block_list:List[Block],
             os.makedirs(dir_path)
         fmt = save_path.split(".")[-1]
         plt.savefig(save_path, bbox_inches='tight', format=fmt)
+    plt.close()
+
+def test_priority_mapper(timestep, block_list):
+    mapper:AllocMap = AllocMap()
+    position_recoder, conflict_graph = mapper.prority_mapper(block_list, timestep, sort_fn=lambda x: (x.s*x.lifetime**2, x.lifetime, x.s, -x.r, x.idx))
+    status = scan_overlap_2d(mapper.position_recoder, block_list)
+    layout_plot(position_recoder, block_list, show=False, tick_dens=4,
+                save=True, save_path="./mem_plan_prio.pdf")
+    # print(position_recoder)
+
+def test_seq_mapper(timestep, block_list):
+    mapper:MemMap = MemMap()
+    position_recoder = mapper.seq_mapper(block_list, timestep, sort_fn=lambda x: (x.s*x.lifetime**2, x.lifetime, x.s, -x.r, x.idx))
+    status = scan_overlap_2d(mapper.position_recoder, block_list)
+    layout_plot(position_recoder, block_list, show=False, tick_dens=4,
+                save=True, save_path="./mem_plan_seq.pdf")
+    # print(position_recoder)
+
+def test_cyclic_mapper(timestep, block_list):
+    mapper:AllocMap = AllocMap()
+    position_recoder, conflict_graph = mapper.prority_mapper(block_list, timestep, sort_fn=lambda x: (x.s*x.lifetime**2, x.lifetime, x.s, -x.pid))
+    status = scan_overlap_2d(mapper.position_recoder, block_list)
+    layout_plot(position_recoder, block_list, show=False, tick_dens=4, 
+                save=True, save_path="./mem_plan_cyclic.pdf")
+
