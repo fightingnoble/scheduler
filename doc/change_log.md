@@ -1192,3 +1192,5 @@ script:
 finish the memory planner, with two mode:
   1. priority mode (global)
   2. sequential mode
+
+the cpp ver and the python ver get the same results

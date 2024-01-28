@@ -347,7 +347,8 @@ def test_mem_planner(
     
     event_range = hyper_p * (n_p+warmup)
 
-    from mapper.mem_planner import Block, test_priority_mapper, test_seq_mapper, CyclicBlock, test_cyclic_mapper
+    from mapper.mem_planner import Block, test_priority_mapper, \
+        test_seq_mapper, CyclicBlock, test_cyclic_mapper, load_block_list_from_json
 
     # build block list
     block_list = []
@@ -372,10 +373,16 @@ def test_mem_planner(
             # pid:int # process id 
             block_list.append(CyclicBlock(item[2], slot_s, slot_e, block_idx, pid=item[1]))
             block_idx += 1
-            
-    test_priority_mapper(timestep, block_list)
-    test_seq_mapper(timestep, block_list)
-    # test_cyclic_mapper(timestep, block_list)
+
+    # export the block list as json
+    import json
+    with open("cache/block_list.json", "w") as f:
+        json.dump(list(map(lambda x: x.to_dict(), sorted(block_list, key=lambda x: x.idx))), f, indent=4)
+    block_list = load_block_list_from_json("cache/block_list.json", 'cyclic_block')
+    
+    print(test_priority_mapper(timestep, block_list))
+    print(test_seq_mapper(timestep, block_list))
+    print(test_cyclic_mapper(timestep, block_list))
 
     
     
