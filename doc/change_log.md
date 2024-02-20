@@ -1193,4 +1193,8 @@ finish the memory planner, with two mode:
   1. priority mode (global)
   2. sequential mode
 
+## 20240123
 the cpp ver and the python ver get the same results
+
+## 20240205
+Final version from houmo

@@ -31,6 +31,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from utils import time_cnt, pyinstr_profiler
 from global_var import *
+from tqdm import tqdm
 
 @dataclass
 class Block(object):
@@ -40,6 +41,7 @@ class Block(object):
     idx:int # index
     n_conflict:int = 0 # number of conflicts
     lifetime:float = field(init=False) 
+    info:str = "" # additional information
 
     def __post_init__(self):
         self.lifetime = elim_nume_error(self.c - self.r)
@@ -70,9 +72,9 @@ def load_block_list_from_json(json_path:str, type:str='block'):
         block_dict_list = json.load(f)
     for block_dict in block_dict_list:
         if type == 'block':
-            block = Block(**{k: v for k, v in block_dict.items() if k in ["s", "r", "c", "idx"]})
+            block = Block(**{k: v for k, v in block_dict.items() if k in ["s", "r", "c", "idx", "info"]})
         elif type == 'cyclic_block':
-            block = CyclicBlock(**{k: v for k, v in block_dict.items() if k in ["s", "r", "c", "idx", "pid"]})
+            block = CyclicBlock(**{k: v for k, v in block_dict.items() if k in ["s", "r", "c", "idx", "pid", "info"]})
         else:
             raise ValueError("Unrecognized type: ", type)
         block_list.append(block)
@@ -130,7 +132,7 @@ class Memalloc(MemRegion):
         return Memalloc(dict_json["offset"], dict_json["size"])
     
 
-class AllocMap(list): 
+class AllocMap(): 
     def __init__(self):
         self.position_recoder:Dict[int, Memalloc] = OrderedDict()
     
@@ -424,7 +426,7 @@ class MemMap(list):
     #             return False
     
 
-def stat_overlapping(
+def stat_overlapping_old(
     block_list:List[Block], 
     timestep:float, 
     block_contention:Dict[int, int] = dict(),
@@ -458,7 +460,6 @@ def stat_overlapping(
     curr_t:float = 0
     prev_slot_n:int = 0
     curr_slot_n:int = 0
-    sparse_list:List[ContentionGroup] = []
     # scan the event list, place, and pop the task into the bin, 
     # expanding the bin size if necessary
     for curr_t in list(event_list):
@@ -534,6 +535,98 @@ def stat_overlapping(
     
     return max_core_num
 
+
+def stat_overlapping(
+    block_list:List[Block], 
+    timestep:float, 
+    block_contention:Dict[int, int] = dict(),
+    conflict_graph:Dict[int, Set[Block]] = dict(),
+    sparse_list:List[ContentionGroup] = [],
+    mapper:MemMap = None, sort_fn:callable=lambda x: x.s, strategy:str='first_fit'
+    ):
+    """
+    Input: block list I: [(s1, r1, c1), (s2, r2, c2), ...]
+        Each triple (si,ri,ci) is an axis-parallel rectangle: 
+            (ri,ci) is the interval on the x-axis
+            si is the length on the y-axis
+            the rectangles along the y-axis while stay fixed on x-axis
+    Output: the blocks in each interval, the contention of each task
+    """
+    block_list.sort(key=lambda x: x.r)
+    
+    # some cache
+    curr_items = [] # cache the current items
+    pending_items = [] # cache the pending items
+    max_core_num = 0 # cache the max core number
+    
+    prev_t:float = 0
+    curr_t:float = 0
+    prev_slot_n:int = 0
+    curr_slot_n:int = 0
+
+    # update the curr_t and pop all the items that have the same release time
+    while len(block_list):
+        curr_t = block_list[0].r
+        # get the pending items
+        while len(block_list) and block_list[0].r <= curr_t:
+            # print("s:", s, "r:", r, "c:", c, "idx:", idx)
+            pending_items.append(block_list.pop(0))
+        
+        curr_slot_n = int(curr_t/timestep)
+        
+        # pop the items that are finished regarding the ddl
+        pop_t = None
+        while len(curr_items) and curr_items[0].c <= curr_t:
+            # print("pop item: s:", s, "r:", r, "c:", c, "idx:", idx)
+            pop_t = curr_items[0].c
+            if mapper is not None:
+                # pop the old block
+                mapper.release(curr_items[0].idx)
+            if sparse_list is not None:
+                sparse_list.append(ContentionGroup(prev_t, pop_t - prev_t, max_core_num, curr_items.copy()))
+            curr_items.pop(0)
+
+      
+        all_items = curr_items + pending_items
+        max_core_num_tmp = sum([item.s for item in all_items])
+
+        # update the bin size
+        if max_core_num_tmp > max_core_num:
+            print(f"curr_t:{curr_t}, max_core_num: {max_core_num} -> {max_core_num_tmp}")
+            max_core_num = max_core_num_tmp
+
+        # place the pending items into the bin
+        if mapper is not None:
+            pending_items.sort(key=sort_fn, reverse=True)
+        
+        while len(pending_items):
+            item = pending_items.pop(0)
+            curr_items.append(item)
+            if mapper is not None:
+                # get the best position for the block
+                offset, interv_idx = mapper.try_to_place(item, strategy)
+                # insert the block into the position
+                mapper.alloc(item.idx, offset, item.s, interv_idx)
+                1+1
+            
+        if curr_items:
+            if block_contention is not None or conflict_graph is not None:
+                # set block contention
+                for item in curr_items:
+                    s, r, c, idx = item.s, item.r, item.c, item.idx
+                    if block_contention is not None:
+                        # record the max degree of contention of each block and set of conflicted blocks
+                        block_contention[idx] = max(block_contention.get(idx, 0), len(curr_items))
+                    if conflict_graph is not None:
+                        # get the union of the conflicted blocks, and remove the current block
+                        conflict_graph[idx] = conflict_graph.get(idx, set()).union(set([item for item in curr_items])).difference(set([item]))
+
+        # sort the current items and pending items by the ddl
+        curr_items.sort(key=lambda x: x.c)
+        prev_t = curr_t
+        prev_slot_n = curr_slot_n
+    
+    return max_core_num
 
 def scan_conflict(block_list:List[Block], time_step:float, 
                   conflict_graph:Dict[int, Set[Block]] = dict(),
@@ -628,7 +721,7 @@ def scan_overlap_1d(position_recoder):
             return False
 
 def layout_plot(position_recoder:Dict[int, Memalloc], block_list:List[Block], 
-                tick_dens = 1, txt_size = 30,
+                tick_num_x = 4, tick_num_y=4, txt_size = 30,
                 show=False, save=False, save_path="task_layout_compact.pdf", 
                 ):
     """
@@ -652,33 +745,37 @@ def layout_plot(position_recoder:Dict[int, Memalloc], block_list:List[Block],
     colors=list(mcolors.XKCD_COLORS.keys())
     fig, ax = plt.subplots(nrows=1,ncols=1,sharex=True,figsize=(20, 10)) 
     # plot the task layout
-    for block in block_list:
+    # for block in block_list:
+    for block in tqdm(block_list):
         idx = block.idx
         memalloc = position_recoder[idx]
         color = mcolors.XKCD_COLORS[colors[idx%len(colors)]]
+        # hex index and info
+        str_print =f"{idx:x}" + block.info
         w = block.lifetime
         l, r = block.r, block.c
         h = memalloc.size
         b, t = memalloc.offset, memalloc.nextoffset
         # convert the l, r, b, t to the plot coordinate
         ax.broken_barh([(l, w)], (get_vertical_offset(b), get_vertical_size(h)), facecolors=color)
-        ax.text((l+r)/2, get_vertical_offset(b)+get_vertical_size(h)/2, str(idx), ha='center', va='center', color='black', fontsize=10)
+        ax.text((l+r)/2, get_vertical_offset(b)+get_vertical_size(h)/2, str_print, ha='center', va='center', color='black', fontsize=10)
         
     # get the plot start and the plot end 
     plot_start = min([block.r for block in block_list])
     plot_end = max([block.c for block in block_list])
     # only set x axis for the bottom plot
     ax.set_xlim(plot_start-x_margin, plot_end+x_margin)
-    ticks = [str(round(t, 3)) for t in np.arange(plot_start, plot_end, time_grid_size*tick_dens)] + [str(round(plot_end, 3))]
-    ax.set_xticks(np.arange(plot_start, plot_end, time_grid_size*tick_dens).tolist()+[plot_end])
+    ticks = [round(t, 3) for t in np.linspace(plot_start, plot_end, tick_num_x, dtype=float)]
+    ax.set_xticks(ticks)
+    
     ax.set_xticklabels(ticks, fontsize=txt_size, rotation=45)
-    ax.tick_params(axis='x', which='major', pad=time_grid_size * tick_dens)
+    ax.tick_params(axis='x', which='major')
     ax.set_xlabel("Time (s)", fontsize=txt_size) 
 
     # set the axis and title
     bin_vertical_offset += max([memalloc.nextoffset for memalloc in position_recoder.values()])
     vs = int((bin_vertical_offset-base_vertical_offset)//vertical_grid_size)
-    ticks = np.linspace(0, vs, 4, dtype=int)
+    ticks = np.linspace(0, vs, tick_num_y, dtype=int)
     ax.set_ylim(-y_margin, bin_vertical_offset+y_margin)
     ax.set_yticks(ticks)
     ax.set_yticklabels(ticks, fontsize=txt_size, rotation=45)
@@ -741,7 +838,7 @@ def test_cyclic_mapper(timestep, block_list):
 
 def verif_utils(block_list, position_recoder, suffix=""):
     status = scan_overlap_2d(position_recoder, block_list)
-    layout_plot(position_recoder, block_list, show=False, tick_dens=4, 
+    layout_plot(position_recoder, block_list, show=False, 
                 save=True, save_path=f"./mem_plan_{suffix}.pdf")
     # print(position_recoder)
     tot_cores_idx = max(position_recoder, key=lambda x: position_recoder[x].nextoffset)
@@ -749,7 +846,7 @@ def verif_utils(block_list, position_recoder, suffix=""):
     print("tot_cores:", tot_cores)
     return status, tot_cores
 
-def exam_json_result(in_path:str, out_path:str, block_type:str='cyclic_block', suffix=""):
+def exam_json_result(in_path:str, out_path:str, block_type:str='block', suffix=""):
     """
     check if the placement is legal
     """
