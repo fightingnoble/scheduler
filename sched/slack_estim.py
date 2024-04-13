@@ -7,7 +7,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 if TYPE_CHECKING:
-    from task.task_agent import TaskBase, ProcessBase, TaskIntAttr, ProcessInt
+    from task.task_agent import TaskBase, ProcessBase, TaskIntAttr, ProcessInt, TaskInt
     from networkx import DiGraph
 from typing import List, Any, Dict, Tuple, Union
 from global_var import *
@@ -108,7 +108,12 @@ def alloc_func(rsc_map_w:Dict[str, Tuple[int, float]],
     # check the constraint
     constr_dict = {node:constr for node, (_, _, constr) in rsc_map_w.items() if node in flops_dict and constr is not None}
     if len(constr_dict) == 0:
-        slack_rem -= sum([lat for node, (_, lat, _) in rsc_map_w.items() if node in flops_dict])
+        slack_rem -= sum([lat for node, (_, lat, _) in rsc_map_w.items() if node in flops_dict]) + time1n_error_tol_abs
+        # redistributed the slack to the remaining processes
+        if slack_rem > 0:
+            for node in flops_dict:
+                slack_redis = flops_dict[node] / ops_rem * slack_rem
+                rsc_map_w[node] = (rsc_map_w[node][0], elim_nume_error(rsc_map_w[node][1] + slack_redis), rsc_map_w[node][2])
         return state, 0, slack_rem
     else:
         state = False
@@ -141,6 +146,8 @@ def build_score_dict_ref_flops(task_dict:Dict[str, TaskBase], nodes:Any, score_d
         assert node_n in task_dict
         _task = task_dict[node_n]
         score_dict[node_n] = _task.flops
+
+
 
 def GurobiDistributeSlack(task_dict:Dict[str, TaskBase], chains:List[Tuple[List[Any], float]], 
                           temporal_rel:Dict, temporal_abs:Dict):
@@ -182,7 +189,7 @@ def GurobiDistributeSlack(task_dict:Dict[str, TaskBase], chains:List[Tuple[List[
         constr_core = [{"mode":task_dict[node].parallel_mode, "max":task_dict[node].core_max_compile, 
                         "min":task_dict[node].core_min_compile, "list":task_dict[node].core_list_compile
                         } for node in node_list]
-        solver = GurobiRscSlackEstim(K, flops, slack_rem, [margin[node] for node in node_list], constr_core, tot_cores) # , verbose=True
+        solver = GurobiRscSlackEstim(K, flops, slack_rem, [margin[node] for node in node_list], constr_core, tot_cores, verbose=False) # , verbose=True
         solver.create_variables()
         solver.define_constraints()
         sol = solver.solve()
@@ -230,11 +237,42 @@ def DistributeSlack(task_dict:Dict[str, TaskBase], chains:List[Tuple[List[Any], 
         state = False
         while not state and len(flops_dict) > 0:
             state, ops_rem, slack_rem = alloc_func(rsc_map_w, task_dict, flops_dict, ops_rem, slack_rem, threshold)
-        # e2e_lat_info.append(sum([lat for node, (_, lat, _) in rsc_map_w.items() if node in chain]))
+        # lt = [lat/(1-temporal_rel) for node, (_, lat, _) in rsc_map_w.items() if node in chain]
+        lt = [elim_nume_error(rsc_map_w[node][1]/(1-temporal_rel)+temporal_abs) for node in chain]
+        print(list(zip(chain, lt, np.cumsum(lt))))
+    assert check_sol(rsc_map_w, chains, temporal_abs, temporal_rel, task_dict)
     return rsc_map_w
 
+def check_sol(sol, chains, temporal_abs, temporal_rel, task_dict):
+    # sol: (n_core, lat, constr)
+    for chain, e2e_constr in chains:
+        for node in chain:
+            _task:TaskInt = task_dict[node]
+            # Check core constraints
+            if _task.parallel_mode == "list":
+                if sol[node][0] not in _task.core_list_compile:
+                    return False
+            elif _task.parallel_mode == "lwb":
+                if sol[node][0] < _task.core_min_compile:
+                    return False
+            elif _task.parallel_mode == "upb":
+                if sol[node][0] > _task.core_max_compile:
+                    return False
+            elif _task.parallel_mode == "range":
+                if sol[node][0] < _task.core_min_compile or sol[node][0] > _task.core_max_compile:
+                    return False
+            # check the flops constraint
+            if elim_nume_error(_task.flops - sol[node][0] * sol[node][1] * FLOPS_PER_CORE)>0:
+                return False
+        # check the e2e_latency constraint
+        e2e_lat = sum([sol[node][1] / (1 - temporal_rel) + temporal_abs for node in chain])
+        if elim_nume_error(e2e_lat - e2e_constr)>0:
+            return False
+
+    return True
+
 def rsc_slack_estim(taskJobs:Union[Dict[str, Union[TaskBase,ProcessBase]], List[Union[TaskBase,ProcessBase]]], 
-             task_graph:DiGraph, start_nodes, end_nodes, 
+             chains:List[Tuple[List[Any], float]],
              temporal_rel:Union[float, Dict[str, float]], 
              threshold, temporal_abs:Dict={}, 
              algorithm="avg"):
@@ -267,11 +305,6 @@ def rsc_slack_estim(taskJobs:Union[Dict[str, Union[TaskBase,ProcessBase]], List[
     else:
         raise TypeError("taskJobs should be a list or dict")
     
-    chains = []
-    for start_node in start_nodes:
-        chains += decompose_dag_into_chains(task_graph, start_node, end_nodes)
-    # zip the chains with its e2e latency
-    chains = [(chain[1:-1], task_graph.nodes[chain[-1]]['ert'] - task_graph.nodes[chain[0]]['ddl']) for chain in chains]
     assert algorithm in ["avg", 'gurobi']
     if algorithm == "avg":
         return DistributeSlack(task_dict, chains, temporal_rel, temporal_abs, threshold)
@@ -403,7 +436,7 @@ def init_graph_time_attr(task_graph_nx:DiGraph,
         assert node in comp_time
         ert[node] = 0 if len(preds) == 0 else max([ddl[pred] for pred in preds]) 
         if isinstance(temporal_rel, float):
-            slack = comp_time[node] *1e7 / (1 - temporal_rel)/ 1e7
+            slack = comp_time[node] *1e7 / (1 - temporal_rel)/ 1e7 + temporal_abs
         else:
             slack = comp_time[node] *1e7 / (1 - temporal_rel[node])/ 1e7 + temporal_abs[node] 
         ddl[node] = ert[node] + slack
@@ -420,7 +453,6 @@ def init_graph_time_attr(task_graph_nx:DiGraph,
                     wifes_ddl = max(wifes) if len(wifes) > 0 else 0
                     ert[succ] -= min(task_graph_nx.nodes[node]['exp_comp_t'], ert[succ]-wifes_ddl)
                 ddl[node] = 0
-                task_graph_nx.nodes[node]['jitter'] = elim_nume_error(task_graph_nx.nodes[node]['exp_comp_t'])
                 task_graph_nx.nodes[node]['exp_comp_t'] = 0
                 task_graph_nx.nodes[node]['ddl'] = 0
 
@@ -431,7 +463,8 @@ def init_graph_time_attr(task_graph_nx:DiGraph,
     return ert, ddl
 
 
-deduce_RDA = lambda size, exec_t_comp_ratioA, wsc_slack_ratio: math.ceil(size * (1-exec_t_comp_ratioA) / wsc_slack_ratio) - size if (1-exec_t_comp_ratioA) != wsc_slack_ratio else 0 
+# deduce_RDA = lambda size, exec_t_comp_ratioA, wsc_slack_ratio: math.ceil(size * (1-exec_t_comp_ratioA) / wsc_slack_ratio) - size if (1-exec_t_comp_ratioA) != wsc_slack_ratio else 0 
+deduce_RDA = lambda size, exec_t_comp_ratioA, wsc_slack_ratio: math.ceil(elim_nume_error(size * (wsc_slack_ratio -1))) if wsc_slack_ratio > 1 else 0 
 deduce_num_exec = lambda freq, f_gcd, thread_scaling_factor: math.ceil(freq / f_gcd) * thread_scaling_factor
 deduce_no_stall_latency = lambda size, flops: flops / size / FLOPS_PER_CORE 
 deduce_min_tot_rsc = lambda req_rsc, thread_scaling_factor, freq_division_factor: req_rsc * thread_scaling_factor * freq_division_factor
@@ -463,93 +496,10 @@ def deduce_task_attrib(taskattr: TaskIntAttr,
     taskattr.equiv_core = equiv_core
     taskattr.util = deduce_util(equiv_core, min_tot_rsc)
 
-def duduce_cfg(taskattr_dict, f_gcd, hyper_p, 
-               logical_graph_nx, task_graph_srcs, task_graph_sinks, sink_attr,
-               slack_threshold, e2e_latency, exec_t_comp_ratioA, jitter_t_comp_ratio, wsc_slack_ratio,
-                 algorithm='avg', timestep_size=10,
-                 verbose=False, plot=False):
-    temporal_abs = {
-        node: elim_nume_error(1/taskattr_dict[node].freq*jitter_t_comp_ratio) 
-        for node in taskattr_dict if taskattr_dict[node].trigger_mode!='N'
-        } if algorithm=='gurobi' else {}
-    temporal_rel = exec_t_comp_ratioA if algorithm == 'avg' else {
-        node: exec_t_comp_ratioA if taskattr_dict[node].trigger_mode=='N' else 0 for node in taskattr_dict}
-    
-    rsc_map_w = rsc_slack_estim(taskattr_dict, logical_graph_nx, task_graph_srcs, 
-                         task_graph_sinks, e2e_latency, temporal_rel, slack_threshold, 
-                         temporal_abs=temporal_abs, algorithm=algorithm) 
-    if verbose:
-        print(rsc_map_w)
-    ert, ddl = estim_release_dll_time(logical_graph_nx, 
-                            comp_time={node:slack_estm for node, (_, slack_estm, _) in rsc_map_w.items()},
-                            io_time={node:1e-6 for node in taskattr_dict},
-                            task_type={node:taskattr_dict[node].timing_flag for node in taskattr_dict},
-                            temporal_rel=temporal_rel, algorithm=algorithm,
-                            temporal_abs=temporal_abs)
-
-    # legality check: all sink node enforce the deadline constraint
-    # correct the ert and ddl of the sink nodes, and ddl of its predecessors
-    for sink in task_graph_sinks:
-        if sink_attr[sink] == "deadline":
-            assert ddl[sink] <= e2e_latency
-            ddl[sink] = e2e_latency
-        else:
-            assert ddl[sink] <= hyper_p
-            ddl[sink] = hyper_p
-        for pred in logical_graph_nx.pred[sink]:
-            ddl[pred] = ddl[sink]
-
-    if verbose:
-        print(ert, ddl) 
-    # update ert, ddl, exp_comp_t to graph as well as the taskattr_dict
-    for node, (req_rsc_size, slack_estm, constr) in rsc_map_w.items():
-        taskattr:TaskIntAttr = taskattr_dict[node]
-        taskattr.ERT = ert[node]
-        taskattr.ddl = ddl[node] - ert[node]
-        taskattr.exp_comp_t = slack_estm
-        deduce_task_attrib(taskattr, f_gcd, hyper_p, req_rsc_size, exec_t_comp_ratioA, wsc_slack_ratio)
-    for node in logical_graph_nx:
-        logical_graph_nx.nodes[node]["ert"] = ert[node]
-        logical_graph_nx.nodes[node]["ddl"] = ddl[node]
-        logical_graph_nx.nodes[node]["exp_comp_t"] = rsc_map_w[node][1] if node in rsc_map_w else 0
-
-    if plot:
-        import matplotlib.pyplot as plt
-        fig = plt.figure(figsize=(20, 10))
-        ax1 = fig.add_subplot(111)
-
-        node_color_map = {"op": "red", "sink": "blue", "src": "green"}
-        edge_color_map = {"data": "red", "control": "blue"}
-        
-        node_colors = [node_color_map[d] for n, d in logical_graph_nx.nodes(data="type")]
-        edge_colors = [edge_color_map[d] for u,v,d in logical_graph_nx.edges(data="type")]
-        for layer, nodes in enumerate(nx.topological_generations(logical_graph_nx)):
-            for node in nodes:
-                logical_graph_nx.nodes[node]["layer"] = layer
-        pos = nx.multipartite_layout(logical_graph_nx, subset_key="layer")
-        # text with 45 degree rotation
-        nx.draw(logical_graph_nx, pos, with_labels=False, node_size=100, node_color=node_colors, edge_color=edge_colors, font_size=10, ax=ax1)
-        # Draw node labels "name" "ddl," "ert," and "exp_comp_t" attributes
-        node_labels = {}
-        for node, data in logical_graph_nx.nodes(data=True):
-            node_labels[node] = f"{node}\n{data['ddl']-data['ert']:.5f}[{data['ert']:.5f}:{data['ddl']:.5f}]\nexp_comp_t:{data['exp_comp_t']:.5f}"
-        text = nx.draw_networkx_labels(logical_graph_nx, pos, labels=node_labels, font_size=10, ax=ax1)
-
-        for _, t in text.items():
-            t.set_rotation(60)
-        fig.tight_layout()
-        plt.savefig(f"plot/jobTask_graph_dbg.pdf", format="pdf")
-        plt.close()
-
-    if verbose:
-        for node, taskattr in taskattr_dict.items():
-            print(node, taskattr)
-            print()
-
 def deduce_cfg2(taskattr_dict, f_gcd, hyper_p, 
                logical_graph_nx, task_graph_srcs, task_graph_sinks, sink_attr, src_attr,
                slack_threshold, e2e_latency, exec_t_comp_ratioA, jitter_t_comp_ratio, wsc_slack_ratio,
-                 algorithm='avg', timestep_size=10,
+                 algorithm='avg', timestep_size=10, jitter_sim_para={}, load_var_sim_para={},
                  verbose=False, plot=False):
 
     # set the the ert and ddl of the sink nodes and the src nodes
@@ -559,18 +509,29 @@ def deduce_cfg2(taskattr_dict, f_gcd, hyper_p,
         logical_graph_nx.nodes[sink]["ddl"] = e2e_constr
         logical_graph_nx.nodes[sink]["exp_comp_t"] = 0
     for src in task_graph_srcs: 
-        jitter_t_comp = 1/src_attr[src]*jitter_t_comp_ratio if algorithm == 'gurobi' else 0
+        jitter_t_comp = elim_nume_error(1/src_attr[src]*jitter_t_comp_ratio) if algorithm == 'gurobi' else 0
         logical_graph_nx.nodes[src]["ert"] = 0
-        logical_graph_nx.nodes[src]["ddl"] = jitter_t_comp
-        logical_graph_nx.nodes[src]["exp_comp_t"] = jitter_t_comp
-
+        logical_graph_nx.nodes[src]["ddl"] = jitter_t_comp 
+        logical_graph_nx.nodes[src]["exp_comp_t"] = jitter_t_comp 
+        logical_graph_nx.nodes[src]['jitter'] = jitter_t_comp
     # set abs compensation and rel compensation
     # use abs comp for coalecing and use rel comp for ours
-    exec_t_comp_abs = {node: 5* timestep_size * 1e-6 for node in taskattr_dict} if algorithm=='gurobi' else 0.
-    exec_t_comp_rel = exec_t_comp_ratioA if algorithm == 'avg' else {
-        node: exec_t_comp_ratioA for node in taskattr_dict}
-    rsc_map_w = rsc_slack_estim(taskattr_dict, logical_graph_nx, task_graph_srcs, 
-                         task_graph_sinks, exec_t_comp_rel, slack_threshold, 
+    # exec_t_comp_abs: the estimation for slot grid displacement
+    # exec_t_comp_rel: the estimation for rate of exec. slowdown
+    # TODO: add transfer delay compensation
+    if algorithm == 'avg':
+        # using the same slowdown ratio for all nodes
+        exec_t_comp_abs = 5* timestep_size * 1e-6 
+        exec_t_comp_rel = exec_t_comp_ratioA
+    else:
+        # support different slowdown ratio for different nodes
+        exec_t_comp_abs = {node: 5* timestep_size * 1e-6 for node in taskattr_dict} 
+        exec_t_comp_rel = {node: exec_t_comp_ratioA for node in taskattr_dict} 
+    
+
+    chains = get_chains_info(logical_graph_nx, task_graph_srcs, task_graph_sinks)
+    rsc_map_w = rsc_slack_estim(taskattr_dict, chains, 
+                                exec_t_comp_rel, slack_threshold, 
                          temporal_abs=exec_t_comp_abs, algorithm=algorithm) 
     if verbose:
         print(rsc_map_w)
@@ -590,13 +551,29 @@ def deduce_cfg2(taskattr_dict, f_gcd, hyper_p,
     if verbose:
         print(ert, ddl) 
 
+    if algorithm == 'avg':
+        wsc_by_name = deduce_eq_wsc(
+            wsc_slack_ratio,
+            logical_graph_nx, task_graph_srcs, task_graph_sinks, 
+            src_attr, jitter_t_comp_ratio, # unused
+            exec_t_comp_rel, 
+            exec_t_comp_abs, 
+            load_var_sim_para,
+            jitter_sim_para,
+            verbose
+        )
+    else:
+        wsc_by_name = None
+
     # update ert, ddl, exp_comp_t to graph as well as the taskattr_dict
     for node, (req_rsc_size, slack_estm, constr) in rsc_map_w.items():
         taskattr:TaskIntAttr = taskattr_dict[node]
         taskattr.ERT = ert[node]
         taskattr.ddl = ddl[node] - ert[node]
         taskattr.exp_comp_t = slack_estm
-        deduce_task_attrib(taskattr, f_gcd, hyper_p, req_rsc_size, exec_t_comp_ratioA, wsc_slack_ratio)
+        # calculate the wsc_slack_ratio for each node
+        spatial_ratio = wsc_by_name[node] if wsc_by_name is not None else 1 
+        deduce_task_attrib(taskattr, f_gcd, hyper_p, req_rsc_size, exec_t_comp_ratioA, spatial_ratio)
         logical_graph_nx.nodes[node]["ert"] = ert[node]
         logical_graph_nx.nodes[node]["ddl"] = ddl[node]
         logical_graph_nx.nodes[node]["exp_comp_t"] = slack_estm
@@ -625,18 +602,57 @@ def deduce_cfg2(taskattr_dict, f_gcd, hyper_p,
             print(node, taskattr)
             print()
 
-def deduce_eq_wsc(task_graph, start_nodes, end_nodes, src_attr,jitter_t_comp_ratio):
+def get_chains_info(task_graph, start_nodes, end_nodes):
     chains = []
     for start_node in start_nodes:
         chains += decompose_dag_into_chains(task_graph, start_node, end_nodes)
-    wcs = []
+    # zip the chains with its e2e latency
+    chains = [(chain[1:-1], task_graph.nodes[chain[-1]]['ert'] - task_graph.nodes[chain[0]]['ddl']) for chain in chains]
+    return chains
+
+def deduce_eq_wsc(
+    wsc_slack_ratio:float,
+    task_graph, start_nodes, end_nodes, src_attr, 
+    jitter_t_comp_ratio, 
+    temporal_rel:Union[float, Dict[str, float]], 
+    temporal_abs:Dict={}, 
+    load_var_sim_para={},
+    jitter_sim_para={},
+    verbose=False,
+    debug = False,
+    ) -> List[Tuple[List[str], float]]:
+    chains = []
+    for start_node in start_nodes:
+        chains += decompose_dag_into_chains(task_graph, start_node, end_nodes)
+    # wsc is determined by timing jitter, exe_slowdown, displacemnt, and e2e latency
+    # wsc_estm = (e2e_latency - jitter - temporal_abs of all nodes) * (1-slowdown ratio)
+    # wsc_comp = (e2e_latency - jitter_t_comp - temporal_abs of all nodes) * (1-temporal_rel)
+    # wsc_ratio = input_wcs_ratio * (wsc_estm/wsc_comp)
+    wcs_by_chain = []
+    wcs_by_name = {}
     for chain in chains:
         src = chain[0]
         sink = chain[-1]
-        jitter_t_comp = 1/src_attr[src]*jitter_t_comp_ratio 
         e2e_constr = task_graph.nodes[sink]['ddl']
-        wcs.append(jitter_t_comp/e2e_constr)
-    return 1-max(wcs)
+        jitter_var = elim_nume_error(1/src_attr[src]*jitter_sim_para.get('scale', 0))
+        exe_slowdown_var = load_var_sim_para.get('scale', 0)
+        jitter_t_comp = task_graph.nodes[src]["jitter"]
+        if isinstance(temporal_rel, float):
+            displacement = len(chain[1:-1]) * temporal_abs
+        else:
+            displacement = sum([temporal_abs[node] for node in chain[1:-1]])
+        if isinstance(temporal_rel, float):
+            wsc_comp = (e2e_constr - jitter_t_comp - displacement) * (1-temporal_rel)
+        else:
+            wsc_comp = (e2e_constr - jitter_t_comp - displacement) * (1-temporal_rel.values()[0])
+        wsc_estm = (e2e_constr - jitter_var - displacement) * (1-exe_slowdown_var)
+        wsc_ratio = wsc_comp/wsc_estm * wsc_slack_ratio
+        if debug:
+            wcs_by_chain.append((chain[1:-1], wsc_ratio))
+            print(f"chain: {chain}, wsc_comp: {wsc_comp}, wsc_estm: {wsc_estm}")
+        for node in chain[1:-1]:
+            wcs_by_name[node] = max(wcs_by_name.get(node, 1), wsc_ratio) 
+    return wcs_by_name
 
 def plot_timeline_graph(logical_graph_nx, path=f"plot/jobTask_graph_dbg.pdf"):
     fig = plt.figure(figsize=(20, 10))
@@ -691,7 +707,7 @@ def test():
                 taskattr.thread_scaling_factor *= args.aux_scale_factor
     logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
     slack_threshold = args.slack_threshold
-    duduce_cfg(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, task_graph_srcs, 
+    deduce_cfg2(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, task_graph_srcs, 
                          task_graph_sinks, sink_attr, slack_threshold, 
                          args.e2e_latency, args.exec_t_comp_ratioA, args.wsc_slack_ratio, 
                          verbose=True)

@@ -3,7 +3,7 @@ import gurobipy as gp
 from gurobipy import GRB
 import numpy as np 
 from utils import time_cnt
-from global_var import FLOPS_PER_CORE, elim_nume_error
+from global_var import FLOPS_PER_CORE, elim_nume_error, flop1n_error_tol_abs, time1n_error_tol_abs
 
 class GurobiRscSlackEstim():
     """
@@ -23,8 +23,8 @@ class GurobiRscSlackEstim():
         core, (k,): number of cores
         lat, (k,): latency of each item
     constraints:
-        flops_k = core_k * lat_k, \forall k \in K
-        e2e <= \sum_{k=1}^{K} lat_k * (1 + margin_k)
+        flops_k <= core_k * lat_k * FLOPS_PER_CORE, \forall k \in K
+        e2e <= \sum_{k=1}^{K} lat_k * (1 - margin_k)
     objective:
         minimize the maximum of core
     """
@@ -79,12 +79,43 @@ class GurobiRscSlackEstim():
             if constr:=self.constr_core[i]:
                 constr_type = constr['mode']
                 if constr_type == 'list':
-                    # binary type for list
+                    # binary type for list, select one and only one from the core size list
                     self.model.addConstr(self.core[i] == sum([constr["list"][j] * self.core_sel[i][j] for j in range(len(constr["list"]))]), name=f'core[{i}]')
                     self.model.addConstr(sum([self.core_sel[i][j] for j in range(len(constr["list"]))]) == 1, name=f'core_sel[{i}]')
-            self.model.addConstr(self.flops[i] == self.core[i] * self.lat[i] * FLOPS_PER_CORE, name=f'flops[{i}]')
-        self.model.addConstr(sum([self.lat[i] / (1 - self.margin[i][1]) + self.margin[i][0] for i in range(self.K)]) <= self.e2e, name="e2e")
+            self.model.addConstr(self.flops[i] + flop1n_error_tol_abs <= self.core[i] * self.lat[i] * FLOPS_PER_CORE, name=f'flops[{i}]')
+        self.model.addConstr(sum([self.lat[i] / (1 - self.margin[i][1]) + self.margin[i][0] for i in range(self.K)]) + time1n_error_tol_abs <= self.e2e, name="e2e")
         self.model.addGenConstrMax(self.max_core, self.core, name="max_core")
+
+    def check_sol(self, sol):
+        # sol: (n_core, lat, constr)
+        for i in range(self.K):
+            # Check core constraints
+            if self.constr_core[i]:
+                constr_type = self.constr_core[i]['mode']
+                if constr_type == 'list':
+                    if sol[i][0] not in self.constr_core[i]["list"]:
+                        return False
+                elif constr_type == 'lwb':
+                    if sol[i][0] < self.constr_core[i]["min"]:
+                        return False
+                elif constr_type == 'upb':
+                    if sol[i][0] > self.constr_core[i]["max"]:
+                        return False
+                elif constr_type == "range":
+                    if sol[i][0] < self.constr_core[i]["min"] or sol[i][0] > self.constr_core[i]["max"]:
+                        return False
+            if elim_nume_error(self.flops[i] - sol[i][0] * sol[i][1] * FLOPS_PER_CORE)>0:
+                return False
+
+        e2e_sum = sum([sol[i][1] / (1 - self.margin[i][1]) + self.margin[i][0] for i in range(self.K)])
+        if elim_nume_error(e2e_sum - self.e2e)>0:
+            return False
+
+        # this work for check guriboi's original solution
+        if self.max_core.X != max([self.core[i].X for i in range(self.K)]):
+            return False
+
+        return True
         
     @time_cnt("solve")
     def solve(self):
@@ -101,8 +132,11 @@ class GurobiRscSlackEstim():
                 if constr:=self.constr_core[i]:
                     constr = self.check_constr(i, constr)
                 n_core = round(self.core[i].x)
-                lat = elim_nume_error(self.flops[i] / (n_core * FLOPS_PER_CORE))
+                # lat = elim_nume_error(self.flops[i] / (n_core * FLOPS_PER_CORE))
+                # [elim_nume_error(self.lat[i].x)-sol[i][1] for i in range(self.K)]
+                lat = elim_nume_error(self.lat[i].x)
                 sol[i] = (n_core, lat, constr)
+            assert self.check_sol(sol)
             return sol
         except gp.GurobiError as e:
             print('Error code ' + str(e.errno) + ': ' + str(e))

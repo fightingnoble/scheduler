@@ -1175,7 +1175,7 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
                 #   newest assigned budget is skipped
                 req_rsc_size = curr_aval_rsc
             else:
-                if round(planned_flops, flop_error_tol_bit) > round(chunk_flops, flop_error_tol_bit):
+                if round(planned_flops, flop1u_error_tol_bit) > round(chunk_flops, flop1u_error_tol_bit):
                     # case 2: previous chunk is late
                     #   newest assigned budget is still available but not enough
                     req_rsc_size = math.ceil(planned_flops/(chunk_e + 1 - n_slot)/timestep /FLOPS_PER_CORE/(1-sched.overprovision_rate))

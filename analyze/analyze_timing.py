@@ -46,7 +46,7 @@ def get_e2e_checker(file_pattern, file_pattern_keys, file_pattern_type, timing_f
                 file_path = os.path.join(folder, fn)
                 print(file_path)
                 # Create a dictionary with the values
-                data = {**info_dict, **{k: t(v) for k,v,t in zip(file_pattern_keys, fn_match.groups(), file_pattern_type) if v is not None}}
+                data = {**info_dict, **get_group_dict(file_pattern_keys, fn_match, file_pattern_type)}
                 data.pop("", None)
                 if 'jitter_en' not in data:
                     data['jitter_en'] = False

@@ -36,7 +36,7 @@ def main():
 
     # hyper_p, glb_n_task_dict, physical_graph_nx = gen_workloads(args)    
     from task.task_cfg import load_taskattrib, deduce_cfg2, gen_taskint_from_cfg, \
-        creat_logical_graph, creat_physical_graph, init_depen, deduce_eq_wsc
+        creat_logical_graph, creat_physical_graph, init_depen 
     from task.load_cfg.loadA import task_graph_srcs, task_graph_ops, task_graph_sinks, sink_attr, src_attr
     from task.load_cfg import load_chain
     taskattr_dict, f_gcd = load_taskattrib(args.profiling_filename, verbose=args.verbose) 
@@ -53,19 +53,13 @@ def main():
 
 
     if args.binpack_cfg["algorithm"] == "coalescing":
-        # temporal_abs_en = True
         algorithm = 'gurobi'
-        wsc_slack_ratio = 1 - args.exec_t_comp_ratioA
     else:
-        # temporal_abs_en = False
         algorithm = 'avg'
-        wsc_slack_ratio = args.wsc_slack_ratio
     deduce_cfg2(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, task_graph_srcs, 
                 task_graph_sinks, sink_attr, src_attr, args.slack_threshold, args.e2e_latency, 
                 args.exec_t_comp_ratioA, args.jitter_t_comp_ratio, 
-                wsc_slack_ratio, algorithm, args.timestepxus)
-    if args.binpack_cfg["algorithm"] == "coalescing":
-        print("deduced_eq_wsc:", deduce_eq_wsc(logical_graph_nx, task_graph_srcs, task_graph_sinks, src_attr, args.jitter_t_comp_ratio))
+                args.wsc_slack_ratio, algorithm, args.timestepxus)
 
     
     # ***************** artifiact: frame isolation *******************************

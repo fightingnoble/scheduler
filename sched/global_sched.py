@@ -145,21 +145,6 @@ def push_task_into_bins_new(
         w_data_pipe.update_wait_time(timestep)
         a_data_pipe.update_wait_time(timestep)
 
-    pid2name = {_p.pid:_p.task.name for _p in glb_p_list}
-    for _SchedTab in bin_list:
-        print("=====================================\n")
-        print(f"Scheduling Table of {_SchedTab.name}({_SchedTab.id}):")
-        _SchedTab.print_scheduling_table(pid2name, timestep)
-        print("=====================================\n")
-    
-    print("=====================================\n")
-    print("bin_pack_result:")
-    print("=====================================\n")
-    for _SchedTab in bin_list:
-        _SchedTab.print_alloc_detail(pid2name, timestep)
-    layout = {_bin.name:_bin.num_resources for _bin in bin_list}
-    print("max_core_num:", sum(layout.values()))
-    print(f"max_core_layout: {layout}")
     return bin_list
 
 def push_step_new(

@@ -12,7 +12,7 @@ from task.task_agent import TaskInt, TaskIntAttr
 from model.task_queue_agent import TaskQueue 
 from task.task_agent import ProcessInt
 from task.graph_scaling import build_node_relationship
-from sched.slack_estim import estim_release_dll_time, deduce_cfg2, deduce_eq_wsc
+from sched.slack_estim import estim_release_dll_time, deduce_cfg2 
 
 # 'ID', 'Task (chain) names', 'Flops on path (G)', 'Expected Latency (ms)', 'T release (ms)', 'Freq.', 'DDL (ms)', 'Cores/Req.', 
 # 'Throuput factor (Spat.)', 'Thread factor (S)', 'Min required cores', 'Timing_flag', 'Max required Cores', 'RDA./Req.', 'Resource Type', 'Pre-assigned', 'Priority'
@@ -552,7 +552,7 @@ def load_taskint(profiling_filename:str="profiling/profiling.csv",
                 # phase = exe_k/task_attr["Freq."]
                 T = 1/task_attr["Freq."]
                 phase = 0
-                flops_on_path = task_attr["Flops on path (G)"]/1e3
+                flops_on_path = elim_nume_error(task_attr["Flops on path (G)"]/1e3)
                 # flops_on_path = task_attr["Flops (G)"]*task_attr["Thread factor (Tmp.)"]/1e3
                 task = TaskInt(
                     task_name=task_n + (f"_{thread_j}" if thread_scaling_en else ''),
@@ -636,7 +636,7 @@ def load_taskattrib(profiling_filename:str="profiling/profiling.csv", verbose: b
         parallel_cfg = extract_parallel_cfg(task_attr, "runtime")
         parallel_cfg_compile = extract_parallel_cfg(task_attr, "compile")
         period = 1/task_attr["Freq."]
-        flops_on_path = task_attr["Flops on path (G)"]/1e3
+        flops_on_path = elim_nume_error(task_attr["Flops on path (G)"]/1e3)
         # flops_on_path = task_attr["Flops (G)"]*task_attr["Thread factor (Tmp.)"]/1e3
         # T = task_attr["Throuput factor (Spat.)"]/task_attr["Freq."]
         # phase = exe_k/task_attr["Freq."]
@@ -657,7 +657,7 @@ def load_taskattrib(profiling_filename:str="profiling/profiling.csv", verbose: b
         # flops=flops_on_path        
         # seq_cpu_time=flops_on_path
         # op_cpu_time=flops_on_path
-        op_io_time=1e-6
+        op_io_time=1e-6*BW_DRAM
         jitter_max=0
         criti_flag="soft" if task_attr["Criti_flag"]=='S' else "hard"
         
@@ -676,12 +676,12 @@ def load_taskattrib(profiling_filename:str="profiling/profiling.csv", verbose: b
                         criticality = criti_flag, # unused
                         trigger_mode=trigger_mode, # unused
                         
-                        core_max = parallel_cfg["max"] if "max" in parallel_cfg else 1e3,
+                        core_max = parallel_cfg["max"] if "max" in parallel_cfg else 1000,
                         core_min = parallel_cfg["min"] if "min" in parallel_cfg else 0,
                         core_list = parallel_cfg["list"] if "list" in parallel_cfg else None,
                         parallel_mode = parallel_cfg["mode"] if "mode" in parallel_cfg else None,
 
-                        core_max_compile = parallel_cfg_compile["max"] if "max" in parallel_cfg else 1e3,
+                        core_max_compile = parallel_cfg_compile["max"] if "max" in parallel_cfg else 1000,
                         core_min_compile = parallel_cfg_compile["min"] if "min" in parallel_cfg else 0,
                         core_list_compile = parallel_cfg_compile["list"] if "list" in parallel_cfg else None,
 
@@ -691,6 +691,7 @@ def load_taskattrib(profiling_filename:str="profiling/profiling.csv", verbose: b
 
                         jitter_max=jitter_max, # unused
                         flops=flops_on_path, 
+                        io_time=op_io_time, 
                         task_flag=task_flag, # unused
                         pre_assigned_resource_flag=pre_assigned_resource_flag, # unused
                         )
@@ -751,8 +752,8 @@ def gen_taskint_from_cfg(taskattr_dict:Dict[str, TaskIntAttr], f_gcd: int,
                     pre_assigned_resource_flag=task_attr.pre_assigned_resource_flag, 
                     RDA_size=task_attr.rda_size, 
                     main_size=task_attr.main_size, 
-                    op_io_time=1e-6*BW_DRAM, op_cpu_time=flops_on_path, 
-                    seq_io_time=1e-6*BW_DRAM, seq_cpu_time=flops_on_path,
+                    op_io_time=task_attr.io_time, op_cpu_time=flops_on_path, 
+                    seq_io_time=task_attr.io_time, seq_cpu_time=flops_on_path,
                     criti_flag=task_attr.criticality, 
                     chain_criti_flag=task_attr.chain_criticality,
                     cbs_en=True, # if task_attr["Cbs_en"]=='Y' else False, 
@@ -815,19 +816,15 @@ def gen_workloads(args):
     logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
 
     if not args.binpack_cfg["slack_sharing"]:
-        # temporal_abs_en = True
         algorithm = 'gurobi'
-        wsc_slack_ratio = 1 - args.exec_t_comp_ratioA
     else:
-        # temporal_abs_en = False
         algorithm = 'avg'
-        wsc_slack_ratio = args.wsc_slack_ratio
     deduce_cfg2(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, task_graph_srcs, 
                 task_graph_sinks, sink_attr, src_attr, args.slack_threshold, args.e2e_latency, 
                 args.exec_t_comp_ratioA, args.jitter_t_comp_ratio, 
-                wsc_slack_ratio, algorithm, args.timestepxus)
-    if not args.binpack_cfg["slack_sharing"]:
-        print("deduced_eq_wsc:", deduce_eq_wsc(logical_graph_nx, task_graph_srcs, task_graph_sinks, src_attr, args.jitter_t_comp_ratio))
+                args.wsc_slack_ratio, algorithm, args.timestepxus, 
+                args.jitter_sim_para, args.load_var_sim_para
+                )
 
     glb_n_task_dict = gen_taskint_from_cfg(taskattr_dict, f_gcd)
     physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), taskattr_dict=taskattr_dict)
@@ -1001,8 +998,8 @@ def create_init_p_list(tasks: Union[List[TaskInt], Dict[str, TaskInt]], verbose:
     pid = 0
     for task in task_list: 
         # for r, d in zip(task.get_release_event(event_range), task.get_deadline_event(event_range)):
-        r = task.get_release_time()
-        d = task.get_deadline_time()
+        r = elim_nume_error(task.get_release_time())
+        d = elim_nume_error(task.get_deadline_time())
         p = task.make_process(r, d, pid)
         pid += 1
         init_p_list.append(p)

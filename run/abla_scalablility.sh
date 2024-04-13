@@ -30,7 +30,7 @@ elif [ $case == "cyc" ]; then
 fi
 
 
-echo "|target path log/$root_dir/." 
+echo "|target path log/$root_dir/., scan lat and aux ..." 
 for lat in $(seq 0.1 -0.01 0.08); do
     for n_aux in $(seq "$aux_start" "$aux_step" "$aux_end"); do 
         {
@@ -44,9 +44,8 @@ for lat in $(seq 0.1 -0.01 0.08); do
             if [ ! -d "$dir_path" ]; then
                 mkdir -p "$dir_path"
             fi
-            echo "=start ./$cfg" `date "+%Y-%m-%d %H:%M:%S.%3N"`
+            # echo "=start ./$cfg" `date "+%Y-%m-%d %H:%M:%S.%3N"`
             {
-
                 if [ $case == "bp" ]; then
                     log_name=$dir_path/${case_sign}${file_suffix}.log.txt
                     if [ -f $log_name ]; then
@@ -54,6 +53,7 @@ for lat in $(seq 0.1 -0.01 0.08); do
                     fi
                     echo "==start (bin_pack-coaleasing) ./$cfg" `date "+%Y-%m-%d %H:%M:%S.%3N"`
                     nohup python $p_fn --test_case bin_pack_new $PY_ARGS $LOAD_VAR > $log_name 2>&1 
+                    # sleep 5
                     echo "==finish (bin_pack-coaleasing) ./$cfg" `date "+%Y-%m-%d %H:%M:%S.%3N"`
                 
                 elif [ $case != "" ]; then
@@ -62,18 +62,18 @@ for lat in $(seq 0.1 -0.01 0.08); do
                         rm $log_name
                     fi
                     echo "==start (${case_input}) ./$cfg/${case_sign}_${file_suffix}" `date "+%Y-%m-%d %H:%M:%S.%3N"`
-                    nohup python $p_fn --test_case ${case_input} $PY_ARGS $LOAD_VAR > $log_name 2>&1& 
+                    nohup python $p_fn --test_case ${case_input} $PY_ARGS $LOAD_VAR > $log_name 2>&1 
+                    # sleep 5
                     echo "==finish (${case_input}) ./$cfg/${case_sign}_${file_suffix}" `date "+%Y-%m-%d %H:%M:%S.%3N"`
                 fi
             }
             echo "finish ./$cfg" `date "+%Y-%m-%d %H:%M:%S.%3N"`
             sleep 1.5
-
-        } 
+        } &
     done
-    echo "-------------------"
     wait
+    echo "Done Aux scan for latency $lat | target path log/$root_dir/." 
 done
-
 wait
+echo "Done | target path log/$root_dir/." 
 

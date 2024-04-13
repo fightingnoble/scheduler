@@ -8,7 +8,7 @@ from task.spec import Spec
 from model.message.msg_dispatcher import MsgDispatcher
 from model.message.data_pipe import DataPipe, TriggerPipe
 from sched.scheduling_table import SchedulingTableInt, load_bin_list
-from sched.scheduling_table import get_task_layout_compact, get_task_layout_sparse, get_task_layout_compact1bin
+from sched.scheduling_table import get_task_layout_compact, get_task_layout_sparse, get_task_layout_compact1bin, Bin_list_print
 from model.resource_agent import Resource_model_int
 from sched.scheduler_agent import Scheduler
 from sched.scheduler_agent import core_mapping_1d
@@ -164,13 +164,13 @@ def main():
             if not os.path.exists(filename):
                 pd.DataFrame(columns=list(cfg_para_dict.keys())+list(para_scan_group1.keys())+["num_cores"]).to_csv(filename, index=False)
             
-            # Load the dataframe                        
-            df = pd.read_csv(filename)
             num_cores = sum(max_core_layout[1].values())
             plot_path_para.update({"num_cores": num_cores})
-            df = update_df(df, {**cfg_para_dict, **para_scan_group1}, 
-                           {"num_cores": num_cores})
-            df.to_csv(filename, index=False)
+            # Load the dataframe                        
+            # df = pd.read_csv(filename)
+            # df = update_df(df, {**cfg_para_dict, **para_scan_group1}, 
+            #                {"num_cores": num_cores})
+            # df.to_csv(filename, index=False)
 
             bin_list_save_path = bin_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
             routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
@@ -216,13 +216,13 @@ def main():
             if not os.path.exists(filename):
                 pd.DataFrame(columns=list(cfg_para_dict.keys())+list(para_scan_group1.keys())+["num_bins","num_cores"]).to_csv(filename, index=False)
             
-            # Load the dataframe                        
-            df = pd.read_csv(filename)
             num_cores = sum(bin_size_list.values())
             plot_path_para.update({"num_cores": num_cores})
-            df = update_df(df, {**cfg_para_dict, **para_scan_group1, "num_bins": args.num_bins}, 
-                           {"num_cores": num_cores})
-            df.to_csv(filename, index=False)
+            # Load the dataframe                        
+            # df = pd.read_csv(filename)
+            # df = update_df(df, {**cfg_para_dict, **para_scan_group1, "num_bins": args.num_bins}, 
+            #                {"num_cores": num_cores})
+            # df.to_csv(filename, index=False)
 
             bin_list_save_path = bin_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
             routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
@@ -249,16 +249,16 @@ def main():
             
             # assert args.binpack_cfg["algorithm"] == "bin_split"
             assert args.binpack_cfg["slack_sharing"] == False
-            # backup args.exec_t_comp_ratioA, args.jitter_t_comp_ratio
+            # 1. cheat the non-sharing model: 
+            #    keep the original exec_t_comp_ratioA in slack distribution and resource estimation
+            #    to make sure the repacking step use the same Bin configuration as the original one.
+            # 2. backup parameters
             exec_t_comp_ratioA_bk = args.exec_t_comp_ratioA
-            # only the exec_t_comp_ratioA influence the ert and ddl
-            args.exec_t_comp_ratioA = args.exec_t_comp_ratioB
-            # This is used to cheat the cfg_deducer, not influence the path setting
-            args.wsc_slack_ratio = 1 - args.exec_t_comp_ratioA
-            
-
+            # 3. change the exec_t_comp_ratioA to args.exec_t_comp_ratioB in th repacking step
+            args.exec_t_comp_ratioA = args.exec_t_comp_ratioB 
             args.binpack_cfg["slack_sharing"] = True
             # reset the ddl and ert
+            print("="* 20 + "Redistribute slack:" + "="* 20 + "\n")
             hyper_p, glb_n_task_dict, physical_graph_nx = gen_workloads(args)
 
             # generate the process list
@@ -266,10 +266,11 @@ def main():
             init_affinity(glb_p_list, mode='job', job_graph_nx=physical_graph_nx, verbose=args.verbose)
 
             # get the size and allocated process id
+            print("="* 20 + "Bin-assignment:" + "="* 20 + "\n")
             pid2_bin_id = {}
             for _bin in bin_list:
                 _bin:SchedulingTableInt
-                print(_bin.index_occupy_by_id().keys())
+                print(f"{_bin.name}({_bin.id})", list(_bin.index_occupy_by_id().keys()))
                 pid_list = _bin.index_occupy_by_id().keys()
                 for pid in pid_list:
                     assert pid not in pid2_bin_id
@@ -304,10 +305,9 @@ def main():
         else:
             raise NotImplementedError(f"binpack algorithm {args.binpack_cfg['algorithm']} is not implemented")
 
-        pid2name = {_p.pid:_p.task.name for _p in glb_p_list}        
-        for _SchedTab in bin_list:
-                _SchedTab.print_alloc_detail(pid2name, sim_step)
+        Bin_list_print(bin_list, glb_p_list, sim_step)
         if args.plot:
+            pid2name = {_p.pid:_p.task.name for _p in glb_p_list}        
             # f"{plot_root}/new_task_bin_pack_cyclic_{num_cores}{args.file_suffix}.pdf"
             get_task_layout_compact(bin_list, pid2name, save= True, time_step= sim_step,
             hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=False, plot_legend=True, format=args.plt_fmt, 
@@ -380,7 +380,7 @@ def main():
                     scheduler_list, monitor_list,
                     event_iter_dict,
                     ddl_update_iter, ddl_stream,
-                    args.load_var_sim_para,
+                    args.load_var_sim_para if args.load_var_sim_en else None,
                     rsc_list, 
                     num_cores, 
                     glb_p_list,
@@ -400,12 +400,12 @@ def main():
                 bin_size = _sched._SchedTab.num_resources
                 tot_cores += bin_size
                 print(f"(Partition {partition_id}) number of context switch {_sched.barrier.number_of_asserts}")
-                print(f"(Partition {partition_id}) cumulative context switch {_sched.barrier.cumulative_time}")
+                print(f"(Partition {partition_id}) cumulative context switch {elim_nume_error(_sched.barrier.cumulative_time)}")
                 weighted_avg_cumulative_time += _sched.barrier.cumulative_time * num_cores
                 n_switch += _sched.barrier.number_of_asserts
             print(f"number of context switch {n_switch}")
             weighted_avg_cumulative_time /= tot_cores
-            print(f"cumulative context switch {weighted_avg_cumulative_time}")
+            print(f"cumulative context switch {elim_nume_error(weighted_avg_cumulative_time)}")
 
 
         elif args.test_all or args.test_case in [case_name_glb_input,]:
@@ -431,7 +431,7 @@ def main():
                     scheduler_list, monitor_list,
                     event_iter_dict,
                     ddl_update_iter, ddl_stream,
-                    args.load_var_sim_para,
+                    args.load_var_sim_para if args.load_var_sim_en else None,
                     rsc_list, 
                     num_cores, 
                     glb_p_list,

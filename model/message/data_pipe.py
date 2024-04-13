@@ -21,7 +21,7 @@ from model.task_queue_agent import TaskQueue
 from model.buffer import Data, Buffer
 from typing import List, Dict, Callable
 from model.event_gen.e2e_latency import exp_jitter
-from global_var import AVG_HOP_NUM, LAT_PER_HOP, BW_DRAM, BROADCAST_SCALER
+from global_var import AVG_HOP_NUM, LAT_PER_HOP, BW_DRAM, BROADCAST_SCALER, AVG_HEAD_LAT
 
 class DataPipe:
     def __init__(self, data_type, num_reciever:int, 
@@ -38,12 +38,16 @@ class DataPipe:
             self.queues = [TaskQueue(sort_f=self.sort_fn, descending=False) for _ in range(num_reciever)]
         else:
             self.queues = queues_list
-        head_latency = AVG_HOP_NUM * LAT_PER_HOP
+        
         if not ideal:
             self.comm_lat_gen = exp_jitter(1, jitter_sim_para, size=1, seed=seed)
-            self.get_io_lat = lambda size: (self.comm_lat_gen()+1) * (head_latency + size / BW_DRAM)
+            self.get_io_lat = lambda size: self.avg_trasfer_time(size, self.comm_lat_gen())
         else:
-            self.get_io_lat = lambda size: (head_latency + size / BW_DRAM)
+            self.get_io_lat = lambda size: self.avg_trasfer_time(size)
+    
+    @staticmethod
+    def avg_trasfer_time(size, slow_down=1):
+        return (AVG_HEAD_LAT + size / BW_DRAM) * (slow_down+1)
     
     def put(self, data:Data, mode:bool="broadcast", dest:List[int]=None,):
         if data.io_time is None:

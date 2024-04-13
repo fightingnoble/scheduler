@@ -612,6 +612,7 @@ class TaskAttr:
 @dataclass
 class TaskIntAttr(TaskAttr):
     flops:Union[int, float]=0
+    io_time:Union[int, float]=0
     task_flag:str="moveable"
     pre_assigned_resource_flag:bool=False
 

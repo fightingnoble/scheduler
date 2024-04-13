@@ -3,7 +3,7 @@ from functools import reduce
 import pandas as pd
 import os
 
-from analyze.pattern import folder_pattern, folder_pattern_keys, folder_type, get_path_var_scaner
+from analyze.pattern import folder_pattern, folder_pattern_keys, folder_type, get_path_var_scaner, get_group_dict
 from analyze.pattern import log_pattern, log_pattern_keys, log_pattern_type
 from utils import update_df
 
@@ -41,7 +41,7 @@ def get_ctx_extracter(file_pattern, file_pattern_keys, file_pattern_type):
                 file_path = os.path.join(folder, fn)
                 print(file_path)
                 # Create a dictionary with the values
-                data = {**info_dict, **{k: t(v) for k,v,t in zip(file_pattern_keys, fn_match.groups(), file_pattern_type) if v is not None}}
+                data = {**info_dict, **get_group_dict(file_pattern_keys, fn_match, file_pattern_type)}
                 data.pop("")
                 if 'seed' not in data:
                     data['seed'] = ""

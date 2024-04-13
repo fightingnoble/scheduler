@@ -1,7 +1,6 @@
 # from multiprocessing import Process, Queue
 from queue import Queue
 from model.buffer import Data
-from global_var import BW_DRAM
 
 class MsgDispatcher:
     def __init__(self, num_queues, queue_list=None):

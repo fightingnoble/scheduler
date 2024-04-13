@@ -1198,3 +1198,112 @@ the cpp ver and the python ver get the same results
 
 ## 20240205
 Final version from houmo
+
+## 20240305
+
+1. add solution checking for resource estimation, i.e., `GurobiRscSlackEstim.check_sol` in slack_estim.py. 
+2. extract the avg transfer delay function in "model/message/data_pipe.py"
+```python
+    @staticmethod
+    def avg_trasfer_time(size, slow_down=1):
+        return (AVG_HEAD_LAT + size / BW_DRAM) * (slow_down+1)
+```
+3. add io_time as the attr of `TaskIntAttr` in "task/task_agent.py", `io_time:Union[int, float]=0`.
+4. return the remaining slack to the tasks, i.e, not force the allocated slack = flops/core/Flops_per_core, in "slack_estim.py".
+```python
+        # for average based
+        # redistributed the slack to the remaining processes
+        for node in flops_dict:
+            slack_redis = elim_nume_error(flops_dict[node] / ops_rem * slack_rem)
+            rsc_map_w[node] = (rsc_map_w[node][0], rsc_map_w[node][1] + slack_redis, rsc_map_w[node][2])
+
+        # for gurobi based
+        # lat = elim_nume_error(self.flops[i] / (n_core * FLOPS_PER_CORE))
+        lat = elim_nume_error(self.lat[i].x)
+```
+5. clarify the meaning of exec_t_comp_abs and exec_t_comp_rel, in "slack_estim.py", which is the estimation for slot grid displacement and rate of exec. slowdown, respectively.
+   Then we also assign slot grid displacement compensation to average based estimation.
+```python
+    # exec_t_comp_abs: the estimation for slot grid displacement
+    # exec_t_comp_rel: the estimation for rate of exec. slowdown
+    # TODO: add transfer delay compensation
+    if algorithm == 'avg':
+        # using the same slowdown ratio for all nodes
+        exec_t_comp_abs = 5* timestep_size * 1e-6 
+        exec_t_comp_rel = exec_t_comp_ratioA
+    else:
+        # support different slowdown ratio for different nodes
+        exec_t_comp_abs = {node: 5* timestep_size * 1e-6 for node in taskattr_dict} 
+        exec_t_comp_rel = {node: exec_t_comp_ratioA for node in taskattr_dict} 
+```
+
+## 20240331
+
+1. redefine the meaning of the wsc_slack_ratio: 
+   
+  - Old ver: the percentage of the worst-case slack relative to the e2e latency, and 
+    ``` python
+    wsc_slack = wsc_slack_ratio * e2e_latency,
+    avg_slack = (1-exec_t_comp_ratioA) * e2e_latency,
+    # the extra resource 
+    RDA_size = math.ceil(size * (1-exec_t_comp_ratioA) / wsc_slack_ratio) - size 
+    ```
+    However, the old version does not considers the impact of other compesation factors, such as the slot grid displacement and arrival jitter. Thus we redefine the meaning of the wsc_slack_ratio as:
+  - New ver: the percentage of shrinking relative to the estimated worst-case slack, which considers both the slot grid displacement and the arrival jitter besides the slowdown rate, 
+  ``` python
+    wsc_estm1 = (e2e_latency - jitter - temporal_abs of all nodes) * (1-slowdown ratio)
+    wsc_comp = (e2e_latency - jitter_t_comp - temporal_abs of all nodes) * (1-temporal_rel)
+    compact_slcak = slack_from_WC_analysis/wsc_slack_ratio 
+    # the extra resource 
+    RDA_size = math.ceil(size * wsc_comp / wsc_estm1 * wsc_slack_ratio) - size 
+  ```
+  wsc_slack_ratio > 1 
+2. fix the numerical tollerance:
+
+  - round flops to when reading from csv, and regular the upper bound of core number
+    ``` python
+    flops_on_path = elim_nume_error(task_attr["Flops on path (G)"]/1e3)
+    core_max_compile = parallel_cfg_compile["max"] if "max" in parallel_cfg else 1000
+    core_max = parallel_cfg["max"] if "max" in parallel_cfg else 1000
+    ```
+  - add slack to the constraint of the gurobi model, i.e. `time1n_error_tol_abs`, `flop1n_error_tol_abs`
+    ``` python
+        self.model.addConstr(self.flops[i] + flop1n_error_tol_abs <= self.core[i] * self.lat[i] * FLOPS_PER_CORE, name=f'flops[{i}]')
+        self.model.addConstr(sum([self.lat[i] / (1 - self.margin[i][1]) + self.margin[i][0] for i in range(self.K)]) + time1n_error_tol_abs <= self.e2e, name="e2e")
+    ```
+## 20240403
+1. add solution checking for resource estimation for average based, i.e., `check_sol` in slack_estim.py. 
+  - add slack to when return the remaining slack to the tasks,
+    ``` python
+        slack_rem -= sum([lat for node, (_, lat, _) in rsc_map_w.items() if node in flops_dict]) + time1n_error_tol_abs
+    ```
+
+## 20240407
+
+1. refine the parameter setting code in repacking mode: 
+    ``` python
+            # assert args.binpack_cfg["algorithm"] == "bin_split"
+            assert args.binpack_cfg["slack_sharing"] == False
+            # 1. cheat the non-sharing model: 
+            #    keep the original exec_t_comp_ratioA in slack distribution and resource estimation
+            #    to make sure the repacking step use the same Bin configuration as the original one.
+            # 2. backup parameters
+            exec_t_comp_ratioA_bk = args.exec_t_comp_ratioA
+            # 3. change the exec_t_comp_ratioA to args.exec_t_comp_ratioB in th repacking step
+            args.exec_t_comp_ratioA = args.exec_t_comp_ratioB 
+            args.binpack_cfg["slack_sharing"] = True
+            # reset the ddl and ert
+            hyper_p, glb_n_task_dict, physical_graph_nx = gen_workloads(args)
+    ``` 
+
+2. remove the csv recoding in "main.py" to enable parallel running 
+3. Redefine the file_surffix as: 
+  ```shell
+  Jitter_sym="var_${jitter_comp_cfg}(J)"
+  w_slowdown_sym="${Jitter_sym}_${exec_t_comp_ratioA}(T)"
+  w_ld1_sym="${w_slowdown_sym}_${load_bursty_ratio1}(LD1)"
+  ```
+  contrast with 
+  ``` python
+  cfg_root_fmt = r"x{aux_scale_factor}_{e2e_latency}s_rda-{jitter_t_comp_ratio:.2%}(J)_{wsc_slack_ratio:.2%}(T)_{exec_t_comp_ratioA:.2%}(S)_ignore"
+  ```

@@ -100,35 +100,15 @@ def input_parser():
     parser.add_argument("--max_core_stat", default=False, type=bool, help="max core stat")
     args = parser.parse_args()
 
-    if args.jitter_sim_en: 
-        if args.jitter_sim_para == {}:
-            jitter_sim_para = args.jitter_sim_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['jitter']
-        else:
-            jitter_sim_para = args.jitter_sim_para
-
-    if args.exec_var_en: 
-        if args.exec_var_para == {}:
-            exec_var_para = args.exec_var_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['exec']
-        else:
-            exec_var_para = args.exec_var_para
-
-    if args.load_var_sim_en:
-        if args.load_var_sim_para == {}:
-            load_var_sim_para = args.load_var_sim_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['load_var']
-        else:
-            load_var_sim_para = args.load_var_sim_para
+    args.jitter_sim_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['jitter'] 
+    args.exec_var_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['exec']
+    args.load_var_sim_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['load_var']
+    args.e2e_var_sim_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['e2e_var']
+    args.binpack_cfg = json.load(open(os.path.join(cfg_dir, args.bin_pack_cfg), "r"))
     
     if args.e2e_var_sim_en:
         assert args.gen_benchmark == True
-        if args.e2e_var_sim_para == {}:
-            e2e_var_sim_para = args.e2e_var_sim_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['e2e_var']
-        else:
-            e2e_var_sim_para = args.e2e_var_sim_para
 
-    if args.bin_pack_para == {}:
-        args.binpack_cfg = binpack_cfg = json.load(open(os.path.join(cfg_dir, args.bin_pack_cfg), "r"))
-    else:
-        binpack_cfg = args.bin_pack_para
     args.plt_fmt = args.plot_fmt.split(",")
     return args
 

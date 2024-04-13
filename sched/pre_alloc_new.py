@@ -164,6 +164,15 @@ def allocate_rsc_4_process_new2(
         bin_id = pid2bin_id[_p.pid]
         affinity_tgt_bin_id_list = [bin_id,]
         affinity_search_bin_id_list = []
+        if bin_list[bin_id].num_resources < req_rsc_size: 
+            # warnings.warn(f"The bin({bin_id}) has not enough resources to fit the task({_p.task.name})")
+            _, _, estim_size = _p.rsc_req_estm(n_slot, timestep, FLOPS_PER_CORE, over_provision_rate=0)
+            if estim_size <= bin_list[bin_id].num_resources:
+                print(f"Expected exit (scaled overflowed): The task({_p.task.name}({_p.pid:d}) {estim_size:d} -> {req_rsc_size:d}, Bin({bin_id}):{bin_name_list[bin_id]}): {bin_list[bin_id].num_resources}")
+            else:
+                print("Unexpected exit: The bin({bin_id}) has not enough resources to fit the task({_p.task.name})")
+            import sys; sys.exit(1)
+                
     else:
         affinity_tgt_bin_id_list, affinity_search_bin_id_list = bin_sel(_p, time_slot_s, time_slot_e, req_rsc_size, rsc_recoder_his, 
                                                                     bin_list, bin_name_list, timestep, binpack_cfg, process_dict)

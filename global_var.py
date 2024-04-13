@@ -11,6 +11,7 @@ SRAM_size_per_core = 1.25 # MB
 trace_file = "trace.txt"
 trace_list = []
 
+# The minimum number of operations 
 numerical_error_tol_abs = 1e-12
 numerical_tol_bit = 12
 numerical_error_tol_rel = 0.01
@@ -23,8 +24,16 @@ def elim_error(x, n_dig, abs_err, mod='round'):
     else:
         return round(x, n_dig)
 
-flop_error_tol_abs = FLOPS_PER_CORE * 1e-6
-flop_error_tol_bit = 7
+# Minimum OPs per micro second per core
+flop1u_error_tol_abs = FLOPS_PER_CORE * 1e-6
+flop1n_error_tol_abs = FLOPS_PER_CORE * 1e-9
+flop1u_error_tol_bit = 7
+flop1n_error_tol_bit = 10
+
+time1u_error_tol_abs = 1e-6
+time1n_error_tol_abs = 1e-9
+time1u_error_tol_bit = 6
+time1n_error_tol_bit = 9
 
 fork_pid_base = 1000
 max_fork_candi_num = 20
@@ -36,6 +45,7 @@ BW_DRAM = 100E9 # Bytes/s
 LAT_PER_HOP = 10e-9 # Seconds
 AVG_HOP_NUM = 10
 MIN_CORE_NUM = 256
+AVG_HEAD_LAT = AVG_HOP_NUM * LAT_PER_HOP
 
 BROADCAST_SCALER = 1
 
