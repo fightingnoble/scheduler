@@ -6,7 +6,8 @@ from task.task_cfg import load_taskattrib, creat_logical_graph
 from task.task_cfg import task_graph_srcs, task_graph_ops, task_graph_sinks
 from sched.slack_estim import deduce_num_exec
 from analyze.pattern import get_path_var_scaner
-from analyze.pattern import folder_pattern, folder_pattern_keys, folder_type, seed_re
+from analyze.pattern import folder_pattern, folder_pattern_keys, folder_type
+from analyze.pattern import get_group_dict, get_log_regexp
 
 # log content pattern
 # (lateness detected)TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) COMPLETED @ {curr_t:.6f}/{_p.event_time:.6f}!!
@@ -14,6 +15,8 @@ from analyze.pattern import folder_pattern, folder_pattern_keys, folder_type, se
 
 completed_pattern1 = r'\t\tTASK (\d+):([\w_]+)\((\d+)\) COMPLETED @ ([\d.]+)/([\d.]+)!!'
 completed_pattern2 = r'\(lateness detected\)TASK (\d+):([\w_]+)\((\d+)\) COMPLETED @ ([\d.]+)/([\d.]+)!!'
+
+force_completed_pattern = r'bin_split'
 
 # TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!
 miss_pattern = r'\t\tTASK (\d+):([\w_]+)\((\d+)\) MISSED DEADLINE @ ([\d.]+)/([\d.]+)!!'
@@ -23,7 +26,7 @@ trigger_pattern = r'\t\t([\w_]+) triggered @ ([\d.]+)/([\d.]+)'
 pattern = r'(?P<task>\w+)\s+triggered\s+@\s+(?P<time>\d+\.\d+)'
 
 # file name pattern
-jitter_en_log_fn_pattern = r"(glb_dyn|dyn)(_\d+)?_jitter_en_seed_("+seed_re+r").log.txt"
+# jitter_en_log_fn_pattern = r"(glb_dyn|dyn)(_\d+)?_jitter_en_seed_("+seed_re+r").log.txt"
 false_jitter_en_log_fn_pattern = r"(glb_dyn|dyn)(_\d+)?_jitter_en.log.txt"
 
 
@@ -67,8 +70,11 @@ def extract_num_cores(filename):
     else:
         return -1
 
-def count_miss_comp(folder, output, get_ref_num_exec=False,
-                    profiling_filename="", aux_scale_factor=0, n_p=0, warmup_dis=False 
+def count_miss_comp(folder, output, 
+                    log_pattern, log_pattern_keys, log_pattern_type,
+                    get_ref_num_exec=False,
+                    profiling_filename="", aux_scale_factor=0, n_p=0, warmup_dis=False,
+                    verbose=False
                     ):
 
     completed_list = []  # 用于存储已完成任务及其计数
@@ -78,7 +84,7 @@ def count_miss_comp(folder, output, get_ref_num_exec=False,
 
     # 遍历指定文件夹下的所有 .log.txt 文件, 按照文件名排序
     # for filename in os.listdir(folder):
-
+    force_list = []
     for filename in sorted(os.listdir(folder)):
         if re.match(false_jitter_en_log_fn_pattern, filename):
             continue
@@ -86,8 +92,14 @@ def count_miss_comp(folder, output, get_ref_num_exec=False,
             completed_dict = {}  # 用于存储已完成任务及其时间
             miss_dict = {}  # 用于存储未完成任务及其时间
             trigger_dict = {}
-            with open(os.path.join(folder, filename), "r") as file:
+            file_path = os.path.join(folder, filename)
+            with open(file_path, "r") as file:
                 for line in file:
+                    # if matched force_completed_pattern in line:
+                    if "'algorithm': 'bin_split'" in line and "test_case='bin_pack_new'" in line:
+                        print("Force completed: ", file_path)
+                        force_list.append(filename)
+                        break 
                     if "COMPLETED" in line:
                         # 找到任务名称和时间
                         if match:= re.search(completed_pattern1, line):
@@ -123,10 +135,11 @@ def count_miss_comp(folder, output, get_ref_num_exec=False,
                                 trigger_dict[task_name].append(time_value)
 
             # 添加到列表中
-            completed_list.append(completed_dict)
-            miss_list.append(miss_dict)
-            filename_list.append(filename)
-            trigger_list.append(trigger_dict)
+            if filename not in force_list:
+                completed_list.append(completed_dict)
+                miss_list.append(miss_dict)
+                filename_list.append(filename)
+                trigger_list.append(trigger_dict)
 
     # find the common trigger event
     # glb_dyn_${x}_ideal.log.txt
@@ -141,9 +154,15 @@ def count_miss_comp(folder, output, get_ref_num_exec=False,
     jitter_en_index = []
     groups = {}
     for i in range(len(trigger_list)):
-        if match:=re.match(jitter_en_log_fn_pattern, filename_list[i]):
-            seed_id = int(match.group(3))
-            groups[seed_id] = groups.get(seed_id, []) + [i]
+        # if match:=re.match(jitter_en_log_fn_pattern, filename_list[i]):
+        #     seed_id = int(match.group(3))
+        if match:=re.match(log_pattern, filename_list[i]):
+            info = get_group_dict(log_pattern_keys, match, log_pattern_type, True)
+            if info['jitter_en'] and info['seed'] != '':
+                seed_id = info['seed']
+                groups[seed_id] = groups.get(seed_id, []) + [i]
+            else:
+                print("Unexpected log file name: ", filename_list[i])
         else:
             groups["static"] = groups.get("static", []) + [i]
 
@@ -157,23 +176,24 @@ def count_miss_comp(folder, output, get_ref_num_exec=False,
             task_name_set.update(trigger_dict.keys())
 
         for task_name in task_name_set:
-            print("task:", task_name)
             trigger_event_set = set()
-            # find the common event
+            # collect the trigger list from the group by task_name
             set_t = [set(trigger_list[idx][task_name]) for idx in group if task_name in trigger_list[idx]]
             if len(set_t) > 0:
+                # find the common trigger event
                 cm_trigger_event_set = set.intersection(*set_t)
+                if verbose:
+                    print(f"task: {task_name}, common element: {cm_trigger_event_set}\n")
                 for idx in group:
                     if task_name in trigger_list[idx]:
                         unique_event_set = set(trigger_list[idx][task_name]) - cm_trigger_event_set
                         if len(unique_event_set) > 0:
-                            print(f"{filename_list[idx]} unique element:", unique_event_set)
-                print("common element:", cm_trigger_event_set)
-            print()
-
+                            print("task:", task_name)
+                            print(f"{filename_list[idx]} unique element:", unique_event_set, "\n")
     df = pd.DataFrame()
 
     # 将列表转换为 DataFrame
+    # columns by column extention
     for i in range(len(completed_list)):
         completed_dict = {key: len(value) for key, value in completed_list[i].items()}
         miss_dict = {key: len(value) for key, value in miss_list[i].items()}
@@ -211,16 +231,29 @@ def test_mode():
     argparser.add_argument("--n_p", type=int, default=1, help="number of processors")
     argparser.add_argument("--get_ref_num_exec", action="store_true", help="get the reference number of execution")
     argparser.add_argument("--warmup_dis", type=bool, default=False, help="whether to warm up the system")
+    argparser.add_argument("--sim_param_seq", type=str, default='sen,slowdown', help="sequence of simulation parameters")
     args = argparser.parse_args()
     print(f"===========folder: {args.folder}===========")
-    count_miss_comp(args.folder, args.output, args.get_ref_num_exec,
-                    args.profiling_filename, args.aux_scale_factor, args.n_p, args.warmup_dis)
+    sim_param_seq = args.sim_param_seq.split(",")
+    log_pattern, log_pattern_keys, log_pattern_type = get_log_regexp(sim_param_seq) 
+    count_miss_comp(
+        args.folder, args.output, 
+        log_pattern, log_pattern_keys, log_pattern_type,                     
+        args.get_ref_num_exec,
+        args.profiling_filename, args.aux_scale_factor, args.n_p, args.warmup_dis
+    )
 
 def get_scaner_warap(args):
+    sim_param_seq = args.sim_param_seq.split(",")
+    log_pattern, log_pattern_keys, log_pattern_type = get_log_regexp(sim_param_seq) 
     def scaner_warp(df, folder, info_dict):
         output = os.path.join(folder, args.stat_csv_filename)
-        count_miss_comp(folder, output, True, 
-                            args.profiling_filename, info_dict["aux_scale_factor"], args.n_p, args.warmup_dis)
+        count_miss_comp(
+            folder, output, 
+            log_pattern, log_pattern_keys, log_pattern_type, 
+            True, 
+            args.profiling_filename, info_dict["aux_scale_factor"], args.n_p, args.warmup_dis, 
+        )
     return scaner_warp
 
 def scan_mode():    
@@ -229,9 +262,10 @@ def scan_mode():
     parser.add_argument("--root_dir", default=".", type=str, help="root directory")
     parser.add_argument("--filename", type=str, default="throughput", help="filename")
     parser.add_argument("--stat_csv_filename", type=str, default="new_bin_pack.csv", help="csv filename")
-    parser.add_argument("--folder_search_seq", type=str, default="num_cores,cfg_n", help="core list")
+    parser.add_argument("--folder_search_seq", type=str, default="num_cores,cfg_n", help="sequence of compile-time parameters")
     parser.add_argument("--n_p", type=int, default=3, help="number of processors")
     parser.add_argument("--warmup_dis", type=bool, default=False, help="whether to warm up the system")
+    parser.add_argument("--sim_param_seq", type=str, default='sen,slowdown', help="sequence of simulation parameters")
 
     args = parser.parse_args()
     root_dir = args.root_dir

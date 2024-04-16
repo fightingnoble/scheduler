@@ -242,3 +242,15 @@ def pyinstr_profiler(description:str):
             return result
         return wrapper
     return pyinstr_profiler_decorator
+
+
+def csv_fmt_check(filename, cols):
+    if not os.path.exists(filename):
+        # Create a dataframe with the values
+        pd.DataFrame(columns=cols).to_csv(filename, index=False)
+    else:
+        # check the column, if not exist, add it, and clear the content
+        df = pd.read_csv(filename)
+        if set(df.columns) != set(cols):
+            pd.DataFrame(columns=cols).to_csv(filename, index=False)
+

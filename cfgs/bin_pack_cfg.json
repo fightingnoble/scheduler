@@ -7,7 +7,7 @@
     "release_temp_rda":false,
     "reservation_policy": "static_1_bin",
     "slack_sharing": false,
-    "algorithm": "mem_plan",
+    "algorithm": "repack",
     "preempt_en": false,
     "core_size": "induced"
 }

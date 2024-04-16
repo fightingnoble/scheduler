@@ -5,30 +5,32 @@ import numpy as np
 import os
 from functools import reduce
 
-from analyze.pattern import folder_pattern, folder_pattern_keys, folder_type, get_path_var_scaner
-from analyze.pattern import log_pattern, log_pattern_keys, log_pattern_type, seed_re
+from analyze.pattern import *
 from utils import update_df
 
-search_seq = ["num_cores", "cfg_n"]
+folder_search_seq = ["num_cores", "cfg_n"]
 
-def read_tp(df, info_dict, stat_df, num_exec, group_dyn, group_stat, jitter_en='en', method='glb_dyn'):
-    # check if there is any missed count
-    missed = stat_df.loc[:, group_dyn+group_stat].xs("Missed Count", level=1, axis=1).loc['sum'].values.any()
-    # read number of exec 
-    num_comp = stat_df.loc[:, group_dyn+group_stat].xs("Completed Count", level=1, axis=1).loc['sum'].values
-    # check whether the number of exec is the same
-    success = np.all(num_comp == num_exec) and not missed
-    if success:
-        # Create a dictionary with the values
-        data = {**info_dict, **{'method': method, 'jitter_en': jitter_en}}
-        data.pop('aux_scale_factor')
-    
-        # Append a row to the dataframe with the values
-        update_fn = lambda x,y: max([x[0],y])
-        df = update_df(df, data, {'throughput': info_dict['aux_scale_factor']}, update_fn)
+def set_tp(df, info_dict):
+    # Create a dictionary with the values
+    data = remove_nondisplay_keys({**info_dict})
+    data.pop('aux_scale_factor')
+
+    # Append a row to the dataframe with the values
+    update_fn = lambda x,y: max([x[0],y])
+    df = update_df(df, data, {'throughput': info_dict['aux_scale_factor']}, update_fn)
     return df
 
-def get_throughput_extracter(stat_csv_filename, profiling_filename, n_p, warmup_dis):
+def check_status(stat_df, num_exec, group):
+    # check if there is any missed count
+    missed = stat_df.loc[:, group].xs("Missed Count", level=1, axis=1).loc['sum'].values.any()
+    # read number of exec 
+    num_comp = stat_df.loc[:, group].xs("Completed Count", level=1, axis=1).loc['sum'].values
+    # check whether the number of exec is the same
+    success = np.all(num_comp == num_exec) and not missed
+    return success
+
+def get_throughput_extracter(stat_csv_filename, profiling_filename, n_p, warmup_dis, sim_param_seq):
+    log_pattern, log_pattern_keys, log_pattern_type = get_log_regexp(sim_param_seq) 
     def extract_throughput(df, folder, info_dict):
         root,dirs,files = os.walk(folder).__next__()
         assert len(dirs) == 0
@@ -50,29 +52,60 @@ def get_throughput_extracter(stat_csv_filename, profiling_filename, n_p, warmup_
             aux_scale_factor = info_dict['aux_scale_factor']
             num_exec = extract_num_exec(profiling_filename, aux_scale_factor, n_p, warmup_dis)
         item_name = stat_df.columns.get_level_values(0).unique().values
-        # TODO: use pattern in analyze.pattern 
-        group_glb = [i for i in item_name if re.match(r"glb_dyn(_\d+)?_jitter_en(_seed_("+seed_re+r"))\.log\.txt", i)]
-        group_dyn = [i for i in item_name if re.match(r"dyn(_\d+)?_jitter_en(_seed_("+seed_re+r"))\.log\.txt", i)]
-        group_dyn_stat = [i for i in item_name if re.match(r"dyn(_\d+)?_jitter_dis\.log\.txt", i) or i.startswith("bin")]
-        group_glb_stat = [i for i in item_name if re.match(r"glb_dyn(_\d+)?(_ideal|_jitter_dis)\.log\.txt", i)]
-        
-        assert len(group_dyn_stat) in [0, 1, 2]
-        assert len(group_glb_stat) in [0, 1, 2]
+        case_group_dict=dict()
+        for i in item_name:
+            if match:= re.match(log_pattern, i):
+                info_sim = get_group_dict(log_pattern_keys, match, log_pattern_type, True)
+                data = {**info_dict, **info_sim}
+                data = remove_nondisplay_keys(data)
+                # cyclic|glb_dyn|dyn|pglb|bin_pack_new
+                # classify the data by 3 levels: other, jitter_param, seed 
+                # filter out the unused jitter_keys such as ld_var by data keys
+                idx1 = tuple(info_sim[k] for k in data if k not in jitter_keys and k in info_sim) 
+                if info_sim['jitter_en']:
+                    idx2 = tuple(info_sim[k] for k in data if k in jitter_keys and k !='seed' and k in info_sim) 
+                else:
+                    idx2 = (False,)
+                if idx1 not in case_group_dict:
+                    case_group_dict[idx1] = dict()
+                if idx2 not in case_group_dict[idx1]:
+                    case_group_dict[idx1][idx2] = []
+                case_group_dict[idx1][idx2].append(i)
 
-        if len(group_glb_stat):
-            df = read_tp(df, info_dict, stat_df, num_exec, [], group_glb_stat, 'dis', 'glb_dyn')
-        if len(group_dyn_stat):
-            df = read_tp(df, info_dict, stat_df, num_exec, [], group_dyn_stat, 'dis', 'dyn')
-        if len(group_glb):
-            df = read_tp(df, info_dict, stat_df, num_exec, group_glb, group_glb_stat, 'en', 'glb_dyn')
-        if len(group_dyn):
-            df = read_tp(df, info_dict, stat_df, num_exec, group_dyn, group_dyn_stat, 'en', 'dyn')
+        # record the failed cases
+        bin_fail_case = []
+        for L1_case, L1_dict in case_group_dict.items():
+            if L1_case[0] in bin_case:
+                if not check_status(stat_df, num_exec, L1_dict[(False,)]):
+                    bin_fail_case.append(L1_case[1:])
+        
+        for L1_case, L1_dict in case_group_dict.items():
+            # check bin_case status
+            if (L1_case[0] in bin_dep_case and L1_case[1:] in bin_fail_case) or (L1_case[0] in bin_case):
+                # skip the bin case, and the bin dependent but the dependent bin case failed
+                continue
+                
+            # check static case
+            if (False,) in L1_dict:
+                if check_status(stat_df, num_exec, L1_dict[(False,)]):
+                    # set static throughput
+                    df = set_tp(df, info_dict)
+                else:
+                    # skip all dynamic cases
+                    continue
+            for case_L2 in L1_dict: 
+                if case_L2 == (False,):
+                    continue
+                if check_status(stat_df, num_exec, L1_dict[case_L2]):
+                    # set dynamic throughput
+                    df = set_tp(df, info_dict) 
         return df
     
     return extract_throughput
 
 if __name__ == "__main__":
     import argparse
+    from utils import csv_fmt_check
     
     parser = argparse.ArgumentParser(description="profiling")
     parser.add_argument("--profiling_filename", type=str, default="profiling/profiling_light.csv", help="profiling filename")
@@ -90,31 +123,26 @@ if __name__ == "__main__":
     filename = args.filename
     filename = f"{filename}.csv"
     filename = os.path.join(args.output_dir, filename)
-    search_seq = args.folder_search_seq.split(",")
+    folder_search_seq = args.folder_search_seq.split(",")
+    folder_search_seq = args.folder_search_seq.split(",")
 
-    if not os.path.exists(filename):
-        # Create a dataframe with the values
-        pd.DataFrame(columns=[
-            'e2e_latency', 'wsc_slack_ratio', 'exec_t_comp_ratioA', 'lateness_mode', 
-            'num_cores', 'method', 'jitter_en', 'throughput', 
-        ]).to_csv(filename, index=False)
-    else:
-        # check the column, if not exist, add it, and clear the content
-        df = pd.read_csv(filename)
-        if set(df.columns) != set([
-            'e2e_latency', 'wsc_slack_ratio', 'exec_t_comp_ratioA', 'lateness_mode', 
-            'num_cores', 'method', 'jitter_en', 'throughput', 
-        ]):
-            pd.DataFrame(columns=[
-                'e2e_latency', 'wsc_slack_ratio', 'exec_t_comp_ratioA', 'lateness_mode', 
-                'num_cores', 'method', 'jitter_en', 'throughput', 
-            ]).to_csv(filename, index=False)
+    cfg_keys = [key for search_key in folder_search_seq for key in folder_pattern_keys[search_key] if keys_filter(key)]
+    cfg_keys = remove_nondisplay_keys(cfg_keys, ["aux_scale_factor"])
+    trace_pattern, trace_pattern_keys, trace_pattern_type = get_log_regexp(args.sim_seq.split(","))
+    sim_keys = remove_nondisplay_keys(trace_pattern_keys, ['seed'])
+    cols =  cfg_keys + sim_keys + ['throughput']
+
+    csv_fmt_check(filename, cols)
 
     # Load the dataframe
     df = pd.read_csv(filename)
 
     root_path = os.path.join('log', root_dir)
-    tp_extracter = get_throughput_extracter(args.stat_csv_filename, args.profiling_filename, args.n_p, args.warmup_dis) 
-    scanner = get_path_var_scaner([tp_extracter, ], folder_pattern, folder_pattern_keys, folder_type, search_seq)
-    df = scanner(df, root_path, len(search_seq), dict(), 0)
+    tp_extracter = get_throughput_extracter(
+        args.stat_csv_filename, args.profiling_filename, 
+        args.n_p, args.warmup_dis, args.sim_param_seq.split(","),
+        sim_keys
+    ) 
+    scanner = get_path_var_scaner([tp_extracter, ], folder_pattern, folder_pattern_keys, folder_type, folder_search_seq)
+    df = scanner(df, root_path, len(folder_search_seq), dict(), 0)
     df.to_csv(filename, index=False)

@@ -159,3 +159,14 @@ ref/**
 
 *xlsx
 **cmd**
+cfgs/var_sim_cfg_test.json
+model/message/message_handler_old.py
+profiling/accelegy.py
+profiling/chain.csv
+run/aaa.sh
+run/all2.sh
+run/csv_merge.py
+run/ref.sh
+sched/bin_ops.old.py
+sim/type.py
+task/load_cfg/load_chain.py

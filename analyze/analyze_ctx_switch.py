@@ -3,8 +3,7 @@ from functools import reduce
 import pandas as pd
 import os
 
-from analyze.pattern import folder_pattern, folder_pattern_keys, folder_type, get_path_var_scaner, get_group_dict
-from analyze.pattern import log_pattern, log_pattern_keys, log_pattern_type
+from analyze.pattern import *
 from utils import update_df
 
 folder_search_seq = ["cfg_n", "num_cores"]
@@ -41,14 +40,18 @@ def get_ctx_extracter(file_pattern, file_pattern_keys, file_pattern_type):
                 file_path = os.path.join(folder, fn)
                 print(file_path)
                 # Create a dictionary with the values
-                data = {**info_dict, **get_group_dict(file_pattern_keys, fn_match, file_pattern_type)}
-                data.pop("")
+                data = {**info_dict, **get_group_dict(file_pattern_keys, fn_match, file_pattern_type, True)}
+                data = remove_nondisplay_keys(data)
+                if 'jitter_en' not in data:
+                    data['jitter_en'] = False
                 if 'seed' not in data:
                     data['seed'] = ""
+                if 'repack_ratio' not in data:
+                    data['repack_ratio'] = ""
 
                 # NOTE: Jitter_en flag is defined differently in 
                 # trace and log name, "var_[\d\.]+" and "dis|en", respectively.
-                if data['jitter_en'] == "en" and data['seed'] == "":
+                if data['jitter_en'] == True and data['seed'] == "":
                     print(f"(Passed!) Warning: no seed in {file_path.split('/')[-1]}")
                     continue
                         
@@ -63,16 +66,18 @@ def get_ctx_extracter(file_pattern, file_pattern_keys, file_pattern_type):
 if __name__ == "__main__":
     import argparse
     from analyze.analyze_tp import get_throughput_extracter
+    from utils import csv_fmt_check
     parser = argparse.ArgumentParser(description="profiling")
     parser.add_argument("--root_dir", default=".", type=str, help="root directory")
     parser.add_argument("--filename", type=str, default="ctx_switch", help="filename")
-    parser.add_argument("--folder_search_seq", type=str, default=','.join(folder_search_seq), help="core list")
+    parser.add_argument("--folder_search_seq", type=str, default=','.join(folder_search_seq), help="sequence of compile-time parameters")
 
     parser.add_argument("--profiling_filename", type=str, default="profiling/profiling_light.csv", help="profiling filename")
     parser.add_argument("--stat_csv_filename", type=str, default=r"new_bin_pack(\d+)?.csv", help="csv filename")
     parser.add_argument("--n_p", type=int, default=3, help="number of processors")
     parser.add_argument("--warmup_dis", type=bool, default=False, help="whether to warm up the system")
     parser.add_argument("--output_dir", type=str, default=".", help="output directory")
+    parser.add_argument("--sim_param_seq", type=str, default='sen,slowdown', help="sequence of simulation parameters")
 
     args = parser.parse_args()
     root_dir = args.root_dir
@@ -81,13 +86,13 @@ if __name__ == "__main__":
     filename = f"{filename}.csv"
     filename = os.path.join(args.output_dir, filename)
     folder_search_seq = args.folder_search_seq.split(",")
-
-    if not os.path.exists(filename):
-        # Create a dataframe with the values
-        pd.DataFrame(columns=
-            [key for search_key in folder_search_seq for key in folder_pattern_keys[search_key]]
-            + [key for key in log_pattern_keys if key != ""]
-        + ['n_ctx_switch', 'cum_time', 'throughput']).to_csv(filename, index=False)
+    sim_param_seq = args.sim_param_seq.split(",")
+    log_pattern, log_pattern_keys, log_pattern_type = get_log_regexp(sim_param_seq) 
+    sim_keys = remove_nondisplay_keys(log_pattern_keys) 
+    cols = [key for search_key in folder_search_seq for key in folder_pattern_keys[search_key] if keys_filter(key)] \
+            + sim_keys\
+            + metric_switch_tp
+    csv_fmt_check(filename, cols)
 
     # Load the dataframe
     df = pd.read_csv(filename)
@@ -95,7 +100,7 @@ if __name__ == "__main__":
     root_path = os.path.join('log', root_dir)
     ctx_extracter = get_ctx_extracter(log_pattern, log_pattern_keys, log_pattern_type) 
     # for find minimum required cores
-    tp_extracter = get_throughput_extracter(args.stat_csv_filename, args.profiling_filename, args.n_p, args.warmup_dis) 
+    tp_extracter = get_throughput_extracter(args.stat_csv_filename, args.profiling_filename, args.n_p, args.warmup_dis, args.sim_param_seq.split(",")) 
     scanner = get_path_var_scaner([ctx_extracter, tp_extracter], folder_pattern, folder_pattern_keys, folder_type, folder_search_seq)
     df = scanner(df, root_path, len(folder_search_seq), dict(), 0)
     df.to_csv(filename, index=False)

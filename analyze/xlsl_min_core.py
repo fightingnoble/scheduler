@@ -8,7 +8,7 @@ parser.add_argument("--root_dir_glb", type=str, default="log", help="output dire
 parser.add_argument("--root_dir_dyn", type=str, default="log", help="output directory")
 args = parser.parse_args()
 
-def extract_min_cores(args, root_dir, method=case_name_glb, jitter_en='en'):
+def extract_min_cores(args, root_dir, method=case_name_glb, jitter_en=True):
     assert method in [case_name_glb, case_name_dyn]
     df = pd.read_csv(os.path.join(root_dir, args.filename + ".csv"))
     # Filter for lateness_mode == 'ignore'
@@ -43,8 +43,8 @@ def extract_min_cores(args, root_dir, method=case_name_glb, jitter_en='en'):
 
 glb_min_cores, glb_ctx_switch_stat = extract_min_cores(args, root_dir=args.root_dir_glb, method=case_name_glb)
 dyn_min_cores, dyn_ctx_switch_stat = extract_min_cores(args, root_dir=args.root_dir_dyn, method=case_name_dyn)
-glb_min_cores_static, glb_ctx_switch_stat_static = extract_min_cores(args, root_dir=args.root_dir_glb, method=case_name_glb, jitter_en='dis')
-dyn_min_cores_static, dyn_ctx_switch_stat_static = extract_min_cores(args, root_dir=args.root_dir_dyn, method=case_name_dyn, jitter_en='dis')
+glb_min_cores_static, glb_ctx_switch_stat_static = extract_min_cores(args, root_dir=args.root_dir_glb, method=case_name_glb, jitter_en=False)
+dyn_min_cores_static, dyn_ctx_switch_stat_static = extract_min_cores(args, root_dir=args.root_dir_dyn, method=case_name_dyn, jitter_en=False)
 
 # merge the dataframes
 min_cores = pd.concat([glb_min_cores, glb_min_cores_static, dyn_min_cores, dyn_min_cores_static], axis=1)

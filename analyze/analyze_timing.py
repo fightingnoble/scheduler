@@ -9,19 +9,28 @@ from model.message.Context_message import trace_analyser
 
 from utils import update_df
 
-folder_search_seq = ["cfg_n"]
+folder_search_seq_default = ["cfg_n"]
 
 def set_percetile(df, data, e2e_latency_list, miss_rate):
         
     rt_e2e_latency_list = np.array(e2e_latency_list[0])
+    if len(rt_e2e_latency_list) > 0:
+        print(f"mean: {np.mean(rt_e2e_latency_list):.6f}, std: {np.std(rt_e2e_latency_list):.6f}, max: {np.max(rt_e2e_latency_list):.6f}, min: {np.min(rt_e2e_latency_list):.6f}")
+        # calculate the percentile
+        rt_percentiles = np.concatenate([np.percentile(rt_e2e_latency_list, [90, 95, 99, 99.9, 99.99]), rt_e2e_latency_list.max(keepdims=True)])
+        print(f"rt_percentile: {rt_percentiles}")
+    else:
+        rt_percentiles = np.array([0, 0, 0, 0, 0, 0])
+        print("no realtime tasks")
+    
     ddl_e2e_latency_list = np.array(e2e_latency_list[1])
-    print(f"mean: {np.mean(rt_e2e_latency_list):.6f}, std: {np.std(rt_e2e_latency_list):.6f}, max: {np.max(rt_e2e_latency_list):.6f}, min: {np.min(rt_e2e_latency_list):.6f}")
-    print(f"mean: {np.mean(ddl_e2e_latency_list):.6f}, std: {np.std(ddl_e2e_latency_list):.6f}, max: {np.max(ddl_e2e_latency_list):.6f}, min: {np.min(ddl_e2e_latency_list):.6f}")
-            # calculate the percentile
-    rt_percentiles = np.concatenate([np.percentile(rt_e2e_latency_list, [90, 95, 99, 99.9, 99.99]), rt_e2e_latency_list.max(keepdims=True)])
-    ddl_percentiles = np.concatenate([np.percentile(ddl_e2e_latency_list, [90, 95, 99, 99.9, 99.99]), ddl_e2e_latency_list.max(keepdims=True)])
-    print(f"rt_percentile: {rt_percentiles}")
-    print(f"ddl_percentile: {ddl_percentiles}")
+    if len(ddl_e2e_latency_list) > 0:
+        print(f"mean: {np.mean(ddl_e2e_latency_list):.6f}, std: {np.std(ddl_e2e_latency_list):.6f}, max: {np.max(ddl_e2e_latency_list):.6f}, min: {np.min(ddl_e2e_latency_list):.6f}")
+        ddl_percentiles = np.concatenate([np.percentile(ddl_e2e_latency_list, [90, 95, 99, 99.9, 99.99]), ddl_e2e_latency_list.max(keepdims=True)])
+        print(f"ddl_percentile: {ddl_percentiles}")
+    else:
+        ddl_percentiles = np.array([0, 0, 0, 0, 0, 0])
+        print("no deadline-driven tasks")
 
     # Append a row to the dataframe with the values
     df = update_df(df, data, {'ddl_percentile': ','.join([f'{x:.6f}' for x in ddl_percentiles.tolist()]),
@@ -30,7 +39,7 @@ def set_percetile(df, data, e2e_latency_list, miss_rate):
                                 'miss_rate': ','.join([f'{x:.3f}' for x in miss_rate]) if isinstance(miss_rate, list) else miss_rate})
     return df
 
-def get_e2e_checker(file_pattern, file_pattern_keys, file_pattern_type, timing_flag_dict, profiling_filename=None, n_p=None, 
+def get_e2e_checker(file_pattern, file_pattern_keys, file_pattern_type, timing_flag_dict, sim_keys, profiling_filename=None, n_p=None, 
                     warmup_dis=None, stat_csv_filename=None, index_seq=None, trace_and_log_check_en=False):
     def e2e_checker(df, folder, info_dict):
         aux_scale_factor = info_dict['aux_scale_factor']
@@ -46,15 +55,17 @@ def get_e2e_checker(file_pattern, file_pattern_keys, file_pattern_type, timing_f
                 file_path = os.path.join(folder, fn)
                 print(file_path)
                 # Create a dictionary with the values
-                data = {**info_dict, **get_group_dict(file_pattern_keys, fn_match, file_pattern_type)}
-                data.pop("", None)
+                data = {**info_dict, **get_group_dict(file_pattern_keys, fn_match, file_pattern_type, True)}
+                data = remove_nondisplay_keys(data)
                 if 'jitter_en' not in data:
                     data['jitter_en'] = False
                 if 'seed' not in data:
                     data['seed'] = ""
+                if 'repack_ratio' not in data:
+                    data['repack_ratio'] = ""
 
                 # false log output: the ones with jitter_en == True but seed == "" and the ones with jitter_en == False but seed != ""
-                if data['jitter_en'] and data['seed'] == "" or data['jitter_en'] == False and data['seed'] != "":
+                if data['jitter_en'] == True and data['seed'] == "" or data['jitter_en'] == False and data['seed'] != "":
                     continue
                 
                 # representation:
@@ -155,7 +166,7 @@ def get_e2e_checker(file_pattern, file_pattern_keys, file_pattern_type, timing_f
                                 
                 if data['jitter_en']:
                     # record the latency and miss rate data before histogram analysis
-                    idx = (data['method'], data['num_cores'])
+                    idx = tuple(data[k] for k in sim_keys)
                     if idx not in dist_recoder:
                         dist_recoder[idx] = []
                     dist_recoder[idx].append(e2e_latency_list)
@@ -168,11 +179,12 @@ def get_e2e_checker(file_pattern, file_pattern_keys, file_pattern_type, timing_f
                     df = set_percetile(df, data, e2e_latency_list, miss_rate)
         
         # merge the list of each key
-        for method, num_cores in dist_recoder.keys():
-            data = {**info_dict, **{'method': method, 'num_cores': num_cores, 'jitter_en': True}}
-            data.pop("", None)
-            e2e_latency_list = reduce(lambda x, y: [x[0]+y[0], x[1]+y[1]], dist_recoder[(method, num_cores)])
-            miss_rate = miss_rate_recoder[(method, num_cores)]
+        for sim_values in dist_recoder.keys():
+            sim_info = dict(zip(sim_keys, sim_values))
+            data = {**info_dict, **sim_info}
+            data = remove_nondisplay_keys(data)
+            e2e_latency_list = reduce(lambda x, y: [x[0]+y[0], x[1]+y[1]], dist_recoder[sim_values])
+            miss_rate = miss_rate_recoder[sim_values]
             df = set_percetile(df, data, e2e_latency_list, miss_rate)
 
         return df
@@ -181,17 +193,19 @@ def get_e2e_checker(file_pattern, file_pattern_keys, file_pattern_type, timing_f
 
 if __name__ == "__main__":
     import argparse
+    from utils import csv_fmt_check
     
     parser = argparse.ArgumentParser(description="profiling")
     parser.add_argument("--root_dir", default=".", type=str, help="root directory")
     parser.add_argument("--filename", type=str, default="timing", help="filename")
-    parser.add_argument("--folder_search_seq", type=str, default=','.join(folder_search_seq), help="core list")
+    parser.add_argument("--folder_search_seq", type=str, default=','.join(folder_search_seq_default), help="core list")
     parser.add_argument("--profiling_filename", type=str, default="profiling/profiling_light.csv", help="profiling filename")
     parser.add_argument("--stat_csv_filename", type=str, default=r"new_bin_pack(\d+)?.csv", help="csv filename")
     parser.add_argument("--n_p", type=int, default=3, help="number of processors")
     parser.add_argument("--warmup_dis", type=bool, default=False, help="whether to warm up the system")
     parser.add_argument("--output_dir", type=str, default=".", help="output directory")
-    parser.add_argument("--index_seq", type=str, default='num_cores,cfg_n', help="core list")
+    parser.add_argument("--index_seq", type=str, default='num_cores,cfg_n', help="sequence of compile-time parameters")
+    parser.add_argument("--sim_seq", type=str, default='sen,slowdown', help="sequence of simulation parameters")
 
     args = parser.parse_args()
     root_dir = args.root_dir
@@ -207,19 +221,17 @@ if __name__ == "__main__":
     filename = f"{filename}.csv"
     filename = os.path.join(args.output_dir, filename)
     folder_search_seq = args.folder_search_seq.split(",")
-    if not os.path.exists(filename):
-        # Create a dataframe with the values
-        pd.DataFrame(columns=
-            [key for search_key in folder_search_seq for key in folder_pattern_keys[search_key] if key != ""]
-            # keys in trace pattern except seed, to acheive distribution statistics
-            + ['method', "num_cores", "jitter_en"] 
-            +['confidence', 'ddl_percentile', 'rt_percentile', 'miss_rate']).to_csv(filename, index=False)
+    trace_pattern, trace_pattern_keys, trace_pattern_type = get_trace_regexp(args.sim_seq.split(","))
+    cfg_keys = [key for search_key in folder_search_seq for key in folder_pattern_keys[search_key] if keys_filter(key)]
+    sim_keys = remove_nondisplay_keys(trace_pattern_keys, ['seed'])
+    cols =  cfg_keys + sim_keys + metric_lat
+    csv_fmt_check(filename, cols)
     
     # Load the dataframe
     df = pd.read_csv(filename)
 
     root_path = os.path.join('trace', root_dir)
-    ctx_extracter = get_e2e_checker(trace_pattern, trace_pattern_keys, trace_pattern_type, timing_flag_dict, 
+    ctx_extracter = get_e2e_checker(trace_pattern, trace_pattern_keys, trace_pattern_type, timing_flag_dict, sim_keys, 
                                     args.profiling_filename, args.n_p, args.warmup_dis, args.stat_csv_filename, 
                                     args.index_seq.split(","))
     scanner = get_path_var_scaner([ctx_extracter, ], folder_pattern, folder_pattern_keys, folder_type, folder_search_seq)
