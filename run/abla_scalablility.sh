@@ -51,10 +51,10 @@ for lat in $(seq 0.1 -0.01 0.08); do
                     if [ -f $log_name ]; then
                         rm $log_name
                     fi
-                    echo "==start (bin_pack-coaleasing) ./$cfg" `date "+%Y-%m-%d %H:%M:%S.%3N"`
+                    echo "==start (bin_pack-coaleasing) ./$cfg/${case_sign}${file_suffix}" `date "+%Y-%m-%d %H:%M:%S.%3N"`
                     nohup python $p_fn --test_case bin_pack_new $PY_ARGS $LOAD_VAR > $log_name 2>&1 
-                    # sleep 5
-                    echo "==finish (bin_pack-coaleasing) ./$cfg" `date "+%Y-%m-%d %H:%M:%S.%3N"`
+                    # sleep 4
+                    echo "==finish (bin_pack-coaleasing) ./$cfg/${case_sign}${file_suffix}" `date "+%Y-%m-%d %H:%M:%S.%3N"`
                 
                 elif [ $case != "" ]; then
                     log_name=$dir_path/${case_sign}_${file_suffix}.log.txt
@@ -63,7 +63,7 @@ for lat in $(seq 0.1 -0.01 0.08); do
                     fi
                     echo "==start (${case_input}) ./$cfg/${case_sign}_${file_suffix}" `date "+%Y-%m-%d %H:%M:%S.%3N"`
                     nohup python $p_fn --test_case ${case_input} $PY_ARGS $LOAD_VAR > $log_name 2>&1 
-                    # sleep 5
+                    # sleep 4
                     echo "==finish (${case_input}) ./$cfg/${case_sign}_${file_suffix}" `date "+%Y-%m-%d %H:%M:%S.%3N"`
                 fi
             }

@@ -5,7 +5,7 @@ from copy import deepcopy
 from typing import Dict, List, Tuple
 from queue import Queue
 from global_var import *
-from utils import load_pickle
+from utils import load_pickle, core_distr
 
 from model.buffer import Buffer, EventCache, TriggerCache
 from model.buffer import Buffer, Data
@@ -2620,17 +2620,7 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data
                 
                 if len(score_dict) > 0:
                     # allocate the remaining resources proportionally to the score
-                    cum_score_reverse = np.cumsum(list(reversed(score_dict.values())))
-                    cum_size = [curr_aval_rsc * s / cum_score_reverse[-1] for s in cum_score_reverse]
-                    for i, pid in enumerate(reversed(score_dict.keys())):
-                        if i == 0:
-                            size = int(cum_size[0])
-                            rsc_map[pid] += size
-                            cum_size[0] = size
-                        else:
-                            size = int(cum_size[i] - cum_size[i - 1])
-                            rsc_map[pid] += size
-                            cum_size[i] = size + cum_size[i - 1]
+                    core_distr(rsc_map, score_dict, curr_aval_rsc)
                     curr_aval_rsc = 0
                 # check the rsc_size is valid
                 # compare with the core_max, core_min, core_list, parallel_mode

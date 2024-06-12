@@ -18,7 +18,7 @@ from model.event_gen.e2e_latency import discrete_event_sim
 from model.task_queue_agent import TaskQueue
 from utils import dump_and_check, load_pickle, update_df, check_parents_path, args_postprocess, get_case_path_str
 from global_var import *
-
+from utils import core_distr
 
 def main():
     import numpy as np 
@@ -28,6 +28,7 @@ def main():
 
     # ======================== porcess arguments ========================
     num_cores = args.num_cores
+    assert args.aux_scale_factor <= 9, "aux_scale_factor should be less than or equal to 9"
 
     cfg_para_dict, para_scan_group1, para_scan_group2, path_para_dict, \
     bin_path_format, trace_path_para, plot_path_para, csv_xlxs_root = args_postprocess(args)
@@ -165,6 +166,28 @@ def main():
                 pd.DataFrame(columns=list(cfg_para_dict.keys())+list(para_scan_group1.keys())+["num_cores"]).to_csv(filename, index=False)
             
             num_cores = sum(max_core_layout[1].values())
+            if args.force_num_cores and args.aux_scale_factor!= 9:
+                # read core number from the bin name with TP=9
+                _cfg_n_t = cfg_root_fmt.format(**cfg_para_dict, **{**para_scan_group1, "aux_scale_factor": 9})
+                _path_para_dict = {"root_dir": args.root_dir, "cfg_n": _cfg_n_t, 
+                                   "i_file_suffix": args.i_file_suffix,
+                                   "force_suffix": ""}
+                folder, files, match = get_core_num_from_trace_name(_path_para_dict)
+                if not match:
+                    print(f"!!! Warning: no bin_list file "+
+                        bin_fn_fmt.format(**path_para_dict, **{"num_cores": r"(\d*)"})
+                        +f" in {folder}:{files} !!!")
+                    return
+                args.num_cores = int(match.group(1)) 
+                
+                if args.num_cores > num_cores:
+                    # just modify the size of the bin
+                    bin_list[0].num_resources = args.num_cores
+                    print(f"Force the num of Core {num_cores} -> {args.num_cores}, the over subcription ratio is {over_sub_ratio}")
+                    num_cores = args.num_cores
+                elif args.num_cores < num_cores: 
+                    print(f"Forced specified num of Core should be larger than the estimated num of cores {num_cores} > {args.num_cores}")
+                    import sys; sys.exit(1)
             plot_path_para.update({"num_cores": num_cores})
             # Load the dataframe                        
             # df = pd.read_csv(filename)
@@ -213,10 +236,42 @@ def main():
             filename = os.path.join(csv_xlxs_root, 'coalescing_req_cores.csv')
             check_parents_path(filename)
             import pandas as pd
-            if not os.path.exists(filename):
-                pd.DataFrame(columns=list(cfg_para_dict.keys())+list(para_scan_group1.keys())+["num_bins","num_cores"]).to_csv(filename, index=False)
+            # if not os.path.exists(filename):
+            #     pd.DataFrame(columns=list(cfg_para_dict.keys())+list(para_scan_group1.keys())+["num_bins","num_cores"]).to_csv(filename, index=False)
             
             num_cores = sum(bin_size_list.values())
+            if args.force_num_cores and args.aux_scale_factor!= 9:
+                # read core number from the bin name with TP=9
+                _cfg_n_t = cfg_root_fmt.format(**cfg_para_dict, **{**para_scan_group1, "aux_scale_factor": 9})
+                _path_para_dict = {"root_dir": args.root_dir, "cfg_n": _cfg_n_t, 
+                                   "i_file_suffix": args.i_file_suffix, 
+                                   "force_suffix": ""}
+                folder, files, match = get_core_num_from_trace_name(_path_para_dict)
+                if not match:
+                    print(f"!!! Warning: no bin_list file "+
+                        bin_fn_fmt.format(**path_para_dict, **{"num_cores": r"(\d*)"})
+                        +f" in {folder}:{files} !!!")
+                    return
+                args.num_cores = int(match.group(1)) 
+
+                if args.num_cores > num_cores:
+                    # culculate the over subcription ratio
+                    over_sub_ratio =  args.num_cores / num_cores
+                    # score is thier size in the bin
+                    score_dict = {_bin.id:_bin.num_resources for _bin in bin_list} 
+                    rsc_map = {**score_dict}
+                    curr_aval_rsc = args.num_cores - num_cores
+                    core_distr(rsc_map, score_dict, curr_aval_rsc)
+                    assert sum(rsc_map.values()) == args.num_cores
+                    # set the size of the bin
+                    for _bin in bin_list:
+                        _bin.num_resources = rsc_map[_bin.id]
+                    print(f"Force the num of Core {num_cores} -> {args.num_cores}, the over subcription ratio is {over_sub_ratio}")
+                    num_cores = args.num_cores
+                elif args.num_cores < num_cores: 
+                    print(f"Forced specified num of Core should be larger than the estimated num of cores {num_cores} > {args.num_cores}")
+                    import sys; sys.exit(1)
+
             plot_path_para.update({"num_cores": num_cores})
             # Load the dataframe                        
             # df = pd.read_csv(filename)
@@ -228,13 +283,7 @@ def main():
             routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
 
         elif args.binpack_cfg["algorithm"] == "repack":
-            folder = cache_root_fmt.format(**path_para_dict)
-            root,dirs,files = os.walk(folder).__next__()
-            assert len(dirs) == 0
-            bin_list_save_path,  routing_table_save_path = None, None
-            for fn in files:
-                if match := re.match(bin_fn_fmt.format(**path_para_dict, **{"num_cores": r"(\d*)"}), fn):
-                    break
+            folder, files, match = get_core_num_from_trace_name(path_para_dict)
             if not match:
                 print(f"!!! Warning: no bin_list file "+
                       bin_fn_fmt.format(**path_para_dict, **{"num_cores": r"(\d*)"})
@@ -297,8 +346,8 @@ def main():
                 verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
                 warmup=True, drain=True, 
                 )
-            path_para_dict['i_file_suffix'] += f"_ov_{args.exec_t_comp_ratioB}_repack"
-            plot_path_para['file_suffix'] += f"_ov_{args.exec_t_comp_ratioB}_repack"
+            path_para_dict['i_file_suffix'] += f"_ov_{args.exec_t_comp_ratioB:.2f}_repack"
+            plot_path_para['file_suffix'] += f"_ov_{args.exec_t_comp_ratioB:.2f}_repack"
             bin_list_save_path = bin_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
             routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
 
@@ -333,13 +382,7 @@ def main():
 
         if args.test_all or args.test_case in [case_name_cyc_input, case_name_dyn_input, case_name_pglb_input]:
             if args.binpack_cfg["core_size"] == "induced":
-                folder = cache_root_fmt.format(**path_para_dict)
-                root,dirs,files = os.walk(folder).__next__()
-                assert len(dirs) == 0
-                bin_list_save_path,  routing_table_save_path = None, None
-                for fn in files:
-                    if match := re.match(bin_fn_fmt.format(**path_para_dict, **{"num_cores": r"(\d*)"}), fn):
-                        break
+                folder, files, match = get_core_num_from_trace_name(path_para_dict)
                 if not match:
                     print(f"!!! Warning: no bin_list file "+
                         bin_fn_fmt.format(**path_para_dict, **{"num_cores": r"(\d*)"})
@@ -495,6 +538,16 @@ def main():
             trace_path = trace_fn_wo_seed_fmt.format(**trace_path_para, **{"case": case_pth})
         # save trace_list to trace_file
         dump_and_check(trace_path, trace_list)
+
+def get_core_num_from_trace_name(path_para_dict):
+    folder = cache_root_fmt.format(**path_para_dict)
+    root,dirs,files = os.walk(folder).__next__()
+    assert len(dirs) == 0
+    bin_list_save_path,  routing_table_save_path = None, None
+    for fn in files:
+        if match := re.match(bin_fn_fmt.format(**path_para_dict, **{"num_cores": r"(\d*)"}), fn):
+            break
+    return folder,files,match
 
 def check_max_bin_num(args, num_cores, bin_path_format):
     max_num_bins = 0

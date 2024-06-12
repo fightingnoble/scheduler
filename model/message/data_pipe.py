@@ -47,7 +47,7 @@ class DataPipe:
     
     @staticmethod
     def avg_trasfer_time(size, slow_down=1):
-        return (AVG_HEAD_LAT + size / BW_DRAM) * (slow_down+1)
+        return (AVG_HEAD_LAT + size / BW_DRAM) / (1-slow_down)
     
     def put(self, data:Data, mode:bool="broadcast", dest:List[int]=None,):
         if data.io_time is None:

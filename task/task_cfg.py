@@ -823,7 +823,7 @@ def gen_workloads(args):
                 task_graph_sinks, sink_attr, src_attr, args.slack_threshold, args.e2e_latency, 
                 args.exec_t_comp_ratioA, args.jitter_t_comp_ratio, 
                 args.wsc_slack_ratio, algorithm, args.timestepxus, 
-                args.jitter_sim_para, args.load_var_sim_para
+                args.var_estimation
                 )
 
     glb_n_task_dict = gen_taskint_from_cfg(taskattr_dict, f_gcd)

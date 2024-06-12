@@ -51,9 +51,10 @@ case_re = rf"(?P<method>{case_name_bp}|{case_name_cyc}|{case_name_dyn}|{case_nam
 case_re_key = ['method',]
 case_re_type = [str,]
 
-core_pattern = r"(?P<num_cores>\d+)?"
-core_pattern_key = ["num_cores"]
-core_pattern_type = [int]
+pure_core_pattern = r"(?P<num_cores>\d+)"
+core_pattern = r"(?P<force_core>_force)?(?P<num_cores>\d+)?"
+core_pattern_key = ["force_core", "num_cores"]
+core_pattern_type = [bool, int]
 
 # ================== jitter parameters ================
 
@@ -132,9 +133,9 @@ def get_log_regexp(suffix_var_order=["sen", "slowdown", "ld"]):
         file_infix_pattern_type.extend(var_pattern_type[key]) 
 
     log_suffix_pattern = rf"(?P<repack>_{var_pattern['repack']})?"
-    log_pattern = case_re+r"(_\d+)?(_jitter_(dis|en))?" + log_infix_pattern +seed_re_withname+log_suffix_pattern+r"\.log\.txt" 
-    log_pattern_keys = case_re_key + ["_log_core_str", "_jitter_en_str","jitter_en"] + file_infix_pattern_keys + seed_re_key + var_pattern_keys['repack']
-    log_pattern_type = case_re_type + [str, str, str] + file_infix_pattern_type + seed_re_type + var_pattern_type['repack']
+    log_pattern = case_re+core_pattern+r"(_jitter_(dis|en))?" + log_infix_pattern +seed_re_withname+log_suffix_pattern+r"\.log\.txt" 
+    log_pattern_keys = case_re_key + core_pattern_key + ["_jitter_en_str", "jitter_en"] + file_infix_pattern_keys + seed_re_key + var_pattern_keys['repack']
+    log_pattern_type = case_re_type + core_pattern_type + [str, str] + file_infix_pattern_type + seed_re_type + var_pattern_type['repack']
     return log_pattern, log_pattern_keys, log_pattern_type
 
 

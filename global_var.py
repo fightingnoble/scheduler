@@ -65,18 +65,18 @@ cache_root_fmt = os.path.join(cache_dir, r"{root_dir}", r"{cfg_n}")
 plot_root_fmt = os.path.join(plot_dir, r"{root_dir}", r"{cfg_n}", r"{num_cores}")
 trace_root_fmt = os.path.join(trace_dir, r"{root_dir}", r"{cfg_n}")
 
-bin_fn_fmt = r"bin_list_{num_cores}{i_file_suffix}.pkl"
-routing_table_fn_fmt = r"routing_table_{num_cores}{i_file_suffix}.pkl"
+bin_fn_fmt = r"bin_list_{force_suffix}{num_cores}{i_file_suffix}.pkl"
+routing_table_fn_fmt = r"routing_table_{force_suffix}{num_cores}{i_file_suffix}.pkl"
 bin_save_fmt = os.path.join(cache_root_fmt, bin_fn_fmt)
 routing_table_save_fmt = os.path.join(cache_root_fmt, routing_table_fn_fmt)
 
 # case: cyclic, sta_dyn, glb_dyn
 
-plt_fn_w_seed_fmt = r"{plot_root}/{case}_{plt_size}_{num_cores}_seed_{seed}{file_suffix}.pdf"
-plt_fn_wo_seed_fmt = r"{plot_root}/{case}_{plt_size}_{num_cores}{file_suffix}.pdf"
+plt_fn_w_seed_fmt = r"{plot_root}/{case}_{plt_size}_{force_suffix}{num_cores}_seed_{seed}{file_suffix}.pdf"
+plt_fn_wo_seed_fmt = r"{plot_root}/{case}_{plt_size}_{force_suffix}{num_cores}{file_suffix}.pdf"
 
-trace_fn_wo_seed_fmt = r"{trace_root}/{case}_e2e_trace_{num_cores}.pkl" 
-trace_fn_w_seed_fmt = r"{trace_root}/{case}_e2e_trace_{num_cores}_seed_{seed}{file_suffix}.pkl" 
+trace_fn_wo_seed_fmt = r"{trace_root}/{case}_e2e_trace_{force_suffix}{num_cores}.pkl" 
+trace_fn_w_seed_fmt = r"{trace_root}/{case}_e2e_trace_{force_suffix}{num_cores}_seed_{seed}{file_suffix}.pkl" 
 
 core_stat_fn_fmt = r"{cache_root}/{case}_max_core_stat.pkl" # dyn_max_core_stat.pkl
 

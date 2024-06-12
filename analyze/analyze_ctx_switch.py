@@ -56,12 +56,74 @@ def get_ctx_extracter(file_pattern, file_pattern_keys, file_pattern_type):
                     continue
                         
                 number_of_context_switch, cumulative_context_switch_time = get_ctx_switch_info(file_path)
-                df = update_df(df, data, {'n_ctx_switch': number_of_context_switch,
-                                            'cum_time': cumulative_context_switch_time,
-                                            'throughput': -1})
+                target = dict(zip(metric_switch_tp, [number_of_context_switch, cumulative_context_switch_time, -1]))
+                df = update_df(df, data, target)
                 1+1
         return df
     return extract_ctx_num
+
+def find_core_num(filename):
+    # 定义正则表达式模式
+    pattern = r"max_core_num: " + pure_core_pattern
+    # with open(filename, "r") as file:
+    #     for line in file:
+    #         if match := re.match(pattern, line):
+    #             print(f"Found core num: {match.group(1)}")
+    #             return match.group(1)
+    #     print(f"Warning: no max_core_num found in {filename}")
+    #     return -1
+    with open(filename, 'r') as file:
+        content = file.read()
+
+
+    # 匹配模式并提取数值
+    matches = re.findall(pattern, content)
+
+    # 输出提取到的数值
+    if not matches:
+        print(f"Warning: no core num info in {filename}")
+        return -1
+    else:
+        num_cores = int(matches[-1])
+        print(f"Number of cores: {num_cores}")
+        return num_cores
+
+def get_core_num(file_pattern, file_pattern_keys, file_pattern_type):
+    def extract_core_num(df, folder, info_dict):
+        root,dirs,files = os.walk(folder).__next__()
+        assert len(dirs) == 0
+        for fn in sorted(os.listdir(folder)):
+            fn_match = re.match(file_pattern, fn)
+            if fn_match:
+                file_path = os.path.join(folder, fn)
+                print(file_path)
+                # Create a dictionary with the values
+                data = {**info_dict, **get_group_dict(file_pattern_keys, fn_match, file_pattern_type, True)}
+                data = remove_nondisplay_keys(data)
+                if 'jitter_en' not in data:
+                    data['jitter_en'] = False
+                if 'seed' not in data:
+                    data['seed'] = ""
+                if 'repack_ratio' not in data:
+                    data['repack_ratio'] = ""
+                    
+                # ensure that num_cores is not already in the dataframe
+                # ensure the method is case_name_bp
+                if 'num_cores' in data or data['method']!= case_name_bp:
+                    continue
+
+                # NOTE: Jitter_en flag is defined differently in 
+                # trace and log name, "var_[\d\.]+" and "dis|en", respectively.
+                if data['jitter_en'] == True and data['seed'] == "":
+                    print(f"(Passed!) Warning: no seed in {file_path.split('/')[-1]}")
+                    continue
+                        
+                num_cores = find_core_num(file_path)
+                df = update_df(df, data, {"num_cores": num_cores})
+        return df
+    return extract_core_num
+
+
 
 if __name__ == "__main__":
     import argparse
@@ -92,6 +154,9 @@ if __name__ == "__main__":
     cols = [key for search_key in folder_search_seq for key in folder_pattern_keys[search_key] if keys_filter(key)] \
             + sim_keys\
             + metric_switch_tp
+    if "num_cores" not in cols:
+        cols.append("num_cores")
+    cols_default = {col_n:"" for col_n in cols}
     csv_fmt_check(filename, cols)
 
     # Load the dataframe
@@ -99,8 +164,9 @@ if __name__ == "__main__":
 
     root_path = os.path.join('log', root_dir)
     ctx_extracter = get_ctx_extracter(log_pattern, log_pattern_keys, log_pattern_type) 
+    num_cores_extracter = get_core_num(log_pattern, log_pattern_keys, log_pattern_type) 
     # for find minimum required cores
     tp_extracter = get_throughput_extracter(args.stat_csv_filename, args.profiling_filename, args.n_p, args.warmup_dis, args.sim_param_seq.split(",")) 
-    scanner = get_path_var_scaner([ctx_extracter, tp_extracter], folder_pattern, folder_pattern_keys, folder_type, folder_search_seq)
+    scanner = get_path_var_scaner([ctx_extracter, num_cores_extracter, tp_extracter], folder_pattern, folder_pattern_keys, folder_type, folder_search_seq)
     df = scanner(df, root_path, len(folder_search_seq), dict(), 0)
     df.to_csv(filename, index=False)

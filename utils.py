@@ -4,8 +4,10 @@ from functools import wraps, reduce
 from global_var import cfg_dir
 from typing import Dict, Callable
 import pandas as pd
+import numpy as np
 import json
 from global_var import *
+import ast
 
 def dump_and_check(save_path, obj2save):
     check_parents_path(save_path)
@@ -38,6 +40,12 @@ def load_pickle(path):
 class Found(Exception):
     pass
 
+def dict_type(string):
+    try:
+        return ast.literal_eval(string)
+    except ValueError:
+        raise argparse.ArgumentTypeError("Invalid dictionary format")
+    
 def input_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("--verbose", action="store_true", help="verbose")
@@ -46,6 +54,8 @@ def input_parser():
     parser.add_argument("--plot_fmt", type=str, default="svg,pdf", help="plot format")
     parser.add_argument("--test_all", default=False, help="test all the task")
     parser.add_argument("--num_cores", default=266, type=int, help="number of cores")
+    parser.add_argument("--force_num_cores", default=False, action="store_true", help="force to use the number of cores")
+    
     parser.add_argument("--num_bins", default=-1, type=int, help="number of bins")
     parser.add_argument("--timestepxus", default=10, type=int, help="timestep in us")
     parser.add_argument("--BinExtendRule", default="list", type=str, help="Rule for when and how to extend the bin")
@@ -59,27 +69,31 @@ def input_parser():
     parser.add_argument("--n_p", default=1, type=int, help="number of periods")
     
     parser.add_argument("--jitter_sim_en", default=False, action="store_true", help="enable jitter simulation")
-    parser.add_argument("--jitter_sim_para", default={}, type=dict, help="jitter simulation parameters")
+    parser.add_argument("--jitter_sim_para", default={}, type=dict_type, help="jitter simulation parameters")
 
     parser.add_argument("--exec_var_en", default=False, action="store_true", help="enable exec jitter simulation")
-    parser.add_argument("--exec_var_para", default={}, type=dict, help="exec jitter simulation parameters")
+    parser.add_argument("--exec_var_para", default={}, type=dict_type, help="exec jitter simulation parameters")
 
     parser.add_argument("--var_sim_cfg", default="var_sim_cfg.json", type=str, help="variation simulation config file")
 
     parser.add_argument("--load_var_sim_en", default=False, action="store_true", help="enable dynamic object simulation")
-    parser.add_argument("--load_var_sim_para", default=dict(), type=dict, help="dynamic object simulation parameters")
+    parser.add_argument("--load_var_sim_para", default=dict(), type=dict_type, help="dynamic object simulation parameters")
 
     parser.add_argument("--e2e_var_sim_en", default=False, action="store_true", help="enable e2e latency variation simulation")
-    parser.add_argument("--e2e_var_sim_para", default=dict(), type=dict, help="e2e latency variation simulation parameters")
+    parser.add_argument("--e2e_var_sim_para", default=dict(), type=dict_type, help="e2e latency variation simulation parameters")
     
     parser.add_argument("--file_suffix", default="", type=str, help="file suffix")
     parser.add_argument("--i_file_suffix", default="", type=str, help="file suffix")
     parser.add_argument("--seed", default=0, type=int, help="random seed")
     parser.add_argument("--barrier_dis", default=False, action="store_true", help="disable barrier")
     parser.add_argument("--data_lifetime_mode", default="static", type=str, help="lifetime mode: most_recent, ref_count, timeout, watermark") 
+    
     parser.add_argument("--jitter_t_comp_ratio", default=0.2, type=float, help="spatial ratio")
     parser.add_argument("--exec_t_comp_ratioA", default=0.05, type=float, help="temporal ratio")
     parser.add_argument("--exec_t_comp_ratioB", default=0.05, type=float, help="temporal ratio")
+    parser.add_argument("--load_t_comp_ratio", default=0.05, type=float, help="temporal ratio")
+    parser.add_argument("--var_estimation", default={}, type=dict_type, help="estimation parameters")
+    
     parser.add_argument("--profiling_filename", type=str, default="profiling/profiling_light.csv", help="profiling filename")
     parser.add_argument("--lateness_mode", type=str, default="ignore", help="lateness mode")
     # parser.add_argument("--lateness_threshold", type=float, default=0.0, help="lateness threshold")
@@ -93,18 +107,36 @@ def input_parser():
     parser.add_argument("--root_dir", default=".", type=str, help="root directory")
 
     parser.add_argument("--bin_pack_cfg", default="bin_pack_cfg.json", type=str, help="bin pack config file")
-    parser.add_argument("--bin_pack_para", default=dict(), type=dict, help="bin pack algorithm parameters")
+    parser.add_argument("--bin_pack_para", default=dict(), type=dict_type, help="bin pack algorithm parameters")
     # parser.add_argument("--bin_sort", default="EAT", type=str, help="bin sort: EAT, barycenter")
     # parser.add_argument("--bin_sort_reverse", default=True, type=bool, help="bin sort reverse")
     
     parser.add_argument("--max_core_stat", default=False, type=bool, help="max core stat")
     args = parser.parse_args()
 
-    args.jitter_sim_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['jitter'] 
-    args.exec_var_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['exec']
-    args.load_var_sim_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['load_var']
-    args.e2e_var_sim_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['e2e_var']
-    args.binpack_cfg = json.load(open(os.path.join(cfg_dir, args.bin_pack_cfg), "r"))
+    jitter_sim_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['jitter'] 
+    jitter_sim_para.update(args.jitter_sim_para)
+    args.jitter_sim_para = jitter_sim_para
+    exec_var_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['exec']
+    exec_var_para.update(args.exec_var_para)
+    args.exec_var_para = exec_var_para
+    load_var_sim_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['load_var']
+    load_var_sim_para.update(args.load_var_sim_para)
+    args.load_var_sim_para = load_var_sim_para
+    e2e_var_sim_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['e2e_var']
+    e2e_var_sim_para.update(args.e2e_var_sim_para)
+    args.e2e_var_sim_para = e2e_var_sim_para
+    binpack_cfg = json.load(open(os.path.join(cfg_dir, args.bin_pack_cfg), "r"))
+    binpack_cfg.update(args.bin_pack_para)
+    args.binpack_cfg = binpack_cfg
+    # copy from jitter_t_comp_ratio, exec_t_comp_ratioA, load_t_comp_ratio
+    var_estimation = {
+        "jitter": args.jitter_t_comp_ratio,
+        "exec": args.exec_t_comp_ratioA,
+        "load_var": args.load_t_comp_ratio,
+    }
+    var_estimation.update(args.var_estimation)
+    args.var_estimation = var_estimation
     
     if args.e2e_var_sim_en:
         assert args.gen_benchmark == True
@@ -117,8 +149,13 @@ def args_postprocess(args):
     args.binpack_cfg.update({"exec_t_comp_ratioB": args.exec_t_comp_ratioB}) 
     para_scan_group2 = {"num_cores": args.num_cores}
 
+    if args.force_num_cores and args.aux_scale_factor!= 9:
+        args.force_suffix="force_"
+    else:
+        args.force_suffix=""
+
     cfg_para_dict, para_scan_group1, cfg_n = get_cfg_n(args)
-    path_para_dict = {"root_dir": root_dir, "cfg_n": cfg_n, "i_file_suffix": args.i_file_suffix}
+    path_para_dict = {"root_dir": root_dir, "cfg_n": cfg_n, "i_file_suffix": args.i_file_suffix, "force_suffix": args.force_suffix}
     # remain parameters in group1 unfilled
     cfg_n_format = cfg_root_fmt.format(**cfg_para_dict, **{}.fromkeys(para_scan_group1, r"{}"))
 
@@ -131,8 +168,12 @@ def args_postprocess(args):
     trace_path_para = {
         "trace_root": trace_root, "num_cores": args.num_cores, 
         "seed": args.seed, "file_suffix": args.file_suffix, 
+        "force_suffix": args.force_suffix
         }
-    plot_path_para = {"plot_root": plot_root, "num_cores": args.num_cores, "seed": args.seed, "file_suffix": args.file_suffix}
+    plot_path_para = {"plot_root": plot_root, "num_cores": args.num_cores, 
+                      "seed": args.seed, "file_suffix": args.file_suffix,
+                      "force_suffix": args.force_suffix
+                      }
     
     # worst case: state seed = -1, seed value is not used but set to 0, print as -1
 
@@ -254,3 +295,18 @@ def csv_fmt_check(filename, cols):
         if set(df.columns) != set(cols):
             pd.DataFrame(columns=cols).to_csv(filename, index=False)
 
+def core_distr(rsc_map, score_dict, curr_aval_rsc):
+    cum_score_reverse = np.cumsum(list(reversed(score_dict.values())))
+    cum_size = [curr_aval_rsc * s / cum_score_reverse[-1] for s in cum_score_reverse]
+    for i, pid in enumerate(reversed(score_dict.keys())):
+        if i == 0:
+            size = int(cum_size[0])
+            rsc_map[pid] += size
+            cum_size[0] = size
+        elif i == len(score_dict) - 1:
+            size = int(curr_aval_rsc - cum_size[i - 1])
+            rsc_map[pid] += size
+        else:
+            size = int(cum_size[i] - cum_size[i - 1])
+            rsc_map[pid] += size
+            cum_size[i] = size + cum_size[i - 1]

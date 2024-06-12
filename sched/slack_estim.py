@@ -122,6 +122,23 @@ def alloc_func(rsc_map_w:Dict[str, Tuple[int, float]],
         # exactly match the slack: 
         #  1. no process is reassigned due to the constraint
         #  2. the reassigned processes compensate each other
+        
+        # if no constraint, all task is assigned slack propotional to its flops, 
+        # and all task requires same core numbers, e.g., core_max_ideal
+        # w/ constraints: 
+        # core_max_actual > core_max_ideal
+        # A. if a task is resource upper bounded, 
+            # it use less core and more slack than the ideal, other task use more core than the ideal
+            # the upper bounded items is upper bounded by the core_max_ideal, 
+            # it's no meaning to assign more slack to them and it's not legal to assign more core to them
+            # so we move them. 
+        # B. core_min_actual come from maxumum core of the lower bounded items in current iterations, 
+            # but not must be the final result. Because there may be other tasks become upper bounded, and lower bounded items may be eliminated.
+            # Consequently, we leave them unprocessed until there is no upper bounded item. 
+        # C. The remaining slack (<= total_slack * percent of flops of remaining tasks), 
+        # and is distributed remaining processes
+        # 
+        # the item that not upper bounded items are maximumly 
         if 0>=curr_slack_rem>=-threshold:
             return state, 0, curr_slack_rem
         elif curr_slack_rem > 0:
@@ -499,7 +516,8 @@ def deduce_task_attrib(taskattr: TaskIntAttr,
 def deduce_cfg2(taskattr_dict, f_gcd, hyper_p, 
                logical_graph_nx, task_graph_srcs, task_graph_sinks, sink_attr, src_attr,
                slack_threshold, e2e_latency, exec_t_comp_ratioA, jitter_t_comp_ratio, wsc_slack_ratio,
-                 algorithm='avg', timestep_size=10, jitter_sim_para={}, load_var_sim_para={},
+                 algorithm='avg', timestep_size=10, 
+                 var_estimation={},
                  verbose=False, plot=False):
 
     # set the the ert and ddl of the sink nodes and the src nodes
@@ -555,11 +573,10 @@ def deduce_cfg2(taskattr_dict, f_gcd, hyper_p,
         wsc_by_name = deduce_eq_wsc(
             wsc_slack_ratio,
             logical_graph_nx, task_graph_srcs, task_graph_sinks, 
-            src_attr, jitter_t_comp_ratio, # unused
+            src_attr, 
             exec_t_comp_rel, 
             exec_t_comp_abs, 
-            load_var_sim_para,
-            jitter_sim_para,
+            var_estimation,
             verbose
         )
     else:
@@ -613,11 +630,9 @@ def get_chains_info(task_graph, start_nodes, end_nodes):
 def deduce_eq_wsc(
     wsc_slack_ratio:float,
     task_graph, start_nodes, end_nodes, src_attr, 
-    jitter_t_comp_ratio, 
     temporal_rel:Union[float, Dict[str, float]], 
     temporal_abs:Dict={}, 
-    load_var_sim_para={},
-    jitter_sim_para={},
+    var_estimation={},
     verbose=False,
     debug = False,
     ) -> List[Tuple[List[str], float]]:
@@ -634,8 +649,8 @@ def deduce_eq_wsc(
         src = chain[0]
         sink = chain[-1]
         e2e_constr = task_graph.nodes[sink]['ddl']
-        jitter_var = elim_nume_error(1/src_attr[src]*jitter_sim_para.get('scale', 0))
-        exe_slowdown_var = load_var_sim_para.get('scale', 0)
+        jitter_var = elim_nume_error(1/src_attr[src]*var_estimation.get('jitter', 0))
+        exe_slowdown_var = var_estimation.get('exec', 0)
         jitter_t_comp = task_graph.nodes[src]["jitter"]
         if isinstance(temporal_rel, float):
             displacement = len(chain[1:-1]) * temporal_abs
