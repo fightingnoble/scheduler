@@ -53,6 +53,17 @@ The `jitter/exec` object contains settings related to jitter.
 | enforce_wc | A boolean value that indicates whether to enforce worst-case scenario. | Boolean | `false` |
 
 ## Scheduler setting
+latency model:
+$$
+    \lat_{\xi^{j}_{k}, \ETEs} = \sum_{\tau_i \in \xi^{j}_{k}} {\var_{ld}\cdot \lat_{i, typ} }{(1\!+\!\var_{sl})}\!+\! \frac{\var_{\jitter}}{\freq_{src}}. \label{eq::lat_model}
+$$
+
+compensation model:
+
+$$
+    \slack({\tau_i}) \geq \lat_{i, typ}  (1 + S_{sl}) + S_{\jitter}
+$$
+
 Compensation stages:
 - Compile-time overprovisioning:  
 
@@ -69,7 +80,9 @@ Compensation ratio:
     percentage of jitter compensated at compile time. (1/src_freq*jitter_t_comp_ratio) 
 - exec_t_comp_ratioA:
 
-    The percent of slowdown assumed at runtime compared to the planned execution time, which is also seen as the overprovisioning ratio. This option results in using 1/(1 - RatioA) times resource to gurrantee the task completes within the planned time, with at most RatioA times slowdown.
+    The percent of slowdown assumed at runtime compared to the planned execution time, which is also seen as the overprovisioning ratio. 
+    This option results in using by latency model for shrinking the time budget in cfg slection, 
+    to gurrantee the task completes within the planned time, with at most RatioA times slowdown.
     This factor affects both the minimal resource requirements as well as the ERT and ddl of each task. 
 - exec_t_comp_ratioB:
 

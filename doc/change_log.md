@@ -1307,3 +1307,96 @@ Final version from houmo
   ``` python
   cfg_root_fmt = r"x{aux_scale_factor}_{e2e_latency}s_rda-{jitter_t_comp_ratio:.2%}(J)_{wsc_slack_ratio:.2%}(T)_{exec_t_comp_ratioA:.2%}(S)_ignore"
   ```
+
+## 0727
+### Slowdown modeling 
+修改latency 模型：
+
+分离模型+预分配+runtime model+runtime allocation
+
+```latex
+\(\s*1\s*- 
+```
+1. 分离模型
+    
+    新建model/performance.py：
+    
+    ```python
+    cal_lat = lambda lat, lat_jitter=0, var_sl=1, var_ld=1: lat*(1+var_sl) * var_ld + lat_jitter
+    slack_comp = lambda slack, lat_jitter=0, var_sl=1, var_ld=1: (slack - lat_jitter) / (1+var_sl) / var_ld 
+    ```
+    
+    avg_trasfer_time 从 /model/message/data_pipe.py 移动到 model/performance.py
+    
+
+---
+
+2. **预分配**
+    
+   1. Compensation:
+      1. sched/packing_solver/gurobi_MP_chain_assign.py
+          ```python
+          # define_constraints
+          # self.model.addConstr(sum([self.lat[i] / (1 - self.margin[i][1]) + self.margin[i][0] for i in range(self.K)]) + time1n_error_tol_abs <= self.e2e, name="e2e")
+          self.model.addConstr(sum([cal_lat(self.lat[i], **self.margin[i]) for i in range(self.K)]) + time1n_error_tol_abs <= self.e2e, name="e2e")
+          
+          # check_sol
+          # e2e_sum = sum([sol[i][1] / (1 - self.margin[i][1]) + self.margin[i][0] for i in range(self.K)])
+          e2e_sum = sum([cal_lat(sol[i][1], **self.margin[i]) for i in range(self.K)])
+          ```
+    
+       2. task/task_agent.py 的 rsc_req_estm
+       3. slack_estim.py
+    
+       4. sched/global_sched.py
+    
+          ```python
+                          # size_del_rda = process_dict[pid].task.flops/FLOPS_PER_CORE/(ddl_t-start_t)
+                          # cores_dict[pid] = int(math.ceil(size_del_rda/(1-exec_t_comp_ratioB)))
+                          slack = slack_comp((ddl_t-start_t), 0, exec_t_comp_ratioB)
+                          size_del_rda = process_dict[pid].task.flops/FLOPS_PER_CORE/slack
+                          cores_dict[pid] = int(math.ceil(size_del_rda))
+          ```
+          
+          发现个奇怪的东西？？为啥这个地方是ratioB
+---
+3. **runtime model**
+    
+    model/resource_agent.py
+    
+    ```python
+    # self.get_real_ops = lambda exp_ops: (1-self.var_gen()) * exp_ops
+    self.get_real_ops = lambda exp_ops: slack_comp(exp_ops, 0, self.var_gen())
+    ```
+    
+
+---
+
+4. **runtime compensation**
+    
+    ```python
+                elif chunk_s < n_slot < chunk_e:
+                    # case 1: release late !!! the running task that is identified as preemptable [chunk_s, chunk_e] 
+                    assert chunk_e == curr_cfg.slot_e + 1
+    								# 调整前
+                    # req_rsc_size = math.ceil(planned_flops/(chunk_e - n_slot)/timestep /FLOPS_PER_CORE/(1-sched.overprovision_rate)) 
+    								# 调整后
+                    slack = slack_comp((chunk_e - n_slot), 0, sched.over_provision_rate)
+                    req_rsc_size = math.ceil(planned_flops/slack/timestep/FLOPS_PER_CORE) 
+    						# ...
+                else:
+                    if round(planned_flops, flop1u_error_tol_bit) > round(chunk_flops, flop1u_error_tol_bit):
+                        # case 2: previous chunk is late
+                        #   newest assigned budget is still available but not enough
+    										# 调整前
+                        # req_rsc_size = math.ceil(planned_flops/(chunk_e + 1 - n_slot)/timestep /FLOPS_PER_CORE/(1-sched.overprovision_rate))
+                        # 调整后，修了个bug？？
+                        # req_rsc_size = math.ceil(planned_flops/(chunk_e - n_slot)/timestep /FLOPS_PER_CORE/(1-sched.overprovision_rate)) 
+                        slack = slack_comp((chunk_e - n_slot), 0, sched.over_provision_rate)
+                        req_rsc_size = math.ceil(planned_flops/slack/timestep/FLOPS_PER_CORE) 
+    
+    ```
+    
+    此处发现一个奇怪的东西，在previous chunk late的时候，chunk_e ＋1，late的case下，之前也+1 但是某一个版本被删除了
+
+3. Partitioning target, algorethm, flow

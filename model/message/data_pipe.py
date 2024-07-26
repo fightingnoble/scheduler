@@ -21,7 +21,7 @@ from model.task_queue_agent import TaskQueue
 from model.buffer import Data, Buffer
 from typing import List, Dict, Callable
 from model.event_gen.e2e_latency import exp_jitter
-from global_var import AVG_HOP_NUM, LAT_PER_HOP, BW_DRAM, BROADCAST_SCALER, AVG_HEAD_LAT
+from model.performance import avg_trasfer_time, multicast_lat_scaler
 
 class DataPipe:
     def __init__(self, data_type, num_reciever:int, 
@@ -41,19 +41,16 @@ class DataPipe:
         
         if not ideal:
             self.comm_lat_gen = exp_jitter(1, jitter_sim_para, size=1, seed=seed)
-            self.get_io_lat = lambda size: self.avg_trasfer_time(size, self.comm_lat_gen())
+            self.get_io_lat = lambda size: avg_trasfer_time(size, self.comm_lat_gen())
         else:
-            self.get_io_lat = lambda size: self.avg_trasfer_time(size)
+            self.get_io_lat = lambda size: avg_trasfer_time(size)
     
-    @staticmethod
-    def avg_trasfer_time(size, slow_down=1):
-        return (AVG_HEAD_LAT + size / BW_DRAM) / (1-slow_down)
     
     def put(self, data:Data, mode:bool="broadcast", dest:List[int]=None,):
         if data.io_time is None:
             data.io_time = self.get_io_lat(data.size)
         if mode == "broadcast":
-            data.io_time *= BROADCAST_SCALER
+            multicast_lat_scaler(data)
             self.buffer.put(["broadcast", data, []])
         elif mode == "unicast":            
             self.buffer.put(["unicast", data, dest])

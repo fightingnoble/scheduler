@@ -4,6 +4,7 @@ from gurobipy import GRB
 import numpy as np 
 from utils import time_cnt
 from global_var import FLOPS_PER_CORE, elim_nume_error, flop1n_error_tol_abs, time1n_error_tol_abs
+from model.performance import cal_lat, slack_comp
 
 class GurobiRscSlackEstim():
     """
@@ -12,7 +13,7 @@ class GurobiRscSlackEstim():
         K: number of items
         flops, (k,): number of operations
         e2e: end-to-end latency
-        margin, (k,): margin of each item
+        margin, (k,): margin of variability for K items
         constr_core: number constraints of each cores
             format: dict {
                 key: "max", "min", "list"
@@ -24,7 +25,7 @@ class GurobiRscSlackEstim():
         lat, (k,): latency of each item
     constraints:
         flops_k <= core_k * lat_k * FLOPS_PER_CORE, \forall k \in K
-        e2e <= \sum_{k=1}^{K} lat_k * (1 - margin_k)
+        # e2e <= \sum_{k=1}^{K} lat_k * (1 + margin_k1) * margin_k2 + margin_k0 
     objective:
         minimize the maximum of core
     """
@@ -45,6 +46,10 @@ class GurobiRscSlackEstim():
         self.max_core = 0
         self.model.setParam('NonConvex', 2)
         self.model.setParam('OutputFlag', int(verbose))
+    
+    def cal_lat_by_margin(self, lat, idx): 
+        assert isinstance(self.margin[idx], (list, tuple)) 
+        return cal_lat(lat[idx], *self.margin[idx])
 
     def create_variables(self):
         for i in range(self.K):
@@ -83,7 +88,8 @@ class GurobiRscSlackEstim():
                     self.model.addConstr(self.core[i] == sum([constr["list"][j] * self.core_sel[i][j] for j in range(len(constr["list"]))]), name=f'core[{i}]')
                     self.model.addConstr(sum([self.core_sel[i][j] for j in range(len(constr["list"]))]) == 1, name=f'core_sel[{i}]')
             self.model.addConstr(self.flops[i] + flop1n_error_tol_abs <= self.core[i] * self.lat[i] * FLOPS_PER_CORE, name=f'flops[{i}]')
-        self.model.addConstr(sum([self.lat[i] / (1 - self.margin[i][1]) + self.margin[i][0] for i in range(self.K)]) + time1n_error_tol_abs <= self.e2e, name="e2e")
+        # self.model.addConstr(sum([self.lat[i] / (1 - self.margin[i][1]) + self.margin[i][0] for i in range(self.K)]) + time1n_error_tol_abs <= self.e2e, name="e2e")
+        self.model.addConstr(sum([cal_lat(self.lat[i], *self.margin[i]) for i in range(self.K)]) + time1n_error_tol_abs <= self.e2e, name="e2e")
         self.model.addGenConstrMax(self.max_core, self.core, name="max_core")
 
     def check_sol(self, sol):
@@ -107,7 +113,8 @@ class GurobiRscSlackEstim():
             if elim_nume_error(self.flops[i] - sol[i][0] * sol[i][1] * FLOPS_PER_CORE)>0:
                 return False
 
-        e2e_sum = sum([sol[i][1] / (1 - self.margin[i][1]) + self.margin[i][0] for i in range(self.K)])
+        # e2e_sum = sum([sol[i][1] / (1 - self.margin[i][1]) + self.margin[i][0] for i in range(self.K)])
+        e2e_sum = sum([cal_lat(sol[i][1], *self.margin[i]) for i in range(self.K)])
         if elim_nume_error(e2e_sum - self.e2e)>0:
             return False
 

@@ -17,6 +17,7 @@ from model.message.message_handler import message_trigger_event_new
 from model.streaming_processing.wartermark_strategy import WatermarkStrategy
 from model.message.data_pipe import DataPipe
 from model.position_table import PosTableInt
+from model.performance import slack_comp
 
 from sched.monitor_agent import Monitor
 from sched.scheduler_agent import Scheduler, check_miss, check_complete
@@ -471,8 +472,11 @@ def coleasing_alloc_1bin(
                 req_size = item[2]
                 pid = item[1]
                 start_t, ddl_t = item[4], item[5]
-                size_del_rda = process_dict[pid].task.flops/FLOPS_PER_CORE/(ddl_t-start_t)
-                cores_dict[pid] = int(math.ceil(size_del_rda/(1-exec_t_comp_ratioB)))
+                # size_del_rda = process_dict[pid].task.flops/FLOPS_PER_CORE/(ddl_t-start_t)
+                # cores_dict[pid] = int(math.ceil(size_del_rda/(1-exec_t_comp_ratioB)))
+                slack = slack_comp((ddl_t-start_t), 0, exec_t_comp_ratioB)
+                size_del_rda = process_dict[pid].task.flops/FLOPS_PER_CORE/slack
+                cores_dict[pid] = int(math.ceil(size_del_rda))
                 if cum_flops[pid] > 0:
                     flops = flops_per_core*math.ceil(size_del_rda)
                     flops = min(flops, cum_flops[pid])

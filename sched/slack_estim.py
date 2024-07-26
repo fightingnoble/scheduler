@@ -14,6 +14,7 @@ from global_var import *
 from task.graph_breakdown import decompose_dag_into_chains
 from collections import OrderedDict
 from sched.packing_solver.gurobi_MP_chain_assign import GurobiRscSlackEstim
+from model.performance import cal_lat, slack_comp
 
 def EstimCoreNums4Process(_p:ProcessInt, flops, expected_slack, 
                           round_mode="round", curr_aval_rsc:int=None):
@@ -192,7 +193,8 @@ def GurobiDistributeSlack(task_dict:Dict[str, TaskBase], chains:List[Tuple[List[
         for node in chain:
             if node in rsc_map_w:
                 ops_rem -= flops_dict[node]
-                slack_rem -= rsc_map_w[node][1] / (1 - margin[node][1]) + margin[node][0]
+                # slack_rem -= rsc_map_w[node][1]/(1 - margin[node][1]) + margin[node][0]
+                slack_rem -= cal_lat(rsc_map_w[node][1], margin[node][0], margin[node][1])
                 flops_dict.pop(node)
                 margin.pop(node)
         
@@ -215,7 +217,8 @@ def GurobiDistributeSlack(task_dict:Dict[str, TaskBase], chains:List[Tuple[List[
         # collelct the slack of each components
         lt = [margin[node_list[0]][0]+sol[0][1]]
         for node in node_list[1:]:
-            lt.append(rsc_map_w[node][1]/(1 - margin[node][1]) + margin[node][0])
+            # lt.append(rsc_map_w[node][1]/(1 - margin[node][1]) + margin[node][0])
+            lt.append(cal_lat(rsc_map_w[node][1], margin[node][0], margin[node][1]))
         print(lt, chain, sum(lt))
 
         # e2e_lat_info.append(sum([lat for node, (_, lat, _) in rsc_map_w.items() if node in chain]))
@@ -235,8 +238,9 @@ def DistributeSlack(task_dict:Dict[str, TaskBase], chains:List[Tuple[List[Any], 
             is_ddl_constr = True
         else:
             is_ddl_constr = False
-        slack_rem -= len(chain) * temporal_abs
-        slack_rem = (1-temporal_rel)*1e3*slack_rem/1e3
+        # slack_rem -= len(chain) * temporal_abs
+        # slack_rem = (1-temporal_rel)*1e3*slack_rem/1e3
+        slack_rem = slack_comp(slack_rem, len(chain) * temporal_abs, temporal_rel)
         ops_rem = sum(flops_dict.values())
         chains_info.append((chain, flops_dict, slack_rem, ops_rem, is_ddl_constr))
     
@@ -255,7 +259,8 @@ def DistributeSlack(task_dict:Dict[str, TaskBase], chains:List[Tuple[List[Any], 
         while not state and len(flops_dict) > 0:
             state, ops_rem, slack_rem = alloc_func(rsc_map_w, task_dict, flops_dict, ops_rem, slack_rem, threshold)
         # lt = [lat/(1-temporal_rel) for node, (_, lat, _) in rsc_map_w.items() if node in chain]
-        lt = [elim_nume_error(rsc_map_w[node][1]/(1-temporal_rel)+temporal_abs) for node in chain]
+        # lt = [elim_nume_error(rsc_map_w[node][1]/(1-temporal_rel)+temporal_abs) for node in chain]
+        lt = [elim_nume_error(cal_lat(rsc_map_w[node][1], temporal_abs, temporal_rel)) for node in chain]
         print(list(zip(chain, lt, np.cumsum(lt))))
     assert check_sol(rsc_map_w, chains, temporal_abs, temporal_rel, task_dict)
     return rsc_map_w
@@ -282,7 +287,8 @@ def check_sol(sol, chains, temporal_abs, temporal_rel, task_dict):
             if elim_nume_error(_task.flops - sol[node][0] * sol[node][1] * FLOPS_PER_CORE)>0:
                 return False
         # check the e2e_latency constraint
-        e2e_lat = sum([sol[node][1] / (1 - temporal_rel) + temporal_abs for node in chain])
+        # e2e_lat = sum([sol[node][1] / (1 - temporal_rel) + temporal_abs for node in chain])
+        e2e_lat = sum([cal_lat(sol[node][1], temporal_abs, temporal_rel) for node in chain])
         if elim_nume_error(e2e_lat - e2e_constr)>0:
             return False
 
@@ -390,9 +396,11 @@ def estim_release_dll_time(task_graph_nx:DiGraph,
                 ert[node] = 0
 
             if algorithm == 'avg':
-                slack = comp_time[node] *1e7 / (1 - temporal_rel)/ 1e7
+                # slack = comp_time[node] *1e7 / (1 - temporal_rel)/ 1e7
+                slack = cal_lat(comp_time[node], 0, temporal_rel)
             else:
-                slack = comp_time[node] *1e7 / (1 - temporal_rel[node])/ 1e7 
+                # slack = comp_time[node] *1e7 / (1 - temporal_rel[node])/ 1e7 
+                slack = cal_lat(comp_time[node], 0, temporal_rel[node])
             # judge whether have start pred
             for pred in preds:
                 if pred not in comp_time:
@@ -453,9 +461,11 @@ def init_graph_time_attr(task_graph_nx:DiGraph,
         assert node in comp_time
         ert[node] = 0 if len(preds) == 0 else max([ddl[pred] for pred in preds]) 
         if isinstance(temporal_rel, float):
-            slack = comp_time[node] *1e7 / (1 - temporal_rel)/ 1e7 + temporal_abs
+            # slack = comp_time[node] *1e7 / (1 - temporal_rel)/ 1e7 + temporal_abs
+            slack = cal_lat(comp_time[node], temporal_abs, temporal_rel)
         else:
-            slack = comp_time[node] *1e7 / (1 - temporal_rel[node])/ 1e7 + temporal_abs[node] 
+            # slack = comp_time[node] *1e7 / (1 - temporal_rel[node])/ 1e7 + temporal_abs[node] 
+            slack = cal_lat(comp_time[node], temporal_abs[node], temporal_rel[node])
         ddl[node] = ert[node] + slack
     
     # For each src node if its ddl=exp_comp_t>0, then transfer the slack to its succ nodes,
@@ -657,10 +667,13 @@ def deduce_eq_wsc(
         else:
             displacement = sum([temporal_abs[node] for node in chain[1:-1]])
         if isinstance(temporal_rel, float):
-            wsc_comp = (e2e_constr - jitter_t_comp - displacement) * (1-temporal_rel)
+            # wsc_comp = (e2e_constr - jitter_t_comp - displacement) * (1-temporal_rel)
+            wsc_comp = slack_comp(e2e_constr, jitter_t_comp+displacement, temporal_rel)
         else:
-            wsc_comp = (e2e_constr - jitter_t_comp - displacement) * (1-temporal_rel.values()[0])
-        wsc_estm = (e2e_constr - jitter_var - displacement) * (1-exe_slowdown_var)
+            # wsc_comp = (e2e_constr - jitter_t_comp - displacement) * (1-temporal_rel.values()[0])
+            wsc_comp = slack_comp(e2e_constr, jitter_t_comp+displacement, temporal_rel.values()[0])
+        # wsc_estm = (e2e_constr - jitter_var - displacement) * (1-exe_slowdown_var)
+        wsc_estm = slack_comp(e2e_constr, jitter_var+displacement, exe_slowdown_var)
         wsc_ratio = wsc_comp/wsc_estm * wsc_slack_ratio
         if debug:
             wcs_by_chain.append((chain[1:-1], wsc_ratio))

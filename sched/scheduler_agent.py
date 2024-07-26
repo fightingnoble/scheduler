@@ -18,6 +18,7 @@ from model.message.msg_dispatcher import MsgDispatcher
 from model.message.Context_message import ContextMsg
 from model.message.data_pipe import DataPipe
 from model.streaming_processing.wartermark_strategy import WatermarkStrategy
+from model.performance import slack_comp, cal_lat
 
 from task.task_agent import ProcessInt
 from sched.scheduling_table import SchedulingTableInt, parse_event_msg
@@ -1169,7 +1170,9 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
             elif chunk_s < n_slot < chunk_e:
                 # case 1: release late !!! the running task that is identified as preemptable [chunk_s, chunk_e] 
                 assert chunk_e == curr_cfg.slot_e + 1
-                req_rsc_size = math.ceil(planned_flops/(chunk_e - n_slot)/timestep /FLOPS_PER_CORE/(1-sched.overprovision_rate)) 
+                # req_rsc_size = math.ceil(planned_flops/(chunk_e - n_slot)/timestep /FLOPS_PER_CORE/(1-sched.overprovision_rate)) 
+                slack = slack_comp((chunk_e - n_slot)*timestep, 0, sched.over_provision_rate)
+                req_rsc_size = math.ceil(planned_flops/slack/FLOPS_PER_CORE) 
             elif n_slot >= chunk_e:
                 # case 3: current chunk is late
                 #   newest assigned budget is skipped
@@ -1178,7 +1181,10 @@ def scheduler_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data_pipe:Da
                 if round(planned_flops, flop1u_error_tol_bit) > round(chunk_flops, flop1u_error_tol_bit):
                     # case 2: previous chunk is late
                     #   newest assigned budget is still available but not enough
-                    req_rsc_size = math.ceil(planned_flops/(chunk_e + 1 - n_slot)/timestep /FLOPS_PER_CORE/(1-sched.overprovision_rate))
+                    # req_rsc_size = math.ceil(planned_flops/(chunk_e + 1 - n_slot)/timestep /FLOPS_PER_CORE/(1-sched.overprovision_rate))
+                    # req_rsc_size = math.ceil(planned_flops/(chunk_e - n_slot)/timestep /FLOPS_PER_CORE/(1-sched.overprovision_rate)) 
+                    slack = slack_comp((chunk_e - n_slot)*timestep, 0, sched.over_provision_rate)
+                    req_rsc_size = math.ceil(planned_flops/slack/FLOPS_PER_CORE) 
                 else:
                     # newest assigned budget is still available                    
                     # tries to finish the remaining work assigned by the configuration chunk until the now

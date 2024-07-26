@@ -16,6 +16,8 @@ from global_var import *
 from model.message.Context_message import ContextMsg
 from model.resource_agent import DDL_reservation, RT_reservation, dummy_reservation
 from model.event_gen.e2e_latency import jitter_gen_biside
+from model.performance import cal_lat, slack_comp
+
 # preemptable?/able to preempt others
 scheduling_attr = {
     "fixed": 0,
@@ -490,7 +492,9 @@ class ProcessInt(ProcessBase):
             if time_slot_e <= time_slot_s:
                 req_rsc_size = 0
             else:
-                req_rsc_size = int(np.ceil(_p.remburst/(time_slot_e-time_slot_s)/timestep/FLOPS_PER_CORE/(1-over_provision_rate)))
+                # req_rsc_size = int(np.ceil(_p.remburst/(time_slot_e-time_slot_s)/timestep/FLOPS_PER_CORE/(1-over_provision_rate)))
+                slack = slack_comp(time_slot_e - time_slot_s, 0, over_provision_rate)
+                req_rsc_size = int(np.ceil(_p.remburst/slack/timestep/FLOPS_PER_CORE))
                 if req_rsc_size > max_size and max_size != float("inf"):
                     req_rsc_size = max_size
                     Warning(f"req_rsc_size({req_rsc_size}) is greater than max_size({max_size})")

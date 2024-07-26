@@ -7,6 +7,7 @@ if typing.TYPE_CHECKING:
 from global_var import *
 from typing import Dict, List, Tuple, Union, Any, OrderedDict
 from model.event_gen.e2e_latency import exp_jitter
+from model.performance import cal_lat, slack_comp
 
 class RscMapInt(OrderedDict[int, Tuple[int, ...]]): 
     title_line = "\tTaskID\t->\tRscSize\n"
@@ -49,7 +50,8 @@ class Resource_model_int(object):
         self.exec_var_para = exec_var_para
         if exec_var_en:
             self.var_gen = exp_jitter(1, exec_var_para, size=1, seed=seed) 
-            self.get_real_ops = lambda exp_ops: (1-self.var_gen()) * exp_ops
+            # self.get_real_ops = lambda exp_ops: (1-self.var_gen()) * exp_ops
+            self.get_real_ops = lambda exp_ops: slack_comp(exp_ops, 0, self.var_gen())
         self.event_list = []
         
     def add_rsc_num(self, num:int):
