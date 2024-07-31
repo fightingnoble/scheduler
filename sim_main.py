@@ -215,7 +215,7 @@ def main():
                 )
 
         elif args.binpack_cfg["algorithm"] == "bin_split":
-            from sched.global_sched import coleasing_alloc_split_bin_new, coleasing_alloc_cluster
+            from sched.global_sched import coleasing_alloc_cluster
             from task.task_cfg import task_graph_srcs, task_graph_sinks
             pid2_bin_id, bin_size_list = coleasing_alloc_cluster(
                 bin_list,
@@ -378,9 +378,9 @@ def main():
         # dump_and_check(routing_table_save_path, scheduler_list[0].detail_alloc_info)
 
     # runtime scheduling
-    elif args.test_all or args.test_case in [case_name_cyc_input, case_name_dyn_input, case_name_pglb_input, case_name_glb_input]:
+    elif args.test_all or args.test_case in two_stage_case_coll + other_case_coll:
 
-        if args.test_all or args.test_case in [case_name_cyc_input, case_name_dyn_input, case_name_pglb_input]:
+        if args.test_all or args.test_case in two_stage_case_coll:
             if args.binpack_cfg["core_size"] == "induced":
                 folder, files, match = get_core_num_from_trace_name(path_para_dict)
                 if not match:
@@ -393,6 +393,7 @@ def main():
                 routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
                 plot_path_para['num_cores'] = num_cores
                 trace_path_para['num_cores'] = num_cores
+                
             else:
                 bin_list_save_path = bin_save_fmt.format(**path_para_dict, **para_scan_group2)
                 routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **para_scan_group2)
@@ -513,19 +514,12 @@ def main():
             return
 
         if args.plot:
-            # f"{plot_root}/seed_{args.seed}/glb_dyn_full_{num_cores}{args.file_suffix}.pdf"
-            # f"{plot_root}/glb_dyn_full_{num_cores}_ideal{args.file_suffix}.pdf"
-            # f"{plot_root}/dyn_full_{num_cores}{args.file_suffix}.pdf"
-            # "{plot_root}/seed_{args.seed}/cyclic_full_{num_cores}{args.file_suffix}.pdf"
             if not args.jitter_sim_en:
                 plot_path=plt_fn_wo_seed_fmt.format(**plot_path_para, **{"case": case_pth, "plt_size": "full"})
-            elif args.barrier_dis:
-                plt_fn_wo_seed_fmt.format(**{**plot_path_para, "num_cores": f"{num_cores}_ideal", 
-                                             **{"case": case_pth, "plt_size": "full"}})
             else:
                 plot_path=plt_fn_w_seed_fmt.format(**plot_path_para, **{"case": case_pth, "plt_size": "full"})
 
-            get_task_layout_compact(actual_sched_record, pid2name, save= True, time_step= sim_step,
+            get_task_layout_compact1bin(actual_sched_record, pid2name, save= True, time_step= sim_step,
             hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=args.plt_fmt, 
             txt_size=40, tick_dens=4, plot_start=0, save_path=plot_path)
 

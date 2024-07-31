@@ -73,8 +73,10 @@ class ClusterGurobiSolverSemi2D:
                     self.used_size[j, tgt_m] += self.Items_done_size_sel[i][0]
                     item_idx.remove(i)
                     # print(f"remove {i}")
-        self.util = []
-        self.usage = []
+        self.util = {}
+        self.usage = {}
+        self.bin_size = {}
+        self.max_constr = {}
 
     def create_variables(self):
         # Variables
@@ -82,67 +84,66 @@ class ClusterGurobiSolverSemi2D:
         # self.Items_tbd_size.keys() combine with range(self.M)
         self.x = self.model.addVars(((i, m) for i in self.Items_tbd_size.keys() for m in range(self.M)), vtype=GRB.BINARY, name="x")
         
-        self.usage = self.model.addVars(self.J, self.M, lb=0, ub=self.max_size, vtype=GRB.INTEGER, name="Bins_usage")
-
-        self.bin_size = self.model.addVars(self.M, lb=0, ub=self.max_size, vtype=GRB.INTEGER, name="Bins_size")
+        for m in range(self.M):
+            self.bin_size[m] = self.model.addVar(lb=0, ub=self.max_size, vtype=GRB.INTEGER, name=f'bin_{m}_size')
+            self.util[m] = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f'bin_{m}_util')
+            for j in range(self.J):
+                self.usage[j, m] = self.model.addVar(lb=0, ub=self.max_size, vtype=GRB.INTEGER, name=f'bin_{m}_usage_Prob{j}')
+        
         self.tot_size = self.model.addVar(lb=0, ub=self.max_size, vtype=GRB.INTEGER, name="tot_size")
         self.affinity_score = self.model.addVar(lb=-self.N, ub=self.N, vtype=GRB.CONTINUOUS, name="affinity_score")
-
-        # for m in range(self.M):
-        #     self.util.append(self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f'bin_{m}_util'))
-
-        # for j in range(self.J):
-        #     self.usage.append(self.model.addVars(self.M, lb=0, ub=self.Bins_size[m], vtype=GRB.INTEGER, name=f'bin_{j}_usage'))
         
-        # self.min_util = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f'min_util')
-        # self.max_util = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f'max_util')
+        self.min_util = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f'min_util')
+        self.max_util = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f'max_util')
         
     def create_constraints(self):
-        # Constraints
-        # Each item must be in exactly one bin.
-        for i in self.Items_tbd_size.keys():
-            self.model.addConstr(
-                gp.quicksum([self.x[(i, m)] for m in range(self.M)]) == 1,
-                name=f'item_{i}_in_one_bin')
-        
-        for j in range(self.J):
-            item_idx:List[int] = self.problems[j]
-            for m in range(self.M):
+        try:
+            # Constraints
+            # Each item must be in exactly one bin.
+            for i in self.Items_tbd_size.keys():
                 self.model.addConstr(
-                    gp.quicksum([self.x[i, m] * self.Items_tbd_size[i] for i in item_idx]) + self.used_size[j, m] == self.usage[j, m],
-                    name=f'bin_{m}_capacity')
-    
-        for m in range(self.M):
-            self.model.addGenConstrMax(self.bin_size[m], [self.usage[j, m] for j in range(self.J)]
-                                       , name=f'bin_{m}_size')
-        self.model.addConstr(self.tot_size == gp.quicksum(self.bin_size[m] for m in range(self.M)), name="tot_size")
+                    gp.quicksum([self.x[(i, m)] for m in range(self.M)]) == 1,
+                    name=f'item_{i}_in_one_bin_constr')
+            
+            # define the usage of each bin in each placement problem
+            for j in range(self.J):
+                item_idx:List[int] = self.problems[j]
+                for m in range(self.M):
+                    self.model.addConstr(
+                        gp.quicksum([self.x[i, m] * self.Items_tbd_size[i] for i in item_idx]) + self.used_size[j, m] == self.usage[j, m],
+                        name=f'bin_{m}_usage_Prob{j}_constr')
+            
+            # define the bin size constraint
+            for m in range(self.M):
+                self.max_constr[m] = self.model.addGenConstrMax(self.bin_size[m], [self.usage[j, m] for j in range(self.J)]
+                                        , name=f'bin_{m}_size_constr')
+            self.model.addConstr(self.tot_size == gp.quicksum(self.bin_size[m] for m in range(self.M)), name="tot_size_constr")
 
-        # calculate the affinity score
-        # for affinity1: 
-        #   score1 = sum([self.x[n, m] * self.affinity1[n, m] for (n, m) in self.affinity1])/self.N
-        # for affiniry2:
-        #   score2 = sum([x[n1, m] * x[n2, m] * affinity2[n1, n2] for n1 in range(N) for (n1, n2) in self.affinity2])/self.N
-        if self.N > 0:
-            self.model.addConstr(
-            (gp.quicksum((self.x[n, m] * self.affinity1[n, m]) for n, m in self.affinity1.keys()) + \
-                gp.quicksum([self.x[n1, m] * self.x[n2, m] * self.affinity2[n1, n2] for m in range(self.M) for (n1, n2) in self.affinity2])/self.N) == self.affinity_score,
-                name="affinity_score")
+            # calculate the affinity score
+            if self.N > 0:
+                self.model.addConstr(
+                (gp.quicksum((self.x[n, m] * self.affinity1[n, m]) for n, m in self.affinity1.keys()) + \
+                    gp.quicksum([self.x[n1, m] * self.x[n2, m] * self.affinity2[n1, n2] for m in range(self.M) for (n1, n2) in self.affinity2])/self.N) == self.affinity_score,
+                    name="affinity_score")
 
-        # for m in range(self.M):
-            #     sum([self.x[(i, m)] * self.Items_tbd_size[i] for i in item_idx]) + self.used_size[j][m]
-            #     self.model.addConstr(
-            #         self.util[m] == sum([self.usage[j][m] * self.duation[j] / self.Bins_size[m] for j in range(self.J)])/sum(self.duation),
-            #                          name=f'bin_{m}_util')
+            for m in range(self.M):
+                    # sum([self.x[(i, m)] * self.Items_tbd_size[i] for i in item_idx]) + self.used_size[j][m]
+                    self.model.addConstr(
+                        self.util[m] == sum([self.usage[j][m] * self.duation[j] for j in range(self.J)])/sum(self.duation)/ self.Bins_size[m] ,
+                                         name=f'bin_{m}_util')
 
-        # add max constraint
-        # self.model.addGenConstrMax(self.min_util, self.util, name="min_util")
-        # self.model.addGenConstrMax(self.max_util, self.util, name="max_util")
-        
+            # add max constraint
+            self.model.addGenConstrMin(self.min_util, self.util, name="min_util")
+            self.model.addGenConstrMax(self.max_util, self.util, name="max_util")
+        except Exception as e:
+            print(f"Error adding constraint for bin {m}: {e}")
+
     @time_cnt("solve")
     def solve(self):
         # self.model.setObjective(self.tot_size, GRB.MINIMIZE) 
         self.model.setObjectiveN(self.tot_size, index=0, priority=2, name="min_tot_size")
         self.model.setObjectiveN(-self.affinity_score, index=1, priority=1, name="max_affinity_score")
+        self.model.setObjectiveN(self.max_util-self.min_util, index=2, priority=0, name="util")
         try:
             # Optimize model
             self.model.optimize()

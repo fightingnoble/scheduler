@@ -62,7 +62,7 @@ cache_dir = "./cache"
 import os 
 cfg_root_fmt = r"x{aux_scale_factor}_{e2e_latency}s_rda-{jitter_t_comp_ratio:.2%}(J)_{wsc_slack_ratio:.2%}(T)_{exec_t_comp_ratioA:.2%}(S)_ignore"
 cache_root_fmt = os.path.join(cache_dir, r"{root_dir}", r"{cfg_n}")
-plot_root_fmt = os.path.join(plot_dir, r"{root_dir}", r"{cfg_n}", r"{num_cores}")
+plot_root_fmt = os.path.join(plot_dir, r"{root_dir}", r"{cfg_n}")
 trace_root_fmt = os.path.join(trace_dir, r"{root_dir}", r"{cfg_n}")
 
 bin_fn_fmt = r"bin_list_{force_suffix}{num_cores}{i_file_suffix}.pkl"
@@ -84,10 +84,18 @@ case_name_bp = r"bin_pack_new"
 case_name_glb = r"glb_dyn"
 case_name_dyn = r"dyn"
 case_name_cyc = r"cyclic"
+case_name_fifo = r"fifo"
 case_name_pglb = r"pglb"
+case_suffix_N_barrier = r"_barrier_dis"
 
 case_name_bp_input = r"bin_pack_new"
 case_name_glb_input = r"glb_dynamic"
+other_case_coll = [case_name_bp_input, case_name_glb_input]
+
 case_name_dyn_input = r"dynamic"
 case_name_cyc_input = r"cyclic"
+case_name_fifo_input = r"fifo"
 case_name_pglb_input = r"partitioned_glb_dynamic"
+two_stage_case_coll = [case_name_cyc_input, case_name_dyn_input, case_name_pglb_input, case_name_glb_input, case_name_fifo_input]
+
+partition_max = 9999

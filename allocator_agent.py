@@ -296,7 +296,7 @@ def sched_step(task_spec:Spec,
         message_trigger_event_new(event_iter_dict, inactive_list, glb_p_list, 
                                   sensor_pipe, ddl_stream, load_var_sim_para,
                                   timestep, curr_t, True) 
-        assert case in ["cyclic", "dynamic", "partitioned_glb_dynamic"]
+        assert case in two_stage_case_coll
         if case == "dynamic":
             sched.scheduler_step(msg_dispatcher, a_data_pipe, w_data_pipe, 
                                 n_slot, timestep, event_range, sim_slot_num, curr_t, 
@@ -309,6 +309,13 @@ def sched_step(task_spec:Spec,
             sched.pglb_step(msg_dispatcher, a_data_pipe, w_data_pipe, 
                                 n_slot, timestep, event_range, sim_slot_num, curr_t, 
                                 glb_name_p_dict, res_cfg, msg_queue, a_msg_queue, sensor_msg_queue, monitor, DEBUG_FG)
+        elif case == "fifo":
+            sched.fifo_step(msg_dispatcher, a_data_pipe, w_data_pipe, 
+                                n_slot, timestep, event_range, sim_slot_num, curr_t, 
+                                glb_name_p_dict, res_cfg, msg_queue, a_msg_queue, sensor_msg_queue, monitor, DEBUG_FG)
+        else:
+            raise ValueError("Invalid scheduler type")
+        
     # update the wait task
     w_data_pipe.update_wait_time(timestep)
     a_data_pipe.update_wait_time(timestep)

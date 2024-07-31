@@ -217,12 +217,17 @@ def get_case_path_str(args):
         case_pth = case_name_pglb
     elif args.test_case == case_name_cyc_input:
         case_pth = case_name_cyc
+    elif args.test_case == case_name_fifo_input:
+        case_pth = case_name_fifo
     elif args.test_case == case_name_dyn_input:
         case_pth = case_name_dyn
     elif args.test_case == case_name_glb_input:
         case_pth = case_name_glb
     elif args.test_case == case_name_bp_input:
         case_pth = case_name_bp
+    
+    if args.barrier_dis:
+        case_pth += case_suffix_N_barrier
     return case_pth
 
 

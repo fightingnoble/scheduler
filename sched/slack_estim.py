@@ -219,7 +219,7 @@ def GurobiDistributeSlack(task_dict:Dict[str, TaskBase], chains:List[Tuple[List[
         for node in node_list[1:]:
             # lt.append(rsc_map_w[node][1]/(1 - margin[node][1]) + margin[node][0])
             lt.append(cal_lat(rsc_map_w[node][1], margin[node][0], margin[node][1]))
-        print(lt, chain, sum(lt))
+        print("Alloted slack: {} {} sum: {:.3e}".format(lt, chain, sum(lt)))
 
         # e2e_lat_info.append(sum([lat for node, (_, lat, _) in rsc_map_w.items() if node in chain]))
     return rsc_map_w

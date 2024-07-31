@@ -2,7 +2,7 @@ import re, os, copy
 from typing import Callable, List
 from collections import OrderedDict
 # regular match expression for path
-from global_var import case_name_cyc, case_name_dyn, case_name_glb, case_name_pglb, case_name_bp
+from global_var import case_name_cyc, case_name_dyn, case_name_glb, case_name_pglb, case_name_bp, case_suffix_N_barrier
 
 bin_case = [case_name_bp]
 bin_dep_case = [case_name_cyc, case_name_dyn]
@@ -47,8 +47,8 @@ folder_type = {
 # =========== case file pattern ===========
 # case_re = r"(?P<method>cyclic|sta_dyn|glb_dyn|dyn|dynamic)"
 # r"(?P<method>cyclic|glb_dyn|dyn|pglb)"
-case_re = rf"(?P<method>{case_name_bp}|{case_name_cyc}|{case_name_dyn}|{case_name_glb}|{case_name_pglb})"
-case_re_key = ['method',]
+case_re = rf"(?P<method>{case_name_bp}|{case_name_cyc}|{case_name_dyn}|{case_name_glb}|{case_name_pglb})(?P<barrier>{case_suffix_N_barrier})"
+case_re_key = ['method',"barrier"]
 case_re_type = [str,]
 
 pure_core_pattern = r"(?P<num_cores>\d+)"
