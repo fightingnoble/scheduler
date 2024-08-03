@@ -18,8 +18,10 @@ from model.event_gen.e2e_latency import discrete_event_sim
 from model.task_queue_agent import TaskQueue
 from utils import dump_and_check, load_pickle, update_df, check_parents_path, args_postprocess, get_case_path_str
 from global_var import *
-from utils import core_distr
+from utils import core_distr, save_chunk, load_h5_file, time_cnt, pyinstr_profiler
 
+@time_cnt("main")
+# @pyinstr_profiler("main")
 def main():
     import numpy as np 
     from utils import input_parser
@@ -40,6 +42,13 @@ def main():
     # generate the process list
     glb_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
     init_affinity(glb_p_list, mode='job', job_graph_nx=physical_graph_nx, verbose=args.verbose)
+    
+    # ======================== scheduler settings ================
+    scheduler_args = {
+        "exec_t_comp_ratioB": args.exec_t_comp_ratioB,
+        "barrier_en": not args.barrier_dis, 
+        "forbid_miss": args.forbid_miss,
+    }
 
     # assert all the process has hard deadline
     if args.lateness_mode == "all_hard":
@@ -105,7 +114,7 @@ def main():
         msg_dispatcher = MsgDispatcher(len(bin_list))
         a_data_pipe = DataPipe("activation", len(bin_list), jitter_sim_para=args.jitter_sim_para, seed=args.seed)
         w_data_pipe = DataPipe("weight", len(bin_list), jitter_sim_para=args.jitter_sim_para, seed=args.seed)
-        scheduler_list = [Scheduler(_SchedTab, args.e2e_latency, hyper_p, glb_p_list, barrier_en=not args.barrier_dis) for _SchedTab in bin_list]
+        scheduler_list = [Scheduler(_SchedTab, args.e2e_latency, hyper_p, glb_p_list, **scheduler_args) for _SchedTab in bin_list]
         monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
 
         print("sim_step: ", sim_step)
@@ -397,6 +406,10 @@ def main():
             else:
                 bin_list_save_path = bin_save_fmt.format(**path_para_dict, **para_scan_group2)
                 routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **para_scan_group2)
+            # ======================== path settings ================
+            trace_path = get_trace_path(args, trace_path_para, case_pth)
+            scheduler_args.update({"trace_path": trace_path})
+
             bin_list = load_bin_list(bin_list_save_path, num_bins)
             cores = [bin.num_resources for bin in bin_list]
             core_map = core_mapping_1d(cores)
@@ -412,9 +425,7 @@ def main():
             a_data_pipe = DataPipe("activation", len(bin_list), jitter_sim_para=args.jitter_sim_para, seed=args.seed)
             w_data_pipe = DataPipe("weight", len(bin_list), jitter_sim_para=args.jitter_sim_para, seed=args.seed)
             scheduler_list = [Scheduler(bin_list[idx], args.e2e_latency, hyper_p, glb_p_list, 
-                                        barrier_en=not args.barrier_dis, res_cfg=rsc_list[idx],
-                                        exec_t_comp_ratioB = args.exec_t_comp_ratioB,
-                                        ) for idx in range(len(bin_list))]
+                                        res_cfg=rsc_list[idx], **scheduler_args) for idx in range(len(bin_list))]
             for _sched in scheduler_list:
                 _sched.core_map = core_map[_sched._SchedTab.id]
             monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]        
@@ -453,6 +464,9 @@ def main():
 
 
         elif args.test_all or args.test_case in [case_name_glb_input,]:
+            # ======================== path settings ================
+            trace_path = get_trace_path(args, trace_path_para, case_pth)
+            scheduler_args.update({"trace_path": trace_path})
             bin_list = [SchedulingTableInt(num_cores, 1, 0, "bin_glb_dynamic")]
             # from message_agent import Message
             
@@ -466,8 +480,7 @@ def main():
             a_data_pipe = DataPipe("activation", len(bin_list), jitter_sim_para=args.jitter_sim_para, seed=args.seed)
             w_data_pipe = DataPipe("weight", len(bin_list), jitter_sim_para=args.jitter_sim_para, seed=args.seed)
             scheduler_list = [Scheduler(bin_list[idx], args.e2e_latency, hyper_p, glb_p_list, 
-                                        barrier_en=not args.barrier_dis, res_cfg=rsc_list[idx]
-                                        ) for idx in range(len(bin_list))]
+                                        res_cfg=rsc_list[idx], **scheduler_args) for idx in range(len(bin_list))]
             monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
 
             print("sim_step: ", sim_step)
@@ -523,15 +536,16 @@ def main():
             hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=args.plt_fmt, 
             txt_size=40, tick_dens=4, plot_start=0, save_path=plot_path)
 
-        # f"{trace_root}/glb_dyn_e2e_trace_{num_cores}"
-        # trace_path = f"{trace_root}/cyclic_e2e_trace_{num_cores}"
-        # trace_path = f"{trace_root}/dynamic_e2e_trace_{num_cores}"
-        if args.jitter_sim_en:
-            trace_path = trace_fn_w_seed_fmt.format(**trace_path_para, **{"case": case_pth})
-        else:
-            trace_path = trace_fn_wo_seed_fmt.format(**trace_path_para, **{"case": case_pth})
         # save trace_list to trace_file
         dump_and_check(trace_path, trace_list)
+        # save_chunk(trace_path.replace(".pkl", ".h5"), trace_list, True)
+
+def get_trace_path(args, trace_path_para, case_pth):
+    if args.jitter_sim_en:
+        trace_path = trace_fn_w_seed_fmt.format(**trace_path_para, **{"case": case_pth})
+    else:
+        trace_path = trace_fn_wo_seed_fmt.format(**trace_path_para, **{"case": case_pth})
+    return trace_path
 
 def get_core_num_from_trace_name(path_para_dict):
     folder = cache_root_fmt.format(**path_para_dict)

@@ -1399,4 +1399,13 @@ Final version from houmo
     
     此处发现一个奇怪的东西，在previous chunk late的时候，chunk_e ＋1，late的case下，之前也+1 但是某一个版本被删除了
 
-3. Partitioning target, algorethm, flow
+## 0801
+
+1. add bin split model, targeting using minimal number of bins, and do not allowing colocation of the tasks in the same bin at the same time
+2. add test to evaluate the improvement with temporal sharing 
+3. add batch running script: run/time_sharing.sh, and plot script: analyze/UE_extract.py
+
+TODO: 
+  test iteration optimize of ST-placement
+  test bin_sharing's contribution to the unexpected conners
+

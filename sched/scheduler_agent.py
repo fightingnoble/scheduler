@@ -106,7 +106,8 @@ class Scheduler(object):
                  _SchedTab: SchedulingTableInt, e2e_latency:float, hyper_period:int,
                  glb_p_list:List[ProcessInt],
                  budget_recoder:Dict[int, List]=None, rsc_recoder_his:Dict[int, LRUCache]=None, 
-                 barrier_en:bool=True, res_cfg:Resource_model_int=None, exec_t_comp_ratioB=0
+                 barrier_en:bool=True, res_cfg:Resource_model_int=None, exec_t_comp_ratioB=0, 
+                 forbid_miss:bool=False, trace_path:str=None,
                  ) -> None:
         self.expired_queue: List = []
         self.blocked_queue: List = []
@@ -189,6 +190,8 @@ class Scheduler(object):
         self.roll_size = lambda:(self.ctx_size_gen()+0.8)*GLB_BUFFER_SIZE_PER_CORE
         self.get_ctx_lat = lambda x=1: self.roll_size()*x/BW_DRAM + head_latency
         self.overprovision_rate = exec_t_comp_ratioB
+        self.forbid_miss = forbid_miss
+        self.trace_path = trace_path
 
     def res_release(self, pid, op_pos_dict:bool=True):
         self.res_cfg.release(pid, verbose=False)
@@ -482,6 +485,9 @@ def check_miss(sched: Scheduler,
 
             running_queue.remove(_p)
         print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!")
+        if sched.forbid_miss: 
+            print("forbid_miss is True, exit the simulation")
+            import sys; sys.exit(1)
 
         if msg_dispatcher is not None:
             msg_dispatcher.broadcast_message(f"TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}({bin_name})!!")
@@ -597,6 +603,7 @@ def check_complete(sched:Scheduler, budget_recoder, timestep,
         # redirect print(data.ctx.serialize()) to the trace_file path
         if len(_p.succ_ctrl) and save_trace:
             trace_list.append(data.ctx.serialize())
+            # save_chunk(sched.trace_path.replace(".pkl", ".h5"), trace_list)
 
         if detail_alloc_info is not None:
             for bin_id, _SchedTab in enumerate(bin_list):
