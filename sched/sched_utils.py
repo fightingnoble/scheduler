@@ -23,7 +23,7 @@ from model.streaming_processing.wartermark_strategy import WatermarkStrategy
 from task.task_agent import ProcessInt
 from sched.monitor_agent import Monitor
 from sched.slack_estim import EstimCoreNums4Process
-
+from sched.placement import core_mapping_1d
 
 def read_msg_queue(sched:Scheduler, curr_t, msg_queue, ready_queue, throttle_list, inactive_list, active_list, 
                    running_queue, process_dict, bin_name, bin_id, res_cfg=None, budget_recoder=None,):
@@ -269,14 +269,44 @@ def load_sched_tab(num_cores, e2e_latency:float, aux_scale_factor:int, bin_path_
         map_new_to_old[k] = new_to_old_t
     return map_new_to_old, new_map_rev
     
-def core_mapping_1d(core_num_list:List[int]):
+# Not verified extracted functions
+def plan_switching(preempt_list, issue_list, ctx_switch_list, budget_recoder, pre_rsc, rsc_map):
     """
-    map the cores to the partitions
+    logic to judge whether the swithing is planned or decided by the scheduler at runtime
+    the swithing out of plan features:
+    1. some tasks release core and other tasks take the core
+    2. this overtake behavior is not planned in the scheduling table
+    step: 
+    1. check whether some cores are released
+    2. check whether this plan is in the scheduling table
     """
-    core_mapping = {}
-    start = 0
-    for i in range(len(core_num_list)):
-        end = start + core_num_list[i]
-        core_mapping[i] = list(range(start, end))
-    return core_mapping
+    off_discount = 0
+    on_discount = 0
+    for _p in ctx_switch_list:
+        old_size = pre_rsc[_p.pid]
+        new_size = rsc_map[_p.pid]
+        if old_size > new_size: 
+            if budget_recoder[_p.pid][3]:
+                chunk_s, chunk_alloc, chunk_slot_num, updated_flg = budget_recoder[_p.pid]
+                if new_size != chunk_alloc:
+                    to_assert_flag = True
+                else:
+                    off_discount += chunk_alloc
+            else:
+                to_assert_flag = True
+        else:
+            chunk_s, chunk_alloc, chunk_slot_num, updated_flg = budget_recoder[_p.pid]
+            if new_size == chunk_alloc:
+                on_discount += chunk_alloc
+
+            
+    if len(preempt_list):
+        to_assert_flag = True
+
+    if to_assert_flag:
+        for _p in issue_list:
+            chunk_s, chunk_alloc, chunk_slot_num, updated_flg = budget_recoder[_p.pid]
+            if chunk_alloc == rsc_map[_p.pid]:
+                on_discount += chunk_alloc
+    return to_assert_flag,off_discount,on_discount
 

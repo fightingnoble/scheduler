@@ -183,6 +183,10 @@ class Scheduler(object):
         self.overprovision_rate = exec_t_comp_ratioB
         self.forbid_miss = forbid_miss
         self.trace_path = trace_path
+        
+        # progress aware
+        self.progress_aware = True
+        self.allow_realloc = True
 
     def res_release(self, pid, op_pos_dict:bool=True):
         self.res_cfg.release(pid, verbose=False)
@@ -348,6 +352,43 @@ class Scheduler(object):
         # scheduler_step(sched, msg_dispatcher, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, res_cfg, msg_queue, DEBUG_FG)
         return scheduler_step_pglb(self, msg_dispatcher, a_data_pipe, data_pipe, n_slot, timestep, event_range, sim_slot_num, curr_t, glb_name_p_dict, 
                               res_cfg, msg_queue, a_msg_queue, sensor_msg_queue, monitor, DEBUG_FG)
+
+
+def handle_taskqueue(sched, curr_t, res_cfg, ready_queue, running_queue, preempt_list, issue_list, ctx_switch_list, bin_name, bin_event_flg, pre_rsc, rsc_map):
+    for _p in preempt_list:
+        print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) preempted at {curr_t:.6f};")
+        running_queue.remove(_p)
+        ready_queue.put(_p)
+        sched.res_release(_p.pid, False)
+    preempt_list.clear()
+            
+    for _p in ctx_switch_list:
+        print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) ctx switch at {curr_t:.6f}({pre_rsc[_p.pid]} -> {rsc_map[_p.pid]});")
+        sched.res_release(_p.pid, False)
+        res_cfg.allocate(_p.pid, rsc_map[_p.pid])
+    ctx_switch_list.clear()
+
+    # if issue the task to runnning list
+    for _p in issue_list:
+        running_queue.put(_p)
+        ready_queue.remove(_p)
+        # NOTE:cross cancelation (removed)
+        _p.set_state("running")
+        res_cfg.allocate(_p.pid, rsc_map[_p.pid])
+        _p.waitTime = 0 
+        _str = f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) issued and "
+        if _p.totburst==0:
+            _p.start_time = curr_t
+            _str += f"start at {curr_t:.6f}; "
+        else:
+            _str += f"resume at {curr_t:.6f}; "
+        _p.curr_start_time = curr_t
+        if bin_name and not bin_event_flg:
+            bin_event_flg = True 
+            print(f"({bin_name})")
+        print(_str)
+    issue_list.clear()
+
 
 
 if __name__ == "__main__":

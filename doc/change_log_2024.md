@@ -168,5 +168,119 @@
 
 TODO: 
   test iteration optimize of ST-placement
-  test bin_sharing's contribution to the unexpected conners
+  test bin_sharing's contribution to the unexpected conners:
+    Add resource adjustment ability to cyclic scheduler
 
+## 20240805
+
+1. add self.progress_aware in scheduler_agent, to indicate whether to consider the execution porgress, refer to rem_flop_budget at runtime
+   1. updateRunningQueue, update_budget parameter is assigned by scheduler's progress_aware
+2. add self.allow_realloc in scheduler_agent, to indicate whether to allow reallocation of resources amount, refer to the available, remaining works, and remaining slack, etc.
+3. Extract the behavior of before and after the loading the new configuration from the scheduling table (scheduling_table.py)
+4. Extract the behavior of calculating the switching overhead: plan_switching (sched_utils.py)
+5. add sched/placement.py as a collection of all physical placement related functions, including: 
+   1. updating the position dict at runtime, i.e., update_phy_posi
+   2. initializing the core bingding of each partition, i.e., core_mapping_1d
+6. Previous feasible checking of scehduler_step is out of data, we update the logic to utilize the _p.get_available_cfg rather than the buggy version
+   ```python
+               # **************************************************************
+            # check the rsc_size is valid
+            # compare with the core_max, core_min, core_list, parallel_mode
+            # **************************************************************
+
+            if req_rsc_size > curr_aval_rsc:
+                if show_warnings: 
+                    warnings.warn(f"TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) is starving {req_rsc_size-curr_aval_rsc:d} cores")
+                req_rsc_size = curr_aval_rsc
+                _p.is_starving = True
+
+            if _p.parallel_mode in ["upb","range"]:
+                if req_rsc_size > _p.core_max:
+                    req_rsc_size = _p.core_max
+            elif _p.parallel_mode in ["lwb", "range"]:
+                if req_rsc_size < _p.core_min:
+                    if _p.core_min > curr_aval_rsc:
+                        # no available solution
+                        if o3_boost_util_en:
+                            skiped_tasks.append(_p)
+                            sorted_queue.pop(0)
+                            continue
+                        else:
+                            break
+                    else:
+                        req_rsc_size = _p.core_min
+            elif _p.parallel_mode == "list":
+                # select the nearest one
+                # filter the core_list by the current available resource
+                core_list = [x for x in _p.core_list if x <= curr_aval_rsc]
+                if len(core_list) == 0:
+                    # no available solution
+                    if o3_boost_util_en:
+                        skiped_tasks.append(_p)
+                        sorted_queue.pop(0)
+                        continue
+                    else:
+                        break
+                req_rsc_size = min(core_list, key=lambda x:abs(x-req_rsc_size))
+
+            if _p.totburst == 0 and chunk_s < n_slot:
+                print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) is deteted a lateness of {(n_slot-chunk_s):d} slots")
+
+            assert isinstance(req_rsc_size, (int, np.integer)), "req_rsc_size is not integer"
+            if req_rsc_size == 0:
+                if o3_boost_util_en:
+                    skiped_tasks.append(_p)
+                    sorted_queue.pop(0)
+                    continue
+                else:
+                    break
+            assert req_rsc_size > 0
+   ```
+
+   ```python
+            # **************************************************************
+            # check the rsc_size is valid
+            # **************************************************************
+            req_rsc_size, constr = _p.get_available_cfg(req_rsc_size, curr_aval_rsc)
+
+            if req_rsc_size == 0 or constr == "N/A":
+                if o3_boost_util_en:
+                    skiped_tasks.append(_p)
+                    sorted_queue.pop(0)
+                    continue
+                else:
+                    break
+            assert req_rsc_size > 0
+            assert isinstance(req_rsc_size, (int, np.integer)), "req_rsc_size is not integer"
+            if req_rsc_size > curr_aval_rsc:
+                if show_warnings: 
+                    warnings.warn(f"TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) is starving {req_rsc_size-curr_aval_rsc:d} cores")
+                _p.is_starving = True
+
+            if _p.totburst == 0 and chunk_s < n_slot:
+                print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) is deteted a lateness of {(n_slot-chunk_s):d} slots")
+    ```
+## 20240806 
+1. Extract the common elements needed for creathing a scheduler_agent in sim_main.py, create_common_scheduler_elements
+2. remove naive_iso case
+3. Extract the common behavior in handling the task queue in sched_fn.py as handle_taskqueue 
+Conclude the trigger condition:
+```python
+    # ready queue status
+    trigger_condA = sched.new_ready_flg
+    # running queue status change -> resource ++ 
+    # for progres aware: someone is straving or is waiting
+    trigger_condB = (set(pre_rsc.keys()) != set(pre_rsc_bk.keys())) and (sum([_p.is_starving for _p in running_queue.queue]) > 0 or len(ready_queue) > 0)
+    # for greedy, any running or waiting task paticitates reallocation
+    trigger_condB = set(pre_rsc.keys()) != set(pre_rsc_bk.keys()) 
+    # budget indicator
+    trigger_condC = sum([budget_recoder[_p.pid][3] for _p in task_queue])
+    # budget indicator simple
+    trigger_condC = (curr_cfg.slot_s == n_slot) 
+```
+
+Conclude the scheduling policy flow:
+
+1. calculate the trigger condition
+2. calculate the paticipation of the tasks in the current slot
+3. calculate the available resource amount in the current slot

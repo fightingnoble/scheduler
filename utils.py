@@ -158,6 +158,8 @@ def input_parser():
     
     parser.add_argument("--max_core_stat", default=False, type=bool, help="max core stat")
     parser.add_argument("--forbid_miss", default=False, action="store_true", help="forbid miss")
+    parser.add_argument("--progress_aware", default=False, action="store_true", help="consider the execution porgress")
+    parser.add_argument("--allow_realloc", default=False, action="store_true", help="allow reallocation of resources amount")
     args = parser.parse_args()
 
     jitter_sim_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['jitter'] 

@@ -10,7 +10,7 @@ from model.message.data_pipe import DataPipe, TriggerPipe
 from sched.scheduling_table import SchedulingTableInt
 from model.resource_agent import Resource_model_int
 from sched.scheduler_agent import Scheduler
-from sched.scheduler_agent import core_mapping_1d
+from sched.placement import core_mapping_1d
 from sched.monitor_agent import Monitor
 from allocator_agent import glb_sched, cyclic_sched
 from model.event_gen.e2e_latency import discrete_event_sim

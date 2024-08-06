@@ -19,6 +19,7 @@ from matplotlib import pyplot as plt
 # import plotly.graph_objects as go
 # import plotly.express as px
 # from plotly.subplots import make_subplots
+from model.lru import LRUCache
 
 class SchedulingTableInt(object): 
     """
@@ -1823,6 +1824,133 @@ def parse_event_msg(msg:str):
     pattern_type = {"event_type":str, "pid":int, "ts":int, "from":int, "to":int}
     result = {k: t(v) for k,v,t in zip(group_dict.keys(), group_dict.values(), pattern_type.values()) if v is not None}
     return result
+
+
+def filter_msg(tab_event_msg:str, msg_filter:Optional[Union[None, Dict[str, str]]]): 
+    """
+    Parse the event message and filter the message by the filter dict
+    Return True if the message is filtered, False otherwise
+    """
+    results = parse_event_msg(tab_event_msg)
+    for k,v in msg_filter.items(): 
+        if k not in results or (results[k] != '?' and results[k]!= v):
+            return False
+    return True, results
+    
+def process_tab_event(sched, curr_t, ready_queue, running_queue, throttle_list, event_list, _SchedTab, process_dict, bin_id, 
+                      msg_filter:Optional[Union[None, Dict[str, str]]]):
+    """
+    process old events -> clear -> process new events
+    NOTE: should not directly rob the budget from all the other partitions
+    CASE: suppose a task A executes on 1 -> 2 -> 3
+    and the task is late and misses the budeget on (1), then at arrival of A, 
+    it should be executed on 2, with the budget of sum of 1 and 2, without 3
+    CASE: 2 -> 1
+    scheduler scan (1), take from bk but got nothing
+    then scheduler scan (2), put the budget to (2) ruther than bk
+    Event format: 
+        {"event_type":str, "pid":int, "ts":int, "from":int, "to":int}
+    """
+    if _SchedTab.alloc_mod != 'exactly':
+        return 
+
+    # 1. process old events
+    for msg in event_list:
+        match, results = filter_msg(msg, msg_filter) 
+        if not match:
+            continue
+        # start, complete, migrate
+        if results['event_type'] == "migrate":
+            if 'to' in results:
+                event_handle_migrate_to(sched, curr_t, ready_queue, running_queue, throttle_list, process_dict, bin_id, results)
+            elif 'from' in results:
+                event_handle_migrate_from(process_dict, bin_id, results)
+        elif results['event_type'] == "start":
+            pass
+        elif results['event_type'] == "complete":
+            pass
+        else:
+            raise ValueError(f"Unknown event type {results['event_type']}")
+        
+    # 2. clear the old events
+    event_list.clear()
+    
+    # 3. process new events
+    # (slot_idx, Dict[pid, event_set])
+    from functools import reduce
+    if _SchedTab.sparse_event[_SchedTab.sparse_idx][1]:
+        event_set = reduce(lambda x,y: x+y, map(lambda x:list(x), _SchedTab.sparse_event[_SchedTab.sparse_idx][1].values()))
+        event_list.extend(list(event_set))
+
+def event_handle_migrate_from(process_dict, bin_id, results):
+    _p = process_dict[results['pid']]
+    rem_flop_budget = {k:v for k,v in _p.rem_flop_budget.items() if v > numerical_error_tol_abs}
+    try:
+        assert len(rem_flop_budget) <= 2
+    except AssertionError:
+        print(f"20231126: CodingError, try to gurrante the budget only on one partition at a time")
+                # restore the _p.rem_flop_budget from BK
+    _p.rem_flop_budget[bin_id] += _p.rem_flop_budget.pop('bk', 0.)
+
+def event_handle_migrate_to(sched, curr_t, ready_queue, running_queue, throttle_list, process_dict, bin_id, results):
+    _p = process_dict[results['pid']]
+    rem_flop_budget = {k:v for k,v in _p.rem_flop_budget.items() if v > numerical_error_tol_abs}
+    assert len(rem_flop_budget) <= 2
+    if _p in (running_queue.queue+ready_queue.queue):
+        _p.throttle_util(running_queue, ready_queue, throttle_list, sched, curr_t)
+                    # backup the _p.rem_flop_budget
+    rem_flop_budget = _p.rem_flop_budget[bin_id]
+    if results['to'] in _p.rem_flop_budget:
+        _p.rem_flop_budget[results['to']] += rem_flop_budget
+    else:
+        _p.rem_flop_budget['bk'] = rem_flop_budget
+    _p.rem_flop_budget[bin_id] = 0
+
+def action_at_end_cfg(curr_cfg, budget_recoder, rsc_recoder_his, process_dict, bin_id):
+    cfg_slot_s, next_cfg, cfg_slot_num = curr_cfg.slot_s, curr_cfg.rsc_map, curr_cfg.slot_num
+    cfg_flops_dict = curr_cfg.flops_dict 
+    cfg_event_list = curr_cfg.event_list
+    # replenish the budget
+    for pid in next_cfg.keys():
+        _p = process_dict[pid]
+                    
+        if bin_id not in _p.rem_flop_budget:
+            _p.rem_flop_budget[bin_id] = 0
+                        
+        flops_tbd = cfg_flops_dict[pid]
+        rem_flop_budget=_p.rem_flop_budget[bin_id]
+        if rem_flop_budget> numerical_error_tol_abs or flops_tbd>numerical_error_tol_abs: 
+            _p.rem_flop_budget[bin_id] += flops_tbd # * _p.var_scale_factor
+            budget_recoder[pid] = [cfg_slot_s, next_cfg[pid], cfg_slot_num, True]
+            
+        # TODO: move the hit recoder to issue stage
+        if _p.pid not in rsc_recoder_his:
+            rsc_recoder_his[_p.pid] = LRUCache(3)
+        rsc_recoder_his[_p.pid].put(bin_id)
+    return cfg_event_list
+
+def action_at_start_cfg(timestep, curr_cfg, _SchedTab, tab_temp_size, tab_pointer, hyper_p_n):
+    cfg_slot_s, next_cfg, cfg_slot_num = _SchedTab.next_item()
+    if _SchedTab.alloc_mod != 'exactly':
+        curr_cfg.update(_SchedTab.sparse_cores[_SchedTab.sparse_idx][1])
+    else:
+        curr_cfg.update(next_cfg)
+    
+    # update the deadline
+    if cfg_slot_s < tab_pointer: 
+        curr_cfg.slot_s = (hyper_p_n + 1) * tab_temp_size + cfg_slot_s
+    else:
+        curr_cfg.slot_s = hyper_p_n * tab_temp_size + cfg_slot_s
+    curr_cfg.slot_e = curr_cfg.slot_s + cfg_slot_num - 1 
+    curr_cfg.slot_num = cfg_slot_num
+    
+    curr_cfg.flops_dict.clear()
+    if _SchedTab.alloc_mod != 'exactly':
+        curr_cfg.flops_dict.update(_SchedTab.sparse_flops[_SchedTab.sparse_idx][1])
+    else:
+        curr_cfg.flops_dict.update({pid: n_cores * cfg_slot_num * timestep * FLOPS_PER_CORE for pid, n_cores in next_cfg.items()})
+    return next_cfg
+
 
 def update_sparse_dict(bin_idx, pid, s_i, sparse_dict, item, item_type):
     if s_i not in sparse_dict[bin_idx]:

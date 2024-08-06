@@ -11,7 +11,7 @@ from sched.scheduling_table import SchedulingTableInt, load_bin_list
 from sched.scheduling_table import get_task_layout_compact, get_task_layout_sparse, get_task_layout_compact1bin, Bin_list_print
 from model.resource_agent import Resource_model_int
 from sched.scheduler_agent import Scheduler
-from sched.scheduler_agent import core_mapping_1d
+from sched.placement import core_mapping_1d
 from sched.monitor_agent import Monitor
 from allocator_agent import glb_sched, cyclic_sched
 from model.event_gen.e2e_latency import discrete_event_sim
@@ -48,6 +48,8 @@ def main():
         "exec_t_comp_ratioB": args.exec_t_comp_ratioB,
         "barrier_en": not args.barrier_dis, 
         "forbid_miss": args.forbid_miss,
+        "progress_aware": args.progress_aware,
+        "allow_realloc": args.allow_realloc,
     }
 
     # assert all the process has hard deadline
@@ -102,20 +104,14 @@ def main():
         for _p in glb_p_list:
             _p.task.criticality = "hard"
         
-        bin_list = [SchedulingTableInt(num_cores, 1, 0, "bin_glb_dynamic")]
-        # from message_agent import Message
-        
-        task_spec = Spec(0.1, [1 for _ in glb_p_list]) 
-        # process_dict_list = [{pid:init_p_list[pid] for pid in _SchedTab.index_occupy_by_id()} for _SchedTab in bin_list]
-        exec_para_dict = dict(exec_var_en=args.exec_var_en, exec_var_para=args.exec_var_para, seed=args.seed)
-        rsc_list = [Resource_model_int(size=sched_tab.num_resources, **exec_para_dict) for sched_tab in bin_list]
-        # curr_cfg_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
-        # msg_pipe = Message()
-        msg_dispatcher = MsgDispatcher(len(bin_list))
-        a_data_pipe = DataPipe("activation", len(bin_list), jitter_sim_para=args.jitter_sim_para, seed=args.seed)
-        w_data_pipe = DataPipe("weight", len(bin_list), jitter_sim_para=args.jitter_sim_para, seed=args.seed)
-        scheduler_list = [Scheduler(_SchedTab, args.e2e_latency, hyper_p, glb_p_list, **scheduler_args) for _SchedTab in bin_list]
-        monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
+        bin_list = [SchedulingTableInt(num_cores, 1, 0, "bin_glb_dynamic")]        
+        task_spec, rsc_list, msg_dispatcher, \
+            a_data_pipe, w_data_pipe, scheduler_list, \
+                monitor_list, trace_path = create_common_scheduler_elements(
+                    args, trace_path_para, case_pth, 
+                    hyper_p, glb_p_list, scheduler_args, 
+                    sim_step, bin_list
+                    )        
 
         print("sim_step: ", sim_step)
         bin_list.clear()
@@ -207,22 +203,6 @@ def main():
             bin_list_save_path = bin_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
             routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
         
-        elif args.binpack_cfg["algorithm"] == "naive_iso":
-            naive_iso(
-                bin_list,
-                glb_p_list, affinity_cfg, event_iter_dict,
-                num_cores, args.quantum_check_en, quantumSize, 
-                sim_step, hyper_p, args.wsc_slack_ratio, args.exec_t_comp_ratioB,
-
-                scheduler_list, monitor_list,
-                msg_dispatcher,
-                a_data_pipe, w_data_pipe,
-
-                num_periods, binpack_cfg=args.binpack_cfg,
-                verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
-                warmup=True, drain=True, 
-                )
-
         elif args.binpack_cfg["algorithm"] == "bin_split":
             from sched.global_sched import coleasing_alloc_cluster
             from task.task_cfg import task_graph_srcs, task_graph_sinks
@@ -406,29 +386,22 @@ def main():
             else:
                 bin_list_save_path = bin_save_fmt.format(**path_para_dict, **para_scan_group2)
                 routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **para_scan_group2)
-            # ======================== path settings ================
-            trace_path = get_trace_path(args, trace_path_para, case_pth)
-            scheduler_args.update({"trace_path": trace_path})
 
             bin_list = load_bin_list(bin_list_save_path, num_bins)
+            
+            task_spec, rsc_list, msg_dispatcher, \
+                a_data_pipe, w_data_pipe, scheduler_list, \
+                    monitor_list, trace_path = create_common_scheduler_elements(
+                        args, trace_path_para, case_pth, 
+                        hyper_p, glb_p_list, scheduler_args, 
+                        sim_step, bin_list
+                        )        
+
+            sensor_pipe = TriggerPipe(len(bin_list))
             cores = [bin.num_resources for bin in bin_list]
             core_map = core_mapping_1d(cores)
-            
-            task_spec = Spec(0.1, [1 for _ in glb_p_list]) 
-            # process_dict_list = [{pid:init_p_list[pid] for pid in _SchedTab.index_occupy_by_id()} for _SchedTab in bin_list]
-            exec_para_dict = dict(exec_var_en=args.exec_var_en, exec_var_para=args.exec_var_para, seed=args.seed)
-            rsc_list = [Resource_model_int(size=sched_tab.num_resources, **exec_para_dict) for sched_tab in bin_list]
-            # curr_cfg_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
-            # msg_pipe = Message()
-            msg_dispatcher = MsgDispatcher(len(bin_list))
-            sensor_pipe = TriggerPipe(len(bin_list))
-            a_data_pipe = DataPipe("activation", len(bin_list), jitter_sim_para=args.jitter_sim_para, seed=args.seed)
-            w_data_pipe = DataPipe("weight", len(bin_list), jitter_sim_para=args.jitter_sim_para, seed=args.seed)
-            scheduler_list = [Scheduler(bin_list[idx], args.e2e_latency, hyper_p, glb_p_list, 
-                                        res_cfg=rsc_list[idx], **scheduler_args) for idx in range(len(bin_list))]
             for _sched in scheduler_list:
                 _sched.core_map = core_map[_sched._SchedTab.id]
-            monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]        
 
             print("sim_step: ", sim_step)
             cyclic_sched(task_spec, affinity_cfg, 
@@ -464,24 +437,15 @@ def main():
 
 
         elif args.test_all or args.test_case in [case_name_glb_input,]:
-            # ======================== path settings ================
-            trace_path = get_trace_path(args, trace_path_para, case_pth)
-            scheduler_args.update({"trace_path": trace_path})
             bin_list = [SchedulingTableInt(num_cores, 1, 0, "bin_glb_dynamic")]
-            # from message_agent import Message
             
-            task_spec = Spec(0.1, [1 for _ in glb_p_list]) 
-            # process_dict_list = [{pid:init_p_list[pid] for pid in _SchedTab.index_occupy_by_id()} for _SchedTab in bin_list]
-            exec_para_dict = dict(exec_var_en=args.exec_var_en, exec_var_para=args.exec_var_para, seed=args.seed)
-            rsc_list = [Resource_model_int(size=sched_tab.num_resources, **exec_para_dict) for sched_tab in bin_list]
-            # curr_cfg_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
-            # msg_pipe = Message()
-            msg_dispatcher = MsgDispatcher(len(bin_list))
-            a_data_pipe = DataPipe("activation", len(bin_list), jitter_sim_para=args.jitter_sim_para, seed=args.seed)
-            w_data_pipe = DataPipe("weight", len(bin_list), jitter_sim_para=args.jitter_sim_para, seed=args.seed)
-            scheduler_list = [Scheduler(bin_list[idx], args.e2e_latency, hyper_p, glb_p_list, 
-                                        res_cfg=rsc_list[idx], **scheduler_args) for idx in range(len(bin_list))]
-            monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
+            task_spec, rsc_list, msg_dispatcher, \
+                a_data_pipe, w_data_pipe, scheduler_list, \
+                    monitor_list, trace_path = create_common_scheduler_elements(
+                        args, trace_path_para, case_pth, 
+                        hyper_p, glb_p_list, scheduler_args, 
+                        sim_step, bin_list
+                        )        
 
             print("sim_step: ", sim_step)
             glb_sched(task_spec, affinity_cfg, 
@@ -537,8 +501,26 @@ def main():
             txt_size=40, tick_dens=4, plot_start=0, save_path=plot_path)
 
         # save trace_list to trace_file
-        dump_and_check(trace_path, trace_list)
         # save_chunk(trace_path.replace(".pkl", ".h5"), trace_list, True)
+        dump_and_check(trace_path, trace_list)
+
+def create_common_scheduler_elements(args, trace_path_para, case_pth, hyper_p, glb_p_list, scheduler_args, sim_step, bin_list):
+    # ======================== path settings ================
+    trace_path = get_trace_path(args, trace_path_para, case_pth)
+    scheduler_args.update({"trace_path": trace_path})
+    task_spec = Spec(0.1, [1 for _ in glb_p_list]) 
+    # process_dict_list = [{pid:init_p_list[pid] for pid in _SchedTab.index_occupy_by_id()} for _SchedTab in bin_list]
+    exec_para_dict = dict(exec_var_en=args.exec_var_en, exec_var_para=args.exec_var_para, seed=args.seed)
+    rsc_list = [Resource_model_int(size=sched_tab.num_resources, **exec_para_dict) for sched_tab in bin_list]
+    # curr_cfg_list = [Resource_model_int(size=sched_tab.num_resources) for sched_tab in bin_list]
+    # msg_pipe = Message()
+    msg_dispatcher = MsgDispatcher(len(bin_list))
+    a_data_pipe = DataPipe("activation", len(bin_list), jitter_sim_para=args.jitter_sim_para, seed=args.seed)
+    w_data_pipe = DataPipe("weight", len(bin_list), jitter_sim_para=args.jitter_sim_para, seed=args.seed)
+    scheduler_list = [Scheduler(bin_list[idx], args.e2e_latency, hyper_p, glb_p_list, 
+                                        res_cfg=rsc_list[idx], **scheduler_args) for idx in range(len(bin_list))]
+    monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
+    return task_spec,rsc_list,msg_dispatcher,a_data_pipe,w_data_pipe,scheduler_list,monitor_list, trace_path
 
 def get_trace_path(args, trace_path_para, case_pth):
     if args.jitter_sim_en:
