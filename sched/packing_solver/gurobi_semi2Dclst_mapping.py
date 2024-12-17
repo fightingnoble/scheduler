@@ -5,58 +5,60 @@ import gurobipy as gp
 
 class GurobiSemi2DClstMapping:
     """
-    问题描述: 
-    我有一个任务图（有向图）, 任务图中有N个任务, 我要把这些任务部署到M个计算资源上。需要满足延迟, 数据依赖, 希望资源最少。
+    Problem Description: 
+    I have a task graph (directed graph) with N tasks, and I need to deploy these tasks on M computing resources. The objective is to satisfy latency and data dependencies while balancing the utilization in spatial and temporal.
 
-    输入: 
-    任务数量N, 资源数量M, 分区数量S
-    连接关系, source节点以及开始时间列表, sink节点以及结束时间列表。
-    每个任务的工作量列表
-    二维表格A, A_ij的下标, i为任务序号, j是资源数量, 而不是标号! A_ij表示给任务i分配j个资源需要的延迟。
+    Input: 
+    Number of tasks N, number of resources M, number of partitions S.
+    Connection relationships, source node and start time list, sink node and end time list.
+    A list of workload for each task.
+    A 2D table A, where A_ij's index: i is the task index, j is the number of resources (not an identifier!). A_ij represents the delay required to assign j resources to task i.
 
-    定义: 
-    每个分区总资源的计算方式: 时间轴上所有时刻, 本分区内最大资源需求。
-    每个任务分配到的资源: 由开始时间、持续时间、资源数量三个数值定义。
-    计算量定义为, 分配的计算资源数量×持续时间
+    Definition: 
+    The total resources for each partition are calculated as: the maximum resource demand in the partition at all moments on the timeline.
+    The resources assigned to each task are defined by its start time, duration, and the number of resources.
+    The computational workload is defined as the assigned number of computational resources × duration.
 
-    约束: 任务图上的每个source节点, 有一个开始时间, 每个sink有一个截止时间, source节点开始时间, 不早于自己的开始时间, 每个节点开始时间不早于其前驱节点的结束时间。sink节点完成不晚于自身截止时间。
-    每个任务i, 有一个分配计算量的下限, 并且资源数量等于所选的A_ij的下标j, 时长> A_ij。
+    Constraints: Each source node in the task graph has a start time, and each sink node has a deadline. The start time of a source node must not be earlier than its own start time. The start time of each node must not be earlier than the end time of its predecessor node. The sink node must complete no later than its deadline.
+    Each task i has a lower bound for the computational workload, and when the resource count equals the index j of the selected A_ij, the duration must be greater than A_ij.
 
-    目标: 要求所有截止时间都得到满足, 同时希望所有分区需要的的计算资源之和最少。    
+    Objective: 
+    The goal is to ensure that all deadlines are met, while minimizing the total computational resources required by all partitions.
     
-    公式描述: 
-    
-    latex算法描述: 
 
+    Formula Description: 
+
+    Latex Algorithm Description: 
     """
+
     # N:int, M:int, S:int, NT:int, T:float, A:Dict[int, int], dependencies:List[Tuple[int, int]], compute_lower_bounds:List[int], start_constraints:List[int], end_constraints:List[int], time_format="float", timestep_size:float=None
     def __init__(self, N:int, M:Union[int, float], S:int, NT:int, T:float, A:Dict[int, int], dependencies:List[Tuple[int, int]],  
                  compute_lower_bounds:List[int], start_constraints:List[int], end_constraints:List[int], path_info:List[Tuple[Union[List[int], float]]],
                  time_format="float", timestep_size:float=None, spt_fmt="int", 
                  verbose=True
                  ):
-        self.N:int = N # 任务数量
-        self.M:int = M # 最大资源数量
-        self.S:int = S # 分区数量
-        self.NT:int = NT # 离散时间步数量
-        self.T:float = T # 周期长度
-        self.A:Dict[int, Dict[int, int]] = A # 二维表格A, A_ij的下标, i为任务序号, j是资源数量, 而不是标号! A_ij表示给任务i分配j个资源需要的延迟。
-        self.dependencies:List[Tuple[int, int]] = dependencies # 任务图上的依赖关系
-        self.compute_lower_bounds:List[int] = compute_lower_bounds # 每个任务的计算量下限
-        self.start_constraints:List[int] = start_constraints # 每个任务的最早开始时间 (None 表示无约束)
-        self.end_constraints:List[int] = end_constraints # 每个任务的最晚完成时间
-        self.path_info:List[Tuple[Union[List[int], float]]] = path_info # all edges along the path from source to sink 
-        # self.critical_tick:List[int] = time_steps # 离散时间步, 用于计算分区最大资源需求
-        self.spt_fmt = GRB.CONTINUOUS if spt_fmt == "float" else GRB.INTEGER # 空间变量类型
-        self.temp_fmt = GRB.CONTINUOUS if time_format == "float" else GRB.INTEGER # 时间变量类型
+        self.N:int = N # Number of tasks
+        self.M:int = M # Maximum number of resources
+        self.S:int = S # Number of partitions
+        self.NT:int = NT # Number of discrete time steps
+        self.T:float = T # Period length
+        self.A:Dict[int, Dict[int, int]] = A # 2D table A, where A_ij's index: i is the task index, j is the number of resources (not an identifier!). A_ij represents the delay required to assign j resources to task i.
+        self.dependencies:List[Tuple[int, int]] = dependencies # Dependency relationships in the task graph
+        self.compute_lower_bounds:List[int] = compute_lower_bounds # Lower bound for each task's workload
+        self.start_constraints:List[int] = start_constraints # Earliest start time for each task (None means no constraint)
+        self.end_constraints:List[int] = end_constraints # Latest completion time for each task
+        self.path_info:List[Tuple[Union[List[int], float]]] = path_info # All edges along the path from source to sink 
+        # self.critical_tick:List[int] = time_steps # Discrete time steps, used to calculate the maximum resource demand for the partition
+        self.spt_fmt = GRB.CONTINUOUS if spt_fmt == "float" else GRB.INTEGER # Space variable type
+        self.temp_fmt = GRB.CONTINUOUS if time_format == "float" else GRB.INTEGER # Time variable type
         if time_format != "float":
             assert (self.T - int(self.T/timestep_size)*timestep_size) < 1e-9, "timestep_size should be a divisor of T"
-        self.t_upb = self.T if time_format == "float" else int(self.T/timestep_size) # 时间变量上界
-        self.t_attr = {"lb": 0, "ub": self.t_upb, "vtype": self.temp_fmt} # 时间变量属性
-        self.spt_attr = {"lb": 1, "ub": M, "vtype": self.spt_fmt} # 空间变量属性
-        self.slackR = 1e-9 if time_format == "float" else 1 # 松弛区间右侧, 计算资源的窗口为 当前时刻往后的一个时间步，所以如果当前时刻完成，则下一个时刻的资源需求为0
+        self.t_upb = self.T if time_format == "float" else int(self.T/timestep_size) # Upper bound for time variable
+        self.t_attr = {"lb": 0, "ub": self.t_upb, "vtype": self.temp_fmt} # Time variable attributes
+        self.spt_attr = {"lb": 1, "ub": M, "vtype": self.spt_fmt} # Space variable attributes
+        self.slackR = 1e-9 if time_format == "float" else 1 # Slack interval right side, resource window is one time step ahead. So if the current moment is finished, the resource demand for the next moment is 0
         
-        # 创建模型
+        # Create model
         self.model = Model("Partitioned_Task_Scheduling")
         self._initialize_variables()
         self._add_constraints()
@@ -68,17 +70,17 @@ class GurobiSemi2DClstMapping:
         """初始化决策变量"""
         # ======================================================================
         # temporal grids
-        self.critical_tick = self.model.addVars(self.NT, name="Critical_Tick", **self.t_attr) # 离散时间步, 用于计算分区最大资源需求
+        self.critical_tick = self.model.addVars(self.NT, name="Critical_Tick", **self.t_attr) # Discrete time steps, used to calculate the maximum resource demand for the partition
         # partition size
-        self.partition_size = self.model.addVars(self.S, name="Partition_Size", **self.spt_attr) # 分区容量
+        self.partition_size = self.model.addVars(self.S, name="Partition_Size", **self.spt_attr) # Partition capacity
 
         # Task variables: temporal placements
-        self.start_times = self.model.addVars(self.N, name="Start_Time", **self.t_attr) # 任务开始时间
-        self.end_times = self.model.addVars(self.N, name="End_Time", **self.t_attr) # 任务结束时间
-        self.durations = self.model.addVars(self.N, name="Duration", **self.t_attr) # 任务持续时间
+        self.start_times = self.model.addVars(self.N, name="Start_Time", **self.t_attr) # Task start times
+        self.end_times = self.model.addVars(self.N, name="End_Time", **self.t_attr) # Task end times
+        self.durations = self.model.addVars(self.N, name="Duration", **self.t_attr) # Task durations
         
         # Task variables: resource allocation
-        self.resources = self.model.addVars(self.N, name="Resources", **self.spt_attr) # 任务所选资源数量
+        self.resources = self.model.addVars(self.N, name="Resources", **self.spt_attr) # Number of resources assigned to each task
 
         # =================================================================================
         # Decision variables
@@ -110,7 +112,7 @@ class GurobiSemi2DClstMapping:
             vtype=GRB.BINARY,
             name="Active_At_T",
         )
-        self.peak_bin_usage = self.model.addVars(self.S, name="Max_Usage", vtype=GRB.INTEGER, lb=0) # 每个分区的最大资源使用量
+        self.peak_bin_usage = self.model.addVars(self.S, name="Max_Usage", vtype=GRB.INTEGER, lb=0) # Maximum usage of each partition
         
         # =================================================================================
         # Target variables
@@ -406,7 +408,7 @@ class GurobiSemi2DClstMapping:
                 for i in range(self.N):
                     tick = self.critical_tick[t]
                     self.model.addConstr(
-                        self.start_times[i] <= tick + (1 - self.Lsatisfied[i, t]) * 1000,  # 1000 为 M 的示例值
+                        self.start_times[i] <= tick + (1 - self.Lsatisfied[i, t]) * 1000,  # 1000 is a big M value to make sure the constraint is satisfied
                         name=f"Start_Active_Constraint_{i}_{t}",
                     )
                     self.model.addConstr(
@@ -429,7 +431,7 @@ class GurobiSemi2DClstMapping:
                     )
 
         # active_at_t_cross_period (cross-hyperperiod)
-        # active_at_t[i, t] = (start_times[i] <= t 或 t< end_time[i]         
+        # active_at_t[i, t] = (start_times[i] <= t or t< end_time[i]         
         for s in range(self.S):
             for t in range(self.NT):
                 for i in range(self.N):
@@ -567,7 +569,7 @@ class GurobiSemi2DClstMapping:
 
             # Loop until we reduce to a model that can be solved
             self.model.computeIIS()
-            self.model.write("conflict.ilp")  # 保存冲突约束到文件
+            self.model.write("conflict.ilp")  # save the conflict constraints to a file
             while True:
                 self.model.computeIIS()
                 print('\nThe following constraint cannot be satisfied:')
@@ -584,13 +586,13 @@ class GurobiSemi2DClstMapping:
             print("No optimal solution found.")
         
 if __name__ == '__main__':
-    # 输入数据
-    T = 30  # 周期
-    N = 5  # 任务数量
-    M = 4  # 最大资源数量
-    S = 2  # 分区数量
+    # Input data
+    T = 30  # Period
+    N = 5  # Number of tasks
+    M = 4  # Maximum number of resources
+    S = 2  # Number of partitions
 
-    # 将 A 转换为嵌套字典格式
+    # Convert A to a nested dictionary format
     # A = {
     #     0: {1: 3, 2: 2, 3: 1},
     #     1: {1: 4, 2: 2, 3: 1},
@@ -600,10 +602,10 @@ if __name__ == '__main__':
     # path_info = [
     #     [(0, 1), (1, 2), 25], 
     # ]
-    # dependencies = [(0, 1), (1, 2)]  # (i, j): i 必须在 j 之前完成
-    # compute_lower_bounds = [10, 8, 12]  # 每个任务的计算量下限
-    # start_constraints = [25, None, None]  # 每个任务的最早开始时间 (None 表示无约束)
-    # end_constraints = [None, None, 50]  # 每个任务的最晚完成时间
+    # dependencies = [(0, 1), (1, 2)]  # (i, j): Task i must complete before task j
+    # compute_lower_bounds = [10, 8, 12]  # Lower bound of computational workload for each task
+    # start_constraints = [25, None, None]  # Earliest start time for each task (None means no constraint)
+    # end_constraints = [None, None, 50]  # Latest completion time for each task
 
     A = {
         0: {1: 3, 2: 2, 3: 1},
@@ -612,43 +614,17 @@ if __name__ == '__main__':
         3: {1: 6, 2: 4, 3: 2},
         4: {1: 3, 2: 2, 3: 1},
     }
-    # List[Tuple[Union[List[int], float]]]
+    # List of paths from source to sink
     path_info = [
         ([0, 1, 2], 25), 
         ((3, 4), 25)
     ]
-    dependencies = [(0, 1), (1, 2), (3, 4)]  # (i, j): i 必须在 j 之前完成
-    compute_lower_bounds = [10, 15, 8, 12, 10]  # 每个任务的计算量下限
-    start_constraints = [0, None, None, 25, None]  # 每个任务的最早开始时间 (None 表示无约束)
-    end_constraints = [None, None, 25, None, 50]  # 每个任务的最晚完成时间
+    dependencies = [(0, 1), (1, 2), (3, 4)]  # (i, j): Task i must complete before task j
+    compute_lower_bounds = [10, 15, 8, 12, 10]  # Lower bound of computational workload for each task
+    start_constraints = [0, None, None, 25, None]  # Earliest start time for each task (None means no constraint)
+    end_constraints = [None, None, 25, None, 50]  # Latest completion time for each task
 
-    
-    # import random
-
-    # 输入参数
-    # N = 5  # 任务数量
-    # M = 4  # 资源数量
-    # S = 3  # 分区数量
-    # critical_ticks = [i for i in range(2 * N + 2)]  # 假设关键时间点
-
-    # # 随机生成任务依赖关系
-    # dependencies = list(set([(random.randint(0, N - 1), random.randint(0, N - 1)) for _ in range(N)]))
-    # dependencies = [(i, j) for i, j in dependencies if i != j]  # 移除自循环
-
-    # # 随机生成计算量下限
-    # compute_lower_bounds = [random.randint(10, 50) for _ in range(N)]
-
-    # # 随机生成最早开始时间和最晚结束时间
-    # start_constraints = [random.randint(0, T // 2) for _ in range(N)]
-    # end_constraints = [random.randint(T // 2, T) for _ in range(N)]
-
-    # # 二维表格 A: 每个任务在不同资源配置下的延迟
-    # A = {i: {j: random.randint(1, 5) for j in range(1, M + 1)} for i in range(N)}
-
-    # # 关键时间点
-    # time_steps = sorted(random.sample(range(0, 2 * T), 2 * N + 2))
-
-    # 测试输入
+    # input of the test 
     test_input = {
         "N": N,
         "M": M,
@@ -667,6 +643,7 @@ if __name__ == '__main__':
 
     print("Test Input:")
     print(test_input)
-    # N:int, M:int, S:int, NT:int, T:float, A:Dict[int, int], dependencies:List[Tuple[int, int]], compute_lower_bounds:List[int], start_constraints:List[int], end_constraints:List[int], time_format="float", timestep_size:float=None
+    
+    # Initialize scheduler and solve
     scheduler = GurobiSemi2DClstMapping(**test_input)
     scheduler.solve()
