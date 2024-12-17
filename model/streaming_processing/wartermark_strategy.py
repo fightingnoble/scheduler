@@ -281,12 +281,12 @@ class WatermarkStrategy(object):
             inactive_list.remove(_p)
             _p.update_deadline_from_timestamp()
             if _p.deadline < curr_t and _p.task.criticality == "hard":
-                print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!")
+                print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}/{_p.get_timestamp():.6f}!!")
                 print(f"		{_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) deadline: {_p.deadline:.6f}")
                 _p.task.missed_deadline_count += 1
             else:
                 if _p.deadline < curr_t: 
-                    warnings.warn(f"Task {_p.task.id}:{_p.task.name}({_p.pid}) violate timing constraint @ {_p.deadline:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!")
+                    warnings.warn(f"Task {_p.task.id}:{_p.task.name}({_p.pid}) violate timing constraint @ {_p.deadline:.6f}/{_p.get_timestamp():.6f}!!")
                     print(f"		{_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) deadline: {_p.deadline:.6f}")
                 _p.handle_process_load_var()
                 _p.release_util(curr_t, active_list)

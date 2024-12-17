@@ -18,7 +18,7 @@ completed_pattern2 = r'\(lateness detected\)TASK (\d+):([\w_]+)\((\d+)\) COMPLET
 
 force_completed_pattern = r'bin_split'
 
-# TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}/{_p.msg_cache[0].get_timestamp():.6f}!!
+# TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) MISSED DEADLINE @ {curr_t:.6f}/{_p.get_timestamp():.6f}!!
 miss_pattern = r'\t\tTASK (\d+):([\w_]+)\((\d+)\) MISSED DEADLINE @ ([\d.]+)/([\d.]+)!!'
 
 # f"		{_p.task.name} triggered @ {ingestion_time:.6f}/{event_time:.6f}"

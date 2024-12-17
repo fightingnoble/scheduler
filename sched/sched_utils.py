@@ -279,15 +279,17 @@ def plan_switching(preempt_list, issue_list, ctx_switch_list, budget_recoder, pr
     step: 
     1. check whether some cores are released
     2. check whether this plan is in the scheduling table
+    chunk_s, chunk_alloc, chunk_slot_num, updated_flg = budget_recoder[_p.pid]
     """
     off_discount = 0
     on_discount = 0
+    to_assert_flag = False
     for _p in ctx_switch_list:
         old_size = pre_rsc[_p.pid]
         new_size = rsc_map[_p.pid]
         if old_size > new_size: 
             if budget_recoder[_p.pid][3]:
-                chunk_s, chunk_alloc, chunk_slot_num, updated_flg = budget_recoder[_p.pid]
+                chunk_alloc = budget_recoder[_p.pid][1]
                 if new_size != chunk_alloc:
                     to_assert_flag = True
                 else:
@@ -295,7 +297,7 @@ def plan_switching(preempt_list, issue_list, ctx_switch_list, budget_recoder, pr
             else:
                 to_assert_flag = True
         else:
-            chunk_s, chunk_alloc, chunk_slot_num, updated_flg = budget_recoder[_p.pid]
+            chunk_alloc = budget_recoder[_p.pid][1]
             if new_size == chunk_alloc:
                 on_discount += chunk_alloc
 

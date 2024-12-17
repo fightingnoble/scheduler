@@ -250,7 +250,7 @@ def main():
             raise NotImplementedError(f"binpack algorithm {args.binpack_cfg['algorithm']} is not implemented")
 
         pid2name = {_p.pid:_p.task.name for _p in glb_p_list}
-        from sched.scheduling_table import get_task_layout_compact, get_task_layout_sparse
+        from sched.bin_list_utils import get_task_layout_compact, get_task_layout_sparse
         
         for _SchedTab in bin_list:
                 _SchedTab.print_alloc_detail(pid2name, sim_step)
@@ -385,7 +385,7 @@ def main():
                 # f"{plot_root}/dyn_full_{num_cores}{args.file_suffix}.pdf"
                 plot_path=plt_fn_w_seed_fmt.format(**plot_path_para, **{"case": case_pth, "plt_size": "full"})
 
-            from sched.scheduling_table import get_task_layout_compact, get_task_layout_sparse
+            from sched.bin_list_utils import get_task_layout_compact, get_task_layout_sparse
             get_task_layout_compact(actual_sched_record, pid2name, save= True, time_step= sim_step,
             hyper_p=hyper_p, n_p=num_periods, warmup=False, drain=True, plot_legend=False, format=["svg","pdf"], 
             txt_size=40, tick_dens=4, plot_start=0, save_path=plot_path)
@@ -462,7 +462,7 @@ def main():
             return
 
         if args.plot:
-            from sched.scheduling_table import get_task_layout_compact
+            from sched.bin_list_utils import get_task_layout_compact
 
             # f"{plot_root}/seed_{args.seed}/glb_dyn_full_{num_cores}{args.file_suffix}.pdf"
             # f"{plot_root}/glb_dyn_full_{num_cores}_ideal{args.file_suffix}.pdf"

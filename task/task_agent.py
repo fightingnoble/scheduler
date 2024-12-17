@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Dict, List, Tuple, Union, Any, OrderedDict
 from typing import TYPE_CHECKING
+import warnings
 
 if TYPE_CHECKING:
     from model.buffer import Buffer, EventCache, TriggerCache
@@ -135,12 +136,15 @@ class ProcessBase(object):
     
     def update_deadline_from_timestamp(self):
         if not self.ddl_sharing_cross_chain:
-            self.deadline = self.msg_cache[0].get_timestamp() + self.task.ERT + self.task.ddl
+            self.deadline = self.get_timestamp()+ self.task.ERT + self.task.ddl
         else:
             raise NotImplementedError
+    
+    def get_timestamp(self):
+        return self.msg_cache[0].get_timestamp()
 
     def get_chain_deadline(_p, sched):
-        event_time = _p.msg_cache[0].get_timestamp() 
+        event_time = _p.get_timestamp()
         e2e_latency = sched.e2e_latency if _p.task.timing_flag == "deadline" else sched.hyper_period
         chain_deadline = event_time + e2e_latency 
         return chain_deadline
@@ -421,7 +425,7 @@ class ProcessBase(object):
         if self.remburst == 0:
             self.remburst += self.totcpu
         if verbose:
-            _str = f"		TASK {self.task.id:d}:{self.task.name:s}({self.pid:d}) is activated @ {curr_t:.6f}/{self.msg_cache[0].get_timestamp():.6f}!!"
+            _str = f"		TASK {self.task.id:d}:{self.task.name:s}({self.pid:d}) is activated @ {curr_t:.6f}/{self.get_timestamp():.6f}!!"
             print(_str)
 
     def throttle_util(_p, running_queue, ready_queue, throttle_list, sched,
@@ -510,7 +514,7 @@ class ProcessInt(ProcessBase):
         time_slot_e = int(_p.deadline//timestep)
         return time_slot_s,time_slot_e
 
-    def get_available_cfg(self, req_rsc_size:int, curr_aval_rsc:int=None): 
+    def get_available_cfg(self, req_rsc_size:int, curr_aval_rsc:int=None, show_warnings=False): 
         applied_constraint = "none"         
         # apply constraints based on parallel_mode
         if self.parallel_mode in ["upb","range"]:
@@ -541,7 +545,12 @@ class ProcessInt(ProcessBase):
         if req_rsc_size == 0: 
             return 0, "N/A"
         if curr_aval_rsc is not None:
+            if req_rsc_size > curr_aval_rsc:
+                if show_warnings: 
+                    warnings.warn(f"TASK {self.task.id:d}:{self.task.name:s}({self.pid:d}) is starving {req_rsc_size-curr_aval_rsc:d} cores")
+                _p.is_starving = True
             req_rsc_size = min(req_rsc_size, curr_aval_rsc)
+
         return req_rsc_size, applied_constraint
 
     def get_available_cfg_vector(self, req_rsc_size_arr: np.ndarray, curr_aval_rsc_arr: np.ndarray = None):

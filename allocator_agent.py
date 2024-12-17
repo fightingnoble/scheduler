@@ -80,7 +80,8 @@ class AllocatorInt(object):
         else: 
             pass
 
-from sched.scheduling_table import SchedulingTableInt, get_sparse_flops
+from sched.scheduling_table import SchedulingTableInt
+from sched.bin_list_utils import get_sparse_flops
 from model.resource_agent import Resource_model_int
 import matplotlib.pyplot as plt
 from global_var import *
@@ -88,7 +89,6 @@ from global_var import *
 from model.task_queue_agent import TaskQueue 
 from task.task_agent import ProcessInt
 import copy
-from model.lru import LRUCache
 from sched.scheduler_agent import Scheduler, glb_dynamic_sched_step
 from sched.monitor_agent import Monitor
 
@@ -346,6 +346,8 @@ def cyclic_sched(task_spec:Spec, affinity,
 
     # pre_ready stage for the initial tasks
     for sched in scheduler_list:
+        if len(sched._SchedTab.sparse_list) == 0: 
+            sched._SchedTab.to_sparse_dict(-1)
         # pass the empty sched table
         if sched._SchedTab.num_resources <= 0 or len(sched._SchedTab.sparse_list) == 0:
             continue
@@ -359,8 +361,6 @@ def cyclic_sched(task_spec:Spec, affinity,
         task_pid_list = list(process_dict.keys())
 
         # init the tasks queue
-
-        _SchedTab.to_sparse_dict(-1)
         curr_cfg.slot_e = -1 #cfg_slot_s + cfg_slot_num - 1
         curr_cfg.slot_s = -1 # cfg_slot_s
         curr_cfg.slot_num = 0 # cfg_slot_num
@@ -422,10 +422,10 @@ def cyclic_sched(task_spec:Spec, affinity,
                 print("		TASK {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
         print("")
     if [sched._SchedTab.alloc_mod=='exactly' for sched in scheduler_list][0]: 
-            try:
-                get_sparse_flops([sched._SchedTab for sched in scheduler_list], glb_p_list, timestep, event_range)
-            except:
-                print("CodingError: pass the get_sparse_flops")
+        try:
+            get_sparse_flops([sched._SchedTab for sched in scheduler_list], glb_p_list, timestep, event_range)
+        except:
+            print("CodingError: pass the get_sparse_flops")
 
     for n_slot in range(sim_slot_num):
         curr_t = n_slot * timestep
@@ -661,7 +661,7 @@ if __name__ == "__main__":
         for _SchedTab in actual_sched_record:
             _SchedTab.print_alloc_detail(pid2name, sim_step)
 
-        from sched.scheduling_table import get_task_layout_compact
+        from sched.bin_list_utils import get_task_layout_compact
         get_task_layout_compact(actual_sched_record, pid2name, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
         txt_size=40, tick_dens=4, plot_start=0, save_path=f"plot/{cfg_n}/{num_cores}/dyn_full_{num_cores}{args.file_suffix}.pdf")
@@ -722,7 +722,7 @@ if __name__ == "__main__":
         for _SchedTab in actual_sched_record:
             _SchedTab.print_alloc_detail(pid2name, sim_step)
 
-        from sched.scheduling_table import get_task_layout_compact
+        from sched.bin_list_utils import get_task_layout_compact
         file_name = f"plot/{cfg_n}/{num_cores}/glb_dyn_full_{num_cores}{args.file_suffix}.pdf" if not args.barrier_dis else f"plot/{cfg_n}/{num_cores}/glb_dyn_full_{num_cores}_ideal{args.file_suffix}.pdf"
         get_task_layout_compact(actual_sched_record, pid2name, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=["svg","pdf"], 
@@ -782,7 +782,7 @@ if __name__ == "__main__":
             warmup=True, drain=True
             )
         pid2name = {_p.pid:_p.task.name for _p in glb_p_list}
-        from sched.scheduling_table import get_task_layout_compact
+        from sched.bin_list_utils import get_task_layout_compact
         get_task_layout_compact(bin_list, pid2name, save= True, time_step= sim_step,
         hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=False, plot_legend=True, format=["svg","pdf"], 
         txt_size=40, tick_dens=2, save_path=f"plot/{cfg_n}/{num_cores}/new_task_bin_pack_cyclic_{num_cores}{args.file_suffix}.pdf") 
