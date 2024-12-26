@@ -586,43 +586,101 @@ class GurobiSemi2DClstMapping:
             print("No optimal solution found.")
         
 if __name__ == '__main__':
+    import math
     # Input data
-    T = 30  # Period
-    N = 5  # Number of tasks
-    M = 4  # Maximum number of resources
-    S = 2  # Number of partitions
+    # T = 30  # Period
+    # N = 5  # Number of tasks
+    # M = 4  # Maximum number of resources
+    # S = 2  # Number of partitions
 
-    # Convert A to a nested dictionary format
     # A = {
     #     0: {1: 3, 2: 2, 3: 1},
-    #     1: {1: 4, 2: 2, 3: 1},
-    #     2: {1: 6, 2: 4, 3: 2},
+    #     1: {1: 5, 2: 3, 3: 2},
+    #     2: {1: 4, 2: 2, 3: 1},
+    #     3: {1: 6, 2: 4, 3: 2},
+    #     4: {1: 3, 2: 2, 3: 1},
     # }
-    # # all paths from source to sink
+    # # List of paths from source to sink
     # path_info = [
-    #     [(0, 1), (1, 2), 25], 
+    #     ([0, 1, 2], 25), 
+    #     ((3, 4), 25)
     # ]
-    # dependencies = [(0, 1), (1, 2)]  # (i, j): Task i must complete before task j
-    # compute_lower_bounds = [10, 8, 12]  # Lower bound of computational workload for each task
-    # start_constraints = [25, None, None]  # Earliest start time for each task (None means no constraint)
-    # end_constraints = [None, None, 50]  # Latest completion time for each task
+    # dependencies = [(0, 1), (1, 2), (3, 4)]  # (i, j): Task i must complete before task j
+    # compute_lower_bounds = [10, 15, 8, 12, 10]  # Lower bound of computational workload for each task
+    # start_constraints = [0, None, None, 25, None]  # Earliest start time for each task (None means no constraint)
+    # end_constraints = [None, None, 25, None, 50]  # Latest completion time for each task
 
-    A = {
-        0: {1: 3, 2: 2, 3: 1},
-        1: {1: 5, 2: 3, 3: 2},
-        2: {1: 4, 2: 2, 3: 1},
-        3: {1: 6, 2: 4, 3: 2},
-        4: {1: 3, 2: 2, 3: 1},
+    T = 100  # Period
+    N = 4  # Number of tasks
+    M = 200  # Maximum number of resources
+    S = 2  # Number of partitions
+
+    # tag to id
+    # D,C,A,B -> 0,1,2,3
+    typical_lat = {
+        2: 20,
+        3: 25,
+        1: 15,
+        0: 45,
     }
+    typical_size = 25
+    assumed_efficiency = 0.9
+    size_list = {
+        2: [10, 20, 30, 40],
+        3: [10, 20, 30, 40],
+        1: [5, 10, 20, 30],
+        0: [5, 10, 20, 30],
+    }
+    
+    # load = typical_size * typical_lat
+    ld = {i: typical_size * typical_lat[i] for i in range(N)}
+    # load[i] / j/(assumed_efficiency*int((j-typical_size)/5))
+    A = {i: {j: math.ceil(ld[i] / j/(assumed_efficiency**int((j-typical_size)/5))) for j in size_list[i]} for i in range(N)}    
+    ld_sample_var = 2.5
+    ld_ppf_value = dict(zip(range(N), (i * typical_size for i in [55, 25, 30, 40, ])))
+    jitter_sample_var = 0
+    jitter_ppf_value = {i: jitter_sample_var for i in range(N)}
+
+    # Max(ppf(ld, x%), max(A[i][j] for j in A[i]))
+    start_constraints = [jitter_ppf_value[0], jitter_ppf_value[1], jitter_ppf_value[2], None]  # Earliest start time for each task (None means no constraint)
+    end_constraints = [90, None, None, 90]  # Latest completion time for each task
+    compute_lower_bounds = [max(ld_ppf_value[i], max([k*v for k,v in A[i].items()])) for i in range(N)]
+    
+    # from logical graph to physical graph, scale the number of nodes
+    scaling_factor= [3, 1, 2, 2]
+    from functools import reduce
+    start_constraints = reduce(lambda x,y: x+y, [[start_constraints[i]]*scaling_factor[i] for i in range(N)])
+    end_constraints = reduce(lambda x,y: x+y, [([end_constraints[i]]*scaling_factor[i]) for i in range(N)])
+    compute_lower_bounds = reduce(lambda x,y: x+y, [[compute_lower_bounds[i]]*scaling_factor[i] for i in range(N)])
+    idx = sum(scaling_factor) - 1
+    for i in range(N-1, -1, -1):
+        for scale_idx in range(scaling_factor[i]):
+            size_list[idx] = size_list[i]
+            A[idx] = A[i]
+            ld[idx] = ld[i]
+            ld_ppf_value[idx] = ld_ppf_value[i]
+            jitter_ppf_value[idx] = jitter_ppf_value[i]
+            idx -= 1
+    N = sum(scaling_factor)
+
+        
     # List of paths from source to sink
     path_info = [
-        ([0, 1, 2], 25), 
-        ((3, 4), 25)
+        ([0], 90), # 1st frame
+        ([1], 90), # 2nd frame
+        ([2], 90), # 3rd frame
+        ([3, 0], 90), # 1st frame
+        ([4, 3, 0], 90), # 1st frame
+        ([4, 6], 90), # 1st frame
+        ([5, 7], 90), # 2nd frame
     ]
-    dependencies = [(0, 1), (1, 2), (3, 4)]  # (i, j): Task i must complete before task j
-    compute_lower_bounds = [10, 15, 8, 12, 10]  # Lower bound of computational workload for each task
-    start_constraints = [0, None, None, 25, None]  # Earliest start time for each task (None means no constraint)
-    end_constraints = [None, None, 25, None, 50]  # Latest completion time for each task
+    dependencies = [
+        (3, 0),
+        (4, 3),
+        (4, 6),
+        (5, 7)
+        ]  # (i, j): Task i must complete before task j
+
 
     # input of the test 
     test_input = {
