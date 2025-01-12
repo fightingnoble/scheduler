@@ -123,21 +123,23 @@ class GurobiSemi2DClstMapping:
         # Target variables
         # =================================================================================
         # Main: utilization of each partition
-        self.utilization = self.model.addVars(self.S, lb=0, ub=1, vtype=GRB.CONTINUOUS, name="Utilization")
-        self.min_util = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f'min_util')
-        self.max_util = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f'max_util')
+        # self.utilization = self.model.addVars(self.S, lb=0, ub=1, vtype=GRB.CONTINUOUS, name="Utilization")
+        # self.min_util = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f'min_util')
+        # self.max_util = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f'max_util')
         
         # Aux 1: speedup rate, chain by chain
-        self.speedup_rate = {}
-        for i in range(self.N):
-            if self.end_constraints[i] is not None:
-                self.speedup_rate[i] = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f"Speedup_Rate_{i}")
+        # self.speedup_rate = {}
+        # for i in range(self.N):
+        #     if self.end_constraints[i] is not None:
+        #         self.speedup_rate[i] = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f"Speedup_Rate_{i}")
         
         # Aux 2: affinity score
         self.affinity_score = self.model.addVar(lb=-len(self.dependencies), ub=len(self.dependencies), vtype=GRB.CONTINUOUS, name="affinity_score")
+        # self.spatial_affinity = self.model.addVars([(i,j) for i,j in self.dependencies], vtype=GRB.BINARY, name="spatial_affinity")
+        # self.temporal_affinity = self.model.addVars([(i,j) for i,j in self.dependencies], vtype=GRB.BINARY, name="temporal_affinity")
                 
         # Aux 3: ratio of peak usage and partition size
-        self.spatial_rda_ratio = self.model.addVars(self.S, lb=0, ub=1, vtype=GRB.CONTINUOUS, name="Spatial_RDA_Ratio")
+        # self.spatial_rda_ratio = self.model.addVars(self.S, lb=0, ub=1, vtype=GRB.CONTINUOUS, name="Spatial_RDA_Ratio")
 
         self.static_wasted_resources = self.model.addVar(
             vtype=GRB.CONTINUOUS,
@@ -350,8 +352,8 @@ class GurobiSemi2DClstMapping:
             assert self.end_constraints[final_node] is not None, "Final node should have a end constraint"
             self.model.addConstr(n_cross * self.T + self.end_times[path[-1]] <= self.end_constraints[final_node], name=f"Path_Cross_Period_{path[0]}_{path[-1]}")
             # speedup rate constraint
-            self.model.addConstr(self.speedup_rate[path[-1]] * (n_cross * self.T + self.end_times[path[-1]]) == self.end_constraints[final_node], 
-                                 name=f"Speedup_Rate_Constraint_{path[0]}_{path[-1]}")
+            # self.model.addConstr(self.speedup_rate[path[-1]] * (n_cross * self.T + self.end_times[path[-1]]) == self.end_constraints[final_node], 
+            #                      name=f"Speedup_Rate_Constraint_{path[0]}_{path[-1]}")
             
 
     def add_bin_constrs(self):
@@ -384,22 +386,30 @@ class GurobiSemi2DClstMapping:
                     name=f"Active_At_T_Partition_Constraint_{i}_{s}",
                 )
         
-        # step 1: replace active_at_t[i, t] * is_task_in_bin[i, s] with at_bin_t[i, s, t]
-        self.at_bin_t = {}
+        # step 1: combine resources[i] * active_at_t[i, t]
+        self.resource_active_at_t = {}
         for i in range(self.N):
-            for s in range(self.S):
-                # for t in self.critical_tick:
-                for t in range(self.NT):
-                    self.at_bin_t[i, s, t] = self.model.addVar(vtype=GRB.BINARY, name=f"z_{i}_{s}_{t}")
-
-        for s in range(self.S):
             for t in range(self.NT):
-                for i in range(self.N):
-                    #  线性化 at_bin_t[i, s, t] = is_task_in_bin[i, s] * active_at_t[i, t]
-                    self.model.addConstr(self.at_bin_t[i, s, t] <= self.is_task_in_bin[i, s], name=f"Z_Upper1_{i}_{s}_{t}")
-                    self.model.addConstr(self.at_bin_t[i, s, t] <= self.active_at_t[i, t], name=f"Z_Upper2_{i}_{s}_{t}")
-                    self.model.addConstr(self.at_bin_t[i, s, t] >= self.is_task_in_bin[i, s] + self.active_at_t[i, t] - 1, name=f"Z_Lower_{i}_{s}_{t}")
-                    # self.model.addConstr(self.at_bin_t[i, s, t] == self.is_task_in_bin[i, s] * self.active_at_t[i, t], name=f"Z_Linear_{i}_{s}_{t}")
+                self.resource_active_at_t[i, t] = self.model.addVar(vtype=GRB.CONTINUOUS, name=f"r_{i}_{t}")
+                self.model.addConstr(self.resource_active_at_t[i, t] == self.resources[i] * self.active_at_t[i, t], name=f"Bilinear_{i}_resource_at_{t}")
+        
+        
+        # # step 1: replace active_at_t[i, t] * is_task_in_bin[i, s] with at_bin_t[i, s, t]
+        # self.at_bin_t = {}
+        # for i in range(self.N):
+        #     for s in range(self.S):
+        #         # for t in self.critical_tick:
+        #         for t in range(self.NT):
+        #             self.at_bin_t[i, s, t] = self.model.addVar(vtype=GRB.BINARY, name=f"z_{i}_{s}_{t}")
+
+        # for s in range(self.S):
+        #     for t in range(self.NT):
+        #         for i in range(self.N):
+        #             #  线性化 at_bin_t[i, s, t] = is_task_in_bin[i, s] * active_at_t[i, t]
+        #             self.model.addConstr(self.at_bin_t[i, s, t] <= self.is_task_in_bin[i, s], name=f"Z_Upper1_{i}_{s}_{t}")
+        #             self.model.addConstr(self.at_bin_t[i, s, t] <= self.active_at_t[i, t], name=f"Z_Upper2_{i}_{s}_{t}")
+        #             self.model.addConstr(self.at_bin_t[i, s, t] >= self.is_task_in_bin[i, s] + self.active_at_t[i, t] - 1, name=f"Z_Lower_{i}_{s}_{t}")
+        #             # self.model.addConstr(self.at_bin_t[i, s, t] == self.is_task_in_bin[i, s] * self.active_at_t[i, t], name=f"Z_Linear_{i}_{s}_{t}")
                     
         # step 2: list allocated tasks at all time points
         # active_at_t: Binds to cross-cycle and non-cross-cycle logic via slack conditions.
@@ -475,18 +485,18 @@ class GurobiSemi2DClstMapping:
             name="Usage_Along_Ticks",
         )
 
-        # Bringing at_bin_t[i, s, t] into 
-        # max[sum(resources[i] * active_at_t[i, t] * is_task_in_bin[i, s] for i in range(self.N)) for t in self.critical_tick] <= partition_size[s]
+        # Bringing resource_active_at_t[i, t] into 
+        # max[sum(resources[i] * active_at_t[i, t] * is_task_in_bin[i, s] for i in range(self.N)) for t in self.critical_tick]
         # we can get:
-        # max[sum(resources[i] * at_bin_t[i, s, t] for i in range(self.N)) for t in self.critical_tick] <= partition_size[s]
+        # max[sum(resource_active_at_t[i, t] * is_task_in_bin[i, s] for i in range(self.N)) for t in self.critical_tick] 
         
-        # define usage_along_ticks[s, t] == sum(resources[i] * at_bin_t[i, s, t] for i in range(self.N)) for t in self.critical_tick
+        # define usage_along_ticks[s, t] == sum(resource_active_at_t[i, t] * is_task_in_bin[i, s] for i in range(self.N)) for t in self.critical_tick
         # define peak_bin_usage[s] == max(usage_along_ticks[s, t] for t in self.critical_tick)
         for s in range(self.S):
             for t in range(self.NT):
                 # 在时间 t 上分区 s 的资源需求
                 self.model.addConstr(
-                    self.usage_along_ticks[s, t] == quicksum(self.resources[i] * self.at_bin_t[i, s, t] for i in range(self.N)),
+                    self.usage_along_ticks[s, t] == quicksum(self.resource_active_at_t[i, t] * self.is_task_in_bin[i, s] for i in range(self.N)),
                     name=f"Usage_Along_Ticks_{s}_{t}",
                 )
             # Max usage in each partition
@@ -530,9 +540,29 @@ class GurobiSemi2DClstMapping:
         # self.model.setObjective(self.static_wasted_resources, GRB.MINIMIZE)
 
         # Define affinity score, to be maximized
-        # +1 if tasks connected by an edge (i, j) is assigned to the same partition
+        # spatial affinity: Ture if tasks are assigned to the same partition, False otherwise
+        # self.model.addConstrs((self.spatial_affinity[i, j] == quicksum(self.is_task_in_bin[i, s] * self.is_task_in_bin[j, s] for s in range(self.S)) for i, j in self.dependencies), name="def_spatial_affinity")
+        # for i, j in self.dependencies:
+        #     self.model.addGenConstrIndicator(self.temporal_affinity[i, j], 1, self.start_times[j] == self.end_times[i], name=f"def_temporal_affinity_{i}_{j}")
+        # for i, j in self.dependencies:
+            
+        #     self.model.addConstr(
+        #         self.start_times[j] - self.end_times[i] <= M * (1 - self.temporal_affinity[i, j]),
+        #         name=f"Temporal_Affinity_Upper_{i}_{j}"
+        #     )
+        #     self.model.addConstr(
+        #         self.end_times[i] - self.start_times[j] <= M * (1 - self.temporal_affinity[i, j]),
+        #         name=f"Temporal_Affinity_Lower_{i}_{j}"
+        #     )
+        
+        # self.model.addConstr(
+        #     self.affinity_score == quicksum(self.spatial_affinity[i, j] for i, j in self.dependencies)/len(self.dependencies),
+        #     name="def_affinity_score"
+        # )
         self.model.addConstr(
-        quicksum(quicksum(self.is_task_in_bin[i, s] * self.is_task_in_bin[j, s] for s in range(self.S)) for i, j in self.dependencies)/len(self.dependencies) == self.affinity_score,
+        quicksum(quicksum(self.is_task_in_bin[i, s] * self.is_task_in_bin[j, s] for s in range(self.S)) - 
+                 (self.start_times[j] + self.T*(1 - self.is_edge_cross_period[i, j]) - self.end_times[i])/self.T
+                 for i, j in self.dependencies)/len(self.dependencies) == self.affinity_score,
             name="affinity_score")
         self.model.setObjectiveN(-self.affinity_score, index=0, priority=2, name="max_affinity_score")
 
@@ -571,9 +601,17 @@ class GurobiSemi2DClstMapping:
     def solve(self):
         """求解模型"""
         try:
+            self.model.printStats()
+            # self.model.Params.Aggregate = 2 
+            # self.model.Params.Presolve = 2  
+            # self.model.Params.MIPFocus = 1  # 1: balanced, 2: feasibility, 3: optimality
+            p = self.model.presolve()
+            p.printStats()
+
             # Optimize model
             def mycallback(model, where):
                 if where == gp.GRB.Callback.MIPSOL:
+                    print("\n" + "=" * 30 + "\n")
                     obj = model.cbGet(gp.GRB.Callback.MIPSOL_OBJ)  # 获取目标函数值
                     partition_size = [model.cbGetSolution(model.getVarByName(f"Max_Usage[{s}]")) for s in range(S)]
                     print(f"当前最优解的目标函数值: {obj}")
@@ -596,7 +634,7 @@ class GurobiSemi2DClstMapping:
                         r_s_d_l[i] = (res, start, duration, exp_comp_time)
                         if self.verbose:
                             print(f"Task {i}: Start={start:.2f}, End={end:.2f}, Duration={duration:.2f}, Resources={res}, Partition={assigned_partition}")
-
+                    print("\n" + "=" * 30 + "\n") 
             self.model.optimize(mycallback)
 
             # build solution dic of (core, lat)
@@ -629,13 +667,13 @@ class GurobiSemi2DClstMapping:
             partition_size = [self.peak_bin_usage[s].x for s in range(self.S)]
             if self.verbose:
                 print(f"Partition Size: {partition_size}")
-                print(f"Utilization: {[self.utilization[s].x for s in range(self.S)]}")
                 print(f"Static Wasted Resources: {self.static_wasted_resources.x:.2f}")
                 print(f"Dynamic Wasted Resources: {self.dynamic_wasted_resources.x:.2f}")
-                print(f"Max/Min Utilization: {self.max_util.x:.2f}/{self.min_util.x:.2f}")
                 print(f"Affinity Score: {self.affinity_score.x}")
-                print(f"Speedup Rate: {sum(map(lambda x: self.speedup_rate[x].x, self.speedup_rate.keys()))/len(self.path_info):.2f}")
-                print(f"Spatial Redundancy Rate: {sum(map(lambda x: self.spatial_rda_ratio[x].x, self.spatial_rda_ratio.keys()))/self.S:.2f}")
+                # print(f"Utilization: {[self.utilization[s].x for s in range(self.S)]}")
+                # print(f"Max/Min Utilization: {self.max_util.x:.2f}/{self.min_util.x:.2f}")
+                # print(f"Speedup Rate: {sum(map(lambda x: self.speedup_rate[x].x, self.speedup_rate.keys()))/len(self.path_info):.2f}")
+                # print(f"Spatial Redundancy Rate: {sum(map(lambda x: self.spatial_rda_ratio[x].x, self.spatial_rda_ratio.keys()))/self.S:.2f}")
 
             return partition_size, sel, r_s_d_l
 
