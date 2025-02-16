@@ -75,6 +75,12 @@ class LRUCache:
         k = list(self.dict.keys())[-1]
         return k
     
+    def get_value(self, key: int) -> int:
+        if key in self.dict:
+            return self.dict[key]
+        else:
+            return []
+    
 # Your LRUCache object will be instantiated and called as such:
 # obj = LRUCache(capacity)
 # param_1 = obj.get(key)

@@ -8,7 +8,7 @@ from task.spec import Spec
 from model.message.msg_dispatcher import MsgDispatcher
 from model.message.data_pipe import DataPipe, TriggerPipe
 from sched.scheduling_table import SchedulingTableInt, load_bin_list
-from sched.scheduling_table import get_task_layout_compact, get_task_layout_sparse, get_task_layout_compact1bin, Bin_list_print
+from sched.bin_list_utils import get_task_layout_compact, get_task_layout_compact1bin, Bin_list_print
 from model.resource_agent import Resource_model_int
 from sched.scheduler_agent import Scheduler
 from sched.placement import core_mapping_1d
@@ -48,7 +48,7 @@ def main():
         "exec_t_comp_ratioB": args.exec_t_comp_ratioB,
         "barrier_en": not args.barrier_dis, 
         "forbid_miss": args.forbid_miss,
-        "progress_aware": args.progress_aware,
+        "progress_aware": True if args.test_case in two_stage_case_coll else False, # args.progress_aware,
         "allow_realloc": args.allow_realloc,
     }
 
@@ -340,6 +340,26 @@ def main():
             bin_list_save_path = bin_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
             routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
 
+        elif args.binpack_cfg["algorithm"] == "full":
+            from sched.global_sched import single_turn_solver
+            from task.task_cfg import task_graph_srcs, task_graph_sinks
+            pid2_bin_id, bin_size_list = single_turn_solver(
+                bin_list,
+                glb_p_list, affinity_cfg, event_iter_dict,
+                num_cores, args.quantum_check_en, quantumSize, 
+                sim_step, hyper_p, args.wsc_slack_ratio, args.exec_t_comp_ratioB,
+
+                scheduler_list, monitor_list,
+                msg_dispatcher,
+                a_data_pipe, w_data_pipe,
+
+                num_periods, binpack_cfg=args.binpack_cfg,
+                job_graph=physical_graph_nx, src_nodes=task_graph_srcs, end_nodes=task_graph_sinks, 
+                n_partition = args.num_bins if args.num_bins != -1 else 9999,
+                verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
+                warmup=True, drain=True, 
+                )
+
         else:
             raise NotImplementedError(f"binpack algorithm {args.binpack_cfg['algorithm']} is not implemented")
 
@@ -370,7 +390,7 @@ def main():
     elif args.test_all or args.test_case in two_stage_case_coll + other_case_coll:
 
         if args.test_all or args.test_case in two_stage_case_coll:
-            if args.binpack_cfg["core_size"] == "induced":
+            if "core_size" in args.binpack_cfg and args.binpack_cfg["core_size"] == "induced":
                 folder, files, match = get_core_num_from_trace_name(path_para_dict)
                 if not match:
                     print(f"!!! Warning: no bin_list file "+

@@ -12,7 +12,7 @@ from task.task_agent import TaskInt, TaskIntAttr
 from model.task_queue_agent import TaskQueue 
 from task.task_agent import ProcessInt
 from task.graph_scaling import build_node_relationship
-from sched.slack_estim import estim_release_dll_time, deduce_cfg2 
+from sched.slack_estim import estim_release_dll_time, deduce_cfg2, deduce_flops_typical, deduce_flops_max, deduce_equiv_core
 
 # 'ID', 'Task (chain) names', 'Flops on path (G)', 'Expected Latency (ms)', 'T release (ms)', 'Freq.', 'DDL (ms)', 'Cores/Req.', 
 # 'Throuput factor (Spat.)', 'Thread factor (S)', 'Min required cores', 'Timing_flag', 'Max required Cores', 'RDA./Req.', 'Resource Type', 'Pre-assigned', 'Priority'
@@ -236,31 +236,66 @@ def creat_logical_graph(srcs:Dict[str, List[str]], ops:Dict[str, List[str]], sin
             logical_graph_nx.add_edge(op_n, sink_n, type="data")
     return logical_graph_nx
 
+def init_timing_feature(logical_graph_nx, taskattr_dict, task_graph_sinks, sink_attr, jitter_t_comp_ratio, e2e_latency, hyper_p, init_jitter_offset):
+    # set the the ert and ddl of the sink nodes and the src nodes
+    for sink in task_graph_sinks:
+        e2e_constr = e2e_latency if sink_attr[sink] == "deadline" else hyper_p
+        logical_graph_nx.nodes[sink]["ert"] = e2e_constr
+        logical_graph_nx.nodes[sink]["ddl"] = e2e_constr
+        logical_graph_nx.nodes[sink]["exp_comp_t"] = 0
+        for pred in logical_graph_nx.pred[sink]:
+            # if the sink is it unique succ, then set the ddl of the pred to the sink's ddl
+            if len(logical_graph_nx.succ[pred]) == 1:
+                logical_graph_nx.nodes[pred]["ddl"] = e2e_constr
+    for src in task_graph_srcs: 
+        jitter_t_comp = elim_nume_error(1/src_attr[src]*jitter_t_comp_ratio) if init_jitter_offset else 0
+        logical_graph_nx.nodes[src]["ert"] = 0
+        logical_graph_nx.nodes[src]["ddl"] = jitter_t_comp 
+        logical_graph_nx.nodes[src]["exp_comp_t"] = jitter_t_comp 
+        logical_graph_nx.nodes[src]['jitter'] = jitter_t_comp
+
+    # propagate the chain_criticality to all nodes from the sink nodes
+    # init all node attr chain_criticality as True
+    for node in logical_graph_nx:
+        logical_graph_nx.nodes[node]["chain_criticality"] = True
+        # TODO: double check
+        # if node in taskattr_dict:
+        #     taskattr_dict[node].chain_criticality = 'hard'
+    for sink in task_graph_sinks:
+        # sort if sink_attr[sink] != "deadline"
+        if sink_attr[sink] != "deadline":
+            logical_graph_nx.nodes[sink]["chain_criticality"] = False
+            for node in nx.ancestors(logical_graph_nx, sink):
+                logical_graph_nx.nodes[node]["chain_criticality"] = False
+                if node in taskattr_dict:
+                    taskattr_dict[node].chain_criticality = 'soft'
+
 def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filename:str="profiling/profiling.csv", 
-                         taskattr_dict:Dict[str, TaskIntAttr]=None):
+                         taskattr_dict:Union[Dict[str, TaskIntAttr], None]=None, mode="manual"):
     """
     Physical Graph:
         A physical graph is the result of translating a Logical Graph for execution in a distributed runtime. 
         The nodes are Tasks and the edges indicate input/output-relationships or partitions of data streams or data sets.
+        mode: "manual" or "full"
     """
+    assert mode in ["manual", "full"]
     physical_graph_nx = nx.DiGraph()
-
     node_parall_dict = {}
     if taskattr_dict is not None:
         for node_n, node_attr in taskattr_dict.items():
             node_attr:TaskIntAttr
-            factor = node_attr.freq_division_factor
-            copy_n = node_attr.thread_scaling_factor
             freq = int(node_attr.freq/f_gcd)
+            factor = node_attr.freq_division_factor if mode == "manual" else freq
+            copy_n = node_attr.thread_scaling_factor
             node_parall_dict[node_n] = [copy_n, factor, freq]
     else:
         # extract the parallelism of each node
         df = pd.read_csv(profiling_filename, sep=",", index_col=0)
         for node_n in df.index:
             node_attr = df.loc[node_n].to_dict()
-            factor = node_attr["Throuput factor (Spat.)"]
-            copy_n = node_attr['Thread factor (Spat.)']
             freq = int(node_attr["Freq."]/f_gcd)
+            factor = node_attr["Throuput factor (Spat.)"] if mode == "manual" else freq
+            copy_n = node_attr['Thread factor (Spat.)']
             node_parall_dict[node_n] = [copy_n, factor, freq]
 
 
@@ -576,7 +611,6 @@ def load_taskint(profiling_filename:str="profiling/profiling.csv",
                 task.thread_scaling_factor = task_attr["Thread factor (Spat.)"]
                 task.freq_division_factor = task_attr["Throuput factor (Spat.)"] 
                 task.var_factor = task_attr["Var. factor (Tmp.)"] 
-                task.required_resource_size = task_attr['Cores/Req.']
                 if freq_div_en:
                     division_factor = task_attr["Throuput factor (Spat.)"]
                     freq_div_mode = 'interleave' if task_attr["Freq."]/f_gcd <= task_attr["Throuput factor (Spat.)"] else 'repeat'
@@ -615,8 +649,10 @@ def load_taskint(profiling_filename:str="profiling/profiling.csv",
     return task_dict, f_gcd
 
 
-def load_taskattrib(profiling_filename:str="profiling/profiling.csv", verbose: bool = False) -> Dict[str, TaskIntAttr]:
-
+def load_taskattrib(profiling_filename:str="profiling/profiling.csv",
+                    mode:str = "manual",
+                    verbose: bool = False) -> Dict[str, TaskIntAttr]:
+    assert mode in ["manual", "full"] 
     df = pd.read_csv(profiling_filename, sep=",", index_col=0) 
     if verbose:
         print(df)
@@ -649,7 +685,6 @@ def load_taskattrib(profiling_filename:str="profiling/profiling.csv", verbose: b
         RDA_size=task_attr['RDA./Req.']
         main_size=task_attr['Cores/Req.']
         exp_comp_t=task_attr['Expected Latency (ms)']/1000
-        required_resource_size = task_attr['Cores/Req.']
         i_offset=0
         task_flag=task_attr["Resource Type"]
         pre_assigned_resource_flag=task_attr["Pre-assigned"]>0
@@ -667,7 +702,7 @@ def load_taskattrib(profiling_filename:str="profiling/profiling.csv", verbose: b
         trigger_mode=task_attr["Trigger_mode"] # event-triggered or periodic
         freq = task_attr["Freq."]
         thread_scaling_factor = task_attr["Thread factor (Spat.)"]
-        freq_division_factor = task_attr["Throuput factor (Spat.)"] 
+        freq_division_factor = task_attr["Throuput factor (Spat.)"] if mode=="manual" else int(freq/f_gcd)
         var_factor = task_attr["Var. factor (Tmp.)"] 
         
         task = TaskIntAttr(name=task_name, 
@@ -695,6 +730,12 @@ def load_taskattrib(profiling_filename:str="profiling/profiling.csv", verbose: b
                         task_flag=task_flag, # unused
                         pre_assigned_resource_flag=pre_assigned_resource_flag, # unused
                         )
+        flops_typical = deduce_flops_typical(task.flops, task.thread_scaling_factor, task.freq, f_gcd)
+        task.flops_typical = flops_typical
+        task.flops_max = deduce_flops_max(flops_typical, task.var_factor)
+        equiv_core = deduce_equiv_core(flops_typical, 1/f_gcd)
+        task.equiv_core = equiv_core
+
         # print(str(task))
         task_id += 1
         task_dict.update({task.name: task})
@@ -742,16 +783,11 @@ def gen_taskint_from_cfg(taskattr_dict:Dict[str, TaskIntAttr], f_gcd: int,
                 task = TaskInt(
                     task_name=task_attr.name + f"_{thread_j}", 
                     task_id=task_id, timing_flag=task_attr.timing_flag,
-                    ERT=task_attr.ERT, 
-                    ddl=task_attr.ddl, 
                     period=T, 
-                    exp_comp_t=task_attr.exp_comp_t, 
                     i_offset=phase, jitter_max=0,
                     flops=task_attr.flops, 
                     task_flag=task_attr.task_flag, 
                     pre_assigned_resource_flag=task_attr.pre_assigned_resource_flag, 
-                    RDA_size=task_attr.rda_size, 
-                    main_size=task_attr.main_size, 
                     op_io_time=task_attr.io_time, op_cpu_time=flops_on_path, 
                     seq_io_time=task_attr.io_time, seq_cpu_time=flops_on_path,
                     criti_flag=task_attr.criticality, 
@@ -760,14 +796,17 @@ def gen_taskint_from_cfg(taskattr_dict:Dict[str, TaskIntAttr], f_gcd: int,
                     trigger_mode=task_attr.trigger_mode, 
                     parallel_cfg={"max":task_attr.core_max, "min":task_attr.core_min, "list":task_attr.core_list, "mode":task_attr.parallel_mode},
                     parallel_cfg_compile={"max":task_attr.core_max_compile, "min":task_attr.core_min_compile, "list":task_attr.core_list_compile},
-                )
+                    ERT=getattr(task_attr, "ERT", None), 
+                    ddl=getattr(task_attr, "ddl", None), 
+                    exp_comp_t=getattr(task_attr, "exp_comp_t", None), 
+                    RDA_size=getattr(task_attr, "rda_size", None), 
+                    main_size=getattr(task_attr, "main_size", None),
+                    )
                 task.freq = task_attr.freq
                 task.thread_scaling_factor = task_attr.thread_scaling_factor
-                task.required_resource_size = task_attr.main_size
 
                 task.freq_division_factor = task_attr.freq_division_factor
                 task.var_factor = task_attr.var_factor
-                task.required_resource_size = task_attr.main_size
 
                 division_factor = task_attr.freq_division_factor
                 freq_div_mode = div_mod_fn(f_gcd, task_attr)
@@ -803,7 +842,8 @@ def gen_taskint_from_cfg(taskattr_dict:Dict[str, TaskIntAttr], f_gcd: int,
     return task_dict
 
 def gen_workloads(args):
-    taskattr_dict, f_gcd = load_taskattrib(args.profiling_filename, verbose=args.verbose) 
+    unfold_mode = "manual" if args.binpack_cfg["algorithm"] in init_packing_algo_required else "full"
+    taskattr_dict, f_gcd = load_taskattrib(args.profiling_filename, unfold_mode, verbose=args.verbose) 
     hyper_p = 1/f_gcd
     assert args.aux_scale_factor >= 0
     if args.aux_scale_factor != 1:
@@ -814,21 +854,24 @@ def gen_workloads(args):
 
     print(f"Ops per second of Workload: {sum([(v.flops*v.var_factor*v.thread_scaling_factor*v.freq) for n,v in taskattr_dict.items()]):.2f} T")
     logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
+    init_timing_feature(logical_graph_nx, taskattr_dict, task_graph_sinks, sink_attr, args.jitter_t_comp_ratio, args.e2e_latency, hyper_p, not args.binpack_cfg["slack_sharing"])
 
     if not args.binpack_cfg["slack_sharing"]:
         algorithm = 'gurobi'
     else:
         algorithm = 'avg'
-    deduce_cfg2(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, task_graph_srcs, 
-                task_graph_sinks, sink_attr, src_attr, args.slack_threshold, args.e2e_latency, 
-                args.exec_t_comp_ratioA, args.jitter_t_comp_ratio, 
-                args.wsc_slack_ratio, algorithm, args.timestepxus, 
-                args.var_estimation
-                )
+    if args.binpack_cfg["algorithm"] in init_packing_algo_required:
+        deduce_cfg2(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, task_graph_srcs, 
+                    task_graph_sinks, sink_attr, src_attr, args.slack_threshold, args.e2e_latency, 
+                    args.exec_t_comp_ratioA, args.jitter_t_comp_ratio, 
+                    args.wsc_slack_ratio, algorithm, args.timestepxus, 
+                    args.var_estimation
+                    )
 
+    physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), taskattr_dict=taskattr_dict, mode=unfold_mode)
     glb_n_task_dict = gen_taskint_from_cfg(taskattr_dict, f_gcd)
-    physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), taskattr_dict=taskattr_dict)
     init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
+
     return hyper_p,glb_n_task_dict,physical_graph_nx
 
 

@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from model.buffer import Data
 
 from dataclasses import dataclass, field, InitVar, asdict
+import bisect
 import copy
 import numpy as np
 import math
@@ -41,18 +42,26 @@ criticality = {
     "hard": 1,
 }
 # lifetime of the task
-task_lifetime = {
-    "terminated": 0, # terminated
-    "suspend": 1, # inactive, wait for activation
-    # "runnable": 2, # ready to be executed
-    "active": 2, # active, but not ready to be executed
-    "running": 3,
-    "throttled": 4, # ready by has no budget
-    "wait": 5, # waiting for I/O
-    "preempted": 6, # preempted by other tasks
-    "ready": 7, # ready to be executed
-    
-}
+# task_lifetime = {
+#     "terminated": 0, # terminated
+#     "suspend": 1, # inactive, wait for activation
+#     "active": 2, # active, but not ready to be executed
+#     "running": 3,
+#     "throttled": 4, # ready by has no budget
+#     "wait": 5, # waiting for I/O
+#     "preempted": 6, # preempted by other tasks
+#     "ready": 7, # ready to be executed
+# }
+from enum import Enum
+class TaskState(Enum):
+    terminated = 0
+    suspend = 1
+    active = 2
+    running = 3
+    throttled = 4
+    wait = 5
+    preempted = 6
+    ready = 7
 
 class ProcessBase(object): 
     def __init__(self, task, release_t, deadline_abs, pid):
@@ -64,9 +73,15 @@ class ProcessBase(object):
         self.trigger_mode = task.trigger_mode # event-triggered or periodic
         self.event_triggers = []  # list to hold event triggers
 
+
+        # =============== 2. runtime state but schedule related ===============
+        self.exp_comp_t = task.exp_comp_t # total cpu time, ++ when cpu burst
+        self.release_time = release_t     # recored when the process is released
+        self.deadline = deadline_abs      # recored when the process is generated  
+
         # =============== 2. runtime state ===============
         self.pid = pid # process id
-        self.state = "terminated" # task state: running, terminated, suspend, runnable, throttled
+        self._state = "terminated" # task state: running, terminated, suspend, runnable, throttled
         self.prio = task.prio      # priority
 
         self.cpu_time = task.cpu_time     # execution time per I/O burst
@@ -75,12 +90,10 @@ class ProcessBase(object):
         self.totcpu = task.totcpu         # total cpu time, ++ when cpu burst
 
         self.i_offset = task.i_offset     # offset of the trigger time
-        self.exp_comp_t = task.exp_comp_t # total cpu time, ++ when cpu burst
         self.cbs_en = task.cbs_en         # whether the task has a constant bandwidth, i.e., applys resource reservation algorithm
 
+        
         self.released = False
-        self.release_time = release_t     # recored when the process is released
-        self.deadline = deadline_abs      # recored when the process is generated  
         self.remburst = 0                 # Record the remaining cpu time for current I/O op, -- when cpu burst, set when moved from waiting to running
         self.rem_flop_budget = {}          # the predefined budget of execution time, -- when cpu burst excceds the budget, moved from running to throttled, set when process is activated
 
@@ -110,6 +123,11 @@ class ProcessBase(object):
         self.parent_pid = None
         self.var_scale_factor = 1
         self.load_var = None
+
+    def update_from_sched_task(self, task):
+        self.exp_comp_t = task.exp_comp_t
+        self.deadline = elim_nume_error(task.get_deadline_time())
+        self.release_time = elim_nume_error(task.get_release_time())
 
     def reset_state_vars(self,):
         self.released = False
@@ -149,10 +167,35 @@ class ProcessBase(object):
         chain_deadline = event_time + e2e_latency 
         return chain_deadline
 
-    def set_state(self, state):
-        assert state in task_lifetime.keys()
-        self.state = state
-    
+    @property
+    def state(self):
+        return self._state
+
+    @state.setter
+    def state(self, new_state):
+        if isinstance(new_state, TaskState):
+            self._state = new_state
+        else:
+            raise ValueError("New state must be an instance of TaskState")
+
+    def set_state(self, state_name):
+        """
+        Sets the state using the name of the TaskState member.
+        """
+        if state_name in TaskState.__members__:
+            self.state = TaskState[state_name]
+        else:
+            raise ValueError(f"Invalid state: {state_name}")
+
+    def get_state_name(self):
+        """
+        Returns the name of the current state as a string.
+        """
+        if self._state is not None:
+            return self._state.name
+        else:
+            return None
+
     def check_depends(self, event_cache:EventCache=None, 
                       trigger_cache:TriggerCache=None, event_triggers:List[Tuple]=None):
         """
@@ -415,6 +458,7 @@ class ProcessBase(object):
 
     def release_util(self, curr_t, active_list, verbose=True):
         active_list.append(self)
+        self.set_state("active")
         # _p.totcpu = _p.task.totcpu if _p.load_var is None else _p.task.totcpu * _p.load_var
         if self.load_var is None or self.load_var >= 1:
             self.totcpu = self.task.totcpu
@@ -422,48 +466,54 @@ class ProcessBase(object):
             self.totcpu = self.task.totcpu * self.load_var
         self.release_time = curr_t
         self.released = True
+        # a task is initialized in multiple queues,
+        # we ensure that the remburst is only released once
         if self.remburst == 0:
             self.remburst += self.totcpu
         if verbose:
             _str = f"		TASK {self.task.id:d}:{self.task.name:s}({self.pid:d}) is activated @ {curr_t:.6f}/{self.get_timestamp():.6f}!!"
             print(_str)
 
-    def throttle_util(_p, running_queue, ready_queue, throttle_list, sched,
-                      curr_t=None, verbose=True):
+    def throttle_util(_p, throttle_list, curr_t=None, 
+                      mode="start", 
+                      
+                      verbose=True):
+        assert mode in ["start", "pend", "migrate"]
         if verbose:
             assert curr_t is not None
             # warnings.warn("		TASK {:d}:{:s}({:d}) THROTTLED!!".format(_p.task.id, _p.task.name, _p.pid))
             print("		TASK {:d}:{:s}({:d}) is THROTTLED @ {:.6f} !!".format(_p.task.id, _p.task.name, _p.pid, curr_t))
         # update statistics 
-        _p.task.throttle_count += 1
+        throttle_list.append(_p)
+        _p.set_state("throttled")
 
         # suppose kill strategy
         # current tile should be reloaded and re-executed
         # other wise, modify the io time
         _p.ready = False
-        _p.ready_time = -1
+        _p.task.throttle_count += 1
         _p.currentburst = 0
         # _p.burst = 0
-
-        _p.waitTime = 0
         # _p.cumulative_executed_time = 0
 
-        if _p in running_queue.queue:
-            sched.res_release(_p.pid)
-            # budget_recoder.pop(_p.pid)
-            running_queue.remove(_p)
-        elif _p in ready_queue.queue:
-            ready_queue.remove(_p)
-        else:
-            raise ValueError("Task is not in the running queue or ready queue")
-        throttle_list.append(_p)
+        if mode == "start":
+            pass
+        elif mode == "pend":
+            _p.ready_time = -1
+            _p.waitTime = 0
+        elif mode == "migrate":
+            _p.migration_count = 0
+
 
 class ProcessInt(ProcessBase):
     def __init__(self, task:TaskBase, release_t, deadline_abs, pid):
         super().__init__(task, release_t, deadline_abs, pid)
         # task_id -> (main_num, RDA_num)
+        self.task:TaskInt
         self.allocated_resource:OrderedDict[int, Tuple[int, int]] = OrderedDict()
+        # runtime state but schedule related
         self.required_resource_size:int = task.required_resource_size
+
         self.input_ready:bool = False
         self.output_ready:bool = False
         self.weight_ready:bool = False
@@ -474,6 +524,7 @@ class ProcessInt(ProcessBase):
         self.parallel_mode = task.parallel_mode
 
         self.is_starving = False
+        self.expexted_rsc_size = -1
 
     def reset_state_vars(self):
         super().reset_state_vars()
@@ -483,6 +534,10 @@ class ProcessInt(ProcessBase):
         self.output_ready = False
         self.weight_ready = False
         self.is_starving = False
+    
+    def update_from_sched_task(self, task:TaskInt):
+        super().update_from_sched_task(task)
+        self.required_resource_size = self.task.required_resource_size
         
 
     def rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE, time_slot_s=None, time_slot_e=None, mode='rt-wsc', over_provision_rate=0., max_size=float("inf")):
@@ -514,7 +569,7 @@ class ProcessInt(ProcessBase):
         time_slot_e = int(_p.deadline//timestep)
         return time_slot_s,time_slot_e
 
-    def get_available_cfg(self, req_rsc_size:int, curr_aval_rsc:int=None, show_warnings=False): 
+    def get_available_cfg(self, req_rsc_size:int, curr_aval_rsc:Union[int, None]=None, show_warnings=False): 
         applied_constraint = "none"         
         # apply constraints based on parallel_mode
         if self.parallel_mode in ["upb","range"]:
@@ -539,6 +594,12 @@ class ProcessInt(ProcessBase):
                     return 0, "N/A"
             else:
                 core_list = self.core_list
+            if req_rsc_size > max(core_list):
+                req_rsc_size = max(core_list)
+            else:
+                # return i, s.t., all e in a[i:] have e >= x
+                idx = bisect.bisect_left(sorted(core_list), req_rsc_size)
+                req_rsc_size = core_list[idx] 
             req_rsc_size = min(core_list, key=lambda x:abs(x-req_rsc_size))
             applied_constraint = "list"
         
@@ -548,7 +609,7 @@ class ProcessInt(ProcessBase):
             if req_rsc_size > curr_aval_rsc:
                 if show_warnings: 
                     warnings.warn(f"TASK {self.task.id:d}:{self.task.name:s}({self.pid:d}) is starving {req_rsc_size-curr_aval_rsc:d} cores")
-                _p.is_starving = True
+                applied_constraint = "partial"
             req_rsc_size = min(req_rsc_size, curr_aval_rsc)
 
         return req_rsc_size, applied_constraint
@@ -646,7 +707,8 @@ class TaskIntAttr(TaskAttr):
 
 class TaskBase(object):
     def __init__(self, task_name:str, task_id:int, timing_flag:str,
-                 ERT:int, ddl:int, period:int, exp_comp_t:int, i_offset:int, jitter_max:int,
+                 period:int, i_offset:int, jitter_max:int,
+                 ERT:Union[int, float, None]=None, ddl:Union[int, float, None]=None, exp_comp_t:Union[int, float, None]=None,
                  op_io_time:int=0, op_cpu_time:int=0, seq_io_time:int=0, seq_cpu_time:int=0, priority:int=0, 
                  criti_flag:str="soft", cbs_en:bool=False, 
                  trigger_mode:bool=False, 
@@ -682,12 +744,8 @@ class TaskBase(object):
 
         self.jitter_max = jitter_max # max jitter
 
-        # deadline in each hyper-period (task that have multiple sub-periods in a hyper-period)
+        self.update_sched_timing(ERT, ddl, exp_comp_t)
         # e.g. the task with 30hz but be divided into 3 tasks with 10hz and 1/30s offset
-        self.ERT = ERT # relative earliest release time in each sub-period
-        self.ddl = ddl # relative deadline in each sub-period
-        self.exp_comp_t = exp_comp_t
-
         self.i_offset = i_offset # offset of the sub-period
         self.period = period
         self.aval_sub_period = []
@@ -703,8 +761,8 @@ class TaskBase(object):
         # self.pid = 0 # process id
         self.prio = priority      # priority
 
-        self.release_time = self.ERT + self.i_offset # recored when the process is generated
-        self.deadline = self.release_time + self.ddl # recored when the process is generated  
+        # self.release_time = self.ERT + self.i_offset # recored when the process is generated
+        # self.deadline = self.release_time + self.ddl # recored when the process is generated  
         self.cpu_time = op_cpu_time                  # execution time per I/O burst
         self.io_time = op_io_time                    # I/O time
         self.totcpu = seq_cpu_time                   # total cpu time
@@ -738,6 +796,43 @@ class TaskBase(object):
         # self.missed_deadline_time = 0
         # self.turnaround_time = 0
         # self.jitter = 0
+
+    def update_sched_timing(self, ERT, ddl, exp_comp_t):
+        # deadline and earlist release time without considering the offset of its sub-period
+        self._ERT = ERT # relative earliest release time in each sub-period
+        self._ddl = ddl # relative deadline in each sub-period
+        self._exp_comp_t = exp_comp_t
+    
+    # getter and setter for ERT, ddl, exp_comp_t
+    @property
+    def ERT(self):
+        if self._ERT is None:
+            raise ValueError("ERT is not set yet")
+        return self._ERT
+
+    @ERT.setter
+    def ERT(self, value):
+        self._ERT = value
+
+    @property
+    def ddl(self):
+        if self._ddl is None:
+            raise ValueError("ddl is not set yet")
+        return self._ddl
+
+    @ddl.setter
+    def ddl(self, value):
+        self._ddl = value
+
+    @property
+    def exp_comp_t(self):
+        if self._exp_comp_t is None:
+            raise ValueError("exp_comp_t is not set yet")
+        return self._exp_comp_t
+
+    @exp_comp_t.setter
+    def exp_comp_t(self, value):
+        self._exp_comp_t = value
 
     def make_process(self, release_t, deadline_abs, pid):
         """
@@ -949,8 +1044,10 @@ class TaskBase(object):
 class TaskInt(TaskBase): 
     def __init__(
                     self, task_name:str, task_id:int, timing_flag:str,
-                    ERT:Union[int, float], ddl:Union[int, float], period:Union[int, float], 
-                    exp_comp_t:Union[int, float], i_offset:Union[int, float], jitter_max:Union[int, float]=0,
+                    # ERT:Union[int, float], ddl:Union[int, float], 
+                    # exp_comp_t:Union[int, float],                     
+                    period:Union[int, float], 
+                    i_offset:Union[int, float], jitter_max:Union[int, float]=0,
                     flops:Union[int, float]=0, task_flag:str="moveable",
                     pre_assigned_resource_flag:bool=False, 
                     op_io_time:int=0, op_cpu_time:int=0, seq_io_time:int=0, seq_cpu_time:int=0, priority:int=0, 
@@ -962,13 +1059,14 @@ class TaskInt(TaskBase):
                 ) -> None:
         super().__init__(
                             task_name=task_name, task_id=task_id, timing_flag=timing_flag,
-                            ERT=ERT, ddl=ddl, period=period, exp_comp_t=exp_comp_t, i_offset=i_offset, jitter_max=jitter_max, 
+                            period=period, i_offset=i_offset, jitter_max=jitter_max, 
                             op_cpu_time=op_cpu_time, op_io_time=op_io_time, seq_io_time=seq_io_time,
                             seq_cpu_time=seq_cpu_time, priority=priority, 
                             criti_flag=criti_flag, cbs_en=cbs_en,
                             trigger_mode=trigger_mode, parallel_cfg=parallel_cfg,
                             parallel_cfg_compile=parallel_cfg_compile,
                             chain_criti_flag=chain_criti_flag,
+                            ERT=kwargs.get("ERT", None), ddl=kwargs.get("ddl", None), exp_comp_t=kwargs.get("exp_comp_t", None),
                         )
         
         # =============== 1. task properties ===============
@@ -981,28 +1079,20 @@ class TaskInt(TaskBase):
         
         # =============== 2. Node attribution ===============
         self.pre_assigned_resource_flag = pre_assigned_resource_flag
-
-        # resource mapping
-        # if pre_assigned_resource_flag:
-        #     assert "main_size" in kwargs.keys(), "main_size is not provided"
-        #     assert "RDA_size" in kwargs.keys(), "RDA_size is not provided"
-        #     src_type:DDL_reservation = DDL_reservation if timing_flag == "deadline" else RT_reservation
-        #     self.pre_assigned_resource = src_type(kwargs["main_size"], kwargs["RDA_size"])
-        # else:
-        #     self.pre_assigned_resource:DDL_reservation = dummy_reservation(0, 0)
-
-        assert "main_size" in kwargs.keys(), "main_size is not provided"
-        assert "RDA_size" in kwargs.keys(), "RDA_size is not provided"
-        if kwargs["RDA_size"]>0:
-            self.pre_assigned_resource = DDL_reservation(kwargs["main_size"], kwargs["RDA_size"])
-        else:
-            self.pre_assigned_resource = RT_reservation(kwargs["main_size"], kwargs["RDA_size"])
         
         # =============== 3. runtime attribute ===============
         # L1 resource allocation
         # task_id -> (main_num, RDA_num)
         self.allocated_resource:OrderedDict[int, Tuple[int, int]] = OrderedDict()
-        self.required_resource_size:int = 0
+        self.update_sched_size(main_size=kwargs.get("main_size", None), RDA_size=kwargs.get("RDA_size", None))
+
+    def update_sched_size(self, main_size=None, RDA_size=None):
+        if main_size is not None and RDA_size is not None:
+            if RDA_size > 0:
+                self.pre_assigned_resource = DDL_reservation(main_size, RDA_size)
+            else:
+                self.pre_assigned_resource = RT_reservation(main_size, RDA_size)
+            self.required_resource_size:int = main_size
 
     # ======== vanilla properties setter and getter ========
     def set_task_name(self, task_name):

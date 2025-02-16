@@ -8,5 +8,6 @@
     "reservation_policy": "manual",
     "slack_sharing": true,
     "algorithm": "reside",
-    "preempt_en": true
+    "preempt_en": true,
+    "core_size": "specified"
 }

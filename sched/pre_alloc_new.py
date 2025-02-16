@@ -12,13 +12,13 @@ from task.task_agent import ProcessInt
 from task.task_agent import TaskInt
 from model.lru import LRUCache
 from model.task_queue_agent import TaskQueue 
-from sched.scheduling_table import SchedulingTableInt
+from sched.scheduling_table import SchedulingTableInt, init_event
 from sched.sort_function import get_process_sort
 from sched.bin_ops import sort_bin_list_EAT, sort_bin_list_by_barycenter, index_preeempt_num_cores_by_interval
 from sched.monitor_agent import get_rsc_2b_released, get_target_bin_id
 def glb_alloc_new2(process_dict, quantumSize, timestep, 
                     ready_queue, running_queue, rsc_recoder, 
-                    rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, 
+                    rsc_recoder_his:Dict[int, LRUCache], issue_list, preempt_list, iter_next_bin_obj, 
                     bin_list:TaskQueue, bin_name_list, n_slot, curr_t, 
                     binpack_cfg:Dict,
                     show_warnings=True, 
@@ -79,7 +79,7 @@ def glb_alloc_new2(process_dict, quantumSize, timestep,
             # request parameters
             _p, n_slot,
             # sched components
-            process_dict, rsc_recoder, rsc_recoder_his,
+            process_dict, rsc_recoder, rsc_recoder_his, 
             iter_next_bin_obj, bin_list, bin_name_list,
             # sched parameters
             timestep, quantumSize,
@@ -415,7 +415,7 @@ def check_and_preemt_alloc(_p:ProcessInt, n_slot:int, bin:SchedulingTableInt,
     free_area = sum(w*h for x,y,w,h in free_spaces)
 
     # required (R)
-    expected_req_rsc_size = req_rsc_size * expected_slot_num
+    _p.expexted_rsc_size = expected_req_rsc_size = req_rsc_size * expected_slot_num
     remburst_req_rsc_size = _p.remburst / timestep / FLOPS_PER_CORE
     # policy: block, asap, all, aeap, N/A
     policy = 'N/A'
@@ -506,7 +506,23 @@ def check_and_preemt_alloc(_p:ProcessInt, n_slot:int, bin:SchedulingTableInt,
         alloc_len = [alloc_len[i] for i in idx]
 
     if policy != 'N/A':
+        # set scheduling table
         bin.allocate(_p.pid, alloc_s, alloc_size, alloc_len, verbose=DEBUG)
+                
+        # # set flop and core
+        # if len(alloc_s) == 1 and alloc_size[0] * alloc_len[0] >= expected_req_rsc_size:
+        #     chunk_flops = _p.remburst 
+        #     bin.flops_list.append((alloc_size[0], _p.pid, chunk_flops))
+        # else: 
+        #     rem_flops = _p.remburst
+        #     for (s, l, size) in zip(alloc_s, alloc_len, alloc_size):
+        #         chunk_exp_req_rsc_size = (_p.remburst * (size*l)/expected_req_rsc_size)/(timestep*FLOPS_PER_CORE) 
+        #         chunk_flops = math.ceil(chunk_exp_req_rsc_size) * timestep * FLOPS_PER_CORE 
+        #         chunk_flops = min(rem_flops, chunk_flops)
+        #         rem_flops -= chunk_flops
+        #         bin.flops_list.append((size, _p.pid, chunk_flops))
+        #         if rem_flops < 0:
+        #             break
         total_alloc_unit = np.sum(np.array(alloc_size) * np.array(alloc_len))
         total_FLOPS_alloc = total_alloc_unit * timestep * FLOPS_PER_CORE
         print(f"task {_p.task.id}:{_p.task.name}({_p.pid}) is allocated successfully in the bin {bin.id} (policy: {policy})")

@@ -347,9 +347,9 @@ def get_chains(task_graph:DiGraph, start_nodes, end_nodes, flops_dict):
         slack = task_graph.nodes[chain[-1]]['ddl'] - task_graph.nodes[chain[0]]['jitter']
         tot_ops = sum([flops_dict[node] for node in chain[1:-1]])
         if task_graph.nodes[chain[-1]]["chain_criticality"]:
-            ddl_chains.append((chain[1:-1], tot_ops, slack))
+            ddl_chains.append((chain[1:-1], tot_ops, elim_nume_error(slack)))
         else:
-            rt_chains.append((chain[1:-1], tot_ops, slack))
+            rt_chains.append((chain[1:-1], tot_ops, elim_nume_error(slack)))
     rt_chains.sort(key=lambda x: (-x[1]/x[2], *x[0][-1].split("_")[-2:]))
     ddl_chains.sort(key=lambda x: (-x[1]/x[2], *x[0][-1].split("_")[-2:]))
     return rt_chains, ddl_chains
@@ -508,19 +508,15 @@ def deduce_task_attrib(taskattr: TaskIntAttr,
                         exec_t_comp_ratioA: float,
                         wsc_slack_ratio: float,):
 
+    equiv_core = taskattr.equiv_core
     rda_size = min(deduce_RDA(req_rsc_size, exec_t_comp_ratioA, wsc_slack_ratio), taskattr.core_max_compile-req_rsc_size)
+    taskattr.num_exec = deduce_num_exec(taskattr.freq, f_gcd, taskattr.thread_scaling_factor)
     taskattr.rda_size = rda_size
     taskattr.main_size = req_rsc_size
-    taskattr.num_exec = deduce_num_exec(taskattr.freq, f_gcd, taskattr.thread_scaling_factor)
     taskattr.no_stall_latency = deduce_no_stall_latency(req_rsc_size, taskattr.flops)
     min_tot_rsc = deduce_min_tot_rsc(req_rsc_size, taskattr.thread_scaling_factor, taskattr.freq_division_factor)
     taskattr.min_tot_rsc = min_tot_rsc
     taskattr.max_tot_rsc = deduce_max_tot_rsc(rda_size, req_rsc_size, taskattr.thread_scaling_factor, taskattr.freq_division_factor, taskattr.var_factor)
-    flops_typical = deduce_flops_typical(taskattr.flops, taskattr.thread_scaling_factor, taskattr.freq, f_gcd)
-    taskattr.flops_typical = flops_typical
-    taskattr.flops_max = deduce_flops_max(flops_typical, taskattr.var_factor)
-    equiv_core = deduce_equiv_core(flops_typical, hyper_p)
-    taskattr.equiv_core = equiv_core
     taskattr.util = deduce_util(equiv_core, min_tot_rsc)
 
 def deduce_cfg2(taskattr_dict, f_gcd, hyper_p, 
@@ -530,18 +526,6 @@ def deduce_cfg2(taskattr_dict, f_gcd, hyper_p,
                  var_estimation={},
                  verbose=False, plot=False):
 
-    # set the the ert and ddl of the sink nodes and the src nodes
-    for sink in task_graph_sinks:
-        e2e_constr = e2e_latency if sink_attr[sink] == "deadline" else hyper_p
-        logical_graph_nx.nodes[sink]["ert"] = e2e_constr
-        logical_graph_nx.nodes[sink]["ddl"] = e2e_constr
-        logical_graph_nx.nodes[sink]["exp_comp_t"] = 0
-    for src in task_graph_srcs: 
-        jitter_t_comp = elim_nume_error(1/src_attr[src]*jitter_t_comp_ratio) if algorithm == 'gurobi' else 0
-        logical_graph_nx.nodes[src]["ert"] = 0
-        logical_graph_nx.nodes[src]["ddl"] = jitter_t_comp 
-        logical_graph_nx.nodes[src]["exp_comp_t"] = jitter_t_comp 
-        logical_graph_nx.nodes[src]['jitter'] = jitter_t_comp
     # set abs compensation and rel compensation
     # use abs comp for coalecing and use rel comp for ours
     # exec_t_comp_abs: the estimation for slot grid displacement
@@ -605,21 +589,6 @@ def deduce_cfg2(taskattr_dict, f_gcd, hyper_p,
         logical_graph_nx.nodes[node]["ddl"] = ddl[node]
         logical_graph_nx.nodes[node]["exp_comp_t"] = slack_estm
     
-    # propagate the chain_criticality to all nodes from the sink nodes
-    # init all node attr chain_criticality as True
-    for node in logical_graph_nx:
-        logical_graph_nx.nodes[node]["chain_criticality"] = True
-        # TODO: double check
-        # if node in taskattr_dict:
-        #     taskattr_dict[node].chain_criticality = 'hard'
-    for sink in task_graph_sinks:
-        # sort if sink_attr[sink] != "deadline"
-        if sink_attr[sink] != "deadline":
-            logical_graph_nx.nodes[sink]["chain_criticality"] = False
-            for node in nx.ancestors(logical_graph_nx, sink):
-                logical_graph_nx.nodes[node]["chain_criticality"] = False
-                if node in taskattr_dict:
-                    taskattr_dict[node].chain_criticality = 'soft'
 
     if plot:
         plot_timeline_graph(logical_graph_nx)

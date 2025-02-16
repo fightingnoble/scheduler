@@ -1,6 +1,9 @@
-from typing import List, Dict, Tuple, Union, Optional, Iterable, Iterator, Collection
-from collections import OrderedDict
+from typing import List, Dict, Tuple, Union, Optional, Iterable, Iterator, Collection, Set
+from collections import OrderedDict, defaultdict
+
+from functools import reduce
 import math
+import bisect
 import os
 import numpy as np
 from model.resource_agent import Resource_model_int
@@ -34,6 +37,9 @@ class SchedulingTableInt(object):
         # self.scheduling_table = np.zeros((num_resources, num_time_slots), dtype=int)
         # self.scheduling_table = np.full((num_time_slots), Resource_model_int(num_resources, id, name), dtype=Resource_model_int)
         self.scheduling_table = np.array([Resource_model_int(num_resources, ) for _ in range(num_time_slots)], dtype=Resource_model_int)
+        self.flops_list = list()
+        self.event_list = list()
+        self.core_list = list()
         self.id = id
         self.name = name
         self.num_resources = num_resources
@@ -48,14 +54,30 @@ class SchedulingTableInt(object):
         # next index of the sparse list
         self.sparse_idx_next = 0
         self.sparse_mode = False
-        self.alloc_mod = "exactly" 
+        self.alloc_mod = "N/A" 
+        
+        # need by overtime
         self.sparse_flops = list()
+        # need by compress
         self.sparse_cores = list()
-        self.sparse_event = list()
+        # need by compact
+        # list of event blocks, each block is a list of events grouped by pid, which has the form like (head_event_t, {pid: {event_msg1, ..., event_msgn}})
+        self.sparse_event:List[List[Tuple[int, Dict[int, Set[str]]]]] = list()
 
         # available when used as a recorder
         self.wr_pointer = 0
         self.hypper_period = hp
+    
+    def set_alloc_mod(self, mod:str):
+        """_summary_
+
+        Args:
+            mod (str): 
+            compress (coleasing_alloc_1bin): the actual core usage is expected to be less than the allocated cores
+            compact (push_task_into_bins_new): allocate process with less budget
+        """
+        assert mod in ["N/A", "overtime", "compress", "compact"]
+        self.alloc_mod = mod
 
     def is_empty(self):
         return np.all([rsc.is_empty() for rsc in self.scheduling_table]) or len(self.scheduling_table) == 0
@@ -338,9 +360,11 @@ class SchedulingTableInt(object):
         # current allocation (C)
         curr_slot = np.zeros(len(s), dtype=int)
 
+        # no enough slots with size >= req_rsc_size
         if (direct_aval_idx).sum() * req_rsc_size < expected_req_rsc_size:
             return False, [], []
         else: 
+            # mapped to single time single interval or 
             if not preempt_en:
                 # check if the task can be executed on the single interval
                 for i in range(len(s)):
@@ -348,6 +372,7 @@ class SchedulingTableInt(object):
                         # allocate resources 
                         return True, [s[i],], [expected_slot_num,]
                 return False, [], []
+            # broken into multiple chunk
             else:
                 cum_rsc_alloc = 0
                 # divide the rsc_avl into intervals as soon as possible
@@ -536,24 +561,86 @@ class SchedulingTableInt(object):
     def to_sparse_dict(self, init_pos: int = 0, verbose: bool = False):
         # sparst_dict = {}
         sparse_list = dense_to_sparse(self.scheduling_table)
-
         # _str = [f"[{empty_boader_s[i]}-{empty_boader_e[i]})" for i in range(len(empty_boader_s))]
         # print("slot:{} Empty".format(",".join(_str,)))
         self.sparse_list = sparse_list
         self.sparse_idx = init_pos
         self.sparse_idx_next = init_pos + 1
         self.sparse_mode = True
-        # check attribute self.alloc_mod, sparse_flops
-        if not hasattr(self, "alloc_mod"):
-            self.alloc_mod = "exactly"
-        if not hasattr(self, "sparse_flops"):
-            self.sparse_flops = list()
-        if not hasattr(self, "sparse_cores"):
-            self.sparse_cores = list()
-        if not hasattr(self, "sparse_event"):
-            self.sparse_event = list()
+    
+    def to_sparse(self, init_pos: int = 0, timestep:float=float('nan'), verbose: bool = False):
+        self.to_sparse_dict(init_pos, verbose)
+        if self.alloc_mod == "compact":
+            self.build_sparse_event()
+        self.build_sparse_flops(timestep)
 
+    def build_sparse_event(self):
+        # event format: alloc_slot_s[0], _p.get_timestamp(), _p.pid, evet_msg
+        # sparse_list format: cfg_slot_s, next_cfg, cfg_slot_num
+        if not self.event_list:
+            return
+        self.event_list.sort(key=lambda x: x[0])
+        sparse_event_dict = defaultdict(lambda:defaultdict(set)) # key: slot_s, value: [ts, pid, event_msg]
+        for event_s, ts, pid, event_msg in self.event_list:
+            sparse_event_dict[event_s][pid].update({event_msg})
+        sparse_event = list(sorted(sparse_event_dict.items()))
+            
+        self.sparse_event.clear()
+        for sparse_idx in range(len(self.sparse_list)):
+            cfg_slot_s, next_cfg, cfg_slot_num = self.sparse_list[sparse_idx]
+            next_cfg_slot_s = self.sparse_list[sparse_idx+1][0] if sparse_idx+1 < len(self.sparse_list) else float('inf')
+            # (slot_idx, Dict[pid, event_set])
+            event_block = []
+            while sparse_event:
+                head_event_t, head_event_dict = sparse_event[0]
+                # ensure match the range from cfg_slot_s -> next_cfg_slot_s
+                assert head_event_t >= cfg_slot_s
+                if head_event_t < next_cfg_slot_s:
+                    sparse_event.pop(0)
+                else:
+                    break
+                # update event_block
+                event_block.append((head_event_t, head_event_dict))
+            if event_block:
+                self.sparse_event.append((cfg_slot_s, event_block))
+            else:
+                self.sparse_event.append((cfg_slot_s, []))
 
+        assert len(self.sparse_list) == len(self.sparse_event)
+        assert len(sparse_event) == 0
+        self.event_list.clear()
+            
+    def build_sparse_flops(self, timestep:float):
+        assert not math.isnan(timestep) and timestep > 0
+        # flops format: alloc_slot_s, _p.get_timestamp(), _p.pid, evet_msg
+        # sparse_list format: cfg_slot_s, next_cfg, cfg_slot_num
+        if not self.flops_list:
+            return
+        # sort the flops_list by the start time
+        self.flops_list.sort(key=lambda x: x[0])
+        
+        # merge the sparse_cores and sparse_flops refer to the new spase_list
+        # assume that the head and the tail of a chunk is always the start or end of a cfg block in the sparse_list
+        # match the flops_list with the sparse_list
+        sparse_flops = defaultdict(dict) # key: slot_s, value: Dict[pid, chunk_flops]
+        for flops_idx in range(len(self.flops_list)):
+            # range A
+            flops_slot_s, pid, (chunk_len, size, chunk_flops) = self.flops_list[flops_idx]
+            rem_flops = chunk_flops
+            # find the index of range B in A that satisfies:
+            # flops_slot_s <= cfg_slot_s and flops_slot_s + chunk_len > cfg_slot_s+cfg_slot_num
+            start_idx = bisect.bisect_left([it[0] for it in self.sparse_list], flops_slot_s)
+            end_idx = bisect.bisect_left([it[0] for it in self.sparse_list], flops_slot_s + chunk_len)
+            for cfg_slot_s, cfg, cfg_slot_num in self.sparse_list[start_idx:end_idx]:
+                assert size == cfg[pid]
+                flops_tbd = elim_nume_error(size * cfg_slot_num * timestep * FLOPS_PER_CORE)
+                sparse_flops[cfg_slot_s][pid] = flops_tbd = min(flops_tbd, rem_flops)
+                rem_flops = elim_nume_error(rem_flops - flops_tbd)                
+            assert rem_flops == 0
+        self.sparse_flops.clear()
+        self.sparse_flops = list(sorted(sparse_flops.items()))
+        self.flops_list.clear()
+    
     # add spase inded by 1
     def idx_plus_1(self,):
         assert self.sparse_mode
@@ -610,7 +697,6 @@ class SchedulingTableInt(object):
         else:
             return False
 
-
     @staticmethod
     def get_core_size(_p, timestep, FLOPS_PER_CORE):
         # release time round up: task should not be released earlier than the release time
@@ -619,1005 +705,7 @@ class SchedulingTableInt(object):
         time_slot_e = int(_p.deadline//timestep)
         req_rsc_size = int(np.ceil(_p.remburst/(time_slot_e-time_slot_s)/timestep/FLOPS_PER_CORE))
         return req_rsc_size
-
-    # def generate_dependency_table(bin_list, job_graph_nx:nx.DiGraph, pname2pid, pid2pname): 
-    #     num_processors = len(bin_list)
-    #     num_timesteps = len(bin_list[0])
-    #     dependency_table = np.empty_like(bin_list, dtype=object)
-    #     dependency_table.fill([])  # Initialize all items with an empty list
         
-    #     num_processors = bin_list.shape[1]
-
-    #     for _Sched_tab in bin_list:
-    #         for cfg_slot_s, next_cfg, cfg_slot_num in _Sched_tab.sparse_list: 
-    #             next_cfg:RscMapInt
-    #             for pid in next_cfg.keys():
-    #                 job_n = pid2pname[pid]
-    #                 for succ_n, datadict in job_graph_nx.succ[job_n].items(): 
-    #                     succ_pid = pname2pid[succ_n]
-        
-    #     # Iterate over each timestep and processor in the scheduling table
-    #     for timestep, processor in np.ndindex(bin_list.shape):
-    #         jobs_executed = bin_list[timestep, processor]
-            
-    #         # Iterate over each job executed by the current processor
-    #         for job_id in jobs_executed:
-    #             dependencies = job_graph.get_dependencies(job_id)  # Get the dependencies of the current job
-                
-    #             # Iterate over each dependency of the current job
-    #             for dependency in dependencies:
-    #                 # Find the processors that executed the predecessor jobs
-    #                 predecessor_processors = np.where(bin_list[:, :] == dependency)[1]
-                    
-    #                 # Append the predecessor processors to the dependency table
-    #                 dependency_table[timestep, processor].extend(predecessor_processors)
-        
-    #     return dependency_table
-
-def get_task_layout_compact(bin_list:List[SchedulingTableInt], pid2name:Dict[int, str], time_step:float = 1e-6,
-                    show=False, save=False, save_path="task_layout_compact.pdf", 
-                    hyper_p=0.1, n_p=1, warmup=False, drain=False,
-                    plot_legend=False,
-                    plot_start=None, plot_end=None, 
-                    tick_dens = 1, txt_size = 30, *, tool="matplotlib",
-                    **kwargs):
-
-    dir_path = os.path.dirname(save_path)
-
-    if not os.path.exists(dir_path):
-        os.makedirs(dir_path)
-
-    event_range = hyper_p * (n_p+warmup)
-    sim_range = hyper_p * (n_p+warmup+drain)
-    if plot_start is None:
-        plot_start = hyper_p * (warmup)
-    if plot_end is None:
-        plot_end = hyper_p * (n_p+warmup+drain)
-
-    colors=list(mcolors.XKCD_COLORS.keys())
-    
-    base_vertical_offset = 0
-    y_margin = 0.5 
-    time_grid_size = 0.004
-    x_margin = time_grid_size
-
-    # plot timeline and task name bin by bin
-    # and select color for the task automatically
-    if plot_legend:
-        fig_size = (40, 50)
-    else:
-        fig_size = (60, 30)
-    fig, axes = plt.subplots(nrows=len(bin_list),ncols=1,sharex=True,figsize=fig_size) 
-
-    vertical_grid_size = 1
-    bin_vertical_offset = base_vertical_offset
-
-    for bin_idx, _SchedTab in enumerate(bin_list): 
-        # bin_temp_size = len(_SchedTab.scheduling_table)
-        # bin_spatial_size = _SchedTab.scheduling_table[0].size
-        bin_spatial_size = _SchedTab.num_resources
-        bin_temp_size = _SchedTab.temp_size
-
-        ax = axes[len(bin_list)-bin_idx-1]                        
-
-        empty_boader_s = []
-        empty_boader_e = []
-        title_line = False
-        pre_rsc = _SchedTab.scheduling_table[0].rsc_map
-        # build a position dict
-        position_dict = {}
-        cum_pos = 0
-        for k,v in pre_rsc.items():
-            position_dict[k] = [[cum_pos], [v], True] 
-            cum_pos += v
-
-        pre_idx = 0
-        empty_flag = len(pre_rsc) == 0
-
-        if empty_flag:
-            empty_boader_s.append(0)
-        
-        for rsc_map_idx in range(bin_temp_size):
-            rsc_map = _SchedTab.scheduling_table[rsc_map_idx].rsc_map
-
-            # set start and end time for each task: 
-            #   if part of the task is in the warmup cycle or drain cycle, 
-                # set the start and end time to the start and end time of the plot
-            s, e = pre_idx*time_step, rsc_map_idx*time_step
-            if s < plot_start:
-                s = plot_start
-
-            if rsc_map == pre_rsc:
-                continue
-            else:
-                if empty_flag:
-                    empty_boader_e.append(rsc_map_idx)
-                else:
-                    # plot the task layout
-                    for pid, size in pre_rsc.items():
-                        _p_name = pid2name[pid]
-                        _p_color = mcolors.XKCD_COLORS[colors[pid%len(colors)]]
-                        is_new = position_dict[pid][-1]
-
-                        for vertical_s, vertical_size in zip(*position_dict[pid][:-1]):
-                            # culculate the position of the bar
-                            bar_vertical_offset = bin_vertical_offset + vertical_s*vertical_grid_size
-                            text_vertical_offset = bar_vertical_offset + 0.5*vertical_size*vertical_grid_size
-                            # plot the horizontal bar: from s to e, with height vertical_size*vertical_grid_size, and vertical offset bar_vertical_offset
-                            ax.broken_barh([(s, e-s)], (bar_vertical_offset, vertical_size*vertical_grid_size), facecolors=_p_color)
-                            # plot the text
-                            if not plot_legend:
-                                if is_new:
-                                    position_dict[pid][-1] = False
-                                    ax.text((s+e)/2, text_vertical_offset, _p_name, ha='center', va='center', color='black', fontsize=10)
-
-                # the vertical grid at the end of the bar
-                ax.axvline(e, color='black', linestyle='-', linewidth=0.5)
-
-                # update the position dict
-                new_pid = set(rsc_map.keys()) - set(pre_rsc.keys())
-                expired_pid = set(pre_rsc.keys()) - set(rsc_map.keys())
-                old_pid = set(pre_rsc.keys()) - expired_pid
-
-                used_position = []
-                for pid in old_pid:
-                    p_size = rsc_map[pid]
-                    for s, size in zip(*position_dict[pid][:-1]):
-                        e = s + size
-                        used_position += [i for i in range(s, e)]
-
-                # remove the expired task from the position dict
-                for pid in expired_pid:
-                    position_dict.pop(pid)
-                
-                aval_pos = [i for i in range(bin_spatial_size) if i not in used_position]
-                # check if the old task's allocation is changed
-
-                size_plus = []
-                size_minus = []
-                for pid in sorted(old_pid):
-                    old_size = pre_rsc[pid]
-                    new_size = rsc_map[pid]
-                    if new_size > old_size:
-                        size_plus.append(pid)
-                    elif new_size < old_size:
-                        size_minus.append(pid)
-
-                for group in [size_minus, size_plus]:
-                    for pid in group: 
-                        old_size = pre_rsc[pid]
-                        new_size = rsc_map[pid]
-
-                        # release the old position
-                        for s, size in zip(*position_dict[pid][:-1]):
-                            e = s + size
-                            aval_pos += [i for i in range(s, e)]
-                        aval_pos.sort()
-                        # get the start position of the old task
-                        cum_pos = position_dict[pid][0][0]
-                        # divide the available position into two parts
-                        left_pos = aval_pos[:aval_pos.index(cum_pos)]
-                        right_pos = aval_pos[aval_pos.index(cum_pos):]
-                        # select the leftmost position from cum_pos
-                        interval_picked = aval_pos[aval_pos.index(cum_pos):aval_pos.index(cum_pos)+new_size]
-                        if len(interval_picked) < new_size:
-                            # select the leftmost position from left_pos
-                            interval_picked = left_pos[-(new_size-len(interval_picked)):] + interval_picked
-                        # check if the position is continuous
-                        interval_picked.sort()
-                        # remove selected position from aval_pos
-                        aval_pos = [i for i in aval_pos if i not in interval_picked]
-                        start = [interval_picked[0]]
-                        size = []
-                        for i in range(new_size-1):
-                            if interval_picked[i] != interval_picked[i+1]-1:
-                                size.append(interval_picked[i]-start[-1]+1)
-                                start.append(interval_picked[i+1])
-                        size.append(interval_picked[-1]-start[-1]+1)
-                        position_dict[pid] = [start, size, position_dict[pid][-1]]
-
-                # pick a proper position for the new task in the available position
-                for pid in new_pid:
-                    p_size = rsc_map[pid]
-                    # search for a gap in the available positions that can accommodate the task's new size
-                    gap_start = None
-                    gap_size = 0
-                    for pos in aval_pos:
-                        if gap_start is None:
-                            gap_start = pos
-                        gap_size += 1
-                        if gap_size == p_size:
-                            break
-                        if pos + 1 not in aval_pos:
-                            gap_start = None
-                            gap_size = 0
-
-                    if gap_start is not None and gap_size == p_size:
-                        # allocate the task to the found gap
-                        start = [gap_start]
-                        size = [gap_size]
-                        position_dict[pid] = [start, size, True]
-                        # remove the selected positions from aval_pos
-                        aval_pos = [i for i in aval_pos if not gap_start <= i < gap_start + gap_size]
-                    else:
-                        # select the leftmost position
-                        interval_picked = aval_pos[:p_size]
-                        # check if the position is continuous
-                        interval_picked.sort()
-                        # remove selected position from aval_pos
-                        aval_pos = [i for i in aval_pos if i not in interval_picked]
-                        start = [interval_picked[0]]
-                        size = []
-                        for i in range(p_size-1):
-                            if interval_picked[i] != interval_picked[i+1]-1:
-                                size.append(interval_picked[i]-start[-1]+1)
-                                start.append(interval_picked[i+1])
-                        size.append(interval_picked[-1]-start[-1]+1)
-                        position_dict[pid] = [start, size, True]
-                
-                # update the pre_rsc                                                
-                pre_idx = rsc_map_idx
-                pre_rsc = rsc_map
-                empty_flag = len(pre_rsc) == 0
-                if empty_flag:
-                    empty_boader_s.append(rsc_map_idx)
-
-
-        # set start and end time for each task: 
-        #   if part of the task is in the warmup cycle or drain cycle, 
-            # set the start and end time to the start and end time of the plot
-        s, e = pre_idx*time_step, bin_temp_size*time_step
-        if s < plot_end or e > plot_start: 
-            if s < plot_start:
-                s = plot_start
-            if e > plot_end:
-                e = plot_end
-
-            if empty_flag:
-                empty_boader_e.append(bin_temp_size)
-            else:
-                # plot the task layout
-                for pid, size in pre_rsc.items():
-                    _p_name = pid2name[pid]
-                    _p_color = mcolors.XKCD_COLORS[[colors[pid%len(colors)]]]
-                    is_new = position_dict[pid][-1]
-
-                    for vertical_s, vertical_size in zip(*position_dict[pid][:-1]):
-                        # culculate the position of the bar
-                        bar_vertical_offset = bin_vertical_offset + vertical_s*vertical_grid_size
-                        text_vertical_offset = bar_vertical_offset + 0.5*vertical_size*vertical_grid_size
-                        # plot the bar
-                        ax.broken_barh([(s, e-s)], (bar_vertical_offset, vertical_size*vertical_grid_size), facecolors=_p_color)
-
-                        # plot the text
-                        if not plot_legend:
-                            if is_new:
-                                position_dict[pid][-1] = False
-                                ax.text((s+e)/2, text_vertical_offset, _p_name, ha='center', va='center', color='black', fontsize=10)
-
-            # the vertical grid at the end of the bar
-            ax.axvline(e, color='black', linestyle='-', linewidth=0.5)
-
-        # set the axis and title
-        vs = int((bin_vertical_offset-base_vertical_offset)//vertical_grid_size)
-        ticks = np.linspace(vs, vs+bin_spatial_size-1, 4, dtype=int)
-        ax.set_ylim(bin_vertical_offset-y_margin, bin_vertical_offset+bin_spatial_size*vertical_grid_size+y_margin)
-        ax.set_yticks(ticks)
-        ax.set_yticklabels(ticks, fontsize=txt_size, rotation=45)
-
-        # set yticks
-        # add bin name
-        # ax.set_title(f"bin: {_SchedTab.name}({_SchedTab.id})", fontsize=txt_size)
-        bin_vertical_offset += bin_spatial_size* vertical_grid_size 
-        ax.text(plot_start, bin_vertical_offset, f"bin: {_SchedTab.name}({_SchedTab.id})", ha='left', va='top', fontsize=txt_size)
-
-    # only set x axis for the bottom plot
-    ax = axes[len(bin_list)-1]
-    ax.set_xlim(plot_start-x_margin, plot_end+x_margin)
-    ticks = [str(round(t, 3)) for t in np.arange(plot_start, plot_end, time_grid_size*tick_dens)] + [str(round(plot_end, 3))]
-    ax.set_xticks(np.arange(plot_start, plot_end, time_grid_size*tick_dens).tolist()+[plot_end])
-    ax.set_xticklabels(ticks, fontsize=txt_size, rotation=45)
-    ax.tick_params(axis='x', which='major', pad=time_grid_size * tick_dens)
-    ax.set_xlabel("Time (s)", fontsize=txt_size) 
-
-    if plot_legend:
-        # add legend to the top plot
-        ax = axes[0]
-        from matplotlib.lines import Line2D
-        legend_elements = []
-        # for i in range(len(init_p_list)): 
-        for i, pid in enumerate(pid2name.keys()):
-            legend_elements.append(Line2D([0], [0], color=mcolors.XKCD_COLORS[colors[i]], lw=4, label=pid2name[pid]))
-        ax.legend(handles=legend_elements, loc='lower center', bbox_to_anchor=(0.5, 1.2),
-        ncol=4, fancybox=True, shadow=True, fontsize=txt_size)
-            
-
-    # plot the result
-    if show:
-        if tool == "matplotlib":
-            plt.show()
-    # save the figure
-    if save: 
-        # if format is given in file name, use it
-        # by default, use pdf
-        path_parse = save_path.split(".")
-        if tool == "matplotlib":
-            if "format" in kwargs and isinstance(kwargs["format"], list):
-                fmt_list = kwargs.pop("format")
-                if path_parse[-1] not in fmt_list:
-                    kwargs["format"].append(path_parse[-1])
-                for f in fmt_list:
-                    save_path = ".".join(path_parse[:-1]) + "." + f
-                    if tool == "matplotlib":
-                        plt.savefig(save_path, bbox_inches='tight', format=f,**kwargs)
-            elif "format" not in kwargs and len(path_parse) > 1: 
-                kwargs["format"] = path_parse[-1]
-            else:
-                kwargs["format"] = "pdf"
-                save_path = save_path + ".pdf"        
-                if tool == "matplotlib":
-                    plt.savefig(save_path, bbox_inches='tight', **kwargs)
-
-def get_task_layout_compact1bin(bin_list:List[SchedulingTableInt], pid2name:Dict[int, str], time_step:float = 1e-6,
-                    show=False, save=False, save_path="task_layout_compact.pdf", 
-                    hyper_p=0.1, n_p=1, warmup=False, drain=False,
-                    plot_legend=False,
-                    plot_start=None, plot_end=None, 
-                    tick_dens = 1, txt_size = 30, *, tool="matplotlib",
-                    **kwargs):
-
-    dir_path = os.path.dirname(save_path)
-
-    if not os.path.exists(dir_path):
-        os.makedirs(dir_path)
-
-    event_range = hyper_p * (n_p+warmup)
-    sim_range = hyper_p * (n_p+warmup+drain)
-    if plot_start is None:
-        plot_start = hyper_p * (warmup)
-    if plot_end is None:
-        plot_end = hyper_p * (n_p+warmup+drain)
-
-    colors=list(mcolors.XKCD_COLORS.keys())
-    
-    base_vertical_offset = 0
-    y_margin = 0.5 
-    time_grid_size = 0.004
-    x_margin = time_grid_size
-
-    # plot timeline and task name bin by bin
-    # and select color for the task automatically
-    tot_cores = sum([_SchedTab.num_resources for _SchedTab in bin_list])
-    height = math.ceil(tot_cores//256)
-    if plot_legend:
-        fig_size = (40, 20+30*height)
-    else:
-        fig_size = (60, 30*height)
-    fig, axes = plt.subplots(nrows=1,ncols=1,sharex=True,figsize=fig_size) 
-
-    vertical_grid_size = 1
-    bin_vertical_offset = base_vertical_offset
-
-    ax = axes           
-    for bin_idx, _SchedTab in enumerate(bin_list): 
-        # bin_temp_size = len(_SchedTab.scheduling_table)
-        # bin_spatial_size = _SchedTab.scheduling_table[0].size
-        bin_spatial_size = _SchedTab.num_resources
-        bin_temp_size = _SchedTab.temp_size
-
-
-        empty_boader_s = []
-        empty_boader_e = []
-        title_line = False
-        pre_rsc = _SchedTab.scheduling_table[0].rsc_map
-        # build a position dict
-        position_dict = {}
-        cum_pos = 0
-        for k,v in pre_rsc.items():
-            position_dict[k] = [[cum_pos], [v], True] 
-            cum_pos += v
-
-        pre_idx = 0
-        empty_flag = len(pre_rsc) == 0
-
-        if empty_flag:
-            empty_boader_s.append(0)
-        
-        for rsc_map_idx in range(bin_temp_size):
-            rsc_map = _SchedTab.scheduling_table[rsc_map_idx].rsc_map
-
-            # set start and end time for each task: 
-            #   if part of the task is in the warmup cycle or drain cycle, 
-                # set the start and end time to the start and end time of the plot
-            s, e = pre_idx*time_step, rsc_map_idx*time_step
-            if s < plot_start:
-                s = plot_start
-
-            if rsc_map == pre_rsc:
-                continue
-            else:
-                if empty_flag:
-                    empty_boader_e.append(rsc_map_idx)
-                else:
-                    # plot the task layout
-                    for pid, size in pre_rsc.items():
-                        _p_name = pid2name[pid]
-                        _p_color = mcolors.XKCD_COLORS[colors[pid%len(colors)]]
-                        is_new = position_dict[pid][-1]
-
-                        for vertical_s, vertical_size in zip(*position_dict[pid][:-1]):
-                            # culculate the position of the bar
-                            bar_vertical_offset = bin_vertical_offset + vertical_s*vertical_grid_size
-                            text_vertical_offset = bar_vertical_offset + 0.5*vertical_size*vertical_grid_size
-                            # plot the horizontal bar: from s to e, with height vertical_size*vertical_grid_size, and vertical offset bar_vertical_offset
-                            ax.broken_barh([(s, e-s)], (bar_vertical_offset, vertical_size*vertical_grid_size), facecolors=_p_color)
-                            # plot the text
-                            if not plot_legend:
-                                if is_new:
-                                    position_dict[pid][-1] = False
-                                    ax.text((s+e)/2, text_vertical_offset, _p_name, ha='center', va='center', color='black', fontsize=10)
-
-                # the vertical grid at the end of the bar
-                ax.axvline(e, color='black', linestyle='-', linewidth=0.5)
-
-                # update the position dict
-                new_pid = set(rsc_map.keys()) - set(pre_rsc.keys())
-                expired_pid = set(pre_rsc.keys()) - set(rsc_map.keys())
-                old_pid = set(pre_rsc.keys()) - expired_pid
-
-                used_position = []
-                for pid in old_pid:
-                    p_size = rsc_map[pid]
-                    for s, size in zip(*position_dict[pid][:-1]):
-                        e = s + size
-                        used_position += [i for i in range(s, e)]
-
-                # remove the expired task from the position dict
-                for pid in expired_pid:
-                    position_dict.pop(pid)
-                
-                aval_pos = [i for i in range(bin_spatial_size) if i not in used_position]
-                # check if the old task's allocation is changed
-
-                size_plus = []
-                size_minus = []
-                for pid in sorted(old_pid):
-                    old_size = pre_rsc[pid]
-                    new_size = rsc_map[pid]
-                    if new_size > old_size:
-                        size_plus.append(pid)
-                    elif new_size < old_size:
-                        size_minus.append(pid)
-
-                for group in [size_minus, size_plus]:
-                    for pid in group: 
-                        old_size = pre_rsc[pid]
-                        new_size = rsc_map[pid]
-
-                        # release the old position
-                        for s, size in zip(*position_dict[pid][:-1]):
-                            e = s + size
-                            aval_pos += [i for i in range(s, e)]
-                        aval_pos.sort()
-                        # get the start position of the old task
-                        cum_pos = position_dict[pid][0][0]
-                        # divide the available position into two parts
-                        left_pos = aval_pos[:aval_pos.index(cum_pos)]
-                        right_pos = aval_pos[aval_pos.index(cum_pos):]
-                        # select the leftmost position from cum_pos
-                        interval_picked = aval_pos[aval_pos.index(cum_pos):aval_pos.index(cum_pos)+new_size]
-                        if len(interval_picked) < new_size:
-                            # select the leftmost position from left_pos
-                            interval_picked = left_pos[-(new_size-len(interval_picked)):] + interval_picked
-                        # check if the position is continuous
-                        interval_picked.sort()
-                        # remove selected position from aval_pos
-                        aval_pos = [i for i in aval_pos if i not in interval_picked]
-                        start = [interval_picked[0]]
-                        size = []
-                        for i in range(new_size-1):
-                            if interval_picked[i] != interval_picked[i+1]-1:
-                                size.append(interval_picked[i]-start[-1]+1)
-                                start.append(interval_picked[i+1])
-                        size.append(interval_picked[-1]-start[-1]+1)
-                        position_dict[pid] = [start, size, position_dict[pid][-1]]
-
-                # pick a proper position for the new task in the available position
-                for pid in new_pid:
-                    p_size = rsc_map[pid]
-                    # search for a gap in the available positions that can accommodate the task's new size
-                    gap_start = None
-                    gap_size = 0
-                    for pos in aval_pos:
-                        if gap_start is None:
-                            gap_start = pos
-                        gap_size += 1
-                        if gap_size == p_size:
-                            break
-                        if pos + 1 not in aval_pos:
-                            gap_start = None
-                            gap_size = 0
-
-                    if gap_start is not None and gap_size == p_size:
-                        # allocate the task to the found gap
-                        start = [gap_start]
-                        size = [gap_size]
-                        position_dict[pid] = [start, size, True]
-                        # remove the selected positions from aval_pos
-                        aval_pos = [i for i in aval_pos if not gap_start <= i < gap_start + gap_size]
-                    else:
-                        # select the leftmost position
-                        interval_picked = aval_pos[:p_size]
-                        # check if the position is continuous
-                        interval_picked.sort()
-                        # remove selected position from aval_pos
-                        aval_pos = [i for i in aval_pos if i not in interval_picked]
-                        start = [interval_picked[0]]
-                        size = []
-                        for i in range(p_size-1):
-                            if interval_picked[i] != interval_picked[i+1]-1:
-                                size.append(interval_picked[i]-start[-1]+1)
-                                start.append(interval_picked[i+1])
-                        size.append(interval_picked[-1]-start[-1]+1)
-                        position_dict[pid] = [start, size, True]
-                
-                # update the pre_rsc                                                
-                pre_idx = rsc_map_idx
-                pre_rsc = rsc_map
-                empty_flag = len(pre_rsc) == 0
-                if empty_flag:
-                    empty_boader_s.append(rsc_map_idx)
-
-
-        # set start and end time for each task: 
-        #   if part of the task is in the warmup cycle or drain cycle, 
-            # set the start and end time to the start and end time of the plot
-        s, e = pre_idx*time_step, bin_temp_size*time_step
-        if s < plot_end or e > plot_start: 
-            if s < plot_start:
-                s = plot_start
-            if e > plot_end:
-                e = plot_end
-
-            if empty_flag:
-                empty_boader_e.append(bin_temp_size)
-            else:
-                # plot the task layout
-                for pid, size in pre_rsc.items():
-                    _p_name = pid2name[pid]
-                    _p_color = mcolors.XKCD_COLORS[[colors[pid%len(colors)]]]
-                    is_new = position_dict[pid][-1]
-
-                    for vertical_s, vertical_size in zip(*position_dict[pid][:-1]):
-                        # culculate the position of the bar
-                        bar_vertical_offset = bin_vertical_offset + vertical_s*vertical_grid_size
-                        text_vertical_offset = bar_vertical_offset + 0.5*vertical_size*vertical_grid_size
-                        # plot the bar
-                        ax.broken_barh([(s, e-s)], (bar_vertical_offset, vertical_size*vertical_grid_size), facecolors=_p_color)
-
-                        # plot the text
-                        if not plot_legend:
-                            if is_new:
-                                position_dict[pid][-1] = False
-                                ax.text((s+e)/2, text_vertical_offset, _p_name, ha='center', va='center', color='black', fontsize=10)
-
-            # the vertical grid at the end of the bar
-            ax.axvline(e, color='black', linestyle='-', linewidth=0.5)
-
-        # add a horizontal line to seperate bins
-        ax.axhline(bin_vertical_offset, color='black', linestyle='-', linewidth=0.5)
-        # set yticks
-        # add bin name
-        # ax.set_title(f"bin: {_SchedTab.name}({_SchedTab.id})", fontsize=txt_size)
-        bin_vertical_offset += bin_spatial_size* vertical_grid_size 
-        ax.text(plot_start, bin_vertical_offset, f"bin: {_SchedTab.name}({_SchedTab.id})", ha='left', va='top', fontsize=txt_size)
-
-    # only set x axis for the bottom plot
-    ax.set_xlim(plot_start-x_margin, plot_end+x_margin)
-    ticks = [str(round(t, 3)) for t in np.arange(plot_start, plot_end, time_grid_size*tick_dens)] + [str(round(plot_end, 3))]
-    ax.set_xticks(np.arange(plot_start, plot_end, time_grid_size*tick_dens).tolist()+[plot_end])
-    ax.set_xticklabels(ticks, fontsize=txt_size, rotation=45)
-    ax.tick_params(axis='x', which='major', pad=time_grid_size * tick_dens)
-    ax.set_xlabel("Time (s)", fontsize=txt_size) 
-
-    # set the axis and title
-    vs = int((bin_vertical_offset-base_vertical_offset)//vertical_grid_size)
-    ticks = np.linspace(0, vs, 4, dtype=int)
-    ax.set_ylim(-y_margin, bin_vertical_offset+y_margin)
-    ax.set_yticks(ticks)
-    ax.set_yticklabels(ticks, fontsize=txt_size, rotation=45)
-
-    if plot_legend:
-        # add legend to the top plot
-        from matplotlib.lines import Line2D
-        legend_elements = []
-        # for i in range(len(init_p_list)): 
-        for i, pid in enumerate(pid2name.keys()):
-            legend_elements.append(Line2D([0], [0], color=mcolors.XKCD_COLORS[colors[i]], lw=4, label=pid2name[pid]))
-        ax.legend(handles=legend_elements, loc='lower center', bbox_to_anchor=(0.5, 1.2),
-        ncol=4, fancybox=True, shadow=True, fontsize=txt_size)
-            
-
-    # plot the result
-    if show:
-        if tool == "matplotlib":
-            plt.show()
-    # save the figure
-    if save: 
-        # if format is given in file name, use it
-        # by default, use pdf
-        path_parse = save_path.split(".")
-        if tool == "matplotlib":
-            if "format" in kwargs and isinstance(kwargs["format"], list):
-                fmt_list = kwargs.pop("format")
-                if path_parse[-1] not in fmt_list:
-                    kwargs["format"].append(path_parse[-1])
-                for f in fmt_list:
-                    save_path = ".".join(path_parse[:-1]) + "." + f
-                    if tool == "matplotlib":
-                        plt.savefig(save_path, bbox_inches='tight', format=f,**kwargs)
-            elif "format" not in kwargs and len(path_parse) > 1: 
-                kwargs["format"] = path_parse[-1]
-            else:
-                kwargs["format"] = "pdf"
-                save_path = save_path + ".pdf"        
-                if tool == "matplotlib":
-                    plt.savefig(save_path, bbox_inches='tight', **kwargs)
-
-
-
-def get_task_layout(bin_list:List[SchedulingTableInt], init_p_list:List[ProcessInt]
-                        , show:bool=False, save:bool=False, save_path:str="task_layout.pdf", **kwargs):
-
-    import matplotlib.colors as mcolors
-    import matplotlib as mpl
-    cmap = mpl.colormaps['viridis']
-    colors=list(mcolors.XKCD_COLORS.keys())
-    
-    # plot timeline and task name bin by bin
-    # and select color for the task automatically
-    fig = plt.figure(figsize=(50, 20))
-    vertical_grid_size = 1
-    
-    for _SchedTab in bin_list:
-        tab_temp_size = len(_SchedTab.scheduling_table)
-        ax = fig.add_subplot(len(bin_list), 1, len(bin_list)-_SchedTab.id)
-        vertical_offset = 0
-        horizen_grid = set()
-        bin_pack_result = _SchedTab.index_occupy_by_id()
-        ordered_k = [k for k, v in sorted(bin_pack_result.items(), key=lambda item: item[1][1])]
-        for pid in ordered_k:
-            alloc_info = bin_pack_result[pid]
-            _p = init_p_list[pid]
-            _p_name = _p.task.name
-            _p_color = mcolors.XKCD_COLORS[[colors[pid%len(colors)]]]
-            for s, size, l in zip(*alloc_info):
-                ax.broken_barh([(s, l)], (vertical_offset*vertical_grid_size, size*vertical_grid_size), facecolors=_p_color)
-                ax.text(s+l//2, (vertical_offset+size//2)*vertical_grid_size, _p_name, ha='center', va='center', color='black', fontsize=10)
-                horizen_grid.add(s)
-                horizen_grid.add(s+l)
-            vertical_offset += size
-        # ax.set_ylim(0, vertical_offset*vertical_grid_size)
-        ax.set_xlim(0, tab_temp_size)
-        ax.set_xlabel('Time')
-        # add bin name
-        ax.set_title(f"bin: {_SchedTab.name}({_SchedTab.id})")
-        # plot the grid
-        for x in horizen_grid:
-            ax.axvline(x, color='black', linestyle='-', linewidth=0.5)
-    # sub-figures shares the same x-axis
-    # fig.subplots_adjust(hspace=0)
-    plt.setp([a.get_xticklabels() for a in fig.axes[:-1]], visible=False)
-
-    # plot the result
-    if show:
-        plt.show()
-    # save the figure
-    if "format" not in kwargs and save_path.split(".")[-1] == "pdf" and save:
-        kwargs["format"] = "pdf"
-    plt.savefig(save_path, **kwargs)
-    print("save figure to", save_path)
-
-def get_task_layout_sparse(bin_list:List[SchedulingTableInt], pid2name:Dict[int, str], time_step:float = 1e-6,
-                    show=False, save=False, save_path="task_layout_compact.pdf", 
-                    hyper_p=0.1, n_p=1, warmup=False, drain=False,
-                    plot_legend=False,
-                    plot_start=None, plot_end=None, 
-                    tick_dens = 1, txt_size = 30, *, tool="matplotlib",
-                    **kwargs):
-
-    dir_path = os.path.dirname(save_path)
-
-    if not os.path.exists(dir_path):
-        os.makedirs(dir_path)
-
-    event_range = hyper_p * (n_p+warmup)
-    sim_range = hyper_p * (n_p+warmup+drain)
-    if plot_start is None:
-        plot_start = hyper_p * (warmup)
-    if plot_end is None:
-        plot_end = hyper_p * (n_p+warmup+drain)
-
-    import matplotlib.colors as mcolors
-    import matplotlib as mpl
-    colors=list(mcolors.XKCD_COLORS.keys())
-    
-    base_vertical_offset = 0
-    y_margin = 0.5 
-    time_grid_size = 0.004
-    x_margin = time_grid_size
-
-    # plot timeline and task name bin by bin
-    # and select color for the task automatically
-    if plot_legend:
-        fig_size = (40, 50)
-    else:
-        fig_size = (60, 30)
-    if tool == "matplotlib":
-        fig = plt.figure(figsize=fig_size)
-    
-
-    vertical_grid_size = 1
-    bin_vertical_offset = base_vertical_offset
-
-    for bin_idx, _SchedTab in enumerate(bin_list): 
-        _SchedTab: SchedulingTableInt
-        # bin_temp_size = len(_SchedTab.scheduling_table)
-        # bin_spatial_size = _SchedTab.scheduling_table[0].size
-        bin_spatial_size = _SchedTab.num_resources
-
-        if tool == "matplotlib":
-            ax = fig.add_subplot(len(bin_list), 1, len(bin_list)-_SchedTab.id)
-        
-        _SchedTab.to_sparse_dict(0)
-        # build a position dict
-        position_dict = {}
-        aval_pos = [i for i in range(bin_spatial_size)]
-
-        while _SchedTab.sparse_idx_next:
-            pre_idx, curr_cfg, slot_num = _SchedTab.sparse_list[_SchedTab.sparse_idx]
-            if _SchedTab.sparse_idx == 0:
-                rsc_map_idx = 0
-                cum_pos = 0
-                for k,v in curr_cfg.items():
-                    position_dict[k] = [[cum_pos], [v], True] 
-                    aval_pos = [i for i in aval_pos if i not in range(cum_pos, cum_pos+v)]
-                    cum_pos += v
-            else:
-                rsc_map_idx = _SchedTab.sparse_list[_SchedTab.sparse_idx_prev][0] + _SchedTab.sparse_list[_SchedTab.sparse_idx_prev][2] 
-                rsc_map = curr_cfg
-                pre_rsc = _SchedTab.sparse_list[_SchedTab.sparse_idx_prev][1]
-
-                # update the position dict
-                new_pid = set(rsc_map.keys()) - set(pre_rsc.keys())
-                expired_pid = set(pre_rsc.keys()) - set(rsc_map.keys())
-                old_pid = set(pre_rsc.keys()) - expired_pid
-
-                # remove the expired task from the position dict
-                for pid in expired_pid:
-                    # release the old position
-                    for s, size in zip(*position_dict[pid][:-1]):
-                        e = s + size
-                        aval_pos += [i for i in range(s, e)]
-                    position_dict.pop(pid)
-                
-                # check if the old task's allocation is changed
-                size_plus = []
-                size_minus = []
-                for pid in sorted(old_pid):
-                    old_size = pre_rsc[pid]
-                    new_size = rsc_map[pid]
-                    if new_size > old_size:
-                        size_plus.append(pid)
-                    elif new_size < old_size:
-                        size_minus.append(pid)
-
-                for group in [size_minus, size_plus]:
-                    for pid in group: 
-                        old_size = pre_rsc[pid]
-                        new_size = rsc_map[pid]
-
-                        # release the old position
-                        for s, size in zip(*position_dict[pid][:-1]):
-                            e = s + size
-                            aval_pos += [i for i in range(s, e)]
-                        aval_pos.sort()
-                        # get the start position of the old task
-                        cum_pos = position_dict[pid][0][0]
-                        # divide the available position into two parts
-                        left_pos = aval_pos[:aval_pos.index(cum_pos)]
-                        right_pos = aval_pos[aval_pos.index(cum_pos):]
-                        # select the leftmost position from cum_pos
-                        interval_picked = aval_pos[aval_pos.index(cum_pos):aval_pos.index(cum_pos)+new_size]
-                        if len(interval_picked) < new_size:
-                            # select the leftmost position from left_pos
-                            interval_picked = left_pos[-(new_size-len(interval_picked)):] + interval_picked
-                        # check if the position is continuous
-                        interval_picked.sort()
-                        # remove selected position from aval_pos
-                        aval_pos = [i for i in aval_pos if i not in interval_picked]
-                        start = [interval_picked[0]]
-                        size = []
-                        for i in range(new_size-1):
-                            if interval_picked[i] != interval_picked[i+1]-1:
-                                size.append(interval_picked[i]-start[-1]+1)
-                                start.append(interval_picked[i+1])
-                        size.append(interval_picked[-1]-start[-1]+1)
-                        position_dict[pid] = [start, size, position_dict[pid][-1]]
-
-                # pick a proper position for the new task in the available position
-                for pid in new_pid:
-                    p_size = rsc_map[pid]
-                    # search for a gap in the available positions that can accommodate the task's new size
-                    gap_start = None
-                    gap_size = 0
-                    for pos in aval_pos:
-                        if gap_start is None:
-                            gap_start = pos
-                        gap_size += 1
-                        if gap_size == p_size:
-                            break
-                        if pos + 1 not in aval_pos:
-                            gap_start = None
-                            gap_size = 0
-
-                    if gap_start is not None and gap_size == p_size:
-                        # allocate the task to the found gap
-                        start = [gap_start]
-                        size = [gap_size]
-                        position_dict[pid] = [start, size, True]
-                        # remove the selected positions from aval_pos
-                        aval_pos = [i for i in aval_pos if not gap_start <= i < gap_start + gap_size]
-                    else:
-                        # select the leftmost position
-                        interval_picked = aval_pos[:p_size]
-                        # check if the position is continuous
-                        interval_picked.sort()
-                        # remove selected position from aval_pos
-                        aval_pos = [i for i in aval_pos if i not in interval_picked]
-                        start = [interval_picked[0]]
-                        size = []
-                        for i in range(p_size-1):
-                            if interval_picked[i] != interval_picked[i+1]-1:
-                                size.append(interval_picked[i]-start[-1]+1)
-                                start.append(interval_picked[i+1])
-                        size.append(interval_picked[-1]-start[-1]+1)
-                        position_dict[pid] = [start, size, True]
-                
-            _SchedTab.idx_plus_1()
-
-            s = pre_idx*time_step
-            if pre_idx != rsc_map_idx:
-                # add the vertical grid at the beginning of the bar
-                if s >= plot_start and s <= plot_end:
-                    add_v_grid(s, ax)
-
-            rsc_map_idx = pre_idx + slot_num
-            e = rsc_map_idx*time_step
-            # sparse list contains no empty cfg
-            assert len(curr_cfg) > 0 
-
-            # set start and end time for each task: 
-            #   if part of the task is in the warmup cycle or drain cycle, 
-                # set the start and end time to the start and end time of the plot
-            if s < plot_start:
-                s = plot_start
-            if e > plot_end:
-                e = plot_end
-            if s >= plot_end or e <= plot_start: 
-                continue
-
-            # plot the task layout
-            for pid, size in curr_cfg.items():
-                _p_name = pid2name[pid]
-                _p_color = mcolors.XKCD_COLORS[colors[pid%len(colors)]]
-                is_new = position_dict[pid][-1]
-
-                for vertical_s, vertical_size in zip(*position_dict[pid][:-1]):
-                    # culculate the position of the bar
-                    bar_vertical_offset = bin_vertical_offset + vertical_s*vertical_grid_size
-                    text_vertical_offset = bar_vertical_offset + 0.5*vertical_size*vertical_grid_size
-                    # plot the horizontal bar: from s to e, with height vertical_size*vertical_grid_size, and vertical offset bar_vertical_offset
-                    h_pos, h_size, v_pos, v_size = s, e-s, bar_vertical_offset, vertical_size*vertical_grid_size
-                    add_bar(h_pos, h_size, v_pos, v_size, _p_color, ax)
-                    # plot the text
-                    if not plot_legend:
-                        if is_new:
-                            position_dict[pid][-1] = False
-                            add_text((s+e)/2, text_vertical_offset, _p_name, ax)
-            # the vertical grid at the end of the bar
-            add_v_grid(e, ax)
-
-            
-        # set the axis and title
-        vs = int((bin_vertical_offset-base_vertical_offset)//vertical_grid_size)
-        ticks = np.linspace(vs, vs+bin_spatial_size-1, 4, dtype=int)
-        if tool == "matplotlib":
-            ax.set_xlim(plot_start-x_margin, plot_end+x_margin)
-            ax.set_ylim(bin_vertical_offset-y_margin, bin_vertical_offset+bin_spatial_size*vertical_grid_size+y_margin)
-            ax.set_yticks(ticks)
-            ax.set_yticklabels(ticks, fontsize=txt_size)
-
-        # set yticks
-        # add bin name
-        # ax.set_title(f"bin: {_SchedTab.name}({_SchedTab.id})", fontsize=txt_size)
-        bin_vertical_offset += bin_spatial_size* vertical_grid_size 
-        if tool == "matplotlib":
-            ax.text(plot_start, bin_vertical_offset, f"bin: {_SchedTab.name}({_SchedTab.id})", ha='left', va='top', fontsize=txt_size)
-
-    # sub-figures shares the same x-axis
-    # fig.subplots_adjust(hspace=0)
-    if tool == "matplotlib":
-        plt.setp([a.get_xticklabels() for a in fig.axes[1:]], visible=False)
-
-    if plot_legend:
-        if tool == "matplotlib":
-            # add legend
-            ax = fig.axes[-1]
-            from matplotlib.lines import Line2D
-            legend_elements = []
-            # for i in range(len(init_p_list)): 
-            for i, pid in enumerate(pid2name.keys()):
-                legend_elements.append(Line2D([0], [0], color=mcolors.XKCD_COLORS[colors[i]], lw=4, label=pid2name[pid]))
-            ax.legend(handles=legend_elements, loc='lower center', bbox_to_anchor=(0.5, 1.2),
-            ncol=4, fancybox=True, shadow=True, fontsize=txt_size)
-            # reset x ticks: text size 30, rotation 45, distance time_grid_size * 2
-            # ticks format: .3f
-            ax = fig.axes[0]
-            ticks = [str(round(t, 3)) for t in np.arange(plot_start, plot_end, time_grid_size*tick_dens)] + [str(round(plot_end, 3))]
-            ax.set_xticks(np.arange(plot_start, plot_end, time_grid_size*tick_dens).tolist()+[plot_end])
-            ax.set_xticklabels(ticks, fontsize=txt_size, rotation=45)
-            ax.tick_params(axis='x', which='major', pad=time_grid_size * tick_dens)
-            # remove frame
-            # ax.spines['top'].set_visible(False)
-            # ax.spines['right'].set_visible(False)
-            # ax.spines['bottom'].set_visible(False)
-            # ax.spines['left'].set_visible(False)
-            # set x axis label as Time (s), text size 30
-            ax.set_xlabel("Time (s)", fontsize=txt_size) 
-
-    # plot the result
-    if show:
-        if tool == "matplotlib":
-            plt.show()
-    # save the figure
-    if save: 
-        # if format is given in file name, use it
-        # by default, use pdf
-        path_parse = save_path.split(".")
-        if tool == "matplotlib" or tool == "plotly":
-            if "format" in kwargs and isinstance(kwargs["format"], list):
-                fmt_list = kwargs.pop("format")
-                if path_parse[-1] not in fmt_list:
-                    kwargs["format"].append(path_parse[-1])
-                for f in fmt_list:
-                    save_path = ".".join(path_parse[:-1]) + "." + f
-                    if tool == "matplotlib":
-                        plt.savefig(save_path, bbox_inches='tight', format=f,**kwargs)
-                    elif tool == "plotly":
-                        fig.write_image(save_path)
-            elif "format" not in kwargs and len(path_parse) > 1: 
-                kwargs["format"] = path_parse[-1]
-            else:
-                kwargs["format"] = "pdf"
-                save_path = save_path + ".pdf"        
-                if tool == "matplotlib":
-                    plt.savefig(save_path, bbox_inches='tight', **kwargs)
-
-def add_bar(h_pos, h_size, v_pos, v_size, _p_color, ax, backend="matplotlib", **kwargs):
-    if backend == "matplotlib":
-        ax.broken_barh([(h_pos, h_size)], (v_pos, v_size), facecolors=_p_color)
-    else:
-        raise NotImplementedError
-
-def add_text(h_pos, v_pos, _p_name, ax, backend="matplotlib", **kwargs):
-    if backend == "matplotlib":
-        ax.text(h_pos, v_pos, _p_name, ha='center', va='center', color='black', fontsize=10)
-
-def add_v_grid(v_pos, ax, backend="matplotlib", **kwargs):
-    if backend == "matplotlib":
-        ax.axvline(v_pos, color='black', linestyle='-', linewidth=0.5)
-
 def dense_to_sparse(scheduling_table:np.ndarray):
     sparse_list = []
     empty_boader_s = []
@@ -1653,160 +741,30 @@ def dense_to_sparse(scheduling_table:np.ndarray):
         sparse_list.append([pre_idx, pre_rsc, len(scheduling_table)-pre_idx])
     return sparse_list
 
-def get_sparse_flops(bin_list:List[SchedulingTableInt], glb_p_list: List[ProcessInt], timestep, event_range):
-
-    process_dict = {_p.pid:_p for _p in glb_p_list}
-    # build event list
-    process_stim_dict = OrderedDict()
-    for pid, _p in process_dict.items():
-        _p:ProcessInt
-        stimu_tab = _p.task.extract_sensor_event(event_range, verbose=False)
-        l = []
-        for stimu_t in stimu_tab:
-            start_t, ddl_t = elim_nume_error(stimu_t+_p.task.ERT), elim_nume_error(stimu_t+_p.task.ERT+_p.task.ddl)
-            # quantize the start time and ddl time
-            slot_s = int(math.ceil(start_t/timestep)) 
-            slot_e = int(math.floor(ddl_t/timestep))
-            l.append([_p.pid, slot_s, slot_e, _p.task.name, stimu_t]) 
-        process_stim_dict[pid] = l
-
-    rsc_recoder = {}
-    for _bin in bin_list:
-        _bin:SchedulingTableInt
-        # # [task_id] = (s, size, l)
-        # bin_pack_result:Dict[int, Tuple[List[int], List[int], List[int]]] = _bin.index_occupy_by_id()
-        # # merge the result to the recoder, also add a extra item of bin_id 
-        # for pid, item in bin_pack_result.items():
-        #     bin_id = [_bin.id] * len(item[0])
-        #     if pid in rsc_recoder:
-        #         s, size, l, b_id = rsc_recoder[pid]
-        #         rsc_recoder[pid] = [s+item[0], size+item[1], l+item[2], b_id+bin_id]
-        #     else:
-        #         rsc_recoder[pid] = [item[0], item[1], item[2], bin_id]
-
-        # update the rsc_recoder by the sparse list
-        sparse_list = _bin.sparse_list
-        for pre_idx, pre_rsc, slot_num in sparse_list:
-            for pid, size in pre_rsc.items():
-                if pid in rsc_recoder:
-                    s, size_l, l, b_id = rsc_recoder[pid]
-                    rsc_recoder[pid] = [s+[pre_idx], size_l+[size], l+[slot_num], b_id+[_bin.id]]
-                else:
-                    rsc_recoder[pid] = [[pre_idx], [size], [slot_num], [_bin.id]]
-
-
-    for pid, item in rsc_recoder.items():
-        s, size, l, b_id = item
-        # sort the result by the start time
-        # sort s and update the size and l
-        s, size, l, b_id = zip(*sorted(zip(s, size, l, b_id), key=lambda x: x[0]))
-        rsc_recoder[pid] = [s, size, l, b_id]
-    # sort the record by pid
-    rsc_recoder = OrderedDict(sorted(rsc_recoder.items(), key=lambda item: item[0]))
-    
-    # inner dict is indexed by slot index
-    # outter dict is indexed by bin index
-    sparse_flops_dict = OrderedDict()
-    sparse_cores_dict = OrderedDict()
-    sparse_event_dict = OrderedDict()
-    # init the above dict
-    for bin_idx in range(len(bin_list)):
-        sparse_flops_dict[bin_idx] = {}
-        sparse_cores_dict[bin_idx] = {}
-        sparse_event_dict[bin_idx] = {}
-    # event pattern:
-    # f"start-{pid:d}_{j:d}", f"complete-{pid:d}_{j:d}", f"migrate-{pid:d}_from_{pre_bin_idx}", f"migrate-{pid:d}_to_{next_bin_idx}"
-    #  start
-    #  ts
-    #  complete
-    #  migrate
-    
-    # check legelty
-    assert set(rsc_recoder.keys()) == set(process_stim_dict.keys())
-    for pid in rsc_recoder.keys():
-        alloc_item = rsc_recoder[pid]
-        stim_item = process_stim_dict[pid]
-        i=0
-        cum_ops = 0
-        ref_flops = process_dict[pid].totcpu
-        s_j_istart = 0 # the start index of chunk, allocated to the jth stimulus
-        for j in range(len(stim_item)):
-            s_j = stim_item[j][1]
-            e_j = stim_item[j][2]
-            pid = stim_item[j][0]
-            s_j_istart = i
-            if i < len(alloc_item[0]):
-                s_i = alloc_item[0][i]
-                bin_idx = alloc_item[3][i]
-                update_sparse_dict(bin_idx, pid, s_i, sparse_event_dict, item={f"start-{pid:d}_{j:d}"}, item_type=set)
-            while i < len(alloc_item[0]):
-                s_i = alloc_item[0][i]
-                size_i = alloc_item[1][i]
-                l_i = alloc_item[2][i]
-                e_i = alloc_item[0][i] + alloc_item[2][i]
-                pre_bin_idx = alloc_item[3][i-1 if i>0 else 0]
-                bin_idx = alloc_item[3][i]
-                next_bin_idx = alloc_item[3][i+1 if i<len(alloc_item[0])-1 else len(alloc_item[0])-1]
-                if pre_bin_idx != bin_idx and i > s_j_istart:
-                    update_sparse_dict(bin_idx, pid, s_i, sparse_event_dict, 
-                                       item={f"migrate-{pid:d}_from_{pre_bin_idx}"}, item_type=set)
-                if cum_ops >= ref_flops:
-                    cum_ops = 0
-                    break
-                if e_i <= e_j:
-                    ops = size_i * l_i * timestep * FLOPS_PER_CORE
-                    ops_tbd = min(ops, ref_flops-cum_ops)
-                    cum_ops += ops
-                    update_sparse_dict(bin_idx, pid, s_i, sparse_flops_dict, item=ops_tbd, item_type=float)
-                    update_sparse_dict(bin_idx, pid, s_i, sparse_cores_dict, item=size_i, item_type=int)
-                    if ops>ops_tbd:
-                        update_sparse_dict(bin_idx, pid, s_i, sparse_event_dict, item={f"complete-{pid:d}_{j:d}"}, item_type=set)
-                    elif next_bin_idx != bin_idx:
-                        update_sparse_dict(bin_idx, pid, s_i, sparse_event_dict, 
-                                        item={f"migrate-{pid:d}_to_{next_bin_idx:d}"}, item_type=set)
-
-                    i += 1
-                else:
-                    assert cum_ops >= ref_flops
-                    cum_ops = 0
-                    break
-        # NOTE: check if all the allocation are found the corresponding stimulus
-        assert i == len(alloc_item[0])
-    # NOTE:check whether the sparse_cores and the sparse_flops have the same length with the sparse_list
-    for bin_idx in range(len(bin_list)):
-        # verify the sparse index matching
-        assert set(sparse_flops_dict[bin_idx].keys()) == set(sparse_cores_dict[bin_idx].keys()) 
-        # event keys is a subset of slot keys
-        assert set(sparse_event_dict[bin_idx].keys()) <= set(sparse_flops_dict[bin_idx].keys())
-
-        # sort the dict by key
-        sorted_slot_n = sorted(sparse_flops_dict[bin_idx].keys())
-        sparse_cores = [sparse_cores_dict[bin_idx][k] for k in sorted_slot_n]
-        sparse_flops = [sparse_flops_dict[bin_idx][k] for k in sorted_slot_n]
-        sparse_event = [sparse_event_dict[bin_idx][k] if k in sparse_event_dict[bin_idx] else {} for k in sorted_slot_n ]
-
-        sparse_list = bin_list[bin_idx].sparse_list
-        assert len(sparse_flops) == len(sparse_list)
-        assert len(sparse_cores) == len(sparse_list)
-        # check have same keys
-        for i in range(len(sparse_list)): 
-            # has the same slot index
-            assert sparse_list[i][0] == sorted_slot_n[i]
-            # has the same task id
-            assert set(sparse_list[i][1].keys()) == set(sparse_flops[i].keys())
-            slot_n = sparse_list[i][0]
-            assert set(sparse_list[i][1].keys()) >= set(sparse_event[i].keys())
-        # sort the dict by key
-        sparse_flops_dict[bin_idx] = OrderedDict(zip(sorted_slot_n, sparse_flops))
-        sparse_cores_dict[bin_idx] = OrderedDict(zip(sorted_slot_n, sparse_cores))
-        sparse_event_dict[bin_idx] = OrderedDict(zip(sorted_slot_n, sparse_event))
-        bin_list[bin_idx].sparse_flops = list(zip(sorted_slot_n, sparse_flops))
-        bin_list[bin_idx].sparse_cores = list(zip(sorted_slot_n, sparse_cores))
-        bin_list[bin_idx].sparse_event = list(zip(sorted_slot_n, sparse_event))
-        bin_list[bin_idx].alloc_mod = "proper"
-    return sparse_flops_dict, sparse_cores_dict, sparse_event_dict
-
 # event msg parser
+
+def init_event(_p, curr_t:float, type:str, src:int=-1, tgt:int=-1) -> str:
+    if type == "migrate_from":
+        assert src >= 0
+        return f"{_p.task.name:s}({_p.pid:d}) migrate from {src:d} @ {curr_t:.6f}/{_p.get_timestamp():.6f}!!"
+    elif type == "migrate_to":
+        assert tgt >= 0
+        return f"{_p.task.name:s}({_p.pid:d}) migrate to {tgt:d} @ {curr_t:.6f}/{_p.get_timestamp():.6f}!!"
+    elif type == "start":
+        assert src >= 0
+        return f"{_p.task.name:s}({_p.pid:d}) start on {src:d} @ {curr_t:.6f}/{_p.get_timestamp():.6f}!!"
+    elif type == "complete":
+        assert src >= 0
+        return f"{_p.task.name:s}({_p.pid:d}) complete on {src:d} @ {curr_t:.6f}/{_p.get_timestamp():.6f}!!"
+    else:
+        raise ValueError(f"Unknown event type {type}")
+
+tab_event_type = ["migrate_from", "start", "complete", "migrate_to"]
+tab_event_re = r"(.*)\((\d+)\) (migrate from|migrate to|start on|complete on) (\d+) @ (\d+\.\d+)/(\d+\.\d+)!!"
+tab_event_pattern_keys = ["name", "pid", "event_type", "bin_id", "curr_t", "ts"]
+tab_event_pattern_type = [str, int, str, int, float, float]
+
+
 def parse_event_msg(msg:str):
     """
     use re to match event pattern, and extract 
@@ -1817,14 +775,18 @@ def parse_event_msg(msg:str):
     f"migrate-{pid:d}_to_{next_bin_idx}"
     """ 
     import re
-    pattern = re.compile(r"^(?P<event_type>\w+)-(?P<pid>\d+)(_(?P<ts>\d+))?(_from_(?P<from>\d+))?(_to_(?P<to>\d+))?$")
+    # pattern = re.compile(r"^(?P<event_type>\w+)-(?P<pid>\d+)(_(?P<ts>\d+))?(_from_(?P<from>\d+))?(_to_(?P<to>\d+))?$")
+    pattern = re.compile(tab_event_re)
     match = pattern.match(msg)
     # {k: t(v) for k,v,t in zip(pattern_keys, match.groups(), pattern_type) if v is not None}
-    group_dict = match.groupdict()
-    pattern_type = {"event_type":str, "pid":int, "ts":int, "from":int, "to":int}
-    result = {k: t(v) for k,v,t in zip(group_dict.keys(), group_dict.values(), pattern_type.values()) if v is not None}
+    try:
+        result = {k: t(v) for k,v,t in zip(tab_event_pattern_keys, match.groups(), tab_event_pattern_type)}
+    except TypeError:
+        assert False, f"TypeError: {msg}"
+    # replace "migrate from" with "migrate_from", "migrate to" with "migrate_to"
+    result['event_type'] = result['event_type'].replace("on", "")
+    result['event_type'] = result['event_type'].replace(" ", "_")
     return result
-
 
 def filter_msg(tab_event_msg:str, msg_filter:Optional[Union[None, Dict[str, str]]]): 
     """
@@ -1834,7 +796,7 @@ def filter_msg(tab_event_msg:str, msg_filter:Optional[Union[None, Dict[str, str]
     results = parse_event_msg(tab_event_msg)
     for k,v in msg_filter.items(): 
         if k not in results or (results[k] != '?' and results[k]!= v):
-            return False
+            return False, {}
     return True, results
     
 def process_tab_event(sched, curr_t, ready_queue, running_queue, throttle_list, event_list, _SchedTab, process_dict, bin_id, 
@@ -1849,21 +811,31 @@ def process_tab_event(sched, curr_t, ready_queue, running_queue, throttle_list, 
     scheduler scan (1), take from bk but got nothing
     then scheduler scan (2), put the budget to (2) ruther than bk
     Event format: 
-        {"event_type":str, "pid":int, "ts":int, "from":int, "to":int}
+        {
+            "name": str,
+            "pid": int,
+            "event_type": str,
+            "bin_id": int,
+            "curr_t": float,
+            "ts": float
+        }
     """
-    if _SchedTab.alloc_mod != 'exactly':
+    if _SchedTab.alloc_mod == 'N/A':
         return 
 
-    # 1. process old events
+    matched_events = []
     for msg in event_list:
         match, results = filter_msg(msg, msg_filter) 
         if not match:
             continue
-        # start, complete, migrate
-        if results['event_type'] == "migrate":
-            if 'to' in results:
+        matched_events.append(msg)
+        # "migrate_from", "start", "complete", "migrate_to"
+        if "migrate" in results['event_type']:
+            if 'to' in results['event_type']:
+                print(msg)
                 event_handle_migrate_to(sched, curr_t, ready_queue, running_queue, throttle_list, process_dict, bin_id, results)
-            elif 'from' in results:
+            elif 'from' in results['event_type']:
+                print(msg)
                 event_handle_migrate_from(process_dict, bin_id, results)
         elif results['event_type'] == "start":
             pass
@@ -1871,96 +843,45 @@ def process_tab_event(sched, curr_t, ready_queue, running_queue, throttle_list, 
             pass
         else:
             raise ValueError(f"Unknown event type {results['event_type']}")
+    # clear the matched events
+    for idx in reversed(matched_events):
+        event_list.remove(idx)
         
-    # 2. clear the old events
-    event_list.clear()
-    
-    # 3. process new events
-    # (slot_idx, Dict[pid, event_set])
-    from functools import reduce
-    if _SchedTab.sparse_event[_SchedTab.sparse_idx][1]:
-        event_set = reduce(lambda x,y: x+y, map(lambda x:list(x), _SchedTab.sparse_event[_SchedTab.sparse_idx][1].values()))
-        event_list.extend(list(event_set))
-
 def event_handle_migrate_from(process_dict, bin_id, results):
-    _p = process_dict[results['pid']]
-    rem_flop_budget = {k:v for k,v in _p.rem_flop_budget.items() if v > numerical_error_tol_abs}
-    try:
-        assert len(rem_flop_budget) <= 2
-    except AssertionError:
-        print(f"20231126: CodingError, try to gurrante the budget only on one partition at a time")
-                # restore the _p.rem_flop_budget from BK
+    _p = check_legality(process_dict, results)
+    # restore the _p.rem_flop_budget from BK
     _p.rem_flop_budget[bin_id] += _p.rem_flop_budget.pop('bk', 0.)
 
-def event_handle_migrate_to(sched, curr_t, ready_queue, running_queue, throttle_list, process_dict, bin_id, results):
+def check_legality(process_dict, results):
     _p = process_dict[results['pid']]
-    rem_flop_budget = {k:v for k,v in _p.rem_flop_budget.items() if v > numerical_error_tol_abs}
-    assert len(rem_flop_budget) <= 2
+    # rem_flop_budget = {k:v for k,v in _p.rem_flop_budget.items() if v > numerical_error_tol_abs}
+    # try:
+    #     assert len(rem_flop_budget) <= 2
+    # except AssertionError:
+    #     print(f"20231126: CodingError, try to gurrante the budget only on one partition at a time")
+    return _p
+
+def event_handle_migrate_to(sched, curr_t, ready_queue, running_queue, throttle_list, process_dict, bin_id, results):
+    _p:ProcessInt = check_legality(process_dict, results)
+    # throttle the task to be migrated
     if _p in (running_queue.queue+ready_queue.queue):
-        _p.throttle_util(running_queue, ready_queue, throttle_list, sched, curr_t)
-                    # backup the _p.rem_flop_budget
+        _p.throttle_util(throttle_list, curr_t)
+        _p.task.migration_count += 1
+        if _p in running_queue.queue:
+            sched.res_release(_p.pid)
+            # budget_recoder.pop(_p.pid)
+            running_queue.remove(_p)
+        elif _p in ready_queue.queue:
+            ready_queue.remove(_p)
+        else:
+            raise ValueError("Task is not in the running queue or ready queue")
+    # backup the _p.rem_flop_budget
     rem_flop_budget = _p.rem_flop_budget[bin_id]
-    if results['to'] in _p.rem_flop_budget:
-        _p.rem_flop_budget[results['to']] += rem_flop_budget
+    if results['bin_id'] in _p.rem_flop_budget:
+        _p.rem_flop_budget[results['bin_id']] += rem_flop_budget
     else:
         _p.rem_flop_budget['bk'] = rem_flop_budget
     _p.rem_flop_budget[bin_id] = 0
-
-def action_at_end_cfg(curr_cfg, budget_recoder, rsc_recoder_his, process_dict, bin_id):
-    cfg_slot_s, next_cfg, cfg_slot_num = curr_cfg.slot_s, curr_cfg.rsc_map, curr_cfg.slot_num
-    cfg_flops_dict = curr_cfg.flops_dict 
-    cfg_event_list = curr_cfg.event_list
-    # replenish the budget
-    for pid in next_cfg.keys():
-        _p = process_dict[pid]
-                    
-        if bin_id not in _p.rem_flop_budget:
-            _p.rem_flop_budget[bin_id] = 0
-                        
-        flops_tbd = cfg_flops_dict[pid]
-        rem_flop_budget=_p.rem_flop_budget[bin_id]
-        if rem_flop_budget> numerical_error_tol_abs or flops_tbd>numerical_error_tol_abs: 
-            _p.rem_flop_budget[bin_id] += flops_tbd # * _p.var_scale_factor
-            budget_recoder[pid] = [cfg_slot_s, next_cfg[pid], cfg_slot_num, True]
-            
-        # TODO: move the hit recoder to issue stage
-        if _p.pid not in rsc_recoder_his:
-            rsc_recoder_his[_p.pid] = LRUCache(3)
-        rsc_recoder_his[_p.pid].put(bin_id)
-    return cfg_event_list
-
-def action_at_start_cfg(timestep, curr_cfg, _SchedTab, tab_temp_size, tab_pointer, hyper_p_n):
-    cfg_slot_s, next_cfg, cfg_slot_num = _SchedTab.next_item()
-    if _SchedTab.alloc_mod != 'exactly':
-        curr_cfg.update(_SchedTab.sparse_cores[_SchedTab.sparse_idx][1])
-    else:
-        curr_cfg.update(next_cfg)
-    
-    # update the deadline
-    if cfg_slot_s < tab_pointer: 
-        curr_cfg.slot_s = (hyper_p_n + 1) * tab_temp_size + cfg_slot_s
-    else:
-        curr_cfg.slot_s = hyper_p_n * tab_temp_size + cfg_slot_s
-    curr_cfg.slot_e = curr_cfg.slot_s + cfg_slot_num - 1 
-    curr_cfg.slot_num = cfg_slot_num
-    
-    curr_cfg.flops_dict.clear()
-    if _SchedTab.alloc_mod != 'exactly':
-        curr_cfg.flops_dict.update(_SchedTab.sparse_flops[_SchedTab.sparse_idx][1])
-    else:
-        curr_cfg.flops_dict.update({pid: n_cores * cfg_slot_num * timestep * FLOPS_PER_CORE for pid, n_cores in next_cfg.items()})
-    return next_cfg
-
-
-def update_sparse_dict(bin_idx, pid, s_i, sparse_dict, item, item_type):
-    if s_i not in sparse_dict[bin_idx]:
-        sparse_dict[bin_idx][s_i] = {}
-    if hasattr(item_type, "update"):
-        old = sparse_dict[bin_idx][s_i].get(pid, item_type())
-        old.update(item)
-        sparse_dict[bin_idx][s_i].update({pid:old})
-    else:
-        sparse_dict[bin_idx][s_i].update({pid:item})
 
 def calc_free_spaces(items, bin_height, bin_width):
     # Sort by start  
@@ -2004,7 +925,6 @@ def get_freespace_features(free_spaces):
     bary_x = weighted_x.sum()/free_area
     bary_y = weighted_y.sum()/free_area 
     return free_area, bary_x, bary_y
-
 
 class BinGenSelInt(object):
     def __init__(self, tab_temp_size:int):
@@ -2051,23 +971,6 @@ def load_bin_list(bin_list_save_path, min_num_bins=-1):
         if bin_id >= len(bin_list):
             bin_list.append(SchedulingTableInt(0, bin_id, 0, f'dummy_bin_{bin_id}'))
     return bin_list
-
-def Bin_list_print(bin_list, glb_p_list, timestep):
-    pid2name = {_p.pid:_p.task.name for _p in glb_p_list}
-    for _SchedTab in bin_list:
-        print("=====================================\n")
-        print(f"Scheduling Table of {_SchedTab.name}({_SchedTab.id}):")
-        _SchedTab.print_scheduling_table(pid2name, timestep)
-        print("=====================================\n")
-    
-    print("=====================================\n")
-    print("bin_pack_result:")
-    print("=====================================\n")
-    for _SchedTab in bin_list:
-        _SchedTab.print_alloc_detail(pid2name, timestep)
-    layout = {_bin.name:_bin.num_resources for _bin in bin_list}
-    print("max_core_num:", sum(layout.values()))
-    print(f"max_core_layout: {layout}")
 
 if __name__ == "__main__": 
     import argparse

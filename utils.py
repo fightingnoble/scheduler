@@ -158,7 +158,7 @@ def input_parser():
     
     parser.add_argument("--max_core_stat", default=False, type=bool, help="max core stat")
     parser.add_argument("--forbid_miss", default=False, action="store_true", help="forbid miss")
-    parser.add_argument("--progress_aware", default=False, action="store_true", help="consider the execution porgress")
+    # parser.add_argument("--progress_aware", default=False, action="store_true", help="consider the execution porgress")
     parser.add_argument("--allow_realloc", default=False, action="store_true", help="allow reallocation of resources amount")
     args = parser.parse_args()
 
@@ -352,14 +352,12 @@ def csv_fmt_check(filename, cols):
 def core_distr(rsc_map, score_dict, curr_aval_rsc):
     cum_score_reverse = np.cumsum(list(reversed(score_dict.values())))
     cum_size = [curr_aval_rsc * s / cum_score_reverse[-1] for s in cum_score_reverse]
+    cum_size[-1] = curr_aval_rsc
     for i, pid in enumerate(reversed(score_dict.keys())):
         if i == 0:
             size = int(cum_size[0])
             rsc_map[pid] += size
             cum_size[0] = size
-        elif i == len(score_dict) - 1:
-            size = int(curr_aval_rsc - cum_size[i - 1])
-            rsc_map[pid] += size
         else:
             size = int(cum_size[i] - cum_size[i - 1])
             rsc_map[pid] += size

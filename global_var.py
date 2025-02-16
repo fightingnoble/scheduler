@@ -90,12 +90,20 @@ case_suffix_N_barrier = r"_barrier_dis"
 
 case_name_bp_input = r"bin_pack_new"
 case_name_glb_input = r"glb_dynamic"
-other_case_coll = [case_name_bp_input, case_name_glb_input]
+other_case_coll = [case_name_glb_input]
 
 case_name_dyn_input = r"dynamic"
 case_name_cyc_input = r"cyclic"
 case_name_fifo_input = r"fifo"
 case_name_pglb_input = r"partitioned_glb_dynamic"
-two_stage_case_coll = [case_name_cyc_input, case_name_dyn_input, case_name_pglb_input, case_name_glb_input, case_name_fifo_input]
+two_stage_case_coll = [case_name_dyn_input, case_name_cyc_input, case_name_pglb_input, case_name_fifo_input]
+
+init_packing_algo_required = [
+    "repack",
+    "bin_split",
+    "coalescing",
+    "mem_plan",
+    "reside",
+]
 
 partition_max = 9999

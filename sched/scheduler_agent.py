@@ -16,6 +16,7 @@ from task.task_agent import ProcessInt
 from sched.scheduling_table import SchedulingTableInt
 from sched.monitor_agent import Monitor
 from sched.sched_fn import *
+from collections import defaultdict
 
 class Scheduler(object): 
     """
@@ -98,7 +99,8 @@ class Scheduler(object):
                  glb_p_list:List[ProcessInt],
                  budget_recoder:Dict[int, List]=None, rsc_recoder_his:Dict[int, LRUCache]=None, 
                  barrier_en:bool=True, res_cfg:Resource_model_int=None, exec_t_comp_ratioB=0, 
-                 forbid_miss:bool=False, trace_path:str=None,
+                 forbid_miss:bool=False, trace_path:str=None, progress_aware:bool=True, 
+                 allow_realloc:bool=True,
                  ) -> None:
         self.expired_queue: List = []
         self.blocked_queue: List = []
@@ -160,8 +162,23 @@ class Scheduler(object):
 
         # curr_cfg, budget_recoder, rsc_recoder_his, process_dict
         # curr_cfg_list, budget_recoder_list, rsc_recoder_his_list, process_dict_list
+
+
+        # ******************************************************
+        # Mechanism of budget and progress recoder
+        # 1. rem_flop_budget
+        # Record the expected operators to be executed in the next few moments
+        # 
+        # 2. budget_recoder: 
+        # record the upper bound of resource consumption (spatial and temporal)
+        # The previous budget is covered, when the new chunk is entered.
+        # Explanation: 
+        # If the load of privious chunk is uncompleted,
+        # the previous timeout budget is useless, 
+        # because the comming computation should be allocated with resources as soon as ponssible
+        # ******************************************************
         self.budget_recoder = budget_recoder if budget_recoder else {}
-        self.rsc_recoder_his = rsc_recoder_his if rsc_recoder_his else {}
+        self.rsc_recoder_his = rsc_recoder_his if rsc_recoder_his else defaultdict(lambda: LRUCache(3))
 
         self.position_dict: Dict[int, int] = {}
         self.barrier_en = barrier_en
@@ -185,8 +202,8 @@ class Scheduler(object):
         self.trace_path = trace_path
         
         # progress aware
-        self.progress_aware = True
-        self.allow_realloc = True
+        self.progress_aware = progress_aware
+        self.allow_realloc = allow_realloc
 
     def res_release(self, pid, op_pos_dict:bool=True):
         self.res_cfg.release(pid, verbose=False)
@@ -196,7 +213,7 @@ class Scheduler(object):
     def check_draining_state(self):
         queue_clear_flag = True
         for _p in  (self.active_list + self.ready_queue.queue + self.running_queue.queue):
-            if _p.msg_cache[0].get_timestamp() < self.switch_border:
+            if _p.get_timestamp() < self.switch_border:
                 queue_clear_flag = False
                 break
         if queue_clear_flag:
@@ -238,18 +255,14 @@ class Scheduler(object):
                                 self.budget_recoder, self.ready_queue, self.throttle_list, self._SchedTab.name,
                                 bin_event_flg)
 
-    def chk_release(self, event_range, curr_t, timestep, 
-                    bin_event_flg:bool=False, ):
-        return chk_release(self, event_range, curr_t, self.inactive_list, self.active_list, self._SchedTab, timestep, 
-                           bin_event_flg, self._SchedTab.name)
-
-    def check_miss(self, msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
-                            curr_t, res_cfg, 
-                            bin_event_flg:bool=False):
+    def check_miss(self, timestep, msg_dispatcher:MsgDispatcher,#msg_pipe:Message,
+                    a_data_pipe:DataPipe,
+                    curr_t, res_cfg, 
+                    bin_event_flg:bool=False):
 
         # check_miss(budget_recoder, curr_t, res_cfg, weight_wait_queue, ready_queue, running_queue, miss_list, 
                             # throttle_list, active_list, inactive_list, buffer, bin_event_flg, bin_name)
-        return check_miss(self, self.budget_recoder, msg_dispatcher, curr_t, res_cfg, self.weight_wait_queue, self.ready_queue, self.running_queue, self.miss_list,
+        return check_miss(self, self.budget_recoder, timestep, msg_dispatcher, a_data_pipe, curr_t, res_cfg, self.weight_wait_queue, self.ready_queue, self.running_queue, self.miss_list,
                             self.throttle_list, self.active_list, self.inactive_list, self.buffer, bin_event_flg, self._SchedTab.name)
 
     def check_throttle(self,
@@ -354,34 +367,70 @@ class Scheduler(object):
                               res_cfg, msg_queue, a_msg_queue, sensor_msg_queue, monitor, DEBUG_FG)
 
 
-def handle_taskqueue(sched, curr_t, res_cfg, ready_queue, running_queue, preempt_list, issue_list, ctx_switch_list, bin_name, bin_event_flg, pre_rsc, rsc_map):
+    # sort metrices
+    # excess_switching_border = lambda x: x.get_timestamp()>=sched.switch_border
+    # is_running = x not in preemptable_list
+    # is_not_hard = lambda x: x.task.criticality != "hard"
+    # fn_crit = lambda x: x.deadline
+    # # fn_crit = lambda _p: budget_recoder[_p.pid][0] + budget_recoder[_p.pid][2]
+    # fn_task_flag = lambda x: 0 if x.task.task_flag=="stationary" else 1
+
+    def handle_taskqueue(self, curr_t, bin_event_flg, pre_rsc, rsc_map): 
+        """ update the resource configuration by preempt_list, issue_list, ctx_switch_list
+
+        Args:
+            curr_t (_type_): _description_
+            bin_event_flg (_type_): _description_
+            pre_rsc (_type_): _description_
+            rsc_map (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        return handle_taskqueue(
+            self, curr_t, self.res_cfg, self.ready_queue, self.running_queue, 
+            self.preempt_list, self.issue_list, self.ctx_switch_list, 
+            self._SchedTab.name, bin_event_flg, pre_rsc, rsc_map
+            )
+        
+
+def handle_taskqueue(sched:Scheduler, curr_t, res_cfg, ready_queue, running_queue, preempt_list, issue_list, ctx_switch_list, bin_name, bin_event_flg, pre_rsc, rsc_map):
     for _p in preempt_list:
         print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) preempted at {curr_t:.6f};")
         running_queue.remove(_p)
         ready_queue.put(_p)
         sched.res_release(_p.pid, False)
+        _p.set_state("ready")
+        _p.task.preemption_count += 1
     preempt_list.clear()
             
     for _p in ctx_switch_list:
         print(f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) ctx switch at {curr_t:.6f}({pre_rsc[_p.pid]} -> {rsc_map[_p.pid]});")
         sched.res_release(_p.pid, False)
         res_cfg.allocate(_p.pid, rsc_map[_p.pid])
+        _p.task.context_switch_count += 1
     ctx_switch_list.clear()
 
     # if issue the task to runnning list
     for _p in issue_list:
+        _p:ProcessInt
+        assert _p.get_state_name() != "running"
         running_queue.put(_p)
+        if _p.pid not in sched.rsc_recoder_his:
+            sched.rsc_recoder_his[_p.pid] = LRUCache(3)
+        sched.rsc_recoder_his[_p.pid].put(sched._SchedTab.id)
+        
         ready_queue.remove(_p)
         # NOTE:cross cancelation (removed)
         _p.set_state("running")
         res_cfg.allocate(_p.pid, rsc_map[_p.pid])
         _p.waitTime = 0 
-        _str = f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) issued and "
+        _str = f"		TASK {_p.task.id:d}:{_p.task.name:s}({_p.pid:d}) is issued and "
         if _p.totburst==0:
             _p.start_time = curr_t
-            _str += f"start at {curr_t:.6f}; "
+            _str += f"started at {curr_t:.6f}; "
         else:
-            _str += f"resume at {curr_t:.6f}; "
+            _str += f"resumed at {curr_t:.6f}; "
         _p.curr_start_time = curr_t
         if bin_name and not bin_event_flg:
             bin_event_flg = True 

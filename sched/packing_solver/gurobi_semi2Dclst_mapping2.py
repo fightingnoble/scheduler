@@ -32,16 +32,16 @@ class GurobiSemi2DClstMapping:
     """
 
     # N:int, M:int, S:int, NT:int, T:float, A:Dict[int, int], dependencies:List[Tuple[int, int]], compute_lower_bounds:List[int], start_constraints:List[int], end_constraints:List[int], time_format="float", timestep_size:float=None
-    def __init__(self, N:int, M:Union[int, float], S:int, T:float, A:Dict[int, int], dependencies:List[Tuple[int, int]],  
+    def __init__(self, N:int, M:Union[int, float], S:int, NT:int, T:float, A:Dict[int, int], dependencies:List[Tuple[int, int]],  
                  compute_lower_bounds:List[int], start_constraints:List[int], end_constraints:List[int], path_info:List[Tuple[Union[List[int], float]]],
-                 time_format="float", timestep_size:float=None, spt_fmt="float", 
+                 time_format="float", timestep_size:float=None, spt_fmt="int", 
                  fit_params:list=None, size_scale=1, 
                  verbose=True
                  ):
         self.N:int = N # Number of tasks
         self.M:int = M # Maximum number of resources
         self.S:int = S # Number of partitions
-        self.NT:int = 2*N # Number of discrete time steps
+        self.NT:int = NT # Number of discrete time steps
         self.T:float = T # Period length
         self.A:Dict[int, Dict[int, int]] = A # 2D table A, where A_ij's index: i is the task index, j is the number of resources (not an identifier!). A_ij represents the delay required to assign j resources to task i.
         self.dependencies:List[Tuple[int, int]] = dependencies # Dependency relationships in the task graph
@@ -66,7 +66,6 @@ class GurobiSemi2DClstMapping:
         self.model = Model("Partitioned_Task_Scheduling")
         self._initialize_variables()
         self._add_constraints()
-        self.scatter_bin_usage()
         self.model.setParam('NonConvex', 2)
         self.model.setParam('OutputFlag', int(verbose))
         self.verbose = verbose 
@@ -74,14 +73,14 @@ class GurobiSemi2DClstMapping:
     def _initialize_variables(self):
         """初始化决策变量"""
         # ======================================================================
+        # temporal grids
+        self.critical_tick = self.model.addVars(self.NT, name="Critical_Tick", **self.t_attr) # Discrete time steps, used to calculate the maximum resource demand for the partition
         # partition size: allow searching number of bins, using spt_attr_0_to_M, the bin with size of 0 is through unused
         # self.partition_size = self.model.addVars(self.S, name="Partition_Size", **self.spt_attr_0_to_M) # Partition capacity
 
         # Task variables: temporal placements
         self.start_times = self.model.addVars(self.N, name="Start_Time", **self.t_attr) # Task start times
         self.end_times = self.model.addVars(self.N, name="End_Time", **self.t_attr) # Task end times
-        self.critical_tick = [self.start_times[i] for i in range(self.N)] + [self.end_times[i] for i in range(self.N)]
-        # critical_tick = [model.cbGetSolution(model.getVarByName(f"Start_Time[{i}]")) for i in range(N)] + [model.cbGetSolution(model.getVarByName(f"End_Time[{i}]")) for i in range(N)]
         self.durations = self.model.addVars(self.N, name="Duration", **self.t_attr) # Task durations
         
         # Task variables: resource allocation
@@ -89,7 +88,11 @@ class GurobiSemi2DClstMapping:
 
         # =================================================================================
         # Decision variables
+        # whether the ith task starts at the tth start critical tick
         # =================================================================================
+        self.is_start_tick = self.model.addVars(self.N, self.NT, vtype=GRB.BINARY, name="Is_Start_Node") 
+        # whether the ith task finishes at the tth end critical tick
+        self.is_end_tick = self.model.addVars(self.N, self.NT, vtype=GRB.BINARY, name="Is_End_Node")  
         self.is_resource_j = self.model.addVars(
             [(i, j) for i in range(self.N) for j in self.A[i].keys()],
             name="Is_Resource_j",
@@ -107,38 +110,51 @@ class GurobiSemi2DClstMapping:
         # active at the critical ticks
         # The the peak usage of each partition        
         # =================================================================================
-        self.active_at_t = {}
-        self.Rsatisfied = {}
-        self.Lsatisfied = {}
-        self.active_at_t_cross_period = {}
-        self.active_at_t_not_cross_period = {}
-        # Lsatisfied = {(i,t): model.cbGetSolution(model.getVarByName(f"L_Satisfied[{i},{t}]")) for i in range(N) for t in range(2*N) if t%.N != i}
-        # Rsatisfied = {(i,t): model.cbGetSolution(model.getVarByName(f"R_Satisfied[{i},{t}]")) for i in range(N) for t in range(2*N) if t%.N != i}
-        # active_at_t_cross_period = {(i,t): model.cbGetSolution(model.getVarByName(f"Active_At_T_Cross_Period[{i},{t}]")) for i in range(N) for t in range(2*N) if t%.N != i}
-        # active_at_t_not_cross_period = {(i,t): model.cbGetSolution(model.getVarByName(f"Active_At_T_Not_Cross_Period[{i},{t}]")) for i in range(N) for t in range(2*N) if t%.N != i}
-        for i in range(self.N):
-            for t in range(self.NT):
-                if t%self.N == i: 
-                    if t > self.N-1: 
-                        # assert task i is not allocated to its end time
-                        self.active_at_t[(i, t)] = 0
-                    else: 
-                        # task i is allocated to its start time
-                        self.active_at_t[(i, t)] = 1
-                else: 
-                    # use binary variable to indicate if task i is active at t
-                    self.active_at_t[(i, t)] = self.model.addVar(vtype=GRB.BINARY, name=f"Active_At_T[{i},{t}]")
-                    # 1 -> t>=start_times[i]
-                    self.Lsatisfied[(i, t)] = self.model.addVar(vtype=GRB.BINARY, name=f"L_Satisfied[{i},{t}]")
-                    # 1 -> t<=end_times[i]-self.slackR
-                    self.Rsatisfied[(i, t)] = self.model.addVar(vtype=GRB.BINARY, name=f"R_Satisfied[{i},{t}]")
-                    self.active_at_t_cross_period[(i, t)] = self.model.addVar(vtype=GRB.BINARY, name=f"Active_At_T_Cross_Period[{i},{t}]")
-                    self.active_at_t_not_cross_period[(i, t)] = self.model.addVar(vtype=GRB.BINARY, name=f"Active_At_T_Not_Cross_Period[{i},{t}]")
-
-
+        self.active_at_t = self.model.addVars(
+            # [(i, t) for i in range(self.N) for t in self.critical_tick],
+            [(i, t) for i in range(self.N) for t in range(self.NT)],
+            vtype=GRB.BINARY,
+            name="Active_At_T",
+        )
         # partition size: allow searching number of bins, using spt_attr_0_to_M, the bin with size of 0 is through unused
         self.peak_bin_usage = self.model.addVars(self.S, name="Max_Usage", **self.spt_attr_0_to_M) # Maximum usage of each partition
+        
+        # =================================================================================
+        # Target variables
+        # =================================================================================
+        # Main: utilization of each partition
+        self.utilization = self.model.addVars(self.S, lb=0, ub=1, vtype=GRB.CONTINUOUS, name="Utilization")
+        self.min_util = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f'min_util')
+        self.max_util = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f'max_util')
+        
+        # Aux 1: speedup rate, chain by chain
+        self.speedup_rate = {}
+        for i in range(self.N):
+            if self.end_constraints[i] is not None:
+                self.speedup_rate[i] = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f"Speedup_Rate_{i}")
+        
+        # Aux 2: affinity score
+        self.affinity_score = self.model.addVar(lb=-len(self.dependencies), ub=len(self.dependencies), vtype=GRB.CONTINUOUS, name="affinity_score")
+                
+        # Aux 3: ratio of peak usage and partition size
+        self.spatial_rda_ratio = self.model.addVars(self.S, lb=0, ub=1, vtype=GRB.CONTINUOUS, name="Spatial_RDA_Ratio")
 
+        self.static_wasted_resources = self.model.addVar(
+            vtype=GRB.CONTINUOUS,
+            name="Static_Wasted_Resources",
+        )
+        self.realloc_overhead_bin = self.model.addVars(
+            self.S,
+            vtype=GRB.CONTINUOUS,
+            name="",
+        )
+        self.dynamic_wasted_resources = self.model.addVar(
+            vtype=GRB.CONTINUOUS,
+            name="Dynamic_Wasted_Resources",
+        )
+    
+    def _add_constraints(self):
+        """添加约束条件"""
 
         # =================================================================================
         # Define the cyclic mapping constraints
@@ -154,56 +170,15 @@ class GurobiSemi2DClstMapping:
         # we not regulate the sink node time, so we need not add a variable to indicate if a sink data is crossing a period
 
         # =================================================================================
-        # Target variables
-        # =================================================================================        
-        # Aux 1: speedup rate, chain by chain
-        # self.speedup_rate = {}
-        # for i in range(self.N):
-        #     if self.end_constraints[i] is not None:
-        #         self.speedup_rate[i] = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f"Speedup_Rate_{i}")
-        
-        # Aux 2: affinity score
-        self.affinity_score = self.model.addVar(vtype=GRB.CONTINUOUS, name="affinity_score")
-        self.spatial_affinity = self.model.addVars([(i,j) for i,j in self.dependencies], vtype=GRB.CONTINUOUS, name="spatial_affinity")
-        self.temporal_affinity = self.model.addVars([(i,j) for i,j in self.dependencies], vtype=GRB.CONTINUOUS, name="temporal_affinity")
-        self.temporal_affinity_bool = self.model.addVars([(i,j) for i,j in self.dependencies], vtype=GRB.BINARY, name="temporal_affinity_bool")
-        self.st_affinity_bool = self.model.addVars([(i,j) for i,j in self.dependencies], vtype=GRB.CONTINUOUS, name="st_affinity_bool")
-        # spatial_affinity = {(i,j): model.cbGetSolution(model.getVarByName(f"spatial_affinity[{i},{j}]")) for i,j in dependencies}
-        # temporal_affinity = {(i,j): model.cbGetSolution(model.getVarByName(f"temporal_affinity[{i},{j}]")) for i,j in dependencies}
-        # temporal_affinity_bool = {(i,j): model.cbGetSolution(model.getVarByName(f"temporal_affinity_bool[{i},{j}]")) for i,j in dependencies}
-        # st_affinity_bool = {(i,j): model.cbGetSolution(model.getVarByName(f"st_affinity_bool[{i},{j}]")) for i,j in dependencies}
-                
-        # Aux 3: ratio of peak usage and partition size
-        # self.spatial_rda_ratio = self.model.addVars(self.S, lb=0, ub=1, vtype=GRB.CONTINUOUS, name="Spatial_RDA_Ratio")
-
-        self.static_wasted_resources = self.model.addVar(
-            vtype=GRB.CONTINUOUS,
-            name="Static_Wasted_Resources",
-        )
-        self.realloc_overhead_bin = self.model.addVars(
-            self.S,
-            vtype=GRB.CONTINUOUS,
-            name="",
-        )
-        self.affinity_overhead = self.model.addVars(
-            [(i,j) for i,j in self.dependencies],
-            vtype=GRB.CONTINUOUS,
-            name="Affinity_Overhead",
-        )
-        self.affinity_overhead_sum = self.model.addVar(
-            vtype=GRB.CONTINUOUS,
-            name="Affinity_Overhead_Sum",
-        )
-        # affinity_overhead = {(i,j): model.cbGetSolution(model.getVarByName(f"Affinity_Overhead[{i},{j}]")) for i,j in dependencies}
-        # affinity_overhead_sum = model.cbGetSolution(model.getVarByName(f"Affinity_Overhead_Sum"))
-        
-        self.dynamic_wasted_resources = self.model.addVar(
-            vtype=GRB.CONTINUOUS,
-            name="Dynamic_Wasted_Resources",
-        )
-    
-    def _add_constraints(self):
-        """添加约束条件"""
+        # Define the allocation constraints in temporal grids
+        # =================================================================================
+        # self.critical_tick[t] >= self.critical_tick[t-1]+self.slackR
+        # self.start_times[i] == [self.is_start_tick[i, t] * critical_tick[t] for t in range(self.NT)]
+        # self.end_times[i] == [self.is_end_tick[i, t] * critical_tick[t] for t in range(self.NT)]
+        # sum(self.is_start_tick[i, t] for t in range(self.NT)) == 1
+        # sum(self.is_end_tick[i, t] for t in range(self.NT)) == 1
+        self.add_tgrid_constrs()
+        # =================================================================================
 
         # =================================================================================
         # Define graph-related timing constraints
@@ -246,6 +221,16 @@ class GurobiSemi2DClstMapping:
                 quicksum(self.is_task_in_bin[i, s] for s in range(self.S)) == 1,
                 name=f"Partition_Assignment_{i}",
             )  
+            # only one critical tick is selected as the start time
+            self.model.addConstr(
+                quicksum(self.is_start_tick[i, k] for k in range(self.NT)) == 1,
+                name=f"Start_Node_Selection_{i}",
+            )
+            # only one critical tick is selected as the end time
+            self.model.addConstr(
+                quicksum(self.is_end_tick[i, k] for k in range(self.NT)) == 1,
+                name=f"End_Node_Selection_{i}",
+            )
             # only one implementation is selected
             self.model.addConstr(
                 quicksum(self.is_resource_j[i, j] for j in self.A[i].keys()) == 1,
@@ -256,10 +241,10 @@ class GurobiSemi2DClstMapping:
         for i in range(self.N):
             # Shape compatibility of allocated region and selected implementation
             # duration[i] >= sum(A_ij * is_resource_j)
-            # self.model.addConstr(
-            #     self.durations[i] >= quicksum(self.is_resource_j[i, j] * self.A[i][j] for j in self.A[i].keys()),
-            #     name=f"Duration_Constraint_{i}",
-            # ) 
+            self.model.addConstr(
+                self.durations[i] >= quicksum(self.is_resource_j[i, j] * self.A[i][j] for j in self.A[i].keys()),
+                name=f"Duration_Constraint_{i}",
+            ) 
             # resources[i] == sum(is_resource_j * j)
             self.model.addConstr(
                 self.resources[i] == quicksum(self.is_resource_j[i, j] * j for j in self.A[i].keys()),
@@ -275,13 +260,52 @@ class GurobiSemi2DClstMapping:
         # self.resources[i] * self.durations[i] >= compute_lower_bounds[i]
         for i in range(self.N):
             self.model.addConstr(
-                self.resources[i] * self.durations[i] == self.compute_lower_bounds[i],
+                self.resources[i] * self.durations[i] >= self.compute_lower_bounds[i],
                 name=f"Compute_Lower_Bound_{i}",
             )
-            # self.model.addConstr(
-            #     self.resources[i] * self.durations[i] <= self.compute_lower_bounds[i] + self.M,
-            #     name=f"Compute_Lower_Bound_{i}",
-            # )
+            self.model.addConstr(
+                self.resources[i] * self.durations[i] <= self.compute_lower_bounds[i] + self.M,
+                name=f"Compute_Lower_Bound_{i}",
+            )
+
+    def add_tgrid_constrs(self):
+
+        # ======================================================================
+        # Grid constraints: increasing critical ticks
+        # self.critical_tick[t] >= self.critical_tick[t-1]+self.slackR
+        # ======================================================================
+        for t in range(1, self.NT):
+            self.model.addConstr(self.critical_tick[t] >= self.critical_tick[t-1]+self.slackR , name=f"Critical_Tick_Incr_{t}")
+        # ======================================================================
+
+        # =================================================================================
+        # Define the constraints of critical ticks and the start and end time of each task
+        # self.start_times[i] == [self.is_start_tick[i, t] * critical_tick[t] for t in range(self.NT)]
+        # self.end_times[i] == [self.is_end_tick[i, t] * critical_tick[t] for t in range(self.NT)]
+        # ======================================================================
+
+        # =====================================
+        # Introduce slack variable v_start and v_end, and linearize the start and end time constraints
+        # =====================================
+        v_start = self.model.addVars(self.N, self.NT, vtype=GRB.CONTINUOUS, lb=0, ub=self.T, name="V_Start")
+        v_end = self.model.addVars(self.N, self.NT, vtype=GRB.CONTINUOUS, lb=0, ub=self.T, name="V_End")
+
+        M = self.T  # 大数 M，需确保大于 critical_tick 的上界
+        for i in range(self.N):
+            for t in range(self.NT):
+                # v_start 约束
+                self.model.addConstr(v_start[i, t] <= self.critical_tick[t], name=f"V_Start_Upper_{i}_{t}")
+                self.model.addConstr(v_start[i, t] <= self.is_start_tick[i, t] * M, name=f"V_Start_Binary_Upper_{i}_{t}")
+                self.model.addConstr(v_start[i, t] >= self.critical_tick[t] - (1 - self.is_start_tick[i, t]) * M, name=f"V_Start_Binary_Lower_{i}_{t}")
+                
+                # v_end 约束
+                self.model.addConstr(v_end[i, t] <= self.critical_tick[t], name=f"V_End_Upper_{i}_{t}")
+                self.model.addConstr(v_end[i, t] <= self.is_end_tick[i, t] * M, name=f"V_End_Binary_Upper_{i}_{t}")
+                self.model.addConstr(v_end[i, t] >= self.critical_tick[t] - (1 - self.is_end_tick[i, t]) * M, name=f"V_End_Binary_Lower_{i}_{t}")
+
+        for i in range(self.N):
+            self.model.addConstr(self.start_times[i] == quicksum(v_start[i, t] for t in range(self.NT)), name=f"Start_Time_Definition_{i}")
+            self.model.addConstr(self.end_times[i] == quicksum(v_end[i, t] for t in range(self.NT)), name=f"End_Time_Definition_{i}")
 
     def add_e2e_graph_constrs(self):
         # =================================================================================
@@ -295,16 +319,17 @@ class GurobiSemi2DClstMapping:
 
         # If crossing the hyperperiod, t[j] <= t[i] + d[i]
         # else, t[j] + T <= t[i] + d[i] 
+        M = self.T # Big M, uppper bound of the time
         for i, j in self.dependencies:
             self.model.addConstr(
-                self.start_times[j] - self.end_times[i] + self.T * self.is_edge_cross_period[i, j] == self.temporal_affinity[i,j],
-                name=f"define_temporal_affinity[{i},{j}]"
+                self.start_times[j] >= self.end_times[i] - M * self.is_edge_cross_period[i, j],
+                name=f"Edge_No_Cross_{i}_{j}"
             )
-            self.model.addConstr(self.temporal_affinity[i,j] >=0, name=f"temporal_affinity_non_negative[{i},{j}]")
-            self.model.addGenConstrIndicator(self.temporal_affinity_bool[i,j], True, self.temporal_affinity[i,j] == 0, name=f"temporal_affinity_bool_false[{i},{j}]")
-            self.model.addGenConstrIndicator(self.temporal_affinity_bool[i,j], False, self.temporal_affinity[i,j] >= self.slackR, name=f"temporal_affinity_bool_true[{i},{j}]")
+            self.model.addConstr(
+                self.start_times[j] + self.T >= self.end_times[i] - M * (1 - self.is_edge_cross_period[i, j]),
+                name=f"Edge_Cross_{i}_{j}"
+            )
 
-        M = self.T # Big M, uppper bound of the time
         for path, slack in self.path_info:
             # start time constraint connected to the source node
             first_node = path[0]
@@ -320,13 +345,13 @@ class GurobiSemi2DClstMapping:
             # end time constraint connected to the sink node
             n_cross = self.is_cross_period[path[0]] + self.is_edge_cross_period[-1, path[0]]
             for i in range(1, len(path)):
-                n_cross += self.is_edge_cross_period[path[i-1], path[i]] + self.is_cross_period[path[i]] 
+                n_cross += self.is_edge_cross_period[path[i-1], path[i]] + self.is_cross_period[path[i]]                
             final_node = path[-1]
             assert self.end_constraints[final_node] is not None, "Final node should have a end constraint"
             self.model.addConstr(n_cross * self.T + self.end_times[path[-1]] <= self.end_constraints[final_node], name=f"Path_Cross_Period_{path[0]}_{path[-1]}")
             # speedup rate constraint
-            # self.model.addConstr(self.speedup_rate[path[-1]] * (n_cross * self.T + self.end_times[path[-1]]) == self.end_constraints[final_node], 
-            #                      name=f"Speedup_Rate_Constraint_{path[0]}_{path[-1]}")
+            self.model.addConstr(self.speedup_rate[path[-1]] * (n_cross * self.T + self.end_times[path[-1]]) == self.end_constraints[final_node], 
+                                 name=f"Speedup_Rate_Constraint_{path[0]}_{path[-1]}")
             
 
     def add_bin_constrs(self):
@@ -350,81 +375,118 @@ class GurobiSemi2DClstMapping:
         # for s in range(self.S):
         #   max[sum(resources[i] * active_at_t[i, t] * is_task_in_bin[i, s] for i in range(self.N)) for t in self.critical_tick] <= partition_size[s]        # ======================================================================
 
-        # step 1: combine resources[i] * active_at_t[i, t]
-        self.resource_active_at_t = {}
+        # add spatial-temporal constraints
+        # if allocated on one partition, it should be active at least once
         for i in range(self.N):
+            for s in range(self.S):
+                self.model.addConstr(
+                    quicksum(self.active_at_t[i, t] for t in range(self.NT)) >= self.is_task_in_bin[i, s],
+                    name=f"Active_At_T_Partition_Constraint_{i}_{s}",
+                )
+        
+        # step 1: replace active_at_t[i, t] * is_task_in_bin[i, s] with at_bin_t[i, s, t]
+        self.at_bin_t = {}
+        for i in range(self.N):
+            for s in range(self.S):
+                # for t in self.critical_tick:
+                for t in range(self.NT):
+                    self.at_bin_t[i, s, t] = self.model.addVar(vtype=GRB.BINARY, name=f"z_{i}_{s}_{t}")
+
+        for s in range(self.S):
             for t in range(self.NT):
-                # alternative: continuous variable or not? 
-                self.resource_active_at_t[i, t] = self.model.addVar(name=f"r_{i}_{t}", **self.spt_attr_0_to_M)
-                self.model.addConstr(self.resource_active_at_t[i, t] == self.resources[i] * self.active_at_t[i, t], name=f"Bilinear_{i}_resource_at_{t}")
-                            
+                for i in range(self.N):
+                    #  线性化 at_bin_t[i, s, t] = is_task_in_bin[i, s] * active_at_t[i, t]
+                    self.model.addConstr(self.at_bin_t[i, s, t] <= self.is_task_in_bin[i, s], name=f"Z_Upper1_{i}_{s}_{t}")
+                    self.model.addConstr(self.at_bin_t[i, s, t] <= self.active_at_t[i, t], name=f"Z_Upper2_{i}_{s}_{t}")
+                    self.model.addConstr(self.at_bin_t[i, s, t] >= self.is_task_in_bin[i, s] + self.active_at_t[i, t] - 1, name=f"Z_Lower_{i}_{s}_{t}")
+                    # self.model.addConstr(self.at_bin_t[i, s, t] == self.is_task_in_bin[i, s] * self.active_at_t[i, t], name=f"Z_Linear_{i}_{s}_{t}")
+                    
         # step 2: list allocated tasks at all time points
         # active_at_t: Binds to cross-cycle and non-cross-cycle logic via slack conditions.
-                    
-        for t in range(self.NT):
-            for i in range(self.N):
-                if t%self.N == i:
-                    continue
-                tick = self.critical_tick[t]
-                # if start_times[i] <= t, then Lsatisfied[i, t] = 1
-                # else, Lsatisfied[i, t] = 0
-                self.model.addGenConstrIndicator(self.Lsatisfied[i, t], True, self.start_times[i] <= tick, name=f"Start_Active_Constraint_{i}_{t}")
-                self.model.addGenConstrIndicator(self.Lsatisfied[i, t], False, self.start_times[i] - self.slackR >= tick, name=f"Start_Inactive_Constraint_{i}_{t}")
-                # if end_times[i] < t, then Rsatisfied[i, t] = 1
-                # else, Rsatisfied[i, t] = 0
-                self.model.addGenConstrIndicator(self.Rsatisfied[i, t], True, tick <= self.end_times[i] - self.slackR, name=f"End_Active_Constraint_{i}_{t}")
-                self.model.addGenConstrIndicator(self.Rsatisfied[i, t], False, tick >= self.end_times[i], name=f"End_Inactive_Constraint_{i}_{t}")
+        
+        # t<=end_times[i]-self.slackR
+        self.Rsatisfied = self.model.addVars(
+            [(i, t) for i in range(self.N) for t in range(self.NT)],
+            vtype=GRB.BINARY,
+            name="R_Satisfied",
+        )
+        # t>=start_times[i]
+        self.Lsatisfied = self.model.addVars(
+            [(i, t) for i in range(self.N) for t in range(self.NT)],
+            vtype=GRB.BINARY,
+            name="L_Satisfied",
+        )
+        self.active_at_t_cross_period = self.model.addVars(
+            [(i, t) for i in range(self.N) for t in range(self.NT)],
+            vtype=GRB.BINARY,
+            name="Active_At_T_Cross_Period",
+        )
+        self.active_at_t_not_cross_period = self.model.addVars(
+            [(i, t) for i in range(self.N) for t in range(self.NT)],
+            vtype=GRB.BINARY,
+            name="Active_At_T_Not_Cross_Period",
+        )
+        for s in range(self.S):
+            for t in range(self.NT):
+                for i in range(self.N):
+                    tick = self.critical_tick[t]
+                    self.model.addConstr(
+                        self.start_times[i] <= tick + (1 - self.Lsatisfied[i, t]) * 1000,  # 1000 is a big M value to make sure the constraint is satisfied
+                        name=f"Start_Active_Constraint_{i}_{t}",
+                    )
+                    self.model.addConstr(
+                        tick <= self.end_times[i] - self.slackR + (1 - self.Rsatisfied[i, t]) * 1000,
+                        name=f"End_Active_Constraint_{i}_{t}",
+                    )
         
         # active_at_t_not_cross_period (non-cross-hyperperiod)：
         # active_at_t[i, t] = (start_times[i] <= t < start_times[i] + durations[i]) 
-        for t in range(self.NT):
-            for i in range(self.N):
-                if t%self.N == i:
-                    continue
-                self.model.addGenConstrAnd(
-                    self.active_at_t_not_cross_period[i, t], [self.Lsatisfied[i, t], self.Rsatisfied[i, t]],
-                    name=f"Active_At_T_Constraint_{i}_{t}",
-                )
-                self.model.addGenConstrIndicator(
-                    self.is_cross_period[i], False, self.active_at_t[i, t] == self.active_at_t_not_cross_period[i, t],
-                    name=f"Active_At_T_Indicator_{i}_{t}",
-                )
+        for s in range(self.S):
+            for t in range(self.NT):
+                for i in range(self.N):
+                    self.model.addGenConstrAnd(
+                        self.active_at_t_not_cross_period[i, t], [self.Lsatisfied[i, t], self.Rsatisfied[i, t]],
+                        name=f"Active_At_T_Constraint_{i}_{t}",
+                    )
+                    self.model.addGenConstrIndicator(
+                        self.is_cross_period[i], False, self.active_at_t[i, t] == self.active_at_t_not_cross_period[i, t],
+                        name=f"Active_At_T_Indicator_{i}_{t}",
+                    )
 
         # active_at_t_cross_period (cross-hyperperiod)
         # active_at_t[i, t] = (start_times[i] <= t or t< end_time[i]         
-        for t in range(self.NT):
-            for i in range(self.N):
-                if t%self.N == i:
-                    continue
-                self.model.addGenConstrOr(
-                    self.active_at_t_cross_period[i, t], [self.Lsatisfied[i, t], self.Rsatisfied[i, t]],
-                    name=f"Active_At_T_Cross_Period_Constraint_{i}_{t}",
-                )
-                self.model.addGenConstrIndicator(
-                    self.is_cross_period[i], True, self.active_at_t[i, t] == self.active_at_t_cross_period[i, t],
-                    name=f"Active_At_T_Cross_Period_Indicator_{i}_{t}",
-                )
+        for s in range(self.S):
+            for t in range(self.NT):
+                for i in range(self.N):
+                    self.model.addGenConstrOr(
+                        self.active_at_t_cross_period[i, t], [self.Lsatisfied[i, t], self.Rsatisfied[i, t]],
+                        name=f"Active_At_T_Cross_Period_Constraint_{i}_{t}",
+                    )
+                    self.model.addGenConstrIndicator(
+                        self.is_cross_period[i], True, self.active_at_t[i, t] == self.active_at_t_cross_period[i, t],
+                        name=f"Active_At_T_Cross_Period_Indicator_{i}_{t}",
+                    )
                 
         
         # Define resource usage along critical ticks
         self.usage_along_ticks = self.model.addVars(
             [(s, t) for s in range(self.S) for t in range(self.NT)],
+            vtype=GRB.INTEGER,
             name="Usage_Along_Ticks",
-            **self.spt_attr_0_to_M,
         )
 
-        # Bringing resource_active_at_t[i, t] into 
-        # max[sum(resources[i] * active_at_t[i, t] * is_task_in_bin[i, s] for i in range(self.N)) for t in self.critical_tick]
+        # Bringing at_bin_t[i, s, t] into 
+        # max[sum(resources[i] * active_at_t[i, t] * is_task_in_bin[i, s] for i in range(self.N)) for t in self.critical_tick] <= partition_size[s]
         # we can get:
-        # max[sum(resource_active_at_t[i, t] * is_task_in_bin[i, s] for i in range(self.N)) for t in self.critical_tick] 
+        # max[sum(resources[i] * at_bin_t[i, s, t] for i in range(self.N)) for t in self.critical_tick] <= partition_size[s]
         
-        # define usage_along_ticks[s, t] == sum(resource_active_at_t[i, t] * is_task_in_bin[i, s] for i in range(self.N)) for t in self.critical_tick
+        # define usage_along_ticks[s, t] == sum(resources[i] * at_bin_t[i, s, t] for i in range(self.N)) for t in self.critical_tick
         # define peak_bin_usage[s] == max(usage_along_ticks[s, t] for t in self.critical_tick)
         for s in range(self.S):
             for t in range(self.NT):
                 # 在时间 t 上分区 s 的资源需求
                 self.model.addConstr(
-                    self.usage_along_ticks[s, t] == quicksum(self.resource_active_at_t[i, t] * self.is_task_in_bin[i, s] for i in range(self.N)),
+                    self.usage_along_ticks[s, t] == quicksum(self.resources[i] * self.at_bin_t[i, s, t] for i in range(self.N)),
                     name=f"Usage_Along_Ticks_{s}_{t}",
                 )
             # Max usage in each partition
@@ -437,14 +499,6 @@ class GurobiSemi2DClstMapping:
         # peak_bin_usage[s] <= partition_size[s]
         # self.model.addConstrs((self.peak_bin_usage[s] <= self.partition_size[s] for s in range(self.S)), name="Peak_Bin_Usage_Constraint")
         self.model.addConstr(quicksum(self.peak_bin_usage[s] for s in range(self.S)) <= self.M, name="Totals_Usage_Constraint")
-
-        # increased partition size constraint
-        for s in range(self.S-1):
-            self.model.addConstr(
-                self.peak_bin_usage[s] >= self.peak_bin_usage[s+1],
-                name=f"Partition_Size_Incr_{s}"
-            )
-        
 
     def define_obj(self):
         # Define the static wasted resources
@@ -470,28 +524,40 @@ class GurobiSemi2DClstMapping:
         self.model.addConstr(
             self.dynamic_wasted_resources == self.T * quicksum(self.realloc_overhead_bin[s] for s in range(self.S)), 
             name="Dynamic_Wasted_Resources_Constraint"
-        ) 
+        )
         
-        for i in range(self.N): 
-            self.model.addConstrs(
-                (((self.resources[j]+self.resources[i])* self.size_scale / 2)**2 *40/256 /100 == self.affinity_overhead[i,j] for i,j in self.dependencies), 
-                name=f"Affinity_Overhead_Constraint"
-            )
-        self.model.addConstrs(((self.spatial_affinity[i,j]) *self.temporal_affinity_bool[i,j]  == self.st_affinity_bool[i,j] for i,j in self.dependencies), name="def_ST_Affinity_Bool")
-        self.model.addConstr(self.affinity_overhead_sum == quicksum((1-self.st_affinity_bool[i,j])  * self.affinity_overhead[i,j] 
-                                                                    for i,j in self.dependencies), name="def_Affinity_Overhead_Sum")         
-        self.model.setObjectiveN(self.static_wasted_resources + self.dynamic_wasted_resources+self.affinity_overhead_sum, index=0, priority=1, name="total_wasted_resources")
+        self.model.setObjectiveN(self.static_wasted_resources + self.dynamic_wasted_resources, index=1, priority=1, name="total_wasted_resources")
+        # self.model.setObjective(self.static_wasted_resources, GRB.MINIMIZE)
 
         # Define affinity score, to be maximized
-        # spatial affinity: Ture if tasks are assigned to the same partition, False otherwise
-        self.model.addConstrs((self.spatial_affinity[i, j] == quicksum(self.is_task_in_bin[i, s] * self.is_task_in_bin[j, s] for s in range(self.S)) for i, j in self.dependencies), name="def_spatial_affinity")
-        
+        # +1 if tasks connected by an edge (i, j) is assigned to the same partition
+        self.model.addConstr(
+        quicksum(quicksum(self.is_task_in_bin[i, s] * self.is_task_in_bin[j, s] for s in range(self.S)) for i, j in self.dependencies)/len(self.dependencies) == self.affinity_score,
+            name="affinity_score")
+        self.model.setObjectiveN(-self.affinity_score, index=0, priority=2, name="max_affinity_score")
 
-        # self.model.addConstr(
-        #     self.affinity_score == quicksum(self.spatial_affinity[i, j]*(1-(self.temporal_affinity[i, j])/self.T) for i, j in self.dependencies)/len(self.dependencies),
-        #     name="def_affinity_score"
+        # # Define metric: utilization of each partition
+        # for s in range(self.S):
+        #     self.model.addConstr(
+        #         self.utilization[s] * self.T * self.partition_size[s] == quicksum(self.compute_lower_bounds[i]*self.is_task_in_bin[i, s] for i in range(self.N)),
+        #         name=f"Utilization_{s}",
+        #     )
+        # # if the partition is not used, its utilization is 0
+        # self.model.addConstrs((self.utilization[s] <= self.partition_size[s] for s in range(self.S)), name="Zero_Utilization_Constraint")
+        # # Define max/min utilization
+        # self.model.addGenConstrMax(
+        #     self.max_util, [self.utilization[s] for s in range(self.S)],
+        #     name=f"Max_Utilization_Constraint",
         # )
-        # self.model.setObjectiveN(-self.affinity_score, index=0, priority=2, name="max_affinity_score")
+        # self.model.addGenConstrMin(
+        #     self.min_util, [self.utilization[s] for s in range(self.S)],
+        #     name=f"Min_Utilization_Constraint",
+        # )
+
+        # # Objective function: minimize the utilization difference among partitions
+        # # self.model.setObjective(quicksum(self.peak_bin_usage[s] for s in range(self.S)), GRB.MINIMIZE)
+        # self.model.setObjectiveN(self.max_util-self.min_util,index=1, priority=2, name="min_tot_size") 
+
         
         # # define speedup rate, to be minimized
         # # self.model.setObjectiveN(quicksum(self.speedup_rate.values())/len(self.path_info), index=3, priority=0, name="speedup_rate")
@@ -500,61 +566,24 @@ class GurobiSemi2DClstMapping:
         # self.model.addConstrs((self.spatial_rda_ratio[s] * self.peak_bin_usage[s] == self.partition_size[s] for s in range(self.S)), name="spatial_redundancy_rate")
         # # self.model.setObjectiveN(quicksum(self.spatial_rda_ratio.values())/self.S, index=4, priority=0, name="spatial_redundancy_rate")
         
-    def scatter_bin_usage(self):
-        """
-        evenly distribute paths to bins
-        """
-        # .start, .VarHintVal
-        allocated = set()
-        bin_id = 0
-        for path, slack in self.path_info:
-            for i in path:
-                if i not in allocated:
-                    for s in range(self.S):
-                        if s != bin_id:
-                            # self.is_task_in_bin[i, s].start = 0
-                            self.is_task_in_bin[i, s].VarHintVal = 0
-                            self.is_task_in_bin[i, s].VarHintPri = 50
-                        else:
-                            # self.is_task_in_bin[i, s].start = 1
-                            self.is_task_in_bin[i, s].VarHintVal = 1
-                            self.is_task_in_bin[i, s].VarHintPri = 50
-                    allocated.add(i)
-            bin_id = (bin_id + 1) % self.S
-            
+        
 
     def solve(self):
         """求解模型"""
         try:
-            self.model.printStats()
-            # self.model.Params.Aggregate = 2 
-            # self.model.Params.Presolve = 2  
-            # self.model.Params.MIPFocus = 1  # 1: balanced, 2: feasibility, 3: optimality
-            # self.model.setParam('MIPGap', 0.80)
-            p = self.model.presolve()
-            p.printStats()
-
             # Optimize model
             def mycallback(model, where):
                 if where == gp.GRB.Callback.MIPSOL:
-                    print("\n" + "=" * 30 + "\n")
                     obj = model.cbGet(gp.GRB.Callback.MIPSOL_OBJ)  # 获取目标函数值
                     partition_size = [model.cbGetSolution(model.getVarByName(f"Max_Usage[{s}]")) for s in range(S)]
                     print(f"当前最优解的目标函数值: {obj}")
                     print(f"Partition Size: {partition_size}")
                     static_wasted_resources = model.cbGetSolution(model.getVarByName("Static_Wasted_Resources"))
                     dynamic_wasted_resources = model.cbGetSolution(model.getVarByName("Dynamic_Wasted_Resources"))
-                    affinity_overhead_sum = model.cbGetSolution(model.getVarByName("Affinity_Overhead_Sum"))
                     print(f"Static Wasted Resources: {static_wasted_resources:.2f}")
                     print(f"Dynamic Wasted Resources: {dynamic_wasted_resources:.2f}")
-                    print(f"Affinity Overhead Sum: {affinity_overhead_sum:.2f}")
-                    spatial_affinity = {(i,j): model.cbGetSolution(model.getVarByName(f"spatial_affinity[{i},{j}]")) for i,j in dependencies}
-                    temporal_affinity = {(i,j): model.cbGetSolution(model.getVarByName(f"temporal_affinity[{i},{j}]")) for i,j in dependencies}
-                    temporal_affinity_bool = {(i,j): model.cbGetSolution(model.getVarByName(f"temporal_affinity_bool[{i},{j}]")) for i,j in dependencies}
-                    st_affinity_bool = {(i,j): model.cbGetSolution(model.getVarByName(f"st_affinity_bool[{i},{j}]")) for i,j in dependencies}
-                    affinity_overhead = {(i,j): model.cbGetSolution(model.getVarByName(f"Affinity_Overhead[{i},{j}]")) for i,j in dependencies}
-                    affinity_overhead_sum = model.cbGetSolution(model.getVarByName(f"Affinity_Overhead_Sum"))
 
+                    sel = {}
                     r_s_d_l = {}
                     for i in range(N):
                         assigned_partition = [s for s in range(S) if model.cbGetSolution(model.getVarByName(f"Task_In_Partition[{i},{s}]")) > 0.5][0]
@@ -562,11 +591,11 @@ class GurobiSemi2DClstMapping:
                         start = model.cbGetSolution(model.getVarByName(f"Start_Time[{i}]")) 
                         duration = model.cbGetSolution(model.getVarByName(f"Duration[{i}]")) 
                         end = model.cbGetSolution(model.getVarByName(f"End_Time[{i}]")) 
-                        # exp_comp_time = [model.cbGetSolution(model.getVarByName(f"Is_Resource_j[{i},{j}]")) * A[i][j] for j in self.A[i].keys() if model.cbGetSolution(model.getVarByName(f"Is_Resource_j[{i},{j}]")) > 0.5][0]
-                        r_s_d_l[i] = (assigned_partition, start, end, duration, i, res)
-                    for assigned_partition, start, end, duration, i, res in sorted(r_s_d_l.values()):
-                        print(f"Task {i}: Start={start:.2f}, End={end:.2f}, Duration={duration:.2f}, Resources={res:.2f}, Partition={assigned_partition}")
-                    print("\n" + "=" * 30 + "\n") 
+                        exp_comp_time = [model.cbGetSolution(model.getVarByName(f"Is_Resource_j[{i},{j}]")) * A[i][j] for j in self.A[i].keys() if model.cbGetSolution(model.getVarByName(f"Is_Resource_j[{i},{j}]")) > 0.5][0]
+                        sel[i] = assigned_partition
+                        r_s_d_l[i] = (res, start, duration, exp_comp_time)
+                        if self.verbose:
+                            print(f"Task {i}: Start={start:.2f}, End={end:.2f}, Duration={duration:.2f}, Resources={res}, Partition={assigned_partition}")
 
             self.model.optimize(mycallback)
 
@@ -598,18 +627,15 @@ class GurobiSemi2DClstMapping:
                 if self.verbose:
                     print(f"Task {i}: Start={start:.2f}, Duration={duration:.2f}, Resources={res}, Partition={assigned_partition}")
             partition_size = [self.peak_bin_usage[s].x for s in range(self.S)]
-            
             if self.verbose:
                 print(f"Partition Size: {partition_size}")
+                print(f"Utilization: {[self.utilization[s].x for s in range(self.S)]}")
                 print(f"Static Wasted Resources: {self.static_wasted_resources.x:.2f}")
                 print(f"Dynamic Wasted Resources: {self.dynamic_wasted_resources.x:.2f}")
+                print(f"Max/Min Utilization: {self.max_util.x:.2f}/{self.min_util.x:.2f}")
                 print(f"Affinity Score: {self.affinity_score.x}")
-                print(f"Affinity 1: {sum(sum(self.is_task_in_bin[i, s].X * self.is_task_in_bin[j, s].X for s in range(self.S))/len(self.dependencies) for i, j in self.dependencies)}")
-                print(f"Affinity 2 {sum(1-(self.start_times[j].X + self.T*self.is_edge_cross_period[i, j].X - self.end_times[i].X)/self.T for i, j in self.dependencies)/len(self.dependencies)}")
-                # print(f"Utilization: {[self.utilization[s].x for s in range(self.S)]}")
-                # print(f"Max/Min Utilization: {self.max_util.x:.2f}/{self.min_util.x:.2f}")
-                # print(f"Speedup Rate: {sum(map(lambda x: self.speedup_rate[x].x, self.speedup_rate.keys()))/len(self.path_info):.2f}")
-                # print(f"Spatial Redundancy Rate: {sum(map(lambda x: self.spatial_rda_ratio[x].x, self.spatial_rda_ratio.keys()))/self.S:.2f}")
+                print(f"Speedup Rate: {sum(map(lambda x: self.speedup_rate[x].x, self.speedup_rate.keys()))/len(self.path_info):.2f}")
+                print(f"Spatial Redundancy Rate: {sum(map(lambda x: self.spatial_rda_ratio[x].x, self.spatial_rda_ratio.keys()))/self.S:.2f}")
 
             return partition_size, sel, r_s_d_l
 
@@ -637,26 +663,7 @@ class GurobiSemi2DClstMapping:
 
         else:
             print("No optimal solution found.")
-
-def debug(model):
-    is_task_in_bin = {(i,s): model.cbGetSolution(model.getVarByName(f"Task_In_Partition[{i},{s}]")) for i in range(N) for s in range(S)}
-    usage_along_ticks = {(s,t): model.cbGetSolution(model.getVarByName(f"Usage_Along_Ticks[{s},{t}]")) for s in range(S) for t in range(2*N)}
-    is_cross_period = {i: model.cbGetSolution(model.getVarByName(f"Is_Cross_Period[{i}]")) for i in range(N)}
-
-    start_times = {i: model.cbGetSolution(model.getVarByName(f"Start_Time[{i}]")) for i in range(N)}
-    durations = {i: model.cbGetSolution(model.getVarByName(f"Duration[{i}]")) for i in range(N)}
-    end_times = {i: model.cbGetSolution(model.getVarByName(f"End_Time[{i}]")) for i in range(N)}
-    resources = {i: model.cbGetSolution(model.getVarByName(f"Resources[{i}]")) for i in range(N)}
-
-    resource_active_at_t = {(i,t): model.cbGetSolution(model.getVarByName(f"r_{i}_{t}")) for i in range(N) for t in range(2*N)}
-    active_at_t = {(i,t): model.cbGetSolution(model.getVarByName(f"Active_At_T[{i},{t}]")) if t%N != i else 1-int(t//N) for i in range(N) for t in range(2*N) }
-    critical_tick = [model.cbGetSolution(model.getVarByName(f"Start_Time[{i}]")) for i in range(N)] + [model.cbGetSolution(model.getVarByName(f"End_Time[{i}]")) for i in range(N)]
-    Lsatisfied = {(i,t): model.cbGetSolution(model.getVarByName(f"L_Satisfied[{i},{t}]")) for i in range(N) for t in range(2*N) if t%N != i}
-    Rsatisfied = {(i,t): model.cbGetSolution(model.getVarByName(f"R_Satisfied[{i},{t}]")) for i in range(N) for t in range(2*N) if t%N != i}
-    active_at_t_cross_period = {(i,t): model.cbGetSolution(model.getVarByName(f"Active_At_T_Cross_Period[{i},{t}]")) for i in range(N) for t in range(2*N) if t%N != i}
-    active_at_t_not_cross_period = {(i,t): model.cbGetSolution(model.getVarByName(f"Active_At_T_Not_Cross_Period[{i},{t}]")) for i in range(N) for t in range(2*N) if t%N != i}
-
-
+        
 if __name__ == '__main__':
     import math
     # fitting alpha and beta
@@ -708,10 +715,10 @@ if __name__ == '__main__':
     typical_size = 25/size_scaler
     assumed_efficiency = 0.9
     size_list = {
-        2: [10/size_scaler, 20/size_scaler, 30/size_scaler, 40/size_scaler, 50/size_scaler],
-        3: [10/size_scaler, 20/size_scaler, 30/size_scaler, 40/size_scaler, 50/size_scaler],
-        1: [10/size_scaler, 20/size_scaler, 30/size_scaler, 40/size_scaler, 50/size_scaler],
-        0: [10/size_scaler, 20/size_scaler, 30/size_scaler, 40/size_scaler, 50/size_scaler],
+        2: [30/size_scaler, 40/size_scaler, 50/size_scaler],
+        3: [30/size_scaler, 40/size_scaler, 50/size_scaler],
+        1: [10/size_scaler, 20/size_scaler, 30/size_scaler],
+        0: [10/size_scaler, 20/size_scaler, 30/size_scaler],
         # 2: [10, 20, 30, 40],
         # 3: [10, 20, 30, 40],
         # 1: [5, 10, 20, 30],
@@ -721,8 +728,6 @@ if __name__ == '__main__':
     # load = typical_size * typical_lat
     ld = {i: typical_size * typical_lat[i] for i in range(N)}
     # load[i] / j/(assumed_efficiency*int((j-typical_size)/5))
-    # polar: -typical_size/ln(assumed_efficiency)
-    # in this case: ~50
     A = {i: {j: math.ceil(ld[i] / j/(assumed_efficiency**int(j/typical_size - 1))*size_scaler)/size_scaler for j in size_list[i]} for i in range(N)}    
     ld_sample_var = 2.5
     ld_ppf_value = {i: bursty_lat[i]/typical_lat[i] for i in range(N)}
@@ -781,7 +786,7 @@ if __name__ == '__main__':
         "N": N,
         "M": M,
         "S": S,
-        # "NT": 2 * N + 2,
+        "NT": 2 * N + 2,
         "T": T,
         "A": A,
         "dependencies": dependencies,
@@ -789,9 +794,8 @@ if __name__ == '__main__':
         "start_constraints": start_constraints,
         "end_constraints": end_constraints,
         "path_info": path_info,
-        "spt_fmt": "float",
         "time_format": "float",
-        "timestep_size": 1e-3,
+        "timestep_size": 1,
         "fit_params": [alpha, beta, 0, 0, 0],
         "size_scale": 590/M,
     }

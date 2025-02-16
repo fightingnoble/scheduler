@@ -142,7 +142,7 @@
     								# 调整前
                     # req_rsc_size = math.ceil(planned_flops/(chunk_e - n_slot)/timestep /FLOPS_PER_CORE/(1-sched.overprovision_rate)) 
     								# 调整后
-                    slack = slack_comp((chunk_e - n_slot), 0, sched.over_provision_rate)
+                    slack = slack_comp((chunk_e - n_slot), 0, sched.overprovision_rate)
                     req_rsc_size = math.ceil(planned_flops/slack/timestep/FLOPS_PER_CORE) 
     						# ...
                 else:
@@ -153,7 +153,7 @@
                         # req_rsc_size = math.ceil(planned_flops/(chunk_e + 1 - n_slot)/timestep /FLOPS_PER_CORE/(1-sched.overprovision_rate))
                         # 调整后，修了个bug？？
                         # req_rsc_size = math.ceil(planned_flops/(chunk_e - n_slot)/timestep /FLOPS_PER_CORE/(1-sched.overprovision_rate)) 
-                        slack = slack_comp((chunk_e - n_slot), 0, sched.over_provision_rate)
+                        slack = slack_comp((chunk_e - n_slot), 0, sched.overprovision_rate)
                         req_rsc_size = math.ceil(planned_flops/slack/timestep/FLOPS_PER_CORE) 
     
     ```
@@ -181,7 +181,7 @@ TODO:
 5. add sched/placement.py as a collection of all physical placement related functions, including: 
    1. updating the position dict at runtime, i.e., update_phy_posi
    2. initializing the core bingding of each partition, i.e., core_mapping_1d
-6. Previous feasible checking of scehduler_step is out of data, we update the logic to utilize the _p.get_available_cfg rather than the buggy version
+6. Previous feasible checking of scehduler_step is out of date, we update the logic to utilize the _p.get_available_cfg rather than the buggy version
    ```python
                # **************************************************************
             # check the rsc_size is valid
@@ -283,4 +283,27 @@ Conclude the scheduling policy flow:
 
 1. calculate the trigger condition
 2. calculate the paticipation of the tasks in the current slot
+   1. check preemptable tasks
+   2. sort the ready task along with preemptable tasks
 3. calculate the available resource amount in the current slot
+
+
+## 20240911
+
+1. add expexted_rsc_size to the ProcessInt
+2. move all modifier of flops_list and evet_list of scehduling table in to the submition stage:
+   1. release_rsc function
+   2. change the key of alloc_mod and the corresponding condition judgement
+3. add the corresponding logic of sparse builder in the to_sparse function of the scheduling table
+
+## 20240914
+ 1. a task is initialized in multiple queues, and we need to ensure that the remburst is only released once, 
+    so we need to check if the remburst is 0 before adding the totcpu to it: 
+```
+        if self.remburst == 0:
+            self.remburst += self.totcpu
+```
+2. remove the check_release in scheduler agent and state_trans,
+    as it is almost the same as the watermarked version, expect that using
+    `cls.check_trigger(_p, event_cache=event_cache, trigger_cache=trigger_cache)`
+    or `_p.check_depends(event_cache=event_cache, trigger_cache=trigger_cache)`. 

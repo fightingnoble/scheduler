@@ -81,7 +81,6 @@ class AllocatorInt(object):
             pass
 
 from sched.scheduling_table import SchedulingTableInt
-from sched.bin_list_utils import get_sparse_flops
 from model.resource_agent import Resource_model_int
 import matplotlib.pyplot as plt
 from global_var import *
@@ -347,7 +346,7 @@ def cyclic_sched(task_spec:Spec, affinity,
     # pre_ready stage for the initial tasks
     for sched in scheduler_list:
         if len(sched._SchedTab.sparse_list) == 0: 
-            sched._SchedTab.to_sparse_dict(-1)
+            sched._SchedTab.to_sparse(-1, timestep)
         # pass the empty sched table
         if sched._SchedTab.num_resources <= 0 or len(sched._SchedTab.sparse_list) == 0:
             continue
@@ -421,11 +420,11 @@ def cyclic_sched(task_spec:Spec, affinity,
                 _p.set_state("suspend")
                 print("		TASK {:d}:{:s}({:d})".format(_p.task.id, _p.task.name, _p.pid))
         print("")
-    if [sched._SchedTab.alloc_mod=='exactly' for sched in scheduler_list][0]: 
-        try:
-            get_sparse_flops([sched._SchedTab for sched in scheduler_list], glb_p_list, timestep, event_range)
-        except:
-            print("CodingError: pass the get_sparse_flops")
+    # if sched._SchedTab.alloc_mod in ['overtime', 'compress']: 
+    #     try:
+    #         get_sparse_flops([sched._SchedTab for sched in scheduler_list], glb_p_list, timestep, event_range)
+    #     except:
+    #         print("CodingError: pass the get_sparse_flops")
 
     for n_slot in range(sim_slot_num):
         curr_t = n_slot * timestep

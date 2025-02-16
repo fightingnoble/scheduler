@@ -4,10 +4,14 @@ if typing.TYPE_CHECKING:
     from task.task_agent import ProcessInt
     from model.task_queue_agent import TaskQueue 
     from model.resource_agent import Resource_model_int
+    from sched.scheduling_table import SchedulingTableInt
+
 from global_var import *
 from typing import Dict, List, Tuple, Union, Any, OrderedDict
 from model.event_gen.e2e_latency import exp_jitter
 from model.performance import cal_lat, slack_comp
+from model.lru import LRUCache
+from functools import reduce
 
 class RscMapInt(OrderedDict[int, Tuple[int, ...]]): 
     title_line = "\tTaskID\t->\tRscSize\n"
@@ -154,14 +158,110 @@ class Resource_model_int(object):
                 ops = min(ops, _p.rem_flop_budget[bin_id], _p.totcpu-_p.totburst)
             else:
                 ops = min(ops, _p.totcpu-_p.totburst)
-            _p.currentburst += ops
-            _p.burst += ops
-            _p.totburst += ops
-            _p.remburst -= ops
-            _p.cumulative_executed_time += timestep
+            _p.currentburst = elim_nume_error(_p.currentburst + ops)
+            _p.burst = elim_nume_error(_p.burst + ops)
+            _p.totburst = elim_nume_error(_p.totburst + ops)
+            _p.remburst = elim_nume_error(_p.remburst - ops)
+            _p.cumulative_executed_time = elim_nume_error(_p.cumulative_executed_time + timestep)
             if update_budget:
                 assert bin_id is not None
                 _p.rem_flop_budget[bin_id] = elim_nume_error(_p.rem_flop_budget[bin_id]-ops)
+                pass
+
+    def action_at_start_cfg(curr_cfg:Resource_model_int, budget_recoder, process_dict, bin_id):
+        """update the budget at the start of a configuration chunk
+            load the budget at the beginning of each cfg chunk rather than the end, 
+            which is important as the cfg may be not consecutive, 
+            loading at the end may lead to launch some kernels too early. 
+            ******************************************************
+            Mechanism of budget and progress recoder
+            1. rem_flop_budget
+            Record the expected operators to be executed in the next few moments
+            
+            2. budget_recoder: 
+            record the upper bound of resource consumption (spatial and temporal)
+            The previous budget is covered, when the new chunk is entered.
+            Explanation: 
+            If the load of privious chunk is uncompleted,
+            the previous timeout budget is useless, 
+            because the comming computation should be allocated with resources as soon as ponssible
+            ******************************************************
+            
+        Args:
+            curr_cfg (Resource_model_int): 
+            budget_recoder (_type_): _description_
+            rsc_recoder_his (_type_): _description_
+            process_dict (_type_): _description_
+            bin_id (_type_): _description_
+
+        """
+        cfg_slot_s, next_cfg, cfg_slot_num = curr_cfg.slot_s, curr_cfg.rsc_map, curr_cfg.slot_num
+        cfg_flops_dict = curr_cfg.flops_dict 
+        # replenish the budget
+        for pid in next_cfg.keys():
+            _p = process_dict[pid]
+                        
+            if bin_id not in _p.rem_flop_budget:
+                _p.rem_flop_budget[bin_id] = 0
+                            
+            flops_tbd = cfg_flops_dict[pid]
+            rem_flop_budget=_p.rem_flop_budget[bin_id]
+            if rem_flop_budget> numerical_error_tol_abs or flops_tbd>numerical_error_tol_abs: 
+                _p.rem_flop_budget[bin_id] += flops_tbd # * _p.var_scale_factor
+                budget_recoder[pid] = [cfg_slot_s, next_cfg[pid], cfg_slot_num, True]
+
+                
+    def action_at_end_cfg(curr_cfg:Resource_model_int, timestep, _SchedTab:SchedulingTableInt, tab_temp_size, tab_pointer, hyper_p_n):
+        """update the configuration at the end of a configuration chunk
+
+        Args:
+            curr_cfg (Resource_model_int): _description_
+            timestep (_type_): _description_
+            _SchedTab (SchedulingTable): 
+            tab_temp_size (_type_): _description_
+            tab_pointer (_type_): _description_
+            hyper_p_n (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        # get the next configuration
+        cfg_slot_s, next_cfg, cfg_slot_num = _SchedTab.next_item()
+        
+        # update the rsc_map
+        if _SchedTab.alloc_mod == 'compress':
+            curr_cfg.update(_SchedTab.sparse_cores[_SchedTab.sparse_idx][1])
+        else:
+            curr_cfg.update(next_cfg)
+        
+        # update the deadline
+        if cfg_slot_s < tab_pointer: 
+            curr_cfg.slot_s = (hyper_p_n + 1) * tab_temp_size + cfg_slot_s
+        else:
+            curr_cfg.slot_s = hyper_p_n * tab_temp_size + cfg_slot_s
+        curr_cfg.slot_e = curr_cfg.slot_s + cfg_slot_num - 1 
+        curr_cfg.slot_num = cfg_slot_num
+        
+        # update the budget
+        curr_cfg.flops_dict.clear()
+        curr_cfg.flops_dict.update(_SchedTab.sparse_flops[_SchedTab.sparse_idx][1])
+
+        # if _SchedTab.alloc_mod in ['overtime', 'compress']:
+        #     curr_cfg.flops_dict.update(_SchedTab.sparse_flops[_SchedTab.sparse_idx][1])
+        # else:
+        #     curr_cfg.flops_dict.update({pid: n_cores * cfg_slot_num * timestep * FLOPS_PER_CORE for pid, n_cores in next_cfg.items()})
+
+        # 2. clear the old events
+        curr_cfg.event_list.clear()
+        # 3. process new events
+        # list((head_event_time, list((slot_idx, Dict[pid, event_set]))))
+        curr_cfg.event_list.extend(map(lambda x:(x[0], reduce(lambda x,y: x+y, map(lambda x:list(x), x[1].values()))), _SchedTab.sparse_event[_SchedTab.sparse_idx][1]))
+        # if _SchedTab.sparse_event[_SchedTab.sparse_idx]:
+        #     event_set = reduce(lambda x,y: x+y, map(lambda x:list(x), _SchedTab.sparse_event[_SchedTab.sparse_idx][1].values()))
+        #     curr_cfg.event_list.extend(list(event_set))
+        
+        return next_cfg
+
 
 
 class DDL_reservation(object):

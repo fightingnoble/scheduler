@@ -1,0 +1,157 @@
+\ Model Partitioned_Task_Scheduling_copy
+\ LP format - for model browsing. Use MPS format to capture full model detail.
+Minimize multi-objectives
+  max_affinity_score: Priority=2 Weight=1 AbsTol=1e-06 RelTol=0
+   0 L_Satisfied[0,0] + 0 L_Satisfied[0,1] + 0 L_Satisfied[0,2]
+   + 0 L_Satisfied[0,3] + 0 L_Satisfied[0,4] + 0 L_Satisfied[0,5]
+   + 0 L_Satisfied[0,6] + 0 L_Satisfied[0,7] + 0 L_Satisfied[0,8]
+   + 0 L_Satisfied[0,9] + 0 L_Satisfied[0,10] + 0 L_Satisfied[0,11]
+   + 0 Active_At_T_Not_Cross_Period[0,0]
+   + 0 Active_At_T_Not_Cross_Period[0,1]
+   + 0 Active_At_T_Not_Cross_Period[0,2]
+   + 0 Active_At_T_Not_Cross_Period[0,3]
+   + 0 Active_At_T_Not_Cross_Period[0,4]
+   + 0 Active_At_T_Not_Cross_Period[0,5]
+   + 0 Active_At_T_Not_Cross_Period[0,6]
+   + 0 Active_At_T_Not_Cross_Period[0,7]
+   + 0 Active_At_T_Not_Cross_Period[0,8]
+   + 0 Active_At_T_Not_Cross_Period[0,9]
+   + 0 Active_At_T_Not_Cross_Period[0,10]
+   + 0 Active_At_T_Not_Cross_Period[0,11]
+  total_wasted_resources: Priority=1 Weight=1 AbsTol=1e-06 RelTol=0
+  
+Subject To
+ Critical_Tick_Incr_3: - Critical_Tick[2] + Critical_Tick[3] >= 1
+ Critical_Tick_Incr_4: - Critical_Tick[3] + Critical_Tick[4] >= 1
+ Critical_Tick_Incr_9: - Critical_Tick[8] + Critical_Tick[9] >= 1
+ Path_Cross_Period_0_2: End_Time[2] + 30 Is_Cross_Period[0]
+   + 30 Is_Cross_Period[1] + 30 Is_Cross_Period[2]
+   + 30 Is_Edge_Cross_Period[0,1] + 30 Is_Edge_Cross_Period[1,2]
+   + 30 Is_Edge_Cross_Period_-1_0 <= 25
+ Duration_Constraint_0: Duration[0] - 3 Is_Resource_j[0,1]
+   - 2 Is_Resource_j[0,2] - Is_Resource_j[0,3] >= 0
+ Duration_Definition_0: Start_Time[0] - End_Time[0] + Duration[0]
+   - 30 Is_Cross_Period[0] = 0
+ Partition_Assignment_0: Task_In_Partition[0,0] + Task_In_Partition[0,1]
+   = 1
+ Resource_Selection_0: Is_Resource_j[0,1] + Is_Resource_j[0,2]
+   + Is_Resource_j[0,3] = 1
+ Active_At_T_Partition_Constraint_0_0: - Task_In_Partition[0,0]
+   + Active_At_T[0,0] + Active_At_T[0,1] + Active_At_T[0,2]
+   + Active_At_T[0,3] + Active_At_T[0,4] + Active_At_T[0,5]
+   + Active_At_T[0,6] + Active_At_T[0,7] + Active_At_T[0,8]
+   + Active_At_T[0,9] + Active_At_T[0,10] + Active_At_T[0,11] >= 0
+ Active_At_T_Partition_Constraint_0_1: - Task_In_Partition[0,1]
+   + Active_At_T[0,0] + Active_At_T[0,1] + Active_At_T[0,2]
+   + Active_At_T[0,3] + Active_At_T[0,4] + Active_At_T[0,5]
+   + Active_At_T[0,6] + Active_At_T[0,7] + Active_At_T[0,8]
+   + Active_At_T[0,9] + Active_At_T[0,10] + Active_At_T[0,11] >= 0
+ End_Inactive_Constraint_0_0: Critical_Tick[0] - End_Time[0]
+   - 30 R_Satisfied[0,0] >= 0
+ End_Inactive_Constraint_0_1: Critical_Tick[1] - End_Time[0]
+   - 30 R_Satisfied[0,1] >= 0
+ End_Inactive_Constraint_0_2: Critical_Tick[2] - End_Time[0]
+   - 30 R_Satisfied[0,2] >= 0
+ End_Active_Constraint_0_3: Critical_Tick[3] - End_Time[0]
+   + 30 R_Satisfied[0,3] <= 29
+ End_Active_Constraint_0_4: Critical_Tick[4] - End_Time[0]
+   + 30 R_Satisfied[0,4] <= 29
+ End_Inactive_Constraint_0_5: Critical_Tick[5] - End_Time[0]
+   - 30 R_Satisfied[0,5] >= 0
+ End_Inactive_Constraint_0_6: Critical_Tick[6] - End_Time[0]
+   - 30 R_Satisfied[0,6] >= 0
+ End_Inactive_Constraint_0_7: Critical_Tick[7] - End_Time[0]
+   - 30 R_Satisfied[0,7] >= 0
+ End_Inactive_Constraint_0_8: Critical_Tick[8] - End_Time[0]
+   - 30 R_Satisfied[0,8] >= 0
+ End_Active_Constraint_0_9: Critical_Tick[9] - End_Time[0]
+   + 30 R_Satisfied[0,9] <= 29
+ End_Inactive_Constraint_0_10: Critical_Tick[10] - End_Time[0]
+   - 30 R_Satisfied[0,10] >= 0
+ End_Inactive_Constraint_0_11: Critical_Tick[11] - End_Time[0]
+   - 30 R_Satisfied[0,11] >= 0
+ Active_At_T_Indicator_0_2: Is_Cross_Period[0] = 0 -> Active_At_T[0,2]
+   - Active_At_T_Not_Cross_Period[0,2] = 0
+ Active_At_T_Indicator_0_4: Is_Cross_Period[0] = 0 -> Active_At_T[0,4]
+   - Active_At_T_Not_Cross_Period[0,4] = 0
+ Active_At_T_Indicator_0_5: Is_Cross_Period[0] = 0 -> Active_At_T[0,5]
+   - Active_At_T_Not_Cross_Period[0,5] = 0
+ Active_At_T_Indicator_0_6: Is_Cross_Period[0] = 0 -> Active_At_T[0,6]
+   - Active_At_T_Not_Cross_Period[0,6] = 0
+ Active_At_T_Indicator_0_7: Is_Cross_Period[0] = 0 -> Active_At_T[0,7]
+   - Active_At_T_Not_Cross_Period[0,7] = 0
+ Active_At_T_Indicator_0_8: Is_Cross_Period[0] = 0 -> Active_At_T[0,8]
+   - Active_At_T_Not_Cross_Period[0,8] = 0
+ Active_At_T_Indicator_0_11: Is_Cross_Period[0] = 0 -> Active_At_T[0,11]
+   - Active_At_T_Not_Cross_Period[0,11] = 0
+ Active_At_T_Indicator_0_0: Is_Cross_Period[0] = 0 -> Active_At_T[0,0]
+   - Active_At_T_Not_Cross_Period[0,0] = 0
+ Active_At_T_Indicator_0_1: Is_Cross_Period[0] = 0 -> Active_At_T[0,1]
+   - Active_At_T_Not_Cross_Period[0,1] = 0
+ Active_At_T_Indicator_0_3: Is_Cross_Period[0] = 0 -> Active_At_T[0,3]
+   - Active_At_T_Not_Cross_Period[0,3] = 0
+ Active_At_T_Indicator_0_9: Is_Cross_Period[0] = 0 -> Active_At_T[0,9]
+   - Active_At_T_Not_Cross_Period[0,9] = 0
+ Active_At_T_Indicator_0_10: Is_Cross_Period[0] = 0 -> Active_At_T[0,10]
+   - Active_At_T_Not_Cross_Period[0,10] = 0
+Bounds
+ -infinity <= Critical_Tick[0] <= 30
+ -infinity <= Critical_Tick[1] <= 30
+ Critical_Tick[2] free
+ Critical_Tick[3] free
+ Critical_Tick[4] free
+ -infinity <= Critical_Tick[5] <= 30
+ -infinity <= Critical_Tick[6] <= 30
+ -infinity <= Critical_Tick[7] <= 30
+ Critical_Tick[8] free
+ Critical_Tick[9] free
+ -infinity <= Critical_Tick[10] <= 30
+ -infinity <= Critical_Tick[11] <= 30
+ End_Time[0] free
+ Duration[0] free
+Binaries
+ Is_Resource_j[0,1] Is_Resource_j[0,2] Is_Resource_j[0,3]
+ Task_In_Partition[0,0] Task_In_Partition[0,1] Active_At_T[0,0]
+ Active_At_T[0,1] Active_At_T[0,2] Active_At_T[0,3] Active_At_T[0,4]
+ Active_At_T[0,5] Active_At_T[0,6] Active_At_T[0,7] Active_At_T[0,8]
+ Active_At_T[0,9] Active_At_T[0,10] Active_At_T[0,11] Is_Cross_Period[0]
+ Is_Cross_Period[1] Is_Cross_Period[2] Is_Edge_Cross_Period[0,1]
+ Is_Edge_Cross_Period[1,2] Is_Edge_Cross_Period_-1_0 R_Satisfied[0,0]
+ R_Satisfied[0,1] R_Satisfied[0,2] R_Satisfied[0,3] R_Satisfied[0,4]
+ R_Satisfied[0,5] R_Satisfied[0,6] R_Satisfied[0,7] R_Satisfied[0,8]
+ R_Satisfied[0,9] R_Satisfied[0,10] R_Satisfied[0,11] L_Satisfied[0,0]
+ L_Satisfied[0,1] L_Satisfied[0,2] L_Satisfied[0,3] L_Satisfied[0,4]
+ L_Satisfied[0,5] L_Satisfied[0,6] L_Satisfied[0,7] L_Satisfied[0,8]
+ L_Satisfied[0,9] L_Satisfied[0,10] L_Satisfied[0,11]
+ Active_At_T_Not_Cross_Period[0,0] Active_At_T_Not_Cross_Period[0,1]
+ Active_At_T_Not_Cross_Period[0,2] Active_At_T_Not_Cross_Period[0,3]
+ Active_At_T_Not_Cross_Period[0,4] Active_At_T_Not_Cross_Period[0,5]
+ Active_At_T_Not_Cross_Period[0,6] Active_At_T_Not_Cross_Period[0,7]
+ Active_At_T_Not_Cross_Period[0,8] Active_At_T_Not_Cross_Period[0,9]
+ Active_At_T_Not_Cross_Period[0,10] Active_At_T_Not_Cross_Period[0,11]
+General Constraints
+ Active_At_T_Constraint_0_0: Active_At_T_Not_Cross_Period[0,0] = AND (
+   L_Satisfied[0,0] , R_Satisfied[0,0] )
+ Active_At_T_Constraint_0_1: Active_At_T_Not_Cross_Period[0,1] = AND (
+   L_Satisfied[0,1] , R_Satisfied[0,1] )
+ Active_At_T_Constraint_0_4: Active_At_T_Not_Cross_Period[0,4] = AND (
+   L_Satisfied[0,4] , R_Satisfied[0,4] )
+ Active_At_T_Constraint_0_5: Active_At_T_Not_Cross_Period[0,5] = AND (
+   L_Satisfied[0,5] , R_Satisfied[0,5] )
+ Active_At_T_Constraint_0_6: Active_At_T_Not_Cross_Period[0,6] = AND (
+   L_Satisfied[0,6] , R_Satisfied[0,6] )
+ Active_At_T_Constraint_0_11: Active_At_T_Not_Cross_Period[0,11] = AND (
+   L_Satisfied[0,11] , R_Satisfied[0,11] )
+ Active_At_T_Constraint_0_2: Active_At_T_Not_Cross_Period[0,2] = AND (
+   L_Satisfied[0,2] , R_Satisfied[0,2] )
+ Active_At_T_Constraint_0_3: Active_At_T_Not_Cross_Period[0,3] = AND (
+   L_Satisfied[0,3] , R_Satisfied[0,3] )
+ Active_At_T_Constraint_0_7: Active_At_T_Not_Cross_Period[0,7] = AND (
+   L_Satisfied[0,7] , R_Satisfied[0,7] )
+ Active_At_T_Constraint_0_8: Active_At_T_Not_Cross_Period[0,8] = AND (
+   L_Satisfied[0,8] , R_Satisfied[0,8] )
+ Active_At_T_Constraint_0_9: Active_At_T_Not_Cross_Period[0,9] = AND (
+   L_Satisfied[0,9] , R_Satisfied[0,9] )
+ Active_At_T_Constraint_0_10: Active_At_T_Not_Cross_Period[0,10] = AND (
+   L_Satisfied[0,10] , R_Satisfied[0,10] )
+End

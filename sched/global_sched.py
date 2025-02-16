@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from sched.scheduling_table import SchedulingTableInt
 
 import math
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 import numpy as np
 from global_var import *
 from model.resource_agent import Resource_model_int
@@ -32,6 +32,7 @@ from sched.bin_ops import bin_iter_list
 from networkx import DiGraph
 from functools import reduce
 from sched.slack_estim import get_chains
+from sched.scheduling_table import init_event
 
 default_binpack_cfg = {
             "sort":"EAT", "sort_reverse":True, "mode": 'non-block', "partial_alloc_en":False, 
@@ -147,6 +148,8 @@ def push_task_into_bins_new(
         w_data_pipe.update_wait_time(timestep)
         a_data_pipe.update_wait_time(timestep)
 
+    for _bin in bin_list:
+        _bin.alloc_mod = "compact"
     return bin_list
 
 def push_step_new(
@@ -156,7 +159,7 @@ def push_step_new(
         event_range: float, sim_slot_num: int, curr_t: float,
 
         glb_name_p_dict, res_cfg: Resource_model_int,
-        issue_sort_fn, issue_list,
+        issue_sort_fn, issue_list:TaskQueue,
         iter_next_bin_obj, 
 
         quantumSize, bin_list:TaskQueue, bin_name_list, 
@@ -198,7 +201,7 @@ def push_step_new(
     # check whether the task is miss
     # TODO: other ready tasks shoud be checked
     # TODO: cache eviction
-    bin_event_flg = check_miss(sched, None, None, curr_t, None, weight_wait_queue, ready_queue, 
+    bin_event_flg = check_miss(sched, None, timestep, None, a_data_pipe, curr_t, None, weight_wait_queue, ready_queue, 
                                running_queue, miss_list, throttle_list, active_list, 
                                inactive_list, buffer, bin_event_flg, bin_name, 
                                mode="future", bin_list=bin_list, n_slot=n_slot, rsc_recoder=rsc_recoder, 
@@ -264,11 +267,13 @@ def push_step_new(
         while len(issue_list):
             _p = issue_list[0]
             if issue_sort_fn(_p) == n_slot: 
+                # assert _p.get_state_name() != "running"
                 running_queue.put(_p)
                 if _p.totburst == 0:
                     _p.start_time = curr_t
                 _p.waitTime = 0
                 issue_list.get()
+                # _p.set_state("running")
             else:
                 break
 
@@ -475,10 +480,14 @@ def coleasing_alloc_1bin(
                 start_t, ddl_t = item[4], item[5]
                 # size_del_rda = process_dict[pid].task.flops/FLOPS_PER_CORE/(ddl_t-start_t)
                 # cores_dict[pid] = int(math.ceil(size_del_rda/(1-exec_t_comp_ratioB)))
+                # ================= Calculate the fueling rate =================
+                # ratioB is used for adjusting the rate for fueling the budget, 
+                # rather than the bw of the core
+                # such rate should be less than bw * flops_per_core, but > truely allocated number of ops
                 slack = slack_comp((ddl_t-start_t), 0, exec_t_comp_ratioB)
                 size_del_rda = process_dict[pid].task.flops/FLOPS_PER_CORE/slack
                 # size_del_rda = item[2] 
-                cores_dict[pid] = int(math.ceil(size_del_rda))
+                cores_dict[pid] = int(math.ceil(item[2]))
                 if cum_flops[pid] > 0:
                     flops = flops_per_core*math.ceil(size_del_rda)
                     flops = min(flops, cum_flops[pid])
@@ -559,8 +568,8 @@ def coleasing_alloc_1bin(
     
     # sparsify the Scheduling table
     # initialize the interval info: slot_s, slot_e, core_size, flops
-    _bin.to_sparse_dict()
-    _bin.alloc_mod = "max"
+    # _bin.to_sparse_dict()
+    _bin.alloc_mod = "compress"
     
     print("max_core_layout:", max_core_layout)
     assert max_core_num == sum(max_core_layout[1].values()), "max_core_num should be equal to the sum of the core size of the current items"
@@ -617,111 +626,7 @@ def coleasing_alloc_cluster(
     # use a gurobi solver to determine the placement of the tasks
     placed_p, bin_name_list, sol, bin_size = gurobi_split_solver(glb_p_list, n_partition, _bin_tb_split, job_graph, src_nodes, end_nodes)
 
-    # update the placed items to the sol
-    for pid, (size, bin_id) in placed_p.items():
-        assert pid not in sol
-        sol.update({pid:bin_id})
-    # print(sol)
-
-    # create the bins from the bin size and the bin name    
-    iter_next_bin_obj =bin_iter_list(_new_bin, bin_size, bin_name_list)
-    planed_bin_list = list(iter_next_bin_obj)
-
-    # rebuild the scheduling table list
-    for cfg_slot_s, cached_cfg, cfg_slot_num in _bin_tb_split.sparse_list:
-        for pid, size in cached_cfg.items():
-            _bin:SchedulingTableInt = planed_bin_list[sol[pid]]
-            _bin.allocate(pid, [cfg_slot_s,], [size,], [cfg_slot_num,], False)
-    for _bin in planed_bin_list:
-        _bin: SchedulingTableInt
-        _bin.to_sparse_dict()
-    
-    # # rebuild the sparse_cores and sparse_flops
-    # for cores, flops, cfgs in zip(_bin_tb_split.sparse_cores, _bin_tb_split.sparse_flops, _bin_tb_split.sparse_list):
-    #     cfg_slot_s, cached_cfg, cfg_slot_num = cfgs
-    #     cores_slot_s, cores_dict = cores
-    #     flops_slot_s, flops_dict = flops
-    #     assert cores_slot_s == cfg_slot_s == flops_slot_s
-    #     bins_core_recoder = {}
-    #     bins_flops_recoder = {}
-    #     for pid, size in cached_cfg.items():
-    #         bin:SchedulingTableInt = planed_bin_list[sol[pid]]
-    #         bin.allocate(pid, [cfg_slot_s,], [size,], [cfg_slot_num,], False)
-    #         if bin.id not in bins_core_recoder:
-    #             bins_core_recoder[bin.id] = {}
-    #         if bin.id not in bins_flops_recoder:
-    #             bins_flops_recoder[bin.id] = {}
-    #         bins_core_recoder[bin.id].update({pid:cores_dict[pid]})
-    #         bins_flops_recoder[bin.id].update({pid:flops_dict[pid]})
-    #     for bin_id in bins_core_recoder:
-    #         bin:SchedulingTableInt = planed_bin_list[bin_id]
-    #         bin.sparse_cores.append([cores_slot_s, bins_core_recoder[bin_id]])
-    #         bin.sparse_flops.append([flops_slot_s, bins_flops_recoder[bin_id]])
-            
-    # for bin in planed_bin_list:
-    #     bin: SchedulingTableInt
-    #     bin.to_sparse_dict()
-    #     # sort 
-    #     bin.sparse_cores.sort(key=lambda x: x[0])
-    #     bin.sparse_flops.sort(key=lambda x: x[0])
-    #     # merge the sparse_cores and sparse_flops refer to the new spase_list
-    #     core_idx = 0
-    #     flops_idx = 0
-    #     assert len(bin.sparse_cores) == len(bin.sparse_flops)
-    #     oringinal_sparse_size = len(bin.sparse_cores)
-    #     for cfg_slot_s, next_cfg, cfg_slot_num in bin.sparse_list:
-    #         new_sparse_cores = []
-    #         new_sparse_flops = []
-    #         # for cores_slot_s, cores_dict in bin.sparse_cores:
-    #         #     if cores_slot_s >= cfg_slot_s and cores_slot_s < cfg_slot_s + cfg_slot_num:
-    #         #         new_sparse_cores.append([cores_slot_s, cores_dict])
-    #         # for flops_slot_s, flops_dict in bin.sparse_flops:
-    #         #     if flops_slot_s >= cfg_slot_s and flops_slot_s < cfg_slot_s + cfg_slot_num:
-    #         #         new_sparse_flops.append([flops_slot_s, flops_dict])
-    #         while core_idx < oringinal_sparse_size: 
-    #             cores_slot_s, cores_dict = bin.sparse_cores[0]
-    #             if cores_slot_s >= cfg_slot_s and cores_slot_s < cfg_slot_s + cfg_slot_num:
-    #                 bin.sparse_cores.pop(0)
-    #                 new_sparse_cores.append([cores_slot_s, cores_dict])
-    #                 core_idx += 1
-    #             else:
-    #                 break
-                
-    #         while flops_idx < oringinal_sparse_size: 
-    #             flops_slot_s, flops_dict = bin.sparse_flops[0]
-    #             if flops_slot_s >= cfg_slot_s and flops_slot_s < cfg_slot_s + cfg_slot_num:
-    #                 bin.sparse_flops.pop(0)
-    #                 new_sparse_flops.append([flops_slot_s, flops_dict])
-    #                 flops_idx += 1
-    #             else:
-    #                 break
-    #         assert flops_idx == core_idx
-            
-    #         # Merge dictionaries of the same slot
-    #         assert len(new_sparse_cores) >= 1
-    #         assert len(new_sparse_flops) == len(new_sparse_cores)
-    #         assert new_sparse_cores[0][0] == cfg_slot_s
-    #         bin.sparse_cores.append(new_sparse_cores[0])
-            
-    #         merged_flops_dict = {}
-    #         for _, flops_dict in new_sparse_flops:
-    #             for key, value in flops_dict.items():
-    #                 if key in merged_flops_dict:
-    #                     merged_flops_dict[key] += value
-    #                 else:
-    #                     merged_flops_dict[key] = value
-    #         bin.sparse_flops.append([cfg_slot_s, merged_flops_dict])
-    #     assert len(bin.sparse_cores) == len(bin.sparse_flops)
-    #     assert core_idx == flops_idx
-    #     # set {} for sparse_event
-    #     for slot_s, cfg, slot_num in bin.sparse_list:
-    #         bin.sparse_event.append([slot_s, {}])
-    #     # set the alloc_mod
-    #     # set the alloc_mod
-    #     bin.alloc_mod = "max"
-    
-    bin_list.clear()
-    bin_list.extend(planed_bin_list)
+    update_bp_result2_schedtab(bin_list, _bin_tb_split, _new_bin, bin_name_list, sol, bin_size)
 
     # layout format: start slot, allocation map, duation slot
     bin_size_list = {_bin.id:_bin.num_resources for _bin in bin_list}
@@ -732,8 +637,107 @@ def coleasing_alloc_cluster(
     max_core_num = sum(bin_size_list.values())
     return pid2_bin_id, bin_size_list
 
+def update_bp_result2_schedtab(bin_list, _bin_tb_split, _new_bin, bin_name_list, sel, bin_size):
+
+    # create the bins from the bin size and the bin name    
+    iter_next_bin_obj =bin_iter_list(_new_bin, bin_size, bin_name_list)
+    planed_bin_list = list(iter_next_bin_obj)
+
+    # rebuild the scheduling table list
+    for cfg_slot_s, cached_cfg, cfg_slot_num in _bin_tb_split.sparse_list:
+        for pid, size in cached_cfg.items():
+            _bin:SchedulingTableInt = planed_bin_list[sel[pid]]
+            _bin.allocate(pid, [cfg_slot_s,], [size,], [cfg_slot_num,], False)
+    # for _bin in planed_bin_list:
+    #     _bin: SchedulingTableInt
+    #     _bin.to_sparse_dict()
+    
+    # rebuild the sparse_cores and sparse_flops
+    for cores, flops, cfgs in zip(_bin_tb_split.sparse_cores, _bin_tb_split.sparse_flops, _bin_tb_split.sparse_list):
+        cfg_slot_s, cached_cfg, cfg_slot_num = cfgs
+        cores_slot_s, cores_dict = cores
+        flops_slot_s, flops_dict = flops
+        assert cores_slot_s == cfg_slot_s == flops_slot_s
+        bins_core_recoder = defaultdict(dict)
+        bins_flops_recoder = defaultdict(dict)
+        for pid, size in cached_cfg.items():
+            bin:SchedulingTableInt = planed_bin_list[sel[pid]]
+            bin.allocate(pid, [cfg_slot_s,], [size,], [cfg_slot_num,], False)
+            bins_core_recoder[bin.id].update({pid:cores_dict[pid]})
+            bins_flops_recoder[bin.id].update({pid:flops_dict[pid]})
+        for bin_id in bins_core_recoder:
+            bin:SchedulingTableInt = planed_bin_list[bin_id]
+            bin.sparse_cores.append([cores_slot_s, bins_core_recoder[bin_id]])
+            bin.sparse_flops.append([flops_slot_s, bins_flops_recoder[bin_id]])
+            
+    for bin in planed_bin_list:
+        bin: SchedulingTableInt
+        bin.to_sparse_dict()
+        # sort 
+        bin.sparse_cores.sort(key=lambda x: x[0])
+        bin.sparse_flops.sort(key=lambda x: x[0])
+        # merge the sparse_cores and sparse_flops refer to the new spase_list
+        core_idx = 0
+        flops_idx = 0
+        assert len(bin.sparse_cores) == len(bin.sparse_flops)
+        oringinal_sparse_size = len(bin.sparse_cores)
+        for cfg_slot_s, next_cfg, cfg_slot_num in bin.sparse_list:
+            new_sparse_cores = []
+            new_sparse_flops = []
+            # for cores_slot_s, cores_dict in bin.sparse_cores:
+            #     if cores_slot_s >= cfg_slot_s and cores_slot_s < cfg_slot_s + cfg_slot_num:
+            #         new_sparse_cores.append([cores_slot_s, cores_dict])
+            # for flops_slot_s, flops_dict in bin.sparse_flops:
+            #     if flops_slot_s >= cfg_slot_s and flops_slot_s < cfg_slot_s + cfg_slot_num:
+            #         new_sparse_flops.append([flops_slot_s, flops_dict])
+            while core_idx < oringinal_sparse_size: 
+                cores_slot_s, cores_dict = bin.sparse_cores[0]
+                if cores_slot_s >= cfg_slot_s and cores_slot_s < cfg_slot_s + cfg_slot_num:
+                    bin.sparse_cores.pop(0)
+                    new_sparse_cores.append([cores_slot_s, cores_dict])
+                    core_idx += 1
+                else:
+                    break
+                
+            while flops_idx < oringinal_sparse_size: 
+                flops_slot_s, flops_dict = bin.sparse_flops[0]
+                if flops_slot_s >= cfg_slot_s and flops_slot_s < cfg_slot_s + cfg_slot_num:
+                    bin.sparse_flops.pop(0)
+                    new_sparse_flops.append([flops_slot_s, flops_dict])
+                    flops_idx += 1
+                else:
+                    break
+            assert flops_idx == core_idx
+            
+            # Merge dictionaries of the same slot
+            assert len(new_sparse_cores) >= 1
+            assert len(new_sparse_flops) == len(new_sparse_cores)
+            assert new_sparse_cores[0][0] == cfg_slot_s
+            bin.sparse_cores.append(new_sparse_cores[0])
+            
+            merged_flops_dict = {}
+            for _, flops_dict in new_sparse_flops:
+                for key, value in flops_dict.items():
+                    if key in merged_flops_dict:
+                        merged_flops_dict[key] += value
+                    else:
+                        merged_flops_dict[key] = value
+            bin.sparse_flops.append([cfg_slot_s, merged_flops_dict])
+        assert len(bin.sparse_cores) == len(bin.sparse_flops)
+        assert core_idx == flops_idx
+        # set {} for sparse_event
+        for slot_s, cfg, slot_num in bin.sparse_list:
+            bin.sparse_event.append([slot_s, {}])
+        # set the alloc_mod
+        # set the alloc_mod
+        bin.alloc_mod = "compress"
+    
+    bin_list.clear()
+    bin_list.extend(planed_bin_list)
+
 def gurobi_split_solver(glb_p_list, n_partition, _bin_tb_split, job_graph, src_nodes, end_nodes):
 
+    _bin_tb_split.to_sparse_dict()
     probs = [list(cfg.keys()) for slot_s, cfg, slot_num in _bin_tb_split.sparse_list]
     J = len(probs)
     duation = [slot_num for slot_s, cfg, slot_num in _bin_tb_split.sparse_list]
@@ -761,33 +765,44 @@ def gurobi_split_solver(glb_p_list, n_partition, _bin_tb_split, job_graph, src_n
     sel, bin_size = solver.solve()    # filter the empty bins
     if gurobi_obj == "mux_min_nbin":
         # classify the items into the bins
-        binid2pidgroups = {}
-        for pid, bin_id in sel.items():
-            if bin_id not in binid2pidgroups:
-                binid2pidgroups[bin_id] = []
-            binid2pidgroups[bin_id].append(pid)
-        # remane
-        # for each bin, find the max item, and set the bin name as the name of the max item
-        name2pid = {p.task.name:p.pid for p in glb_p_list}
-        pid2_name = {v:k for k,v in name2pid.items()}
-        bin_dict = {}
-        pid2_size = {**placed_p, **tbd_p}
-        for bin_id, pidgroup in binid2pidgroups.items():
-            if pidgroup:
-                # get the max item
-                max_pid = max(pidgroup, key=lambda x: pid2_size[x])
-                # get the name of the max item
-                bin_dict[bin_id] = (pid2_name[max_pid], bin_size[bin_id])
-        # reindex the bins, by the corresponding pid 
-        pid2_bin_name = {} 
-        for pid, bin_id in sel.items():
-            assert bin_id in range(M)
-            pid2_bin_name[pid] = bin_dict[bin_id][0]
+        sel, bin_size, bin_name_list = rename_bins_and_relable_assignments(glb_p_list, placed_p, tbd_p, M, sel, bin_size)
+    else: 
+        # update the placed items to the sol
+        for pid, (size, bin_id) in placed_p.items():
+            assert pid not in sel
+            sel.update({pid:bin_id})
+    # print(sol)
+    return placed_p,bin_name_list,sel,bin_size
+
+def rename_bins_and_relable_assignments(glb_p_list, placed_p, tbd_p, M, sel, bin_size):
+    binid2pidgroups = {}
+    for pid, bin_id in sel.items():
+        if bin_id not in binid2pidgroups:
+            binid2pidgroups[bin_id] = []
+        binid2pidgroups[bin_id].append(pid)
+    # remane
+    # for each bin, find the max item, and set the bin name as the name of the max item
+    name2pid = {p.task.name:p.pid for p in glb_p_list}
+    pid2_name = {v:k for k,v in name2pid.items()}
+    bin_dict = {}
+    pid2_size = {**placed_p, **tbd_p}
+    for bin_id, pidgroup in binid2pidgroups.items():
+        if pidgroup:
+            # get the max item
+            max_pid = max(pidgroup, key=lambda x: pid2_size[x])
+            # get the name of the max item
+            bin_dict[bin_id] = (pid2_name[max_pid], bin_size[bin_id])
+
+    # reindex the bins, by the corresponding pid 
+    pid2_bin_name = {} 
+    for pid, bin_id in sel.items():
+        assert bin_id in range(M)
+        pid2_bin_name[pid] = bin_dict[bin_id][0]
         # sort the name,size tuple by the pid
         # zip(sorted(bin_dict.values(), key=lambda x: name2pid[x[0]]))
-        bin_name_list, bin_size = zip(*sorted(bin_dict.values(), key=lambda x: name2pid[x[0]]))
-        sel = {pid:bin_name_list.index(pid2_bin_name[pid]) for pid in sel}
-    return placed_p,bin_name_list,sel,bin_size
+    bin_name_list, bin_size = zip(*sorted(bin_dict.values(), key=lambda x: name2pid[x[0]]))
+    sel = {pid:bin_name_list.index(pid2_bin_name[pid]) for pid in sel}
+    return sel,bin_size,bin_name_list
 
 def build_greedy_obj(n_partition, glb_p_list, job_graph, src_nodes, end_nodes, col_pid):
     placed_p, tbd_p = {}, {}
@@ -905,3 +920,154 @@ def build_search_obj(glb_p_list, job_graph, src_nodes, end_nodes, col_pid):
             size = _p.task.pre_assigned_resource.main_size+_p.task.pre_assigned_resource.RDA_size
             tbd_p.update({pid:size})
     return bin_name_list,affinity_dict1, affinity_dict2, placed_p, tbd_p
+
+
+def single_turn_solver(
+        bin_list: List[SchedulingTableInt], 
+        glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,
+        total_cores:int, quantum_check_en, quantumSize, 
+        timestep, hyper_p, wsc_slack_ratio, exec_t_comp_ratioB,
+
+        scheduler_list: List[Scheduler], monitor_list:List[Monitor],
+        msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
+        a_data_pipe:DataPipe=None,
+        w_data_pipe:DataPipe=None, 
+
+        n_p=1, binpack_cfg:Dict=default_binpack_cfg,
+        job_graph:DiGraph=None, src_nodes:List=None, end_nodes:List=None, n_partition:int=9999,
+        show_warnings=True, 
+        verbose=False, DEBUG_FG=False, *, 
+        warmup=False, drain=False,                     
+):
+    place_round = warmup+n_p
+    tab_temp_size = int(hyper_p//timestep)
+    # assert math.isclose(hyper_p, tab_temp_size*timestep, abs_tol=numerical_error_tol_abs), \
+    #         "hyper_p should be the multiple of timestep"
+    tab_spatial_size = total_cores
+    glb_name_p_dict = {p.task.name:p for p in glb_p_list}
+
+    # build load dict
+    load_dict = {_p.task.name:_p.task.flops for _p in glb_p_list} 
+    # build timing constraint dict
+    # scan the node connected to src_nodes and sink_nodes
+    start_t_dict = {}
+    ddl_t_dict = {}
+    # {n:elim_nume_error(job_graph.nodes[sink]["ddl"]+ glb_name_p_dict[n].task.i_offset) for sink in end_nodes for n in job_graph.predecessors(sink) }
+    for node in job_graph.nodes:
+        if node in src_nodes or node in end_nodes:
+            continue
+        start_t = None
+        for pred in job_graph.predecessors(node):
+            if not pred in src_nodes:
+                continue
+            if start_t is None:
+                start_t = elim_nume_error(job_graph.nodes[pred]["ert"]+glb_name_p_dict[node].task.i_offset)
+            else:
+                raise ValueError("multiple data-driven nodes")
+        start_t_dict[node] = start_t
+
+        ddl_t = None
+        for succ in job_graph.successors(node):
+            if not succ in end_nodes:
+                continue
+            ddl_t = elim_nume_error(job_graph.nodes[succ]["ddl"]+glb_name_p_dict[node].task.i_offset)
+        ddl_t_dict[node] = ddl_t
+    
+    assert len(start_t_dict) == len(ddl_t_dict) == len(load_dict) == len(glb_name_p_dict)
+    N = len(load_dict)
+    M = tab_spatial_size
+    S = 4
+    # print(f"start_t_dict: {start_t_dict}")
+    # print(f"ddl_t_dict: {ddl_t_dict}")
+    # print(f"load_dict: {load_dict}")
+    # edges excepted the edges from src_nodes to end_nodes
+    name2pid = {p.task.name:p.pid for p in glb_p_list}
+    pid2_name = {v:k for k,v in name2pid.items()}
+    pid_list = list(name2pid.values())
+    pid_list.sort()
+    # build the affinity matrix
+    compute_lower_bounds = [load_dict[pid2_name[pid]] for pid in pid_list]
+    start_constraints = [start_t_dict[pid2_name[pid]] for pid in pid_list]
+    end_constraints = [ddl_t_dict[pid2_name[pid]] for pid in pid_list]
+    dependencies = [(name2pid[s], name2pid[d]) for s,d, e_attr in job_graph.edges(data=True) if e_attr["type"]!="control"]
+    rt_chains, ddl_chains = get_chains(job_graph, src_nodes, end_nodes, {
+            _p_n:_p.task.flops for _p_n, _p in glb_name_p_dict.items()
+        })
+    # :List[Tuple[Union[List[int], float]]]
+    path_info = [
+        ([name2pid[node] for node in p[0]], p[2]) for p in rt_chains+ddl_chains
+    ]
+    
+    from collections import defaultdict
+    A = defaultdict(dict)
+    for _p in glb_p_list:
+        mode = _p.task.parallel_mode
+        if mode != "list":
+            if mode == "upb":
+                s, e = 1, _p.task.core_max_compile
+            elif mode == "lwb":
+                s, e = _p.task.core_min_compile, M
+            elif mode == "range":
+                s, e = _p.task.core_min_compile, _p.task.core_max_compile
+            else:
+                s, e = 1, M
+            core_iter = [2**i for i in range(math.ceil(math.log2(s)), math.floor(math.log2(e))+1)]
+            if e > core_iter[-1]:
+                core_iter.append(e)
+            if s < core_iter[0]:
+                core_iter.insert(0, s)
+        elif mode == "list":
+            core_iter = _p.task.core_list_compile
+            
+        else:
+            core_iter = range(1, M+1)
+        for n_core in core_iter:
+            A[_p.pid].update({n_core:_p.task.flops/n_core/FLOPS_PER_CORE})
+    
+    from sched.packing_solver.gurobi_semi2Dclst_mapping import GurobiSemi2DClstMapping
+    
+    # N:int, M:int, S:int, NT:int, A:Dict[int, int]], dependencies:List[Tuple[int, int]], 
+    # compute_lower_bounds:List[int], start_constraints:List[int], end_constraints:List[int], time_steps:List[int]
+    test_input = {
+        "N": N,
+        "M": M,
+        "S": S,
+        "NT": 2 * int(N/S**0.5) + 2,
+        "T": hyper_p,
+        "A": A,
+        "dependencies": dependencies,
+        "compute_lower_bounds": compute_lower_bounds,
+        "start_constraints": start_constraints,
+        "end_constraints": end_constraints,
+        "path_info": path_info,
+        "time_format": "float",
+    }
+    mapper =  GurobiSemi2DClstMapping(
+        **test_input
+    )
+    partition_size, sel, r_s_d_l = mapper.solve()
+    for pid, (res, start, duration, exp_comp_time) in r_s_d_l:
+        # update res, start, duration
+        _p:ProcessInt = glb_name_p_dict[pid2_name[pid]]
+        task_tb_updated = _p.task
+        task_tb_updated.update_sched_timing(start, duration, exp_comp_time)
+        task_tb_updated.update_sched_size(res, 0)
+        _p.update_from_sched_task(task_tb_updated)
+
+    def _new_bin(id, size=tab_spatial_size, name=None): 
+        if name is None:
+            name = "bin"+str(id)
+        print("Create a new bin: ", id, "name:", name, "size:", size)
+        return new_bin(size, tab_temp_size, id=id, name=name)
+
+    tbd_p = {pid:res for pid, (res, start, duration, exp_comp_time) in r_s_d_l}
+    
+    sel, bin_size, bin_name_list = rename_bins_and_relable_assignments(glb_p_list, [], tbd_p, M, sel, bin_size)
+
+    # create the bins from the bin size and the bin name    
+    iter_next_bin_obj =bin_iter_list(_new_bin, bin_size, bin_name_list)
+    planed_bin_list = list(iter_next_bin_obj)
+        
+    update_bp_result2_schedtab(bin_list, _bin_tb_split, _new_bin, bin_name_list, sel, bin_size)
+
+    
