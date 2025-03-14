@@ -922,152 +922,152 @@ def build_search_obj(glb_p_list, job_graph, src_nodes, end_nodes, col_pid):
     return bin_name_list,affinity_dict1, affinity_dict2, placed_p, tbd_p
 
 
-def single_turn_solver(
-        bin_list: List[SchedulingTableInt], 
-        glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,
-        total_cores:int, quantum_check_en, quantumSize, 
-        timestep, hyper_p, wsc_slack_ratio, exec_t_comp_ratioB,
+# def single_turn_solver(
+#         bin_list: List[SchedulingTableInt], 
+#         glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,
+#         total_cores:int, quantum_check_en, quantumSize, 
+#         timestep, hyper_p, wsc_slack_ratio, exec_t_comp_ratioB,
 
-        scheduler_list: List[Scheduler], monitor_list:List[Monitor],
-        msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
-        a_data_pipe:DataPipe=None,
-        w_data_pipe:DataPipe=None, 
+#         scheduler_list: List[Scheduler], monitor_list:List[Monitor],
+#         msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
+#         a_data_pipe:DataPipe=None,
+#         w_data_pipe:DataPipe=None, 
 
-        n_p=1, binpack_cfg:Dict=default_binpack_cfg,
-        job_graph:DiGraph=None, src_nodes:List=None, end_nodes:List=None, n_partition:int=9999,
-        show_warnings=True, 
-        verbose=False, DEBUG_FG=False, *, 
-        warmup=False, drain=False,                     
-):
-    place_round = warmup+n_p
-    tab_temp_size = int(hyper_p//timestep)
-    # assert math.isclose(hyper_p, tab_temp_size*timestep, abs_tol=numerical_error_tol_abs), \
-    #         "hyper_p should be the multiple of timestep"
-    tab_spatial_size = total_cores
-    glb_name_p_dict = {p.task.name:p for p in glb_p_list}
+#         n_p=1, binpack_cfg:Dict=default_binpack_cfg,
+#         job_graph:DiGraph=None, src_nodes:List=None, end_nodes:List=None, n_partition:int=9999,
+#         show_warnings=True, 
+#         verbose=False, DEBUG_FG=False, *, 
+#         warmup=False, drain=False,                     
+# ):
+#     place_round = warmup+n_p
+#     tab_temp_size = int(hyper_p//timestep)
+#     # assert math.isclose(hyper_p, tab_temp_size*timestep, abs_tol=numerical_error_tol_abs), \
+#     #         "hyper_p should be the multiple of timestep"
+#     tab_spatial_size = total_cores
+#     glb_name_p_dict = {p.task.name:p for p in glb_p_list}
 
-    # build load dict
-    load_dict = {_p.task.name:_p.task.flops for _p in glb_p_list} 
-    # build timing constraint dict
-    # scan the node connected to src_nodes and sink_nodes
-    start_t_dict = {}
-    ddl_t_dict = {}
-    # {n:elim_nume_error(job_graph.nodes[sink]["ddl"]+ glb_name_p_dict[n].task.i_offset) for sink in end_nodes for n in job_graph.predecessors(sink) }
-    for node in job_graph.nodes:
-        if node in src_nodes or node in end_nodes:
-            continue
-        start_t = None
-        for pred in job_graph.predecessors(node):
-            if not pred in src_nodes:
-                continue
-            if start_t is None:
-                start_t = elim_nume_error(job_graph.nodes[pred]["ert"]+glb_name_p_dict[node].task.i_offset)
-            else:
-                raise ValueError("multiple data-driven nodes")
-        start_t_dict[node] = start_t
+#     # build load dict
+#     load_dict = {_p.task.name:_p.task.flops for _p in glb_p_list} 
+#     # build timing constraint dict
+#     # scan the node connected to src_nodes and sink_nodes
+#     start_t_dict = {}
+#     ddl_t_dict = {}
+#     # {n:elim_nume_error(job_graph.nodes[sink]["ddl"]+ glb_name_p_dict[n].task.i_offset) for sink in end_nodes for n in job_graph.predecessors(sink) }
+#     for node in job_graph.nodes:
+#         if node in src_nodes or node in end_nodes:
+#             continue
+#         start_t = None
+#         for pred in job_graph.predecessors(node):
+#             if not pred in src_nodes:
+#                 continue
+#             if start_t is None:
+#                 start_t = elim_nume_error(job_graph.nodes[pred]["ert"]+glb_name_p_dict[node].task.i_offset)
+#             else:
+#                 raise ValueError("multiple data-driven nodes")
+#         start_t_dict[node] = start_t
 
-        ddl_t = None
-        for succ in job_graph.successors(node):
-            if not succ in end_nodes:
-                continue
-            ddl_t = elim_nume_error(job_graph.nodes[succ]["ddl"]+glb_name_p_dict[node].task.i_offset)
-        ddl_t_dict[node] = ddl_t
+#         ddl_t = None
+#         for succ in job_graph.successors(node):
+#             if not succ in end_nodes:
+#                 continue
+#             ddl_t = elim_nume_error(job_graph.nodes[succ]["ddl"]+glb_name_p_dict[node].task.i_offset)
+#         ddl_t_dict[node] = ddl_t
     
-    assert len(start_t_dict) == len(ddl_t_dict) == len(load_dict) == len(glb_name_p_dict)
-    N = len(load_dict)
-    M = tab_spatial_size
-    S = 4
-    # print(f"start_t_dict: {start_t_dict}")
-    # print(f"ddl_t_dict: {ddl_t_dict}")
-    # print(f"load_dict: {load_dict}")
-    # edges excepted the edges from src_nodes to end_nodes
-    name2pid = {p.task.name:p.pid for p in glb_p_list}
-    pid2_name = {v:k for k,v in name2pid.items()}
-    pid_list = list(name2pid.values())
-    pid_list.sort()
-    # build the affinity matrix
-    compute_lower_bounds = [load_dict[pid2_name[pid]] for pid in pid_list]
-    start_constraints = [start_t_dict[pid2_name[pid]] for pid in pid_list]
-    end_constraints = [ddl_t_dict[pid2_name[pid]] for pid in pid_list]
-    dependencies = [(name2pid[s], name2pid[d]) for s,d, e_attr in job_graph.edges(data=True) if e_attr["type"]!="control"]
-    rt_chains, ddl_chains = get_chains(job_graph, src_nodes, end_nodes, {
-            _p_n:_p.task.flops for _p_n, _p in glb_name_p_dict.items()
-        })
-    # :List[Tuple[Union[List[int], float]]]
-    path_info = [
-        ([name2pid[node] for node in p[0]], p[2]) for p in rt_chains+ddl_chains
-    ]
+#     assert len(start_t_dict) == len(ddl_t_dict) == len(load_dict) == len(glb_name_p_dict)
+#     N = len(load_dict)
+#     M = tab_spatial_size
+#     S = 4
+#     # print(f"start_t_dict: {start_t_dict}")
+#     # print(f"ddl_t_dict: {ddl_t_dict}")
+#     # print(f"load_dict: {load_dict}")
+#     # edges excepted the edges from src_nodes to end_nodes
+#     name2pid = {p.task.name:p.pid for p in glb_p_list}
+#     pid2_name = {v:k for k,v in name2pid.items()}
+#     pid_list = list(name2pid.values())
+#     pid_list.sort()
+#     # build the affinity matrix
+#     compute_lower_bounds = [load_dict[pid2_name[pid]] for pid in pid_list]
+#     start_constraints = [start_t_dict[pid2_name[pid]] for pid in pid_list]
+#     end_constraints = [ddl_t_dict[pid2_name[pid]] for pid in pid_list]
+#     dependencies = [(name2pid[s], name2pid[d]) for s,d, e_attr in job_graph.edges(data=True) if e_attr["type"]!="control"]
+#     rt_chains, ddl_chains = get_chains(job_graph, src_nodes, end_nodes, {
+#             _p_n:_p.task.flops for _p_n, _p in glb_name_p_dict.items()
+#         })
+#     # :List[Tuple[Union[List[int], float]]]
+#     path_info = [
+#         ([name2pid[node] for node in p[0]], p[2]) for p in rt_chains+ddl_chains
+#     ]
     
-    from collections import defaultdict
-    A = defaultdict(dict)
-    for _p in glb_p_list:
-        mode = _p.task.parallel_mode
-        if mode != "list":
-            if mode == "upb":
-                s, e = 1, _p.task.core_max_compile
-            elif mode == "lwb":
-                s, e = _p.task.core_min_compile, M
-            elif mode == "range":
-                s, e = _p.task.core_min_compile, _p.task.core_max_compile
-            else:
-                s, e = 1, M
-            core_iter = [2**i for i in range(math.ceil(math.log2(s)), math.floor(math.log2(e))+1)]
-            if e > core_iter[-1]:
-                core_iter.append(e)
-            if s < core_iter[0]:
-                core_iter.insert(0, s)
-        elif mode == "list":
-            core_iter = _p.task.core_list_compile
+#     from collections import defaultdict
+#     A = defaultdict(dict)
+#     for _p in glb_p_list:
+#         mode = _p.task.parallel_mode
+#         if mode != "list":
+#             if mode == "upb":
+#                 s, e = 1, _p.task.core_max_compile
+#             elif mode == "lwb":
+#                 s, e = _p.task.core_min_compile, M
+#             elif mode == "range":
+#                 s, e = _p.task.core_min_compile, _p.task.core_max_compile
+#             else:
+#                 s, e = 1, M
+#             core_iter = [2**i for i in range(math.ceil(math.log2(s)), math.floor(math.log2(e))+1)]
+#             if e > core_iter[-1]:
+#                 core_iter.append(e)
+#             if s < core_iter[0]:
+#                 core_iter.insert(0, s)
+#         elif mode == "list":
+#             core_iter = _p.task.core_list_compile
             
-        else:
-            core_iter = range(1, M+1)
-        for n_core in core_iter:
-            A[_p.pid].update({n_core:_p.task.flops/n_core/FLOPS_PER_CORE})
+#         else:
+#             core_iter = range(1, M+1)
+#         for n_core in core_iter:
+#             A[_p.pid].update({n_core:_p.task.flops/n_core/FLOPS_PER_CORE})
     
-    from sched.packing_solver.gurobi_semi2Dclst_mapping import GurobiSemi2DClstMapping
+#     from sched.packing_solver.gurobi_semi2Dclst_mapping import GurobiSemi2DClstMapping
     
-    # N:int, M:int, S:int, NT:int, A:Dict[int, int]], dependencies:List[Tuple[int, int]], 
-    # compute_lower_bounds:List[int], start_constraints:List[int], end_constraints:List[int], time_steps:List[int]
-    test_input = {
-        "N": N,
-        "M": M,
-        "S": S,
-        "NT": 2 * int(N/S**0.5) + 2,
-        "T": hyper_p,
-        "A": A,
-        "dependencies": dependencies,
-        "compute_lower_bounds": compute_lower_bounds,
-        "start_constraints": start_constraints,
-        "end_constraints": end_constraints,
-        "path_info": path_info,
-        "time_format": "float",
-    }
-    mapper =  GurobiSemi2DClstMapping(
-        **test_input
-    )
-    partition_size, sel, r_s_d_l = mapper.solve()
-    for pid, (res, start, duration, exp_comp_time) in r_s_d_l:
-        # update res, start, duration
-        _p:ProcessInt = glb_name_p_dict[pid2_name[pid]]
-        task_tb_updated = _p.task
-        task_tb_updated.update_sched_timing(start, duration, exp_comp_time)
-        task_tb_updated.update_sched_size(res, 0)
-        _p.update_from_sched_task(task_tb_updated)
+#     # N:int, M:int, S:int, NT:int, A:Dict[int, int]], dependencies:List[Tuple[int, int]], 
+#     # compute_lower_bounds:List[int], start_constraints:List[int], end_constraints:List[int], time_steps:List[int]
+#     test_input = {
+#         "N": N,
+#         "M": M,
+#         "S": S,
+#         "NT": 2 * int(N/S**0.5) + 2,
+#         "T": hyper_p,
+#         "A": A,
+#         "dependencies": dependencies,
+#         "compute_lower_bounds": compute_lower_bounds,
+#         "start_constraints": start_constraints,
+#         "end_constraints": end_constraints,
+#         "path_info": path_info,
+#         "time_format": "float",
+#     }
+#     mapper =  GurobiSemi2DClstMapping(
+#         **test_input
+#     )
+#     partition_size, sel, r_s_d_l = mapper.solve()
+#     for pid, (res, start, duration, exp_comp_time) in r_s_d_l:
+#         # update res, start, duration
+#         _p:ProcessInt = glb_name_p_dict[pid2_name[pid]]
+#         task_tb_updated = _p.task
+#         task_tb_updated.update_sched_timing(start, duration, exp_comp_time)
+#         task_tb_updated.update_sched_size(res, 0)
+#         _p.update_from_sched_task(task_tb_updated)
 
-    def _new_bin(id, size=tab_spatial_size, name=None): 
-        if name is None:
-            name = "bin"+str(id)
-        print("Create a new bin: ", id, "name:", name, "size:", size)
-        return new_bin(size, tab_temp_size, id=id, name=name)
+#     def _new_bin(id, size=tab_spatial_size, name=None): 
+#         if name is None:
+#             name = "bin"+str(id)
+#         print("Create a new bin: ", id, "name:", name, "size:", size)
+#         return new_bin(size, tab_temp_size, id=id, name=name)
 
-    tbd_p = {pid:res for pid, (res, start, duration, exp_comp_time) in r_s_d_l}
+#     tbd_p = {pid:res for pid, (res, start, duration, exp_comp_time) in r_s_d_l}
     
-    sel, bin_size, bin_name_list = rename_bins_and_relable_assignments(glb_p_list, [], tbd_p, M, sel, bin_size)
+#     sel, bin_size, bin_name_list = rename_bins_and_relable_assignments(glb_p_list, [], tbd_p, M, sel, bin_size)
 
-    # create the bins from the bin size and the bin name    
-    iter_next_bin_obj =bin_iter_list(_new_bin, bin_size, bin_name_list)
-    planed_bin_list = list(iter_next_bin_obj)
+#     # create the bins from the bin size and the bin name    
+#     iter_next_bin_obj =bin_iter_list(_new_bin, bin_size, bin_name_list)
+#     planed_bin_list = list(iter_next_bin_obj)
         
-    update_bp_result2_schedtab(bin_list, _bin_tb_split, _new_bin, bin_name_list, sel, bin_size)
+#     update_bp_result2_schedtab(bin_list, _bin_tb_split, _new_bin, bin_name_list, sel, bin_size)
 
     

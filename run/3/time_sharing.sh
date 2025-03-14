@@ -223,6 +223,7 @@ binary_search() {
 }
 
 # 主逻辑
+# scan over the variation variation
 for case_idx in 0 1; do
     for var_slowdown in $(seq 0 0.01 0.4); do
     read -u3                           #代表从管道中读取一个令牌
