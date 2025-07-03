@@ -8,6 +8,7 @@ import numpy as np
 import json
 from global_var import *
 import ast
+from collections import OrderedDict
 
 import h5py
 import numpy as np
@@ -349,11 +350,12 @@ def csv_fmt_check(filename, cols):
         if set(df.columns) != set(cols):
             pd.DataFrame(columns=cols).to_csv(filename, index=False)
 
-def core_distr(rsc_map, score_dict, curr_aval_rsc):
-    cum_score_reverse = np.cumsum(list(reversed(score_dict.values())))
+def core_distr(rsc_map, score_dict, curr_aval_rsc, order_fn=lambda x:x[1], sort=True):
+    sorted_score_dict = OrderedDict(sorted(score_dict.items(), key=order_fn) if sort else score_dict.items())
+    cum_score_reverse = np.cumsum(list(reversed(sorted_score_dict.values())))
     cum_size = [curr_aval_rsc * s / cum_score_reverse[-1] for s in cum_score_reverse]
     cum_size[-1] = curr_aval_rsc
-    for i, pid in enumerate(reversed(score_dict.keys())):
+    for i, pid in enumerate(reversed(sorted_score_dict.keys())):
         if i == 0:
             size = int(cum_size[0])
             rsc_map[pid] += size

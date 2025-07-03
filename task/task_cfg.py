@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Union, List, Dict, Iterator, Callable, Tuple, Optional
-import copy
+import copy, re
 import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -12,7 +12,7 @@ from task.task_agent import TaskInt, TaskIntAttr
 from model.task_queue_agent import TaskQueue 
 from task.task_agent import ProcessInt
 from task.graph_scaling import build_node_relationship
-from sched.slack_estim import estim_release_dll_time, deduce_cfg2, deduce_flops_typical, deduce_flops_max, deduce_equiv_core
+from sched.slack_estim import estim_release_dll_time, deduce_cfg2, deduce_flops_ModelSum, deduce_flops_ModelSumMax, deduce_equiv_core
 
 # 'ID', 'Task (chain) names', 'Flops on path (G)', 'Expected Latency (ms)', 'T release (ms)', 'Freq.', 'DDL (ms)', 'Cores/Req.', 
 # 'Throuput factor (Spat.)', 'Thread factor (S)', 'Min required cores', 'Timing_flag', 'Max required Cores', 'RDA./Req.', 'Resource Type', 'Pre-assigned', 'Priority'
@@ -221,6 +221,7 @@ def creat_logical_graph(srcs:Dict[str, List[str]], ops:Dict[str, List[str]], sin
     logical_graph_nx = nx.DiGraph()
     for src_n in srcs:
         logical_graph_nx.add_node(src_n, type="src")
+        logical_graph_nx.nodes[src_n]["partition"] = src_n
         for op_n in srcs[src_n]:
             logical_graph_nx.add_node(op_n)
             logical_graph_nx.add_edge(src_n, op_n, type="control")
@@ -236,40 +237,109 @@ def creat_logical_graph(srcs:Dict[str, List[str]], ops:Dict[str, List[str]], sin
             logical_graph_nx.add_edge(op_n, sink_n, type="data")
     return logical_graph_nx
 
-def init_timing_feature(logical_graph_nx, taskattr_dict, task_graph_sinks, sink_attr, jitter_t_comp_ratio, e2e_latency, hyper_p, init_jitter_offset):
-    # set the the ert and ddl of the sink nodes and the src nodes
-    for sink in task_graph_sinks:
-        e2e_constr = e2e_latency if sink_attr[sink] == "deadline" else hyper_p
-        logical_graph_nx.nodes[sink]["ert"] = e2e_constr
-        logical_graph_nx.nodes[sink]["ddl"] = e2e_constr
-        logical_graph_nx.nodes[sink]["exp_comp_t"] = 0
-        for pred in logical_graph_nx.pred[sink]:
-            # if the sink is it unique succ, then set the ddl of the pred to the sink's ddl
-            if len(logical_graph_nx.succ[pred]) == 1:
-                logical_graph_nx.nodes[pred]["ddl"] = e2e_constr
-    for src in task_graph_srcs: 
-        jitter_t_comp = elim_nume_error(1/src_attr[src]*jitter_t_comp_ratio) if init_jitter_offset else 0
-        logical_graph_nx.nodes[src]["ert"] = 0
-        logical_graph_nx.nodes[src]["ddl"] = jitter_t_comp 
-        logical_graph_nx.nodes[src]["exp_comp_t"] = jitter_t_comp 
-        logical_graph_nx.nodes[src]['jitter'] = jitter_t_comp
+def init_timing_feature(logical_graph_nx, taskattr_dict, task_graph_sinks, 
+                        sink_attr, hyper_p, 
+                        jitter_t_comp_ratio, e2e_latency, init_jitter_offset,
+                        mode="manual",
+                        ):
 
-    # propagate the chain_criticality to all nodes from the sink nodes
-    # init all node attr chain_criticality as True
+    if mode == "full": 
+        # delete the original sink nodes and create a copy for each pred
+        for sink_n in list(task_graph_sinks.keys()):
+            idx = 0
+            for pred in list(logical_graph_nx.pred[sink_n]):
+                # create a copy of the sink node for each pred
+                if taskattr_dict[pred].thread_scaling_factor == 0: 
+                    # remove node
+                    logical_graph_nx.remove_node(pred)
+                    continue
+                node_name = sink_n+"_"+str(idx)
+                logical_graph_nx.add_node(node_name, **logical_graph_nx.nodes[sink_n])
+                logical_graph_nx.add_edge(pred, node_name, **logical_graph_nx.edges[pred, sink_n])
+                task_graph_sinks[node_name] = []
+                idx += 1
+            logical_graph_nx.remove_node(sink_n)
+            task_graph_sinks.pop(sink_n)
+         
+
     for node in logical_graph_nx:
+        # propagate the chain_criticality to all nodes from the sink nodes
+        # init all node attr chain_criticality as True
         logical_graph_nx.nodes[node]["chain_criticality"] = True
         # TODO: double check
         # if node in taskattr_dict:
         #     taskattr_dict[node].chain_criticality = 'hard'
+
+        # set the the ert and ddl of the sink nodes and the src nodes
+        if logical_graph_nx.nodes[node]["type"] == "src":
+            assert node in task_graph_srcs
+            src = node
+            jitter_t_comp = elim_nume_error(1/src_attr[src]*jitter_t_comp_ratio) if init_jitter_offset else 0
+            logical_graph_nx.nodes[src]["ert"] = 0
+            logical_graph_nx.nodes[src]["ddl"] = jitter_t_comp 
+            logical_graph_nx.nodes[src]["exp_comp_t"] = jitter_t_comp 
+            logical_graph_nx.nodes[src]['jitter'] = jitter_t_comp
+            logical_graph_nx.nodes[src]['freq'] = src_attr[src]
+            logical_graph_nx.nodes[src]['comp_ratio'] = jitter_t_comp_ratio
+
+        elif logical_graph_nx.nodes[node]["type"] == "op":
+            assert node in task_graph_ops
+            op = node
+            logical_graph_nx.nodes[op]["flops"] = taskattr_dict[op].flops
+            logical_graph_nx.nodes[op]["var_factor"] = taskattr_dict[op].var_factor
+            logical_graph_nx.nodes[op]["freq"] = taskattr_dict[op].freq
+        
     for sink in task_graph_sinks:
-        # sort if sink_attr[sink] != "deadline"
-        if sink_attr[sink] != "deadline":
+        # use re to check if there is a '_'+str(idx) in the sink node name
+        if re.search(r"_\d+$", sink):
+            # remove the idx from the sink node name
+            sink_name = re.sub(r"_\d+$", "", sink)
+        else:
+            sink_name = sink
+        e2e_constr = e2e_latency if sink_attr[sink_name] == "deadline" else hyper_p
+        logical_graph_nx.nodes[sink]["ert"] = e2e_constr
+        logical_graph_nx.nodes[sink]["ddl"] = e2e_constr
+        logical_graph_nx.nodes[sink]["exp_comp_t"] = 0
+        
+        # propagate the ddl to the pred nodes of the sink nodes
+        for pred in logical_graph_nx.pred[sink]:
+            # if the sink is it unique succ, then set the ddl of the pred to the sink's ddl
+            if len(logical_graph_nx.succ[pred]) == 1:
+                logical_graph_nx.nodes[pred]["ddl"] = e2e_constr
+
+        # propagate the freq to the sink nodes
+        if mode == "full":
+            # assert each sink has only one pred
+            assert len(logical_graph_nx.pred[sink]) == 1
+            pred = list(logical_graph_nx.pred[sink])[0]
+            # set freq of sink to the freq of the pred
+            logical_graph_nx.nodes[sink]["freq"] = logical_graph_nx.nodes[pred]["freq"]
+
+                
+        # propagage the chain_criticality from sinks to all upstream nodes
+        if sink_attr[sink_name] != "deadline":
             logical_graph_nx.nodes[sink]["chain_criticality"] = False
+            # Mark all ancestors (not just direct parents) as soft criticality
             for node in nx.ancestors(logical_graph_nx, sink):
                 logical_graph_nx.nodes[node]["chain_criticality"] = False
                 if node in taskattr_dict:
                     taskattr_dict[node].chain_criticality = 'soft'
+    
+def export_json_graph_utils(G:nx.DiGraph, fn:str):
+    from networkx.readwrite import json_graph
+    import json
+    data = json_graph.node_link_data(G)  # 提取节点和边数据
+    with open(fn if fn.endswith(".json") else fn + ".json", "w") as f:
+        json.dump(data, f)
 
+def load_json_graph_utils(f:str):
+    from networkx.readwrite import json_graph
+    import json
+    with open(f, "r") as f:
+        data = json.load(f)
+    G = json_graph.node_link_graph(data, directed=True)  # 导入节点和边数据
+    return G
+    
 def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filename:str="profiling/profiling.csv", 
                          taskattr_dict:Union[Dict[str, TaskIntAttr], None]=None, mode="manual"):
     """
@@ -279,25 +349,23 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filen
         mode: "manual" or "full"
     """
     assert mode in ["manual", "full"]
+    # create physical graph
     physical_graph_nx = nx.DiGraph()
+    
+    # list the scaling factors of each node depending on the type and mode
     node_parall_dict = {}
-    if taskattr_dict is not None:
-        for node_n, node_attr in taskattr_dict.items():
-            node_attr:TaskIntAttr
+    for node_n in logical_graph_nx.nodes:
+        if logical_graph_nx.nodes[node_n]["type"] == "op":
+            # for node_n, node_attr in taskattr_dict.items():
+            assert node_n in taskattr_dict
+            node_attr:TaskIntAttr = taskattr_dict[node_n]
             freq = int(node_attr.freq/f_gcd)
-            factor = node_attr.freq_division_factor if mode == "manual" else freq
+            factor = node_attr.freq_division_factor 
             copy_n = node_attr.thread_scaling_factor
             node_parall_dict[node_n] = [copy_n, factor, freq]
-    else:
-        # extract the parallelism of each node
-        df = pd.read_csv(profiling_filename, sep=",", index_col=0)
-        for node_n in df.index:
-            node_attr = df.loc[node_n].to_dict()
-            freq = int(node_attr["Freq."]/f_gcd)
-            factor = node_attr["Throuput factor (Spat.)"] if mode == "manual" else freq
-            copy_n = node_attr['Thread factor (Spat.)']
-            node_parall_dict[node_n] = [copy_n, factor, freq]
-
+        else:
+            freq = int(logical_graph_nx.nodes[node_n]["freq"]/f_gcd) if mode == "full" else 1
+            node_parall_dict[node_n] = [1, freq, freq]
 
     # add nodes
     for node_n, node_attr in logical_graph_nx.nodes(data=True):
@@ -307,6 +375,10 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filen
                 for exe_k in range(factor):
                     node_name = node_n+"_"+str(copy_j)+"_"+str(exe_k)
                     physical_graph_nx.add_node(node_name, **node_attr)
+                    # add offset
+                    if node_attr["type"] == "src":
+                        # add offset attr
+                        physical_graph_nx.nodes[node_name]["offset"] = exe_k/logical_graph_nx.nodes[node_n]["freq"]
                     # add control dependency
                     if exe_k < factor-1:
                         # physical_graph_nx.add_edge(node_name, node_n+"_"+str(copy_j)+"_"+str(exe_k+1))
@@ -327,7 +399,13 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filen
                                             # pred_n+"_"+pred_copy_j, 
                                             f"{pred_n}_{pred_copy_j}",
                                             f"{succ_n}_{succ_copy_j}", 'repeat')
-            # count the number of edges from pred to each succ
+            
+            # add edge attribute, 
+            # reDistPattn: one2one, downscaling, upscaling
+            # type: data, control
+            # factor: count
+            
+            # count the number of edges from their preds
             for succ_exe_k in range(succ_factor):
                 count = 0
                 succ_node_name = succ_n+"_"+str(0)+"_"+str(succ_exe_k)
@@ -342,6 +420,9 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filen
                     reDistPattn = "one2one"
                 else:
                     reDistPattn = "downscaling"
+                pred_is_op = logical_graph_nx.nodes[pred_n]["type"] == "op"
+                succ_is_op = logical_graph_nx.nodes[succ_n]["type"] == "op"
+                edge_type = "data" if pred_is_op and succ_is_op else "control"
                 for pred_copy_j in range(pred_copy_n):
                     for succ_copy_j in range(succ_copy_n): 
                         for pred_exe_k in range(pred_factor):
@@ -349,9 +430,10 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filen
                             pred_node_name = pred_n+"_"+str(pred_copy_j)+"_"+str(pred_exe_k)
                             if physical_graph_nx.has_edge(pred_node_name, succ_node_name):
                                 physical_graph_nx.edges[pred_node_name, succ_node_name]["reDistPattn"] = reDistPattn
-                                physical_graph_nx.edges[pred_node_name, succ_node_name]["type"] = "data"
+                                physical_graph_nx.edges[pred_node_name, succ_node_name]["type"] = edge_type
                                 physical_graph_nx.edges[pred_node_name, succ_node_name]["factor"] = count
             
+            # count the number of edges to their succs
             for pred_exe_k in range(pred_factor):
                 count = 0
                 pred_node_name = pred_n+"_"+str(0)+"_"+str(pred_exe_k)
@@ -372,7 +454,6 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filen
                                 pred_node_name = pred_n+"_"+str(pred_copy_j)+"_"+str(pred_exe_k)
                                 if physical_graph_nx.has_edge(pred_node_name, succ_node_name):
                                     physical_graph_nx.edges[pred_node_name, succ_node_name]["reDistPattn"] = reDistPattn
-                                    physical_graph_nx.edges[pred_node_name, succ_node_name]["type"] = "data"
                                     physical_graph_nx.edges[pred_node_name, succ_node_name]["factor"] = count
 
         elif pred_n in node_parall_dict and succ_n not in node_parall_dict:
@@ -390,6 +471,18 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filen
         else:
             physical_graph_nx.add_edge(pred_n, succ_n, type="control", reDistPattn="none")
     
+    if mode == "full":
+        # propagate the offset from src nodes to all downstream nodes
+        # sort src nodes by their offset 
+        src_nodes = [node_n for node_n, type_n in physical_graph_nx.nodes(data="type") if type_n == "src"]
+        src_nodes.sort(key=lambda x: physical_graph_nx.nodes[x]["offset"])
+        for src_n in src_nodes:
+            offset = physical_graph_nx.nodes[src_n]["offset"]
+            for succ_n in nx.descendants(physical_graph_nx, src_n):
+                assert physical_graph_nx.nodes[succ_n]["type"] != "src"
+                # add offset to the node
+                physical_graph_nx.nodes[succ_n]["offset"] = offset 
+
     return physical_graph_nx
 
 def creat_jobTask_graph(task_graph:Dict[str, List[str]], f_gcd, plot:bool=False, profiling_filename:str="profiling/profiling.csv"):
@@ -730,10 +823,10 @@ def load_taskattrib(profiling_filename:str="profiling/profiling.csv",
                         task_flag=task_flag, # unused
                         pre_assigned_resource_flag=pre_assigned_resource_flag, # unused
                         )
-        flops_typical = deduce_flops_typical(task.flops, task.thread_scaling_factor, task.freq, f_gcd)
-        task.flops_typical = flops_typical
-        task.flops_max = deduce_flops_max(flops_typical, task.var_factor)
-        equiv_core = deduce_equiv_core(flops_typical, 1/f_gcd)
+        flops_ModelSum = deduce_flops_ModelSum(task.flops, task.thread_scaling_factor, task.freq, f_gcd)
+        task.flops_ModelSum = flops_ModelSum
+        task.flops_ModelSumMax = deduce_flops_ModelSumMax(flops_ModelSum, task.var_factor)
+        equiv_core = deduce_equiv_core(flops_ModelSum, 1/f_gcd)
         task.equiv_core = equiv_core
 
         # print(str(task))
@@ -854,7 +947,9 @@ def gen_workloads(args):
 
     print(f"Ops per second of Workload: {sum([(v.flops*v.var_factor*v.thread_scaling_factor*v.freq) for n,v in taskattr_dict.items()]):.2f} T")
     logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
-    init_timing_feature(logical_graph_nx, taskattr_dict, task_graph_sinks, sink_attr, args.jitter_t_comp_ratio, args.e2e_latency, hyper_p, not args.binpack_cfg["slack_sharing"])
+    init_timing_feature(logical_graph_nx, taskattr_dict, task_graph_sinks, sink_attr, hyper_p, 
+                        args.jitter_t_comp_ratio, args.e2e_latency, not args.binpack_cfg["slack_sharing"],
+                        mode=unfold_mode)
 
     if not args.binpack_cfg["slack_sharing"]:
         algorithm = 'gurobi'
@@ -871,7 +966,6 @@ def gen_workloads(args):
     physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), taskattr_dict=taskattr_dict, mode=unfold_mode)
     glb_n_task_dict = gen_taskint_from_cfg(taskattr_dict, f_gcd)
     init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
-
     return hyper_p,glb_n_task_dict,physical_graph_nx
 
 
@@ -1055,6 +1149,23 @@ def create_init_p_list(tasks: Union[List[TaskInt], Dict[str, TaskInt]], verbose:
     return init_p_list
 
 
+def plot_workflow_g(node_color_map, edge_color_map, graph_nx, ax):
+    node_colors = [node_color_map[d] for n, d in graph_nx.nodes(data="type")]
+    edge_colors = [edge_color_map[d] for u,v,d in graph_nx.edges(data="type")]
+    for layer, layer_nodes in enumerate(nx.topological_generations(graph_nx.reverse())):
+        for node in layer_nodes:
+            graph_nx.nodes[node]["layer"] = -layer
+    pos = nx.multipartite_layout(
+        graph_nx, subset_key="layer",
+        align="horizontal",  # 水平布局
+        scale=1.2  # 放大节点间距
+    )
+    nx.draw(graph_nx, pos, with_labels=False, node_size=100, node_color=node_colors, edge_color=edge_colors, 
+            font_size=10, ax=ax, connectionstyle="arc3,rad=0.04")
+    text = nx.draw_networkx_labels(graph_nx, pos, font_size=10, ax=ax)
+    for _, t in text.items():
+        t.set_rotation(60)
+
 if __name__ == "__main__": 
     import argparse
     import numpy as np 
@@ -1108,32 +1219,8 @@ if __name__ == "__main__":
 
         node_color_map = {"op": "red", "sink": "blue", "src": "green"}
         edge_color_map = {"data": "red", "control": "blue"}
-        
-        node_colors = [node_color_map[d] for n, d in logical_graph_nx.nodes(data="type")]
-        edge_colors = [edge_color_map[d] for u,v,d in logical_graph_nx.edges(data="type")]
-        for layer, nodes in enumerate(nx.topological_generations(logical_graph_nx)):
-            for node in nodes:
-                logical_graph_nx.nodes[node]["layer"] = layer
-        pos = nx.multipartite_layout(logical_graph_nx, subset_key="layer")
-        # text with 45 degree rotation
-        nx.draw(logical_graph_nx, pos, with_labels=False, node_size=100, node_color=node_colors, edge_color=edge_colors, font_size=10, ax=ax1)
-        text = nx.draw_networkx_labels(logical_graph_nx, pos, font_size=10, ax=ax1)
-        for _, t in text.items():
-            t.set_rotation(60)
-        fig.tight_layout()
-
-
-        node_colors = [node_color_map[d] for n, d in physical_graph_nx.nodes(data="type")]
-        edge_colors = [edge_color_map[d] for u,v,d in physical_graph_nx.edges(data="type")]
-        for layer, nodes in enumerate(nx.topological_generations(physical_graph_nx)):
-            # `multipartite_layout` expects the layer as a node attribute, so add the
-            # numeric layer value as a node attribute
-            for node in nodes:
-                physical_graph_nx.nodes[node]["layer"] = layer
-        pos = nx.multipartite_layout(physical_graph_nx, subset_key="layer")
-        nx.draw(physical_graph_nx, pos, with_labels=False, node_size=100, node_color=node_colors, edge_color=edge_colors, font_size=10, ax=ax2)
-        text = nx.draw_networkx_labels(physical_graph_nx, pos, font_size=10, ax=ax2)
-        for _, t in text.items():
-            t.set_rotation(60)
+        graph_nx = logical_graph_nx
+        for graph_nx, ax in zip([logical_graph_nx, physical_graph_nx], [ax1, ax2]):
+            plot_workflow_g(node_color_map, edge_color_map, graph_nx, ax)
         fig.tight_layout()
         plt.savefig("plot/{cfg_n}/jobTask_graph.pdf", format="pdf")

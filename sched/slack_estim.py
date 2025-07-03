@@ -496,8 +496,8 @@ deduce_num_exec = lambda freq, f_gcd, thread_scaling_factor: math.ceil(freq / f_
 deduce_no_stall_latency = lambda size, flops: flops / size / FLOPS_PER_CORE 
 deduce_min_tot_rsc = lambda req_rsc, thread_scaling_factor, freq_division_factor: req_rsc * thread_scaling_factor * freq_division_factor
 deduce_max_tot_rsc = lambda rda_size, size, thread_scaling_factor, freq_division_factor, var_factor: (rda_size + size) * thread_scaling_factor * freq_division_factor * var_factor
-deduce_flops_typical = lambda flops, thread_scaling_factor, freq, f_gcd : flops * thread_scaling_factor * freq / f_gcd
-deduce_flops_max = lambda flops_typical, var_factor: flops_typical * var_factor
+deduce_flops_ModelSum = lambda flops, thread_scaling_factor, freq, f_gcd : flops * thread_scaling_factor * freq / f_gcd
+deduce_flops_ModelSumMax = lambda flops_ModelSum, var_factor: flops_ModelSum * var_factor
 deduce_equiv_core = lambda ops, hyper_p: ops / hyper_p / FLOPS_PER_CORE
 deduce_util = lambda equiv_core, min_tot_rsc: equiv_core / min_tot_rsc
 
