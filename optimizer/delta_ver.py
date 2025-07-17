@@ -21,15 +21,16 @@ from pyro.infer.autoguide import AutoDelta, AutoNormal
 from pyro.infer import Trace_ELBO, TraceEnum_ELBO, config_enumerate
 import torchsort
 from pyro.ops.indexing import Vindex
-from optimizer.utils import SchedulerBase
+from optimizer.scheduler_base import SchedulerBase
 from pyro.distributions.util import broadcast_shape
+import pyro.distributions.transforms as T
 
-ld_finish_threshold = 1e-3
-state_avail_th = 0.5
-epsilon = 1e-12
+ld_finish_threshold = torch.tensor(1e-6)
+state_avail_th = torch.tensor(0.5)
+epsilon = torch.tensor(1e-12)
 from optimizer.ops import (
     update_w_rem, update_IF, update_IA, update_delta_w, 
-    update_alloc, release_cond_fn, update_IF_src, update_IF_mid
+    prior_alloc, release_cond_fn, Next_comp_time, term_cond_fn, alloc_seq, alloc_spatial, core_req_lb
 )
 
 class SchedulingBayesNet(SchedulerBase):
@@ -52,55 +53,52 @@ class SchedulingBayesNet(SchedulerBase):
         
     def _init_parameters(self):
         """初始化所有可优化参数"""
-        # 任务参数 (t_i, e_i, r_i, R_s_percentage, s_probs_mids)
-        # 时间偏移参数（显式声明张量类型）
+        # tunable parameters for each node: 
+        # trigger threshold, deadline, priority, resource request thresholds, mapping
         
+        # trigger threshold
         # 0<=t_i<=1, 
         # need to be multiplied by T_hp to get the actual time
         # need greater than offset of source nodes, and less than ddl of sink nodes
-        self.t_i_mid = pyro.param(
-            "t_i",
-            torch.rand(self.num_mids),
-            constraint=constraints.unit_interval
+        self.t_i_mid = pyro.param("t_i", # 最早出发时间
+            torch.rand(self.num_mids), constraint=constraints.unit_interval
         )
+        
+        # priority parameter
         # 0<=e_i<=1
         # need to be multiplied by T_hp to get the actual time
         # need greater than t_i, and less than ddl of sink nodes
-        self.e_i_mid = pyro.param(
-            "e_i",                                  # 优先级参数
-            torch.rand(self.num_mids),
-            constraint=constraints.unit_interval
+        self.e_i_mid = pyro.param("e_i",  # 优先级参数
+            torch.rand(self.num_mids), constraint=constraints.unit_interval
+        )
+        
+        # resource request threshold 
+        # 0<=r_i<=M
+        self.r_i_mid = pyro.param( "r_i", # 预期资源需求
+            torch.rand(self.num_mids)/2, constraint=constraints.unit_interval
         )
 
-        # 0<=r_i<=M
-        self.r_i_mid = pyro.param(
-            "r_i",                                  # 预期资源需求
-            torch.rand(self.num_mids)/2,
-            constraint=constraints.unit_interval
+        # \sum_j s_ij = 1 \forall i \in \{1, \ldots, n\}
+        self.s_probs_mids = pyro.param( "s_probs", # 队列分配 (Gumbel-Softmax松弛)
+            torch.ones(self.num_tasks, self.S_max)/self.S_max, constraint=constraints.simplex
         )
+
         # \sum_s R_s = M \forall s \in \{1, \ldots, S\}
         # 队列资源分配 (使用simplex约束)
-        self.R_s_percentage = pyro.param(
-            "R_s", 
-            torch.ones(self.S_max)/self.S_max,
-            constraint=constraints.simplex, 
+        self.R_s_percentage = pyro.param( "R_s", 
+            torch.ones(self.S_max)/self.S_max, constraint=constraints.simplex, 
         ) 
-
-        # 队列分配 (Gumbel-Softmax松弛)
-        # \sum_j s_ij = 1 \forall i \in \{1, \ldots, n\}
-        self.s_probs_mids = pyro.param(
-            "s_probs", 
-            torch.ones(self.num_tasks, self.S_max)/self.S_max,
-            constraint=constraints.simplex
-        )
         
     @config_enumerate(default="parallel")
     def model(self): 
         self._init_parameters()
-        ft_var = pyro.sample(f"ft", dist.Normal(0, self.ft_std).mask(self.is_source_node).to_event(1))
-        ft = (self.ft_ref + ft_var) * self.is_source_node.float() 
         
-        ld = [torch.tensor(0.0) for _ in range(self.num_src)]
+        # =================================================================================
+        # # 1. generate the load 
+        ft = pyro.sample(f"ft", self.ft_dist.to_event(1))
+        ld=[]
+        for i in range(self.num_src):
+            ld.append(ft[i])
         for i in range(self.num_src, self.num_tasks):
             if self.ld_mask[i]:
                 ld_var = self.ld_values[i][0]
@@ -111,60 +109,85 @@ class SchedulingBayesNet(SchedulerBase):
                 ld_var = Vindex(self.ld_values[i])[ld_cat]
                 # print(f"ld_var: {ld_var.shape}")
             ld.append(ld_var)
-        # print("=====")
-
-        # get the initial parameters of the system
-        # (t_i, e_i, r_i, R_s_percentage, s_probs_mids)
-        s_i_onehot_mid = pyro.sample(
-            "s_i", 
-            dist.RelaxedOneHotCategoricalStraightThrough(torch.tensor(0.5), probs=self.s_probs_mids).mask(~self.is_source_node).to_event(1)
-            )  # temperature=0.5
         
-        s_i_mid_t = s_i_onehot_mid[self.num_src:] @ torch.arange(self.S_max, dtype=torch.float) 
-                                
-        # sort the parameters by the priority (here is e_i, smaller is higher priority)
+        # =================================================================================
+        # 2. generate mapping based on mapping parameter
+        s_i_onehot_mid = pyro.sample("s_i", dist.RelaxedOneHotCategoricalStraightThrough(
+            torch.tensor(0.5), probs=self.s_probs_mids).to_event(1))  # temperature=0.5
+        s_i_q_mid = s_i_onehot_mid @ torch.arange(
+            self.S_max, dtype=torch.float) + self.fixed_partition_num
+        
+        # =================================================================================
+        # 3. reorder the nodes based on the priority parameter
+        # (smaller e_i means higher priority)
         # example: e_i = torch.tensor([3.0, 1.0, 2.0], requires_grad=True)
-        # differentiable soft rank
+        # Step1: differentiable soft rank
         soft_ranks = torchsort.soft_rank(self.e_i_mid.unsqueeze(0), regularization_strength=1.0).squeeze(0)
         # print("Soft Ranks:", soft_ranks)  # get [2.0, 0.5, 1.5]
-
-        # differential group sort
-        sorted_indices_mid = torch.argsort(soft_ranks)
+        
+        # Step2: differential group sort
+        self.sorted_indices_mid = torch.argsort(soft_ranks)
         # print("Sorted Indices:", sorted_indices)  # 输出 [1, 2, 0]
-        t_i_mid = torch.gather(self.t_i_mid, -1, sorted_indices_mid)
-        e_i_mid = torch.gather(self.e_i_mid, -1, sorted_indices_mid)
-        r_i_mid = torch.gather(self.r_i_mid, -1, sorted_indices_mid)
-        s_i_mid = torch.gather(s_i_mid_t, -1, sorted_indices_mid)
-
-        # extend parameters to include source nodes
-        t_i_q = self.quant_t_e_r(t_i_mid, self.hp_steps)
-        e_i_q = self.quant_t_e_r(e_i_mid, self.hp_steps)
-        r_i_q = self.quant_t_e_r(r_i_mid, self.M)
-        R_s_q = self.redist_R_s(self.R_s_percentage, self.M)
-        s_i_q = torch.cat([torch.full((self.num_src,), float(self.S_max)), s_i_mid]) 
+        t_i_mid = torch.gather(self.t_i_mid, -1, self.sorted_indices_mid)
+        e_i_mid = torch.gather(self.e_i_mid, -1, self.sorted_indices_mid)
+        r_i_mid = torch.gather(self.r_i_mid, -1, self.sorted_indices_mid)
+        s_i_mid = torch.gather(s_i_q_mid, -1, self.sorted_indices_mid)
+        
+        # =================================================================================
+        # 4. extend parameters to include source nodes 
+        t_i_q_mid = self.quant_t_e_r(t_i_mid, self.hp_steps)*self.delta_T
+        e_i_q_mid = self.quant_t_e_r(e_i_mid, self.hp_steps)*self.delta_T
+        r_i_q_mid = self.quant_t_e_r(r_i_mid, self.M)
+        R_s_q_mid = self.redist_R_s(self.R_s_percentage, self.M)
+        
+        # s_i_q = torch.cat([torch.full((self.num_src,), float(self.S_max)), s_i_mid]) 
+        t_i_q = torch.cat([self.trigger_offset[:self.num_src], t_i_q_mid]) 
+        e_i_q = torch.cat([torch.zeros(self.num_src), e_i_q_mid]) 
+        r_i_q = torch.cat([self.rsc_req_cache[:self.num_src], r_i_q_mid]) 
+        s_i_q = torch.cat([self.partition_sel[:self.num_src], s_i_mid]) 
+        R_s_q = torch.cat([torch.ones(self.fixed_partition_num), R_s_q_mid]) 
         
         # The first trick is to broadcast. This works with or without enumeration.
         # get shape of the state space 
-        
         # enumeration|batch|event 
+        w_prev, IA_prev, IF_prev, q_prev, finish_time = self.state_trans(ld, t_i_q, e_i_q, r_i_q, s_i_q, R_s_q)
+
+    def state_trans(self, ld, t_i_q, e_i_q, r_i_q, s_i_q, R_s_q):
         enum_bat_shape = broadcast_shape(*[i.shape for i in ld])
         state_shape= enum_bat_shape + (self.num_tasks,)
         
         # initial state
         IA_prev = torch.zeros(state_shape)  # 初始未激活
-        w_prev =  torch.zeros(state_shape)   # 初始剩余负载为0
-        q_prev =  torch.zeros(state_shape)   # 初始资源分配为0
-                
-        total_loss = torch.tensor(0.0)
+        w_prev =  torch.zeros(state_shape)  # 初始剩余负载为0
+        q_prev =  torch.zeros(state_shape)  # 初始资源分配为0
+        IF_prev =  torch.zeros(state_shape)  # 初始完成时间为0
 
-        for t in pyro.markov(range(self.hp_steps, self.hp_steps + 2)):
-            t_curr = t * self.delta_T  # Relative time within hyper-period
-
+        # for t in pyro.markov(range(self.hp_steps, self.hp_steps + 2)):
+        #     t_curr = t * self.delta_T  # Relative time within hyper-period
+        t_curr = self.timer_t[0]
+        t_prev = 0
+        finish_time = torch.zeros(state_shape)
+        num_round = 0 
+        while (t_curr < self.sim_step*self.delta_T).any():
+            with torch.no_grad():
+                print(f"num_round: {num_round}, t_curr: {t_curr.unique().tolist()}")
+            delta_t = t_curr - t_prev
             # 计算激活状态IA
-            w_rem_t = update_w_rem(w_prev, q_prev, 1, self.delta_T)
-            IF_curr = update_IF(IA_prev, w_rem_t, ft, t_curr, self.is_source_node, ld_finish_threshold)
-            IA_t = update_IA(IF_curr, release_cond_fn(t_curr, t_i_q), self.adj_mat, self.in_degree, epsilon=1e-12)
-            
+            w_rem_t = update_w_rem(w_prev, q_prev, 1, delta_t)
+            IF_curr_t = update_IF(IA_prev, w_rem_t, torch.tensor([0.]), ld_finish_threshold)
+            with torch.no_grad():
+                new_finish = IF_curr_t*(1-IF_prev)
+                for i in range(self.num_tasks):
+                    if new_finish[i]>0.5:
+                        print(f"Task {self.node_list[i]} finishes at {t_curr}")
+            # finish_time = torch.where(IF_curr_t*(1-IF_prev), t_curr, finish_time)
+            IA_t = update_IA(IF_curr_t, release_cond_fn(t_curr, t_i_q), self.is_source_node, 
+                             self.adj_mat, self.in_degree, epsilon=1e-12)
+            with torch.no_grad():
+                new_active = IA_t*(1-IA_prev)
+                for i in range(self.num_tasks):
+                    if new_active[i]>0.5:
+                        print(f"Task {self.node_list[i]} activates at {t_curr}")            
             delta_w_t = []
             for i in range(self.num_tasks):
                 # first broadcast to state_shape
@@ -177,34 +200,31 @@ class SchedulingBayesNet(SchedulerBase):
             #  (enumeration|batch) -> (enumeration|batch|event)
             delta_w_t = torch.stack(delta_w_t, dim=-1)
             w_curr_t = w_rem_t + delta_w_t
-
+            masked_r_i_q = core_req_lb(r_i_q, w_curr_t,ld_finish_threshold)
+            
             q_curr_t = torch.zeros(state_shape)
-            for s in range(self.S_max): 
+            for s in range(self.fixed_partition_num):
                 mask = (s_i_q == s)
-                q_curr_t += update_alloc(
-                    w_curr_t * mask.float(),
-                    R_s_q[s],
-                    t_curr,
-                    e_i_q,
-                    r_i_q
-                )
-                
-            
-            # IA_curr = pyro.sample(f"IA_curr_{t}", dist.Delta(IA_t).to_event(1))
-            # w_curr = pyro.sample(f"w_curr_{t}", dist.Delta(w_curr_t).to_event(1))
-            # q_curr = pyro.sample(f"q_curr_{t}", dist.Delta(q_curr_t).to_event(1))
-
-
-            
+                core_req = alloc_seq(w_curr_t * mask.float(), t_curr, e_i_q)
+                q_curr_t += prior_alloc(1.0,masked_r_i_q*mask.float(), core_req)
+            for s in range(self.fixed_partition_num, self.fixed_partition_num+self.S_max): 
+                mask = (s_i_q == s)
+                core_req = alloc_spatial(w_curr_t * mask.float(), t_curr, e_i_q)
+                q_curr_t += prior_alloc(R_s_q[s],masked_r_i_q*mask.float(), core_req)
+            timer_nxt = torch.where(self.timer_t > t_curr, self.timer_t, self.sim_step*self.delta_T).min()
+            comp_t = Next_comp_time(w_curr_t, q_curr_t, 1)
+            comp_nxt = torch.where(comp_t > t_curr, comp_t, self.sim_step*self.delta_T).amin(dim=-1, keepdim=True)
+                         
             # 记录目标函数项 -----------------------------------------------
             # 目标1: 超时惩罚
-            for i in range(self.num_tasks):
-                if t_curr >= self.ddl_cache[i]:
-                    pyro.factor(f"obj1_term_{t}_{i}", -torch.select(w_curr_t, -1, i)) 
+            # for i in range(self.num_tasks):
+            #     if t_curr >= self.ddl_cache[i]:
+            #         pyro.factor(f"obj1_term_{t_curr}_{i}", -torch.select(w_curr_t, -1, i)) 
             
             # 目标2: 重调度惩罚
             # reschedule_cost = (q_curr != q_prev).float() * (q_curr + q_prev)**2
             # pyro.factor(f"obj2_term_{t}", -self.alpha * reschedule_cost.sum())
+            
             # # 传递状态到下一步 ---------------------------------------------
             # IA_prev = IA_curr
             # w_prev = w_curr
@@ -212,10 +232,11 @@ class SchedulingBayesNet(SchedulerBase):
             IA_prev = IA_t
             w_prev = w_curr_t
             q_prev = q_curr_t
-
-        IA_curr = pyro.sample(f"IA_curr_{t}", dist.Normal(IA_t, 1e-4).to_event(1))
-        w_curr = pyro.sample(f"w_curr_{t}", dist.Normal(w_curr_t, 1e-4).to_event(1))
-        q_curr = pyro.sample(f"q_curr_{t}", dist.Normal(q_curr_t, 1e-4).to_event(1))            
+            IF_prev = IF_curr_t
+            t_curr,t_prev = torch.min(t_curr + comp_nxt, timer_nxt), t_curr
+            num_round += 1
+        return w_prev, IA_prev, IF_prev, q_prev, finish_time
+    
     def guide(self):
         pass
 
@@ -224,11 +245,11 @@ class SchedulingBayesNet(SchedulerBase):
         optimizer = ClippedAdam({"lr": lr, "clip_norm": 10.0})
         
         svi = SVI(self.model, 
-                #   self.guide,
-                    config_enumerate(
-                        AutoNormal(poutine.block(self.model, hide=[f"ld_{i}" for i, flg in enumerate(self.ld_mask) if not flg])), 
-                        "parallel"
-                        ),
+                  self.guide,
+                    # config_enumerate(
+                    #     AutoNormal(poutine.block(self.model, hide=[f"ld_{i}" for i, flg in enumerate(self.ld_mask) if not flg])), 
+                    #     "parallel"
+                    #     ),
                   optimizer, 
                   loss=TraceEnum_ELBO(max_plate_nesting=self.max_plate_nesting))
 
@@ -281,7 +302,7 @@ if __name__ == "__main__":
     # print("Optimized Parameters:", params)
 
     from task.task_cfg import load_json_graph_utils
-    from optimizer.utils import draw_computational_graph
+    from optimizer.scheduler_base import draw_computational_graph
     G = load_json_graph_utils('./cache/graph.json')
     max_plate_nesting = 1
     first_available_dim = -1 - max_plate_nesting
@@ -297,13 +318,17 @@ if __name__ == "__main__":
         "max_plate_nesting": max_plate_nesting,
     }
     model = SchedulingBayesNet(**inputs)
-    dot = pyro.render_model(
-        model.model, model_args=(),     
-        render_params=True,
-        render_distributions=True,
-        render_deterministic=True
-    )
-    dot.render('plot/scheduling_graph', view=True)
+    # dot = pyro.render_model(
+    #     model.model, model_args=(),     
+    #     render_params=True,
+    #     render_distributions=True,
+    #     render_deterministic=True
+    # )
+    # dot.render('plot/scheduling_graph', view=True)
+
+    trace = poutine.trace(model.model).get_trace()
+    trace.compute_log_prob()  # optional, but allows printing of log_prob shapes
+    print(trace.format_shapes())
 
     trace = poutine.trace(poutine.enum(model.model, first_available_dim=first_available_dim)).get_trace()
     trace.compute_log_prob()  # optional, but allows printing of log_prob shapes

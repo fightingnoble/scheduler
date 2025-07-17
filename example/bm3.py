@@ -25,7 +25,7 @@ case0 = {
     "B": 25,
     "C": 15,
     "D": 45,
-}
+} # ideal case
 case1 = {
     "S1": 30,
     "S2": 0,
@@ -34,7 +34,17 @@ case1 = {
     "B": 54,
     "C": 22,
     "D": 50,
-}
+} # A unexpacted case
+
+case2 = {
+    "S1": 0, # 30hz
+    "S2": 0, # 10hz
+    "S3": 0, # 20hz
+    "A": 30,
+    "B": 40,
+    "C": 25,
+    "D": 60,
+} # Mean case
 
 case = case1
 src_attr={
@@ -45,9 +55,9 @@ src_attr={
 
 task_attr = {
     "A": {"ert": 0, "ddl": 40, "exp_lat": case["A"], "base_size": 25},
-    "B": {"ert": 0, "ddl": 100, "exp_lat": case["B"], "base_size": 25},
-    "C": {"ert": 60, "ddl": 30, "exp_lat": case["C"], "base_size": 25},
-    "D": {"ert": 110, "ddl": 100, "exp_lat": case["D"], "base_size": 25},
+    "B": {"ert": 40, "ddl": 100, "exp_lat": case["B"], "base_size": 25},
+    "C": {"ert": 0, "ddl": 30, "exp_lat": case["C"], "base_size": 25},
+    "D": {"ert": 30, "ddl": 100, "exp_lat": case["D"], "base_size": 25},
 }
 
 tot_core = 50

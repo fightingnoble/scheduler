@@ -7,6 +7,7 @@ import pyro.poutine as poutine
 from global_var import *
 from model.event_gen.e2e_latency import get_truncnorm_para
 from utils import core_distr
+from optimizer.dist_custom import TruncatedNormal
 
 class SchedulerBase:
     def __init__(self, graph:nx.DiGraph, 
@@ -19,6 +20,8 @@ class SchedulerBase:
                  ):
         
         src_cache = [n for n, degree in dict(graph.in_degree()).items() if degree == 0]
+        # sort the src nodes by 1. offset, 2. their id
+        src_cache.sort(key=lambda x: (graph.nodes[x]['offset'], x))
         sink_cache = [n for n, degree in dict(graph.out_degree()).items() if degree == 0]
         mid_cache = [n for n in graph.nodes if n not in src_cache and n not in sink_cache]
         self.graph = graph
@@ -52,30 +55,28 @@ class SchedulerBase:
         self.sim_step = self.hp_steps * self.num_hp_sim  # total number of simulation steps
         self.cat_num = max_Categorical_num
         
-        
-        # get the sensor node's 1/freq *comp_ratio
-        sen_period = []
-        ft_ratio = []
-        ft_offset = []
-        
-        for i in range(self.num_src):
-            sen_period.append(1/self.graph.nodes[self.node_list[i]]['freq'])
-            ft_ratio.append(self.graph.nodes[self.node_list[i]]['comp_ratio'])
-            ft_offset.append(self.graph.nodes[self.node_list[i]]['offset'] + self.graph.nodes[self.node_list[i]]['comp_ratio']/self.graph.nodes[self.node_list[i]]['freq'])
-        sen_period = torch.tensor(sen_period)
-        ft_ratio = torch.tensor(ft_ratio)
-        ft_ref = torch.tensor(ft_offset)
-        _,ft_std,_,ft_a,ft_b = get_truncnorm_para(range_max=sen_period, jitter_sim_para={"scale": ft_ratio})
-        
-        # get flops, var_factor attributes for middle nodes
-        self.ft_std = torch.cat([ft_std, torch.ones(self.num_mids)])
-        self.ft_ref = torch.cat([ft_ref, torch.zeros(self.num_mids)])
-        
-        self.ld_values, self.ld_probs = self.build_cat_prob_list()
-        
-                
-        # 遍历每个超周期和时间步
         self.is_source_node = torch.cat([torch.full((self.num_src,), True), torch.full((self.num_mids, ), False)])
+        # pre-define parameters for each node: 
+        # trigger threshold, deadline, priority parameter, resource request thresholds, mapping
+        
+        # trigger threshold
+        trigger_offset = [] 
+        trigger_offset_flag = [] 
+        timer = set()
+        for i in range(self.num_src):
+            trigger_offset.append(self.graph.nodes[self.node_list[i]]['offset'])
+            timer.add(self.graph.nodes[self.node_list[i]]['offset'])
+            trigger_offset_flag.append(True)
+        timer.add(self.sim_step * delta_T)
+        for i in range(self.num_mids):
+            trigger_offset.append(-1)
+            trigger_offset_flag.append(False)
+        self.trigger_offset_flag = torch.tensor(trigger_offset_flag)
+        self.trigger_offset = torch.tensor(trigger_offset)
+        self.timer_t = torch.tensor(sorted(timer)) # default float32 
+        
+        # deadline threshold
+        # all nodes are pre-defined with a default deadline 
         self.ddl_cache = torch.full((self.num_src + self.num_mids,), self.sim_step * delta_T)
         for i, node in enumerate(mid_cache):
             ddl = self.sim_step * delta_T
@@ -84,8 +85,56 @@ class SchedulerBase:
                     ddl = min(ddl, self.graph.nodes[succ]["ddl"] + self.graph.nodes[succ]['offset'])
                     # print(node, ddl, self.graph.nodes[succ]["ddl"]+ self.graph.nodes[succ]['offset'], self.graph.nodes[succ]["ddl"], self.graph.nodes[succ]['offset'])
             self.ddl_cache[i+self.num_src] = ddl
+        
+        # priority threshold
+        self.priority_cache = torch.cat([torch.arange(self.num_src, dtype=torch.float), torch.ones(self.num_mids)*-1.])
+        self.priority_cache_flag = torch.cat([torch.ones(self.num_src, dtype=torch.bool), torch.zeros(self.num_mids, dtype=torch.bool)])
 
-        # self.has_ddl = torch.tensor([0]*self.num_src + [graph.successors(n)[0] for n in mid_cache])
+        # resource request threshold 
+        rsc_req_cache = []
+        for i in range(self.num_src):
+            rsc_req_cache.append(1.)
+        for i in range(self.num_mids):
+            rsc_req_cache.append(-1.)
+        self.rsc_req_cache = torch.tensor(rsc_req_cache)
+        
+        # pre-defined mapping
+        partition_sel = []
+        partition_sel_flag = []
+        unique_partition = {}
+        for i in range(self.num_src):
+            part_name = self.graph.nodes[self.node_list[i]]['partition']
+            if part_name not in unique_partition:
+                unique_partition[part_name] = len(unique_partition)
+            partition_sel.append(unique_partition[part_name])
+            partition_sel_flag.append(True)
+        
+        for i in range(self.num_mids):
+            partition_sel.append(-1)
+            partition_sel_flag.append(False)
+        self.partition_sel_flag = torch.tensor(partition_sel_flag)
+        self.partition_sel = torch.tensor(partition_sel)
+        self.fixed_partition_num = len(unique_partition)
+        
+        # Define the parameters of the prior distributions
+        # ft_std, ft_ref for source nodes
+        # ld_values, ld_probs for middle nodes
+        sen_period = []
+        ft_ratio = []
+        ft_offset = []
+        
+        for i in range(self.num_src):
+            sen_period.append(1/self.graph.nodes[self.node_list[i]]['freq'])
+            ft_ratio.append(self.graph.nodes[self.node_list[i]]['comp_ratio'])
+            ft_offset.append(self.graph.nodes[self.node_list[i]]['comp_ratio']/self.graph.nodes[self.node_list[i]]['freq'])
+        sen_period = torch.tensor(sen_period)
+        ft_ratio = torch.tensor(ft_ratio)
+        ft_ref = torch.tensor(ft_offset)
+        _,ft_std,_,ft_a,ft_b = get_truncnorm_para(range_max=sen_period, jitter_sim_para={"scale": ft_ratio})
+        
+        # get flops, var_factor attributes for middle nodes
+        self.ft_dist = TruncatedNormal(ft_ref, ft_std, torch.tensor(ft_a), torch.tensor(ft_b))
+        self.ld_values, self.ld_probs = self.build_cat_prob_list()
                     
     def build_cat_prob_list(self):
         # Hard code to define a descrite load distribution 
@@ -99,7 +148,7 @@ class SchedulerBase:
             ld_probs.append(torch.tensor([1.0]))
             ld_values.append(torch.tensor([0.0]))
 
-        ld_standard = torch.tensor([self.graph.nodes[self.node_list[i]]['flops']/FLOPS_PER_CORE/self.delta_T for i in range(self.num_src, self.num_tasks)])
+        ld_standard = torch.tensor([self.graph.nodes[self.node_list[i]]['flops']/FLOPS_PER_CORE for i in range(self.num_src, self.num_tasks)])
         for i in range(self.num_src, self.num_tasks):
             # middle nodes
             k = self.graph.nodes[self.node_list[i]]['var_factor']
@@ -130,8 +179,7 @@ class SchedulerBase:
             x_q = (x * scale).round()
             x_q = x_q.clamp(min=0, max=scale) - temp
         x_q += temp
-        # extend t_i, r_i, e_i to include source nodes
-        return torch.cat([torch.zeros(self.num_src), x_q])
+        return x_q
 
     def redist_R_s(self, R_s_percentage, M):
         # retain gradients
@@ -183,7 +231,6 @@ def build_cat_prob_tensor(self):
     cat_values = torch.arange(self.cat_num, dtype=torch.float).expand(self.num_tasks, -1)
     return cat_values
     # self.plate_queues = pyro.plate("queues", self.S_max, dim=-2)
-
 
 
 def draw_computational_graph(model):

@@ -19,13 +19,11 @@ minimum_diff = lambda x, y: x - torch.nn.functional.softplus(x - y)
 maximum_diff = lambda x, y: x + torch.nn.functional.softplus(y - x)
 ceil_diff = lambda x: x + (1 - torch.sigmoid(ceil_factor * (x - torch.floor(x) - 0.5)))
 ge_diff = lambda x, y: torch.sigmoid(comp_scale * (x - y))
-le_diff = lambda x, y: 1 - torch.sigmoid(comp_scale * (y - x))
+le_diff = lambda x, y: torch.sigmoid(comp_scale * (y - x))
 eq_diff = lambda x, y: torch.exp(-eq_scale * (x - y)^2)
 
-import zuko
-zuko.flows.PlanarFlow
 
-OP_MAP_base = {
+OP_MAP_BASE = {
     'clamp_min': torch.clamp_min,
    'minimum': torch.minimum,
    'maximum': torch.maximum,
@@ -44,12 +42,13 @@ OP_MAP_diff = {
     'le': le_diff,
     'eq': eq_diff,
 }
-
+OP_MAP = OP_MAP_BASE
 
 def update_w_rem(
                 w_prev, q_prev, # step-dependent variable
                 rate_c, # step-independent variable
                 delta_T, # constant
+                op_map=OP_MAP
                  ):
     """
     Get the executed load in previous time step
@@ -65,32 +64,38 @@ def update_w_rem(
         w_rem: the remiaining load at the beginning of the current time step.
     """
     processed = q_prev* rate_c * delta_T 
-    w_rem = torch.clamp_min(w_prev - processed, 0)
+    w_rem = op_map["clamp_min"](w_prev - processed, 0)
     return w_rem
 
 def update_IF(IA_prev, w_rem, # step-dependent variable
-              ft_c, # step-independent variable
-              t_curr, is_source_node, ld_finish_threshold=1e-3 # constant
+              term_cond, 
+              ld_finish_threshold=torch.tensor(1e-3), # constant
+            op_map=OP_MAP
               ):
     """
     Update the finish indicator based on the executed load and the arrival load.
     math:: 
-    \mathbb{IF}^i_t = \mathbb{IA}^i_{t-1} * \left\{\begin{IEEEeqnarraybox}[\relax][c]{l's}
-        ft_i <= t & Sources\\
-        \hat w^i_{t} == 0 & DNNs, 
-    \end{IEEEeqnarraybox}\right.
+    \vec{\Isfinish}_t = \vec{\Isactive}_{t-1} (\vec{w}_t == 0)
     """
-    IF_curr = IA_prev*torch.where(is_source_node, torch.ge(t_curr, ft_c), torch.ge(ld_finish_threshold, w_rem))
+    IF_curr = op_map["maximum"](IA_prev*op_map["ge"](ld_finish_threshold, w_rem), term_cond)
     return IF_curr
 
-release_cond_fn = lambda t,r: (t>=r).float()
+release_cond_fn = lambda t,r,op_map=OP_MAP: op_map["ge"](t,r).float()
+term_cond_fn = lambda t,ddl,op_map=OP_MAP: op_map["ge"](t,ddl).float()
 
 def update_IA(IF_curr, # step-dependent variable
               release_cond, # step-independent variable
-              adj_mat, in_degree, epsilon=1e-12, # constant
+              is_source_node, 
+              adj_mat, in_degree, epsilon=torch.tensor(1e-12), # constant
+              op_map=OP_MAP
               ):
     """
-    math:: \mathbb{IA}^i_t = \min\limits_{i' \in pred.} \mathbb{IF}^{i'}_{t} 
+    math::
+        &\vec{\Isactive}_t = \left\{\begin{IEEEeqnarraybox}[\relax][c]{l's}
+        \vec{at}_c == t & Sources\\
+        \min\limits_{i' \in pred.} \Isfinish^{i'}_{t} & DNNs, 
+        \end{IEEEeqnarraybox}\right.\\ 
+
 
     Args:
         IF_curr: indicator of whether the task is active at t 
@@ -113,13 +118,18 @@ def update_IA(IF_curr, # step-dependent variable
     
     # 合并源节点和中间节点的激活条件
     # [83, 83] @ [4,4,4, 1, 83] -> [4,4,4, 1, 83]
-    IA_curr = (torch.matmul(adj_mat, IF_curr.unsqueeze(-1)).squeeze(-1) - in_degree + epsilon) * release_cond
+    # condition, the satisfied predecessor equals to the in-degree of the node, 
+    # is equivalent to that adj_mat@ IF_curr - in_degree> -epsilon
+    IA_curr = torch.where(is_source_node, 
+                           torch.ones_like(IF_curr), 
+                          op_map['ge'](torch.matmul(adj_mat, IF_curr.unsqueeze(-1)).squeeze(-1), in_degree - epsilon)) * release_cond
     return IA_curr
 
 # exact bijective fun
 def update_delta_w(
     IA_prev, IA_curr, # step-dependent variable
-    ld_c # step-independent variable
+    ld_c, # step-independent variable
+    op_map=OP_MAP
     ):
     """
     Determine the arrival load before the start of the current time step.
@@ -139,40 +149,58 @@ def update_delta_w(
     return (1 - IA_prev) * IA_curr * ld_c
 
 
-def update_alloc(
-    w_curr, # step-dependent variable
-    R_s, t, e_i, r_i # constant
+def prior_alloc(
+    R_s, r_i, # constant
+    core_req, 
+    op_map=OP_MAP
     ):
-    # min(max(r_i, q_min), q_max)
-    slack = torch.clamp_min(e_i - t, 0) + 1e-6  # avoid zero division
-    core_req = torch.ceil(w_curr / slack) # minimal resource required
     # minimal resource required
-    q_min = torch.maximum(r_i, core_req)
-    
+    q_min = op_map["maximum"](r_i, core_req)
     # calculate q_max, task by task
     # R_s - q_min_s[0:0].sum(), R_s - q_min_s[0:1].sum(), R_s - q_min_s[0:2].sum(), ...
     q_max_s = R_s - q_min.cumsum(dim=-1) + q_min
-    q_max_s = torch.clamp_min(q_max_s, 0)
-    q_min = torch.minimum(q_min, q_max_s)
+    q_max_s = op_map["clamp_min"](q_max_s, 0)
+    q_min = op_map["minimum"](q_min, q_max_s)
     return q_min 
+
+
+def core_req_lb(r_i_q, w_curr, 
+                ld_finish_threshold=torch.tensor(1e-3), # constant
+                op_map=OP_MAP):
+    return r_i_q * op_map["ge"](w_curr, ld_finish_threshold)
+
+alloc_seq = lambda w_curr, t, e_i, op_map=OP_MAP: w_curr.new_zeros(w_curr.shape)
+
+def alloc_spatial(w_curr, t, e_i, op_map=OP_MAP):
+    slack = op_map["clamp_min"](e_i - t, 0) + 1e-6  # avoid zero division
+    core_req = op_map["ceil"](w_curr / slack) # minimal resource required
+    return core_req
+
+def Next_comp_time(
+    w_curr, # step-dependent variable
+    q_curr, # step-dependent variable
+    rate_c, # step-independent variable
+    epsilon=torch.tensor(1e-3), # constant
+    op_map=OP_MAP
+):
+    """
+    Calculate the next computation time based on the remaining load and the allocated resources.
+    math:: t_{comp,i,t+1} = \frac{\hat w^i_t}{q^i_t rate^i_t}
+
+    Args:
+        w_curr: remaining load at the beginning of the current time step.
+        q_curr: allocated resources at the beginning of the current time step
+        rate_c: rate of execution w.r.t. the allocated resources
+
+    Returns:
+        t_comp_next: the next computation time.
+    """
+    q_alloc = q_curr + epsilon  # avoid zero division
+    t_comp_next = (w_curr / (q_alloc * rate_c))
+    return t_comp_next
 
 # define the baseline model
 # import pyro.distributions.transforms as T
 
 # define a bijective approximation 
 
-
-
-
-def update_IF_mid(
-              ft_c, # step-independent variable
-              t_curr # constant
-              ):
-    IF_curr = (t_curr >= ft_c)
-    return IF_curr
-
-def update_IF_src(IA_prev, w_rem, # step-dependent variable
-              ld_finish_threshold=1e-3 # constant
-              ):
-    IF_curr = IA_prev*(w_rem <= ld_finish_threshold)
-    return IF_curr
