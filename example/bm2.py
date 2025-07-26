@@ -16,7 +16,7 @@ task_graph_ops = {
     "D": ["O2"], 
 }
 
-# record the exp_lat of ops, and offset of srcs
+# record the exp_comp_t of ops, and offset of srcs
 case0 = {
     "S1": 60,
     "S2": 60,
@@ -44,10 +44,10 @@ src_attr={
 }
 
 task_attr = {
-    "A": {"ert": 0, "ddl": 140, "exp_lat": case["A"], "base_size": 30},
-    "B": {"ert": 0, "ddl": 60, "exp_lat": case["B"], "base_size": 20},
-    "C": {"ert": 60, "ddl": 110, "exp_lat": case["C"], "base_size": 20},
-    "D": {"ert": 110, "ddl": 140, "exp_lat": case["D"], "base_size": 20},
+    "A": {"ert": 0, "ddl": 140, "exp_comp_t": case["A"], "base_size": 30},
+    "B": {"ert": 0, "ddl": 60, "exp_comp_t": case["B"], "base_size": 20},
+    "C": {"ert": 60, "ddl": 110, "exp_comp_t": case["C"], "base_size": 20},
+    "D": {"ert": 110, "ddl": 140, "exp_comp_t": case["D"], "base_size": 20},
 }
 
 tot_core = 50

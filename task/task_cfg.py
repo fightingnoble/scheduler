@@ -363,8 +363,8 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filen
             factor = node_attr.freq_division_factor 
             copy_n = node_attr.thread_scaling_factor
             node_parall_dict[node_n] = [copy_n, factor, freq]
-        else:
-            freq = int(logical_graph_nx.nodes[node_n]["freq"]/f_gcd) if mode == "full" else 1
+        elif mode == "full":
+            freq = int(logical_graph_nx.nodes[node_n]["freq"]/f_gcd) 
             node_parall_dict[node_n] = [1, freq, freq]
 
     # add nodes
@@ -935,7 +935,7 @@ def gen_taskint_from_cfg(taskattr_dict:Dict[str, TaskIntAttr], f_gcd: int,
     return task_dict
 
 def gen_workloads(args):
-    unfold_mode = "manual" if args.binpack_cfg["algorithm"] in init_packing_algo_required else "full"
+    unfold_mode = args.G_decomp_mode
     taskattr_dict, f_gcd = load_taskattrib(args.profiling_filename, unfold_mode, verbose=args.verbose) 
     hyper_p = 1/f_gcd
     assert args.aux_scale_factor >= 0

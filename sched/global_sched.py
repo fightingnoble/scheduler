@@ -423,7 +423,7 @@ def coleasing_alloc_1bin(
         for stimu_t in stimu_tab:
             item = (_p.task.name, _p.pid, 
               _p.task.pre_assigned_resource.main_size + _p.task.pre_assigned_resource.RDA_size, 
-              stimu_t, elim_nume_error(stimu_t+_p.task.ERT), elim_nume_error(stimu_t+_p.task.ERT+_p.task.ddl), _p.task.exp_comp_t)
+              elim_nume_error(stimu_t), elim_nume_error(stimu_t+_p.task.ERT), elim_nume_error(stimu_t+_p.task.ERT+_p.task.ddl), _p.task.exp_comp_t)
             start_t, ddl_t = item[4], item[5]
             # quantize the start time and ddl time
             slot_s = int(math.ceil(start_t/timestep)) * timestep
@@ -588,7 +588,7 @@ def coleasing_alloc_cluster(
         w_data_pipe:DataPipe=None, 
 
         n_p=1, binpack_cfg:Dict=default_binpack_cfg,
-        job_graph:DiGraph=None, src_nodes:List=None, end_nodes:List=None, n_partition:int=9999,
+        job_graph:DiGraph=None, n_partition:int=9999,
         show_warnings=True, 
         verbose=False, DEBUG_FG=False, *, 
         warmup=False, drain=False,                     
@@ -624,7 +624,7 @@ def coleasing_alloc_cluster(
         return new_bin(size, sim_slot_num, id=id, name=name)
 
     # use a gurobi solver to determine the placement of the tasks
-    placed_p, bin_name_list, sol, bin_size = gurobi_split_solver(glb_p_list, n_partition, _bin_tb_split, job_graph, src_nodes, end_nodes)
+    placed_p, bin_name_list, sol, bin_size = gurobi_split_solver(glb_p_list, n_partition, _bin_tb_split, job_graph)
 
     update_bp_result2_schedtab(bin_list, _bin_tb_split, _new_bin, bin_name_list, sol, bin_size)
 
@@ -735,7 +735,7 @@ def update_bp_result2_schedtab(bin_list, _bin_tb_split, _new_bin, bin_name_list,
     bin_list.clear()
     bin_list.extend(planed_bin_list)
 
-def gurobi_split_solver(glb_p_list, n_partition, _bin_tb_split, job_graph, src_nodes, end_nodes):
+def gurobi_split_solver(glb_p_list, n_partition, _bin_tb_split, job_graph):
 
     _bin_tb_split.to_sparse_dict()
     probs = [list(cfg.keys()) for slot_s, cfg, slot_num in _bin_tb_split.sparse_list]
@@ -745,6 +745,8 @@ def gurobi_split_solver(glb_p_list, n_partition, _bin_tb_split, job_graph, src_n
     assert affinity_mode in ["manual", "search", "greedy"]
     # collect used items from problems
     col_pid = set(reduce(lambda x,y: x+y, probs))
+    src_nodes = [n for n, x in job_graph.in_degree() if x == 0]
+    end_nodes = [n for n, x in job_graph.out_degree() if x == 0]
     
     if n_partition == partition_max:
         bin_name_dict,affinity_dict1, affinity_dict2, placed_p, tbd_p = build_search_obj(glb_p_list, job_graph, src_nodes, end_nodes, col_pid)
@@ -882,10 +884,13 @@ def build_search_obj(glb_p_list, job_graph, src_nodes, end_nodes, col_pid):
             +process_dict[name2pid[x]].task.pre_assigned_resource.RDA_size 
                         for x in job_graph.nodes if x not in end_nodes and x not in src_nodes}
     for chain, tot_ops, slack in ddl_chains+rt_chains:
-        bgest = max([x for x in chain if x not in used], key=lambda x: size_dict[x])
-        used.append(bgest)
-        affinity_dict1.update({name2pid[bgest]:len(bin_name_list)})
-        bin_name_list.append(bgest)
+        free_nodes = [x for x in chain if x not in used]
+        if free_nodes:
+            bgest = max(free_nodes, key=lambda x: size_dict[x])
+            used.append(bgest)
+            # affinity_dict1.update({name2pid[bgest]:len(bin_name_list)})
+            bin_name_list.append(bgest)
+            
         
         # set the affinity2 by the connectivities of the tasks in the job graph
         # using bfs 
@@ -903,12 +908,12 @@ def build_search_obj(glb_p_list, job_graph, src_nodes, end_nodes, col_pid):
                 tgt_pid = name2pid[successor]
                 if node not in bin_name_list and successor not in bin_name_list:
                     affinity_dict2[(pid, tgt_pid)] = 1
-                elif node in bin_name_list and successor not in bin_name_list:
-                    bin_id = bin_name_list.index(node)
-                    affinity_dict1[(tgt_pid, bin_id)] = 1 
-                elif node not in bin_name_list and successor in bin_name_list:
-                    bin_id = bin_name_list.index(successor)
-                    affinity_dict1[(pid, bin_id)] = 1 
+                # elif node in bin_name_list and successor not in bin_name_list:
+                #     bin_id = bin_name_list.index(node)
+                #     affinity_dict1[(tgt_pid, bin_id)] = 1 
+                # elif node not in bin_name_list and successor in bin_name_list:
+                #     bin_id = bin_name_list.index(successor)
+                #     affinity_dict1[(pid, bin_id)] = 1 
             if successor not in visited:
                 q.append(successor)
     # mark others as tbd

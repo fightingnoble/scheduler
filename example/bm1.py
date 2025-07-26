@@ -38,7 +38,7 @@ task_graph_ops = {
 # Chain 3		    120.0 			
 
 # case 0:					
-# Typical latency (exp_lat)					
+# Typical latency (exp_comp_t)					
 # Chain 1	0.0 	40.0 	33.3 	0.0 	0.0 
 # Chian 2	0.0 	20.0 	20.0 	23.3 	10.0 
 # Chain 3		    73.3 	0.0 	0.0 	0.0 
@@ -53,7 +53,7 @@ task_graph_ops = {
 # Chian 2	20.0 	21.0 	25.0 	23.3 	10.0 
 # Chain 3		100.0 	0.0 	0.0 	0.0 
 
-# record the exp_lat of ops, and offset of srcs
+# record the exp_comp_t of ops, and offset of srcs
 case0 = {
     "S1": 0,
     "S2": 0,
@@ -132,13 +132,13 @@ src_attr={
 }
 
 task_attr = {
-    "A": {"ert": 0, "ddl": 70, "exp_lat": case["A"], "base_size": 20},
-    "B": {"ert": 70, "ddl": 120, "exp_lat": case["B"], "base_size": 20},
-    "C": {"ert": 0, "ddl": 40, "exp_lat": case["C"], "base_size": 10},
-    "D": {"ert": 40, "ddl": 70, "exp_lat": case["D"], "base_size": 10},
-    "E": {"ert": 70, "ddl": 105, "exp_lat": case["E"], "base_size": 10},
-    "F": {"ert": 105, "ddl": 120, "exp_lat": case["F"], "base_size": 10},
-    "G": {"ert": 0, "ddl": 120, "exp_lat": case["G"], "base_size": 10},
+    "A": {"ert": 0, "ddl": 70, "exp_comp_t": case["A"], "base_size": 20},
+    "B": {"ert": 70, "ddl": 120, "exp_comp_t": case["B"], "base_size": 20},
+    "C": {"ert": 0, "ddl": 40, "exp_comp_t": case["C"], "base_size": 10},
+    "D": {"ert": 40, "ddl": 70, "exp_comp_t": case["D"], "base_size": 10},
+    "E": {"ert": 70, "ddl": 105, "exp_comp_t": case["E"], "base_size": 10},
+    "F": {"ert": 105, "ddl": 120, "exp_comp_t": case["F"], "base_size": 10},
+    "G": {"ert": 0, "ddl": 120, "exp_comp_t": case["G"], "base_size": 10},
 }
 
 tot_core = 40 
