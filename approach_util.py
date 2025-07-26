@@ -5,6 +5,7 @@ from example.bm4 import swt_lat
 from collections import defaultdict, OrderedDict
 import math
 from utils import core_distr
+import functools
 
 class MyGraph(nx.DiGraph):
     def __init__(self, srcs, ops, sinks, task_attr, src_attr, sink_attr=None):
@@ -161,18 +162,6 @@ class Acc_p(object):
             Otherwise, scheduler will generate a new allocation map, 
             during which the allocation map in last round will be renamed as alloc_map_prev. 
             
-            Switching progress: 
-            Compare the alloc_map_prev with the generated alloc_map_curr, 
-            if the allocation map changes, the reallocation progress will be triggered, 
-            the res_map will be cleared, during which no task can be executed; 
-            if the allocation map remains the same, the scheduler will continue to execute tasks. 
-
-            case 1: complete reallocation progress, new configuration is issued, impose a finish event
-            case 2: finish event happens, generate new allocation map, 
-            enter reallocation progress, and impose a reallcation completion event
-            case 3: finish event happens, do not change the allocation map, 
-            continue to execute tasks, and impose a finish event
-
             Two types of tasks: 
             - "system task" that stalls the accelerator
             - "user task" that can be executed by the accelerator
@@ -267,13 +256,14 @@ class Acc_p(object):
             if curr_aval_rsc <= 0:
                 break
             
-            # allocate free resource
+        # allocate free resource
+        # if there are still resources left, 
+        # it means no late process is waiting for resources
         if curr_aval_rsc > 0 and len(alloc_map_curr):
             print(f"\tMinimum resource requirement at {curr_t}: {alloc_map_curr}")
-                # if there are still resources left, 
-                # it means no late process is waiting for resources
             assert sum([score == float('inf') and constr_dict[pid] != "upb" for pid, score in score_dict.items()]) == 0
                 # also, there is no process waiting for resources in the ready queue
             assert len(score) == 0
             core_distr(alloc_map_curr, score_dict, curr_aval_rsc)
         return alloc_map_curr
+    

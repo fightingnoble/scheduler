@@ -4,8 +4,8 @@ from example.bm4 import *
 import sys
 import os
 # add the parent directory to the path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from approach_util33 import Acc_p, Sen_p, MyGraph
+# sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from approach_util import Acc_p, Sen_p, MyGraph
 
 event_t = [] # detailed info of all events, (t, type)
 event_t.extend([(0, "external"), (float("inf"), "external")])
