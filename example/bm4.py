@@ -39,9 +39,9 @@ case1 = {
 
 case = case1
 src_attr={
-    "S1": {"offset":0, "exp_comp_t":case["S1"], "tgt_device": "sen_p0", "base_size": 25},
-    "S2": {"offset":0, "exp_comp_t":case["S2"], "tgt_device": "sen_p0", "base_size": 25},
-    "S3": {"offset":0, "exp_comp_t":case["S3"], "tgt_device": "sen_p0", "base_size": 25},
+    "S1": {"offset":0, "exp_comp_t":case["S1"], "tgt_device": "sen_p0", "base_size": 1},
+    "S2": {"offset":0, "exp_comp_t":case["S2"], "tgt_device": "sen_p0", "base_size": 1},
+    "S3": {"offset":0, "exp_comp_t":case["S3"], "tgt_device": "sen_p0", "base_size": 1},
 }
 
 task_attr = {

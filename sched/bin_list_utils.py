@@ -70,7 +70,7 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], pid2name:Dict[int
         bin_spatial_size = _SchedTab.num_resources
         bin_temp_size = _SchedTab.temp_size
 
-        ax = axes[len(bin_list)-bin_idx-1]                        
+        ax = axes[len(bin_list)-bin_idx-1] if len(bin_list) > 1 else axes                     
 
         empty_boader_s = []
         empty_boader_e = []
@@ -284,7 +284,7 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], pid2name:Dict[int
         ax.text(plot_start, bin_vertical_offset, f"bin: {_SchedTab.name}({_SchedTab.id})", ha='left', va='top', fontsize=txt_size)
 
     # only set x axis for the bottom plot
-    ax = axes[len(bin_list)-1]
+    ax = axes[len(bin_list)-1] if len(bin_list) > 1 else axes
     ax.set_xlim(plot_start-x_margin, plot_end+x_margin)
     ticks = [str(round(t, 3)) for t in np.arange(plot_start, plot_end, time_grid_size*tick_dens)] + [str(round(plot_end, 3))]
     ax.set_xticks(np.arange(plot_start, plot_end, time_grid_size*tick_dens).tolist()+[plot_end])
@@ -294,7 +294,7 @@ def get_task_layout_compact(bin_list:List[SchedulingTableInt], pid2name:Dict[int
 
     if plot_legend:
         # add legend to the top plot
-        ax = axes[0]
+        ax = axes[0] if len(bin_list) > 1 else axes
         from matplotlib.lines import Line2D
         legend_elements = []
         # for i in range(len(init_p_list)): 

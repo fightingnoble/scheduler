@@ -966,7 +966,27 @@ def gen_workloads(args):
     physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), taskattr_dict=taskattr_dict, mode=unfold_mode)
     glb_n_task_dict = gen_taskint_from_cfg(taskattr_dict, f_gcd)
     init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
-    return hyper_p,glb_n_task_dict,physical_graph_nx
+    # generate the process list
+    glb_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
+    # add the pid as the attribute of the nodes in the physical graph
+    for p in glb_p_list:
+        physical_graph_nx.nodes[p.task.name]['node_id'] = p.task.id
+    # assign id to the srcs and sinks in the physical graph 
+    srcs = [n for n, x in physical_graph_nx.in_degree() if x == 0]
+    sinks = [n for n, x in physical_graph_nx.out_degree() if x == 0]
+    
+    id_cnt = -1
+    for n in srcs:
+        physical_graph_nx.nodes[n]['node_id'] = id_cnt
+        id_cnt -= 1
+    id_cnt = len(glb_p_list)
+    for n in sinks:
+        physical_graph_nx.nodes[n]['node_id'] = id_cnt
+        id_cnt += 1
+    init_affinity(glb_p_list, mode='job', job_graph_nx=physical_graph_nx, verbose=args.verbose)
+    export_json_graph_utils(physical_graph_nx, "cache/graph_w_ert_ddl.json")
+    
+    return hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list
 
 
 def extract_parallel_cfg(task_attr, mode="runtime"):
@@ -1132,13 +1152,12 @@ def create_init_p_list(tasks: Union[List[TaskInt], Dict[str, TaskInt]], verbose:
     # add1216: distinguish the task defined by user and the process in the task queue
     # generate the a serial of ideal task instances
     init_p_list = []
-    pid = 0
     for task in task_list: 
         # for r, d in zip(task.get_release_event(event_range), task.get_deadline_event(event_range)):
         r = elim_nume_error(task.get_release_time())
         d = elim_nume_error(task.get_deadline_time())
-        p = task.make_process(r, d, pid)
-        pid += 1
+        # 使用task.id作为进程的PID
+        p = task.make_process(r, d, task.id)
         init_p_list.append(p)
         if verbose:
             print("TASK {:d}:{:s}({:d}), is expected to finish {}T OPs in {:f}-{:f} !!".format(

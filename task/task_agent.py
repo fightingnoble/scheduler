@@ -1018,10 +1018,12 @@ class TaskBase(object):
                 print(f"{n_event} events of {self.name} are generated")
 
     @classmethod
-    def get_event_generator(cls, glb_n_task_dict:Dict[str, TaskBase], hyper_p, n_p, warmup, **kwargs): 
+    def get_event_generator(cls, glb_p_list:List[ProcessBase], hyper_p, n_p, warmup, **kwargs): 
         event_range = hyper_p * (n_p+warmup)
         event_iter_dict = {}
-        for task_n, _task in glb_n_task_dict.items():
+        for _p in glb_p_list:
+            _task = _p.task
+            task_n = _task.name
             if _task.trigger_mode!='N':
                 # filter the processes with trigger_mode is not "N"
                 event_time_iter = _task.delegate_event_generator(event_range=event_range)

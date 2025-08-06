@@ -37,11 +37,7 @@ def main():
     case_pth = get_case_path_str(args)
 
     # ======================== workload settings ========================
-    hyper_p, glb_n_task_dict, physical_graph_nx = gen_workloads(args)
-
-    # generate the process list
-    glb_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
-    init_affinity(glb_p_list, mode='job', job_graph_nx=physical_graph_nx, verbose=args.verbose)
+    hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list = gen_workloads(args)
     
     # ======================== scheduler settings ================
     scheduler_args = {
@@ -75,7 +71,7 @@ def main():
     # simulation of driving dynamics
     # get event generators: arrival time, deadline, load
     jitter_para_dict = dict(jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para, seed=args.seed)
-    event_iter_dict = TaskInt.get_event_generator(glb_n_task_dict, hyper_p, num_periods, warmup, **jitter_para_dict)
+    event_iter_dict = TaskInt.get_event_generator(glb_p_list, hyper_p, num_periods, warmup, **jitter_para_dict)
 
     # seen in the item 21. load_var and thread fork in assumption.md
     if args.load_var_sim_en: 
@@ -164,6 +160,7 @@ def main():
                 verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
                 warmup=True, drain=True, 
                 )
+            bin_list[0].to_sparse_dict()
             filename = os.path.join(csv_xlxs_root, 'coalescing_req_cores.csv')
             check_parents_path(filename)
             import pandas as pd
@@ -297,11 +294,7 @@ def main():
             args.binpack_cfg["slack_sharing"] = True
             # reset the ddl and ert
             print("="* 20 + "Redistribute slack:" + "="* 20 + "\n")
-            hyper_p, glb_n_task_dict, physical_graph_nx = gen_workloads(args)
-
-            # generate the process list
-            glb_p_list = create_init_p_list(glb_n_task_dict, args.verbose)
-            init_affinity(glb_p_list, mode='job', job_graph_nx=physical_graph_nx, verbose=args.verbose)
+            hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list = gen_workloads(args)
 
             # get the size and allocated process id
             print("="* 20 + "Bin-assignment:" + "="* 20 + "\n")

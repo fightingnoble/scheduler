@@ -603,7 +603,7 @@ if __name__ == "__main__":
     # from model.message.message_handler import gen_sensor_event
     # event_iter_dict = gen_sensor_event(glb_p_list, hyper_p, num_periods, True, args.jitter_sim_en, args.jitter_sim_para, args.seed)
     jitter_para_dict = dict(jitter_sim_en=args.jitter_sim_en, jitter_sim_para=args.jitter_sim_para, seed=args.seed)
-    event_iter_dict = TaskInt.get_event_generator(glb_n_task_dict, hyper_p, num_periods, True, **jitter_para_dict)
+    event_iter_dict = TaskInt.get_event_generator(glb_p_list, hyper_p, num_periods, True, **jitter_para_dict)
     # convert to list then convert to iterator
     # event_iter_dict = {task: [list(event_iter_dict[task][0]), list(event_iter_dict[task][1])] for task in event_iter_dict}
     # pickle.dump(event_iter_dict, open(f"cache/{cfg_n}/event_iter_dict_{args.test_case}_{args.jitter_sim_en}.pkl", "wb"))

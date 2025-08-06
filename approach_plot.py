@@ -1,4 +1,6 @@
-from approach_util import Acc_p, Sen_p, MyGraph, PartitionConfig, acc_p_factory, GlobalEvent_t
+from approach_util import Acc_p, Sen_p, MyGraph, PartitionConfig, acc_p_factory, GlobalEvent_t, old_timestep
+from global_var import elim_nume_error, BW_DRAM, GLB_BUFFER_SIZE_PER_CORE
+from task_estimation import trasfer_realloc_as_task
 
 
 def print_progress(curr_t, pred_t, processors):
@@ -7,7 +9,37 @@ def print_progress(curr_t, pred_t, processors):
         print(f"\tDuration: {curr_t - pred_t}")
     else:
         print(f"\tInitial decision")
+    
+    # 只打印有实际动作的处理器
+    active_processors = []
     for i, proc in enumerate(processors):
+        # 检查处理器是否有实际动作
+        has_action = False
+        
+        # 检查是否有运行中的任务
+        if hasattr(proc, 'running') and proc.running:
+            has_action = True
+        
+        # 检查是否有就绪任务
+        if hasattr(proc, 'ready'):
+            if isinstance(proc.ready, dict) and proc.ready:
+                has_action = True
+            elif hasattr(proc.ready, 'qsize') and proc.ready.qsize() > 0:
+                has_action = True
+        
+        # 检查是否有资源分配
+        if hasattr(proc, 'res_map') and proc.res_map:
+            has_action = True
+        
+        # 检查是否有状态变化
+        if hasattr(proc, 'sys_state') and proc.sys_state == "R":
+            has_action = True
+        
+        if has_action:
+            active_processors.append((i, proc))
+    
+    # 只打印活跃的处理器
+    for i, proc in active_processors:
         print(f"\n\tProcessor {i}: {proc}")
         # Print sys_state if it exists
         if hasattr(proc, 'sys_state'):
@@ -21,16 +53,20 @@ def print_progress(curr_t, pred_t, processors):
         # Print slack_map if it exists
         if hasattr(proc, 'slack_map'):
             print(f"\t\tSlack_map: {proc.slack_map}")
+    
+    # 如果没有活跃处理器，打印一个简短的提示
+    if not active_processors:
+        print(f"\tNo active processors")
 
 
-def instantiate_processors(G, partition_cfg):
-    acc_p_list = acc_p_factory("glb", partition_cfg)
+def instantiate_processors(G, partition_cfg, event_t, policy="glb"):
     sen_p0 = Sen_p("sen_p", 3, 1, G, G.srcs)
+    acc_p_list = acc_p_factory(policy, partition_cfg)
     processors = [sen_p0] + acc_p_list
     for i, proc in enumerate(processors):
         print(f"Processor {i}: {proc}")
-    event_t = GlobalEvent_t([(0, "external")])
-    return processors, event_t, G, partition_cfg
+    event_t = GlobalEvent_t(event_t)
+    return processors, event_t
 
 
 def run_simulation(processors, event_t, G):
@@ -83,6 +119,7 @@ def run_simulation(processors, event_t, G):
             new_ready = proc.update_ready(curr_t)
             new_ready_dict[proc] = new_ready
 
+        # TODO: collective update ready flag accross all processors
 
         # allocation progress
         # duation_sen_p = sen_p0.sched(curr_t) 
@@ -93,8 +130,10 @@ def run_simulation(processors, event_t, G):
         for proc in processors:
             # 兼容不同类型的参数
             if isinstance(proc, Acc_p):
+                proc: Acc_p
                 duation = proc.sched(curr_t, new_comp_dict[proc], new_ready_dict[proc])
             else:
+                proc: Sen_p
                 duation = proc.sched(curr_t)
             duation_dict[proc] = duation
 
@@ -135,26 +174,198 @@ if __name__ == "__main__":
             base_pwr_list=[1],
             mapped_node_list=[G.sinks+G.ops],
             TSmap_list=[None],  # 如果用cyclic策略可传入具体map
+            swt_lat_list=[5],  # case1使用固定值5
             G=G, # nodes other than sources
         )
-    elif args.case == "case2":
-        from approach_util import load_graph_from_json, get_partition_info
-        from utils import load_pickle
-        srcs, ops, sinks, task_attr, src_attr, sink_attr = load_graph_from_json('cache/graph_w_ert_ddl.json')
-        G = MyGraph(srcs, ops, sinks, task_attr, src_attr, sink_attr)
+        event_t = [(0, "external")]
 
-        bin_list = load_pickle('cache/coalescing_scan/n_bins_max/x1_0.1s_rda-20.00%(J)_100.00%(T)_30.00%(S)_ignore/bin_list_371.pkl')
-        num_partitions, partition_size, flops_per_core, partition_task_map, TSMap_list = get_partition_info(bin_list)
+        processors, event_t = instantiate_processors(
+            G, partition_cfg, list(event_t), policy="pglb"
+            )
+
+    elif args.case == "case2":
+        print("case2: single partition glb")
+        # similar to case1, but with a actual load graph 
+        from approach_util import instantiate_mygraph_from_json, get_partition_info, set_time_unit
+        from utils import load_pickle
+        from global_var import FLOPS_PER_CORE
+        
+        time_unit, time_norm_factor = set_time_unit(1e-6, False)
+
+        G, pid2name = instantiate_mygraph_from_json(
+            'cache/graph_w_ert_ddl.json',
+            time_norm_factor=time_norm_factor
+            )
+
+        # # Suppose there is only one partition
+        swt_lat = trasfer_realloc_as_task(BW_DRAM, 500, GLB_BUFFER_SIZE_PER_CORE, time_norm_factor)
+        partition_cfg = PartitionConfig(
+            num_partitions=1,
+            cap_list=[500],
+            base_pwr_list=[FLOPS_PER_CORE],
+            mapped_node_list=[G.sinks+G.ops],
+            TSmap_list=[None],  # 如果用cyclic策略可传入具体map
+            swt_lat_list=[swt_lat],  # case2使用计算值
+            G=G, # nodes other than sources
+        )
+
+        # collect the event_t from the 
+        event_t = set()
+        # 2. the offset of the sensor and the length to be simulated 
+        num_hp = 3
+        T_hp = 0.1
+        for i in range(num_hp):
+            for node in G.srcs:
+                t = elim_nume_error(G.nodes[node]['offset'] + i * T_hp)
+                event_t.add((t, "external"))
+                print(f"{node}'s {i}th event at {t}")
+        processors, event_t = instantiate_processors(
+            G, partition_cfg, list(event_t), policy="pglb"
+            )
+
+    elif args.case == "case3":
+        print("case3: multi partition pglb")
+        from approach_util import instantiate_mygraph_from_json, get_partition_info, set_time_unit
+        from utils import load_pickle
+        
+        time_unit, time_norm_factor = set_time_unit(1e-6, False)
+        G, pid2name = instantiate_mygraph_from_json(
+            'cache/graph_w_ert_ddl.json',
+            time_norm_factor=time_norm_factor
+            )
+
+        bin_list = load_pickle('./cache/coalescing_scan/n_bins_max/x1_0.1s_rda-20.00%(J)_100.00%(T)_30.00%(S)_ignore/bin_list_477.pkl')
+        num_partitions, partition_size, flops_per_core, partition_task_map, TSMap_list = get_partition_info(bin_list, G, pid2name)
+
+        # 为每个分区计算swt_lat
+        swt_lat_list = []
+        for i in range(num_partitions):
+            swt_lat = trasfer_realloc_as_task(BW_DRAM, partition_size[i], GLB_BUFFER_SIZE_PER_CORE, time_norm_factor)
+            swt_lat_list.append(swt_lat)
+
         partition_cfg = PartitionConfig(
             num_partitions=num_partitions,
             cap_list=partition_size,
             base_pwr_list=flops_per_core,
             mapped_node_list=partition_task_map,
             TSmap_list=TSMap_list,
+            swt_lat_list=swt_lat_list,  # case3使用计算值
             G=G,
         )
+        # collect the event_t from:
+        event_t = set()
+        # 2. the offset of the sensor and the length to be simulated 
+        num_hp = 3
+        T_hp = 0.1
+        for i in range(num_hp):
+            for node in G.srcs:
+                t = elim_nume_error(G.nodes[node]['offset'] + i * T_hp)
+                event_t.add((t, "external"))
+                print(f"{node}'s {i}th event at {t}")
+        
+        processors, event_t = instantiate_processors(
+            G, partition_cfg, list(event_t), policy="pglb"
+            )
+    elif args.case in ["case4", "case5"]:
+        print(f"case{args.case}: {'single' if args.case == 'case4' else 'multi'}-partition cyclic")
+        from approach_util import instantiate_mygraph_from_json, get_partition_info, set_time_unit
+        from utils import load_pickle
+        
+        time_unit, time_norm_factor = set_time_unit(1e-6, False)
+        G, pid2name = instantiate_mygraph_from_json(
+            'cache/graph_w_ert_ddl.json',
+            time_norm_factor=time_norm_factor
+            )
+        if args.case == "case5":
+            bin_list = load_pickle('./cache/coalescing_scan/n_bins_max/x1_0.1s_rda-20.00%(J)_100.00%(T)_30.00%(S)_ignore/bin_list_477.pkl')
+        else:
+            bin_list = load_pickle('./cache/coalescing_scan/n_bins_1/x1_0.1s_rda-20.00%(J)_100.00%(T)_30.00%(S)_ignore/bin_list_371.pkl')
+        
+        num_partitions, partition_size, flops_per_core, partition_task_map, TSMap_list = get_partition_info(bin_list, G, pid2name)
+
+        # 为每个分区计算swt_lat
+        swt_lat_list = []
+        for i in range(num_partitions):
+            swt_lat = trasfer_realloc_as_task(BW_DRAM, partition_size[i], GLB_BUFFER_SIZE_PER_CORE, time_norm_factor)
+            swt_lat_list.append(swt_lat)
+        
+        partition_cfg = PartitionConfig(
+            num_partitions=num_partitions,
+            cap_list=partition_size,
+            base_pwr_list=flops_per_core,
+            mapped_node_list=partition_task_map,
+            TSmap_list=TSMap_list,
+            swt_lat_list=swt_lat_list,  # case3使用计算值
+            G=G,
+        )
+        # collect the event_t from:
+        event_t = set()
+        # 1. bin_list (from the sparse_list of each bin)
+        for bin in bin_list:
+            for cfg_slot_s, next_cfg, cfg_slot_num in bin.sparse_list:
+                event_t.add((elim_nume_error(cfg_slot_s*old_timestep), "external"))
+        # 2. the offset of the sensor and the length to be simulated 
+        num_hp = 3
+        T_hp = 0.1
+        for i in range(num_hp):
+            for node in G.srcs:
+                t = elim_nume_error(G.nodes[node]['offset'] + i * T_hp)
+                event_t.add((t, "external"))
+                print(f"{node}'s {i}th event at {t}")
+        processors, event_t = instantiate_processors(
+            G, partition_cfg, list(event_t), policy="cyc"
+            )
+    elif args.case in ["case6", "case7"]:
+        print(f"case{args.case}: {'single' if args.case == 'case6' else 'multi'}-partition reservation")
+        from approach_util import instantiate_mygraph_from_json, get_partition_info, set_time_unit
+        from utils import load_pickle
+        
+        time_unit, time_norm_factor = set_time_unit(1e-6, False)
+        G, pid2name = instantiate_mygraph_from_json(
+            'cache/graph_w_ert_ddl.json',
+            time_norm_factor=time_norm_factor
+            )
+        if args.case == "case7":
+            bin_list = load_pickle('./cache/coalescing_scan/n_bins_max/x1_0.1s_rda-20.00%(J)_100.00%(T)_30.00%(S)_ignore/bin_list_477.pkl')
+        else:
+            bin_list = load_pickle('./cache/coalescing_scan/n_bins_1/x1_0.1s_rda-20.00%(J)_100.00%(T)_30.00%(S)_ignore/bin_list_371.pkl')
+        
+        num_partitions, partition_size, flops_per_core, partition_task_map, TSMap_list = get_partition_info(bin_list, G, pid2name)
+
+        # 为每个分区计算swt_lat
+        swt_lat_list = []
+        for i in range(num_partitions):
+            swt_lat = trasfer_realloc_as_task(BW_DRAM, partition_size[i], GLB_BUFFER_SIZE_PER_CORE, time_norm_factor)
+            swt_lat_list.append(swt_lat)
+        
+        partition_cfg = PartitionConfig(
+            num_partitions=num_partitions,
+            cap_list=partition_size,
+            base_pwr_list=flops_per_core,
+            mapped_node_list=partition_task_map,
+            TSmap_list=TSMap_list,
+            swt_lat_list=swt_lat_list,  # case3使用计算值
+            G=G,
+        )
+        # collect the event_t from:
+        event_t = set()
+        # 1. bin_list (from the sparse_list of each bin)
+        for bin in bin_list:
+            for cfg_slot_s, next_cfg, cfg_slot_num in bin.sparse_list:
+                event_t.add((elim_nume_error(cfg_slot_s*old_timestep), "external"))
+        # 2. the offset of the sensor and the length to be simulated 
+        num_hp = 3
+        T_hp = 0.1
+        for i in range(num_hp):
+            for node in G.srcs:
+                t = elim_nume_error(G.nodes[node]['offset'] + i * T_hp)
+                event_t.add((t, "external"))
+                print(f"{node}'s {i}th event at {t}")
+        processors, event_t = instantiate_processors(
+            G, partition_cfg, list(event_t), policy="reserv"
+            )
+
     else:
         raise ValueError(f"Invalid case: {args.case}")
 
-    processors, event_t, G, partition_cfg = instantiate_processors(G, partition_cfg)
     run_simulation(processors, event_t, G)
