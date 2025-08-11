@@ -10,6 +10,7 @@ import functools
 import types, json
 from global_var import FLOPS_PER_CORE, GLB_BUFFER_SIZE_PER_CORE, BW_DRAM
 from warnings import warn
+import numpy as np
 from task_estimation import (
     estimate_task_execution_time, 
     estimate_resource_requirement, 
@@ -18,71 +19,220 @@ from task_estimation import (
     calculate_slack_time,
     estimate_task_progress
 )
+from scipy.stats import truncnorm
+from scipy.stats import poisson
 
 # TODO: These numbers are temporal magic numbers, which must be removed. 
 old_timestep = 10e-6
 
 
 time_unit = 1 
+
+def build_logical_graph(srcs, ops, sinks, task_attr, src_attr, sink_attr):
+    dag = nx.DiGraph()
+    for src_n in srcs:
+        dag.add_node(src_n, type="src", **src_attr[src_n])
+        for op_n in srcs[src_n]:
+            dag.add_node(op_n)
+            dag.add_edge(src_n, op_n, type="control")
+    for op_n in ops:
+        dag.add_node(op_n, type="op", **task_attr[op_n])
+        for sink_n in ops[op_n]:
+            dag.add_node(sink_n)
+            dag.add_edge(op_n, sink_n, type="data")
+    for sink_n in sinks:
+        if sink_attr is None:
+            dag.add_node(sink_n, type="sink")
+        else:
+            dag.add_node(sink_n, type="sink", **sink_attr[sink_n])
+    
+    return dag
+
 class MyGraph(nx.DiGraph):
     def __init__(self, srcs, ops, sinks, task_attr, src_attr, sink_attr=None):
         super(MyGraph, self).__init__()
-        for src_n in srcs:
-            self.add_node(src_n, type="src", **src_attr[src_n])
-            for op_n in srcs[src_n]:
-                self.add_node(op_n)
-                self.add_edge(src_n, op_n, type="control")
-        for op_n in ops:
-            self.add_node(op_n, type="op", **task_attr[op_n])
-            for sink_n in ops[op_n]:
-                self.add_node(sink_n)
-                self.add_edge(op_n, sink_n, type="data")
-        for sink_n in sinks:
-            if sink_attr is None:
-                self.add_node(sink_n, type="sink")
-            else:
-                self.add_node(sink_n, type="sink", **sink_attr[sink_n])
-            
+        self.logical_graph = build_logical_graph(srcs, ops, sinks, task_attr, src_attr, sink_attr)
+        self.rng_fn_list = {}
+
         # self.n_pred_map trackes the non-ready, intermediate tasks in the graph
         # The value of n_pred_map is updated when tasks in graph are finished
         # A item is removed from the queue when it is moved to the ready queue
         # srcs are initially excluded from n_pred_map
-        self.n_pred_map =  {node:len(list(self.predecessors(node))) for node in self.nodes() if node not in srcs}
+        self.n_pred_map = {}
         
-        # self.srcs trackes the non-active srcs, 
-        # which are removed when they are activated by external events
-        self.srcs = [node for node in self.nodes() if node in srcs]
+        self.srcs = []
+        self.ops = []
+        self.sinks = []
+        
+        self.offset_map = {}
+        self.ddl_map = {"R": -float('inf')}
+        self.ert_map = {"R": -float('inf')}
+        self.init_rng_fn_list()
+        
 
-        self.sinks = [node for node in self.nodes() if node in sinks]
-        self.ops = [node for node in self.nodes() if node in ops]
-        self.ddl_map = {node:task_attr[node]['ddl'] for node in self.ops}
-        self.ddl_map.update({node:sink_attr[node]['ddl'] for node in self.sinks})
-        self.ert_map = {node:task_attr[node]['ert'] for node in self.ops}
-        self.ddl_map['R'] = -float('inf')
-        self.ert_map['R'] = -float('inf')
-            
+        # self.n_pred_map =  {node:len(list(self.predecessors(node))) for node in self.nodes() if node not in srcs}
+        
+        # # self.srcs trackes the non-active srcs, 
+        # # which are removed when they are activated by external events
+        # self.srcs = [node for node in self.nodes() if node in srcs]
+
+        # self.sinks = [node for node in self.nodes() if node in sinks]
+        # self.ops = [node for node in self.nodes() if node in ops]
+        # self.ddl_map = {node:task_attr[node]['ddl'] for node in self.ops}
+        # self.ddl_map.update({node:sink_attr[node]['ddl'] for node in self.sinks})
+        # self.ert_map = {node:task_attr[node]['ert'] for node in self.ops}
 
     def mark_finish(self, node):
         for succ in self.successors(node):
             self.n_pred_map[succ] -= 1
+        
+        # 从缓存中移除该节点
+        if node in self.ddl_map:
+            self.ddl_map.pop(node)
+        if node in self.ert_map:
+            self.ert_map.pop(node)
+        if node in self.offset_map:
+            self.offset_map.pop(node)
+        
+        # 从分类列表中移除
+        if node in self.ops:
+            self.ops.remove(node)
+        elif node in self.srcs:
+            self.srcs.remove(node)
+        else:
+            self.sinks.remove(node)
+        
+        # 移除边和节点
         self.remove_edges_from([(node, succ) for succ in self.successors(node)])
         self.remove_node(node)
         
     def mark_ready(self, node):
         self.n_pred_map.pop(node)
+    
+    def init_rng_fn_list(self):
+        for _node, _type in self.logical_graph.nodes(data="type"):
+            if _type == "sink":
+                continue
+            self.rng_fn_list[_node] = get_var_t_fn(self.logical_graph, _node, _type)
+
+    def duplicate_for_hyperperiod(self, hp_idx: int, seed: int, T_hp: float = 0.1):
+        """
+        按给定的超周期索引 hp_idx 和随机种子 seed，复制当前图中的节点与边：
+        - 新节点名称为 "原名_" + hp_idx
+        - 除 sink 节点外（src 与 op），为其生成带随机扰动的 exp_comp_t（可控随机，受 seed 影响）
+        - 同步更新状态缓存：n_pred_map, srcs, ops, sinks, ddl_map, ert_map
+        - offset/ert/ddl 叠加超周期偏移：新值 = 原值 + hp_idx * T_hp
+
+        参数：
+            hp_idx: 超周期索引
+            seed: 随机种子
+            T_hp: 超周期长度，用于计算时间偏移
+            jitter_src_std_ratio: src节点执行时间随机化的标准差比例
+            jitter_op_std_ratio: op节点执行时间随机化的标准差比例
+            clamp_min: 随机化因子的最小限制
+            clamp_max: 随机化因子的最大限制
+
+        说明：
+        - 随机化策略参考 scheduler_base 的参数化思路：对 src 使用截断近似的正态扰动（以原 exp_comp_t 为均值），
+          对 op 采用同样形式的扰动。未显式提供 var_factor/freq/comp_ratio 时，使用固定比例的标准差。
+        - offset/ert/ddl 叠加超周期偏移。
+        """
+        rng = np.random.RandomState(seed + int(hp_idx))
+
+        # 缓存当前节点与边，避免遍历时结构变化
+        orig_nodes = list(self.logical_graph.nodes(data=True))
+        # 包含边属性
+        orig_edges = list(self.logical_graph.edges(data=True))
+
+        # 先创建所有新节点
+        for node,attr in orig_nodes:
+            new_name = f"{str(node)}_{hp_idx}"
+            node_type = attr['type']
+
+            # 对 src/op 做执行时间随机化；sink 保持不变
+            if node_type in ['src', 'op']:
+                attr['exp_comp_t'] = elim_nume_error(self.rng_fn_list[node](rng))
+
+            # 添加超周期偏移到时间相关属性
+            time_offset = hp_idx * T_hp
+            if 'offset' in attr:
+                attr['offset'] = elim_nume_error(attr['offset'] + time_offset)
+            if 'ert' in attr:
+                attr['ert'] = elim_nume_error(attr['ert'] + time_offset)
+            if 'ddl' in attr:
+                attr['ddl'] = elim_nume_error(attr['ddl'] + time_offset)
+
+            self.add_node(new_name, **attr)
+
+            # 维护分类列表
+            if node_type == 'src':
+                self.srcs.append(new_name)
+            elif node_type == 'op':
+                self.ops.append(new_name)
+            elif node_type == 'sink':
+                self.sinks.append(new_name)
+
+            # ddl/ert 缓存复制（R 特殊键保持原状，不新增）
+            if node_type in ['op', 'sink']:
+                if 'ddl' in attr:
+                    self.ddl_map[new_name] = attr['ddl']
+                if 'ert' in attr:
+                    self.ert_map[new_name] = attr['ert']
+            
+            # 更新 offset_map 缓存
+            if node_type == 'src':
+                if 'offset' in attr:
+                    self.offset_map[new_name] = attr['offset']
+
+        # 再复制所有边（保持原边属性）
+        for u, v, eattr in orig_edges:
+            new_u = f"{u}_{hp_idx}"
+            new_v = f"{v}_{hp_idx}"
+            if new_u in self.nodes and new_v in self.nodes:
+                self.add_edge(new_u, new_v, **eattr)
+
+        # 更新 n_pred_map：对于非 src 节点，设置其未就绪前驱计数
+        for node, attr in orig_nodes:
+            node_type = attr['type']
+            if node_type == 'src':
+                continue
+            dup = f"{str(node)}_{hp_idx}"
+            if dup in self.nodes:
+                # 以复制后的入度作为初始前驱数
+                self.n_pred_map[dup] = len(list(self.predecessors(dup)))
 
 
 class GlobalEvent_t:
-    def __init__(self, event_t) -> List:
+    def __init__(self, event_t:List) -> List:
         """
         Renew the event_t, which is a list of (event_time, event_type)
         assert event_type in ["external"]
         We enforce an event at inf is inserted 
         """
-        self.event_t = []
-        self.event_t.extend(event_t)
-        self.event_t.append((float("inf"), "external"))
-        self.event_t = list(set(self.event_t))
+        # self.event_t = []
+        # self.event_t.extend(event_t)
+        # self.event_t.append((float("inf"), "external"))
+        # self.event_t = list(set(self.event_t))
+        # self.event_t.sort()
+        self.event_t = [(float("inf"), "external")]
+
+        # 存储原始事件模式，用于动态更新
+        self._original_events = set(event_t)
+
+    def add_events_for_hyperperiod(self, hp_idx: int, T_hp: float):
+        """
+        为新的超周期添加事件
+        
+        参数：
+            hp_idx: 超周期索引
+            T_hp: 超周期长度
+            src_nodes: 源节点列表（用于生成传感器事件）
+            graph: 图实例（用于获取节点属性）
+        """
+        # add the original events to the event_t
+        self.event_t.extend(set((elim_nume_error(_t + hp_idx * T_hp), _type) for _t, _type in self._original_events))
+
+        # 重新排序事件队列
         self.event_t.sort()
 
     def get_next_event_time(self, curr_t):
@@ -108,9 +258,23 @@ class BaseProcessor:
         self.base_pwr = base_pwr
         self.G_ptr = G
         self.cap = cap
-        self.mapped_node = mapped_node
+        self.mapped_node = set()
         self.policy = 'N/A'
+        # 存储原始映射模式，用于动态更新
+        self._original_mapped_pattern = set(mapped_node) if mapped_node is not None else set()
 
+    def update_mapped_nodes_for_hyperperiod(self, hp_idx: int):
+        """
+        根据超周期索引更新mapped_node，复制原始映射模式
+        例如：如果原始映射是 ['S1', 'S2']，超周期0会变成 ['S1_0', 'S2_0']
+        """
+        if not self._original_mapped_pattern:
+            return
+        
+        for node in self._original_mapped_pattern:
+            new_node = f"{node}_{hp_idx}"
+            if new_node in self.G_ptr.nodes():
+                self.mapped_node.add(new_node)
 
     def update_run(self, pred_t, curr_t) -> bool:
         # 统一接口，子类实现具体逻辑
@@ -246,12 +410,12 @@ class Acc_p(BaseProcessor):
                 # rem_t  = self.running[node] - (curr_t - pred_t) * self.res_map[node] * self.base_pwr
                 rem_t = estimate_task_progress(self.running[node], curr_t - pred_t, self.res_map[node], self.base_pwr)
                 if rem_t <= 0:
+                    if curr_t > self.G_ptr.ddl_map[node]:
+                        print(f"\t[{self.id}] {node} is timeout at {curr_t}")
                     self.G_ptr.mark_finish(node)
                     new_complete_flag |= True
                     self.running.pop(node)
                     self.res_map.pop(node)
-                    if curr_t > self.G_ptr.ddl_map[node]:
-                        print(f"\t[{self.id}] {node} is timeout at {curr_t}")
                     print(f"\t[{self.id}] Task {node} finishes at {curr_t}") 
                 else:
                     self.running[node] = rem_t
@@ -272,9 +436,9 @@ class Acc_p(BaseProcessor):
             n_pred = self.G_ptr.n_pred_map[node]
             if n_pred == 0:
                 if node in self.G_ptr.sinks:
-                    self.G_ptr.mark_finish(node)
                     if curr_t > self.G_ptr.ddl_map[node]:
                         print(f"\t[{self.id}] {node} is timeout at {curr_t}")
+                    self.G_ptr.mark_finish(node)
                     print(f"\t[{self.id}] sink {node} finish at {curr_t}")
                 elif node in self.G_ptr.ops:
                     # illegal check
@@ -761,8 +925,10 @@ def load_graph_from_json(json_path, time_norm_factor):
             srcs[node_id] = list(G.successors(node_id))
             src_attr[node_id] = {
                 'offset': offset,
-                'exp_comp_t': exp_comp_t,
+                'exp_comp_t': node['comp_ratio'] / node['freq'],
                 'base_size': base_size,
+                'comp_ratio': node['comp_ratio'],
+                'freq': node['freq'],
                 # 'tgt_device': n.get('tgt_device', 'sen_p0')
             }
         # 汇节点
@@ -771,7 +937,8 @@ def load_graph_from_json(json_path, time_norm_factor):
             sink_attr[node_id] = {
                 'exp_comp_t': exp_comp_t,
                 'base_size': base_size,
-                'ddl': node['ddl'] + offset
+                'ddl': node['ddl'] + offset,
+                'var_factor': node['var_factor'],
                 # 'tgt_device': n.get('tgt_device', 'sink')
             }
         # 中间节点
@@ -782,12 +949,36 @@ def load_graph_from_json(json_path, time_norm_factor):
                 'exp_comp_t': exp_comp_t,
                 'base_size': base_size,
                 # 'tgt_device': n.get('tgt_device', 'acc_p0'),
-                'ert': node['ert'],
+                'ert': node['ert'] + offset,
                 'ddl': node['ddl'] + offset
             }
 
     return srcs, ops, sinks, task_attr, src_attr, sink_attr, pid2name
     # TODO: duplicate nodes in the graph, add noise to their exp_comp_t as the simulation time expands
+
+def get_var_t_fn(logical_graph, node, type):
+    if type == "src":
+        # follow truncated normal distribution
+        half_len = logical_graph.nodes[node]['comp_ratio'] / logical_graph.nodes[node]['freq']
+        ZScore = 3
+        loc = logical_graph.nodes[node]['exp_comp_t']
+        scale = half_len / ZScore
+        a, b = -ZScore, ZScore
+        var_t_fn = lambda rng: truncnorm.rvs(a, b, loc=loc, scale=scale, random_state=rng).item()
+    elif type == "op":
+        # follow truncated poisson distribution
+        lambda_ld = 1
+        exp_comp_t = logical_graph.nodes[node]['exp_comp_t']
+        k = logical_graph.nodes[node]['var_factor']
+        if k == 1:
+            var_t_fn = lambda rng: exp_comp_t
+        else:
+            ini_probs = np.zeros(k+1)
+            for j in range(k+1):
+                ini_probs[j] = poisson.pmf(j,lambda_ld)
+            ini_probs = ini_probs/ini_probs.sum()
+            var_t_fn = lambda rng: np.random.choice(k+1, p=ini_probs, replace=False).item() * exp_comp_t
+    return var_t_fn
 
 # 实例化MyGraph
 def instantiate_mygraph_from_json(json_path, time_norm_factor):

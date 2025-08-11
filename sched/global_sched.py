@@ -749,13 +749,14 @@ def gurobi_split_solver(glb_p_list, n_partition, _bin_tb_split, job_graph):
     end_nodes = [n for n, x in job_graph.out_degree() if x == 0]
     
     if n_partition == partition_max:
-        bin_name_dict,affinity_dict1, affinity_dict2, placed_p, tbd_p = build_search_obj(glb_p_list, job_graph, src_nodes, end_nodes, col_pid)
+        bin_name_list,affinity_dict1, affinity_dict2, placed_p, tbd_p = build_search_obj(glb_p_list, job_graph, src_nodes, end_nodes, col_pid)
+        
         gurobi_obj = "mux_min_nbin"
     else: 
-        bin_name_dict,affinity_dict1, affinity_dict2, placed_p, tbd_p = build_greedy_obj(n_partition, glb_p_list, job_graph, src_nodes, end_nodes, col_pid)
+        bin_name_list,affinity_dict1, affinity_dict2, placed_p, tbd_p = build_greedy_obj(n_partition, glb_p_list, job_graph, src_nodes, end_nodes, col_pid)
         gurobi_obj = "colocate_fix_nbin_min_size"
 
-    M = len(bin_name_dict)
+    M = len(bin_name_list)
     N = len(tbd_p)
     K = len(placed_p)
 

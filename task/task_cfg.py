@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Union, List, Dict, Iterator, Callable, Tuple, Optional
+from typing import Union, List, Dict, Iterator, Callable, Tuple, Optional, Any
 import copy, re
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,7 +16,7 @@ from sched.slack_estim import estim_release_dll_time, deduce_cfg2, deduce_flops_
 
 # 'ID', 'Task (chain) names', 'Flops on path (G)', 'Expected Latency (ms)', 'T release (ms)', 'Freq.', 'DDL (ms)', 'Cores/Req.', 
 # 'Throuput factor (Spat.)', 'Thread factor (S)', 'Min required cores', 'Timing_flag', 'Max required Cores', 'RDA./Req.', 'Resource Type', 'Pre-assigned', 'Priority'
-from task.load_cfg.loadA import task_graph_srcs, task_graph_ops, task_graph_sinks, affinity_cfg, sink_attr, src_attr, pre_assign_priority
+from task.load_cfg.loadA import task_graph_srcs, task_graph_ops, task_graph_sinks, affinity_cfg, task_sink_attr, task_src_attr, pre_assign_priority
 # from task.load_cfg.load_chain import *
 
 # def vis_task_static_timeline(task_list, show=False, save=False, save_path="task_static_timeline.pdf", **kwargs):
@@ -210,6 +210,41 @@ def vis_task_static_timeline(task_list:List[TaskInt], show=False, save=False, sa
             save_path = save_path + ".pdf"        
             plt.savefig(save_path, bbox_inches='tight', **kwargs)
 
+def process_sink_nodes_for_full_mode(logical_graph_nx, sinks, ops, taskattr_dict):
+    """
+    在"full"模式下处理sink节点：删除原始sink节点并为每个前驱节点创建副本
+    
+    Args:
+        logical_graph_nx: 逻辑图对象
+        sinks: sink节点字典
+        ops: 操作节点字典
+        taskattr_dict: 任务属性字典
+    """
+    for sink_n in list(sinks.keys()):
+        idx = 0
+        for pred in list(logical_graph_nx.pred[sink_n]):
+            # create a copy of the sink node for each pred
+            if taskattr_dict[pred].thread_scaling_factor == 0: 
+                # remove node
+                logical_graph_nx.remove_node(pred)
+                continue
+
+            # assert sink_n is in is unique sink node of pred
+            assert sink_n in logical_graph_nx.succ[pred]
+            assert len([n_ for n_ in logical_graph_nx.succ[pred] if n_ in sinks]) == 1
+
+            node_name = sink_n+"_"+str(idx)
+            logical_graph_nx.add_node(node_name, **logical_graph_nx.nodes[sink_n])
+            logical_graph_nx.add_edge(pred, node_name, **logical_graph_nx.edges[pred, sink_n])
+            # add the new sink node to the sinks
+            sinks[node_name] = []
+            # change the relation in ops
+            ops[pred].clear()
+            ops[pred].append(node_name)
+            idx += 1
+        logical_graph_nx.remove_node(sink_n)
+        sinks.pop(sink_n)
+
 def creat_logical_graph(srcs:Dict[str, List[str]], ops:Dict[str, List[str]], sinks:Dict[str, List[str]]): 
     """
     Logical Graph:
@@ -237,30 +272,20 @@ def creat_logical_graph(srcs:Dict[str, List[str]], ops:Dict[str, List[str]], sin
             logical_graph_nx.add_edge(op_n, sink_n, type="data")
     return logical_graph_nx
 
-def init_timing_feature(logical_graph_nx, taskattr_dict, task_graph_sinks, 
-                        sink_attr, hyper_p, 
-                        jitter_t_comp_ratio, e2e_latency, init_jitter_offset,
-                        mode="manual",
-                        ):
-
-    if mode == "full": 
-        # delete the original sink nodes and create a copy for each pred
-        for sink_n in list(task_graph_sinks.keys()):
-            idx = 0
-            for pred in list(logical_graph_nx.pred[sink_n]):
-                # create a copy of the sink node for each pred
-                if taskattr_dict[pred].thread_scaling_factor == 0: 
-                    # remove node
-                    logical_graph_nx.remove_node(pred)
-                    continue
-                node_name = sink_n+"_"+str(idx)
-                logical_graph_nx.add_node(node_name, **logical_graph_nx.nodes[sink_n])
-                logical_graph_nx.add_edge(pred, node_name, **logical_graph_nx.edges[pred, sink_n])
-                task_graph_sinks[node_name] = []
-                idx += 1
-            logical_graph_nx.remove_node(sink_n)
-            task_graph_sinks.pop(sink_n)
-         
+def init_timing_feature(
+        logical_graph_nx,
+        taskattr_dict,
+        task_graph_srcs,
+        task_graph_ops,
+        task_graph_sinks,
+        src_attr,
+        sink_attr,
+        hyper_p,
+        jitter_t_comp_ratio,
+        e2e_latency,
+        init_jitter_offset,
+        mode="manual",
+    ):
 
     for node in logical_graph_nx:
         # propagate the chain_criticality to all nodes from the sink nodes
@@ -935,6 +960,7 @@ def gen_taskint_from_cfg(taskattr_dict:Dict[str, TaskIntAttr], f_gcd: int,
     return task_dict
 
 def gen_workloads(args):
+    # 1. load task attributes
     unfold_mode = args.G_decomp_mode
     taskattr_dict, f_gcd = load_taskattrib(args.profiling_filename, unfold_mode, verbose=args.verbose) 
     hyper_p = 1/f_gcd
@@ -946,8 +972,23 @@ def gen_workloads(args):
                 taskattr.thread_scaling_factor *= args.aux_scale_factor
 
     print(f"Ops per second of Workload: {sum([(v.flops*v.var_factor*v.thread_scaling_factor*v.freq) for n,v in taskattr_dict.items()]):.2f} T")
-    logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
-    init_timing_feature(logical_graph_nx, taskattr_dict, task_graph_sinks, sink_attr, hyper_p, 
+    
+    # 2. create logical graph
+    _srcs = task_graph_srcs 
+    _ops = task_graph_ops 
+    _sinks = task_graph_sinks
+    _src_attr = task_src_attr
+    _sink_attr = task_sink_attr
+    srcs, ops, sinks = copy.deepcopy(_srcs), copy.deepcopy(_ops), copy.deepcopy(_sinks)
+    src_attr = copy.deepcopy(_src_attr)
+    sink_attr = copy.deepcopy(_sink_attr)
+    logical_graph_nx = creat_logical_graph(srcs, ops, sinks)
+
+    # 3. graph structure considering the following modes
+    if unfold_mode == "full":
+        process_sink_nodes_for_full_mode(logical_graph_nx, sinks, ops, taskattr_dict)
+    init_timing_feature(logical_graph_nx, taskattr_dict, 
+                        srcs, ops, sinks, src_attr, sink_attr, hyper_p, 
                         args.jitter_t_comp_ratio, args.e2e_latency, not args.binpack_cfg["slack_sharing"],
                         mode=unfold_mode)
 
@@ -956,8 +997,9 @@ def gen_workloads(args):
     else:
         algorithm = 'avg'
     if args.binpack_cfg["algorithm"] in init_packing_algo_required:
-        deduce_cfg2(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, task_graph_srcs, 
-                    task_graph_sinks, sink_attr, src_attr, args.slack_threshold, args.e2e_latency, 
+        deduce_cfg2(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, 
+                    srcs, sinks, sink_attr, src_attr, 
+                    args.slack_threshold, args.e2e_latency, 
                     args.exec_t_comp_ratioA, args.jitter_t_comp_ratio, 
                     args.wsc_slack_ratio, algorithm, args.timestepxus, 
                     args.var_estimation
@@ -983,8 +1025,15 @@ def gen_workloads(args):
     for n in sinks:
         physical_graph_nx.nodes[n]['node_id'] = id_cnt
         id_cnt += 1
-    init_affinity(glb_p_list, mode='job', job_graph_nx=physical_graph_nx, verbose=args.verbose)
-    export_json_graph_utils(physical_graph_nx, "cache/graph_w_ert_ddl.json")
+    init_affinity(
+        glb_p_list,
+        mode='job',
+        job_graph_nx=physical_graph_nx,
+        _srcs=srcs,
+        _sinks=sinks,
+        verbose=args.verbose,
+    )
+    # export_json_graph_utils(physical_graph_nx, "cache/graph_w_ert_ddl.json")
     
     return hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list
 
@@ -1047,13 +1096,17 @@ def init_depen(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[T
         if verbose:
             print(job_n, job.pred_data, job.pred_ctrl, job.succ_data, job.succ_ctrl)
 
-def init_affinity(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[TaskInt,ProcessInt]]]=None, 
-                  mode="task",
-                  job_graph_nx:nx.DiGraph=None, 
-                  task_graph_nx:nx.DiGraph=None,
-                  task_custom_affinity_cfg:Dict[str, List[str]]=None, 
-                  job_custom_affinity_cfg:Dict[str, List[str]]=None,
-                  verbose=False):
+def init_affinity(
+        taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Union[TaskInt,ProcessInt]]]=None, 
+        mode="task",
+        job_graph_nx:nx.DiGraph=None, 
+        task_graph_nx:nx.DiGraph=None,
+        task_custom_affinity_cfg:Dict[str, List[str]]=None, 
+        job_custom_affinity_cfg:Dict[str, List[str]]=None,
+        _srcs=None,
+        _sinks=None,
+        verbose=False
+    ):
     # affinity task/job(s) selection machanism:
     #   Basic principle: 
     #       Besides the custom affinity configuration, prioritize the tasks/jobs with the highest probability 
@@ -1069,9 +1122,9 @@ def init_affinity(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Unio
         assert task_graph_nx is not None
         for node_n in task_graph_nx.nodes():
             # get predecesor, successor and slibling
-            pred_n_list = [pred for pred in task_graph_nx.pred[node_n].keys() if pred not in task_graph_srcs.keys()]
-            succ_n_list = [succ for succ in task_graph_nx.succ[node_n].keys() if succ not in task_graph_sinks.keys()]
-            slib_n_list = [sibling for pred_n in pred_n_list for sibling in task_graph_nx.succ[pred_n].keys() if sibling != node_n and sibling not in task_graph_sinks.keys()]
+            pred_n_list = [pred for pred in task_graph_nx.pred[node_n].keys() if pred not in _srcs]
+            succ_n_list = [succ for succ in task_graph_nx.succ[node_n].keys() if succ not in _sinks]
+            slib_n_list = [sibling for pred_n in pred_n_list for sibling in task_graph_nx.succ[pred_n] if sibling != node_n and sibling not in _sinks]
             
             # 0. custom affinity configuration
             pos_affinity_cfg.update({node_n:task_custom_affinity_cfg[node_n]})
@@ -1091,9 +1144,9 @@ def init_affinity(taskJobs:Union[Dict[str, Union[TaskInt,ProcessInt]], List[Unio
         assert job_graph_nx is not None
         for job_n, job in taskJobs.items():
             # get predecesor, successor and slibling
-            pred_n_list = [pred_n for pred_n in job_graph_nx.pred[job_n].keys() if pred_n not in task_graph_srcs.keys()]
-            succ_n_list = [succ_n for succ_n in job_graph_nx.succ[job_n].keys() if succ_n not in task_graph_sinks.keys()]
-            slib_n_list = [sibling for pred_n in pred_n_list for sibling in job_graph_nx.succ[pred_n].keys() if sibling != job_n and sibling not in task_graph_sinks.keys()]
+            pred_n_list = [pred_n for pred_n in job_graph_nx.pred[job_n].keys() if pred_n not in _srcs]
+            succ_n_list = [succ_n for succ_n in job_graph_nx.succ[job_n].keys() if succ_n not in _sinks]
+            slib_n_list = [sibling for pred_n in pred_n_list for sibling in job_graph_nx.succ[pred_n].keys() if sibling != job_n and sibling not in _sinks]
             
             # 0. custom affinity configuration
             if job_custom_affinity_cfg is not None:
@@ -1210,7 +1263,7 @@ if __name__ == "__main__":
     sim_step = min([glb_n_task_dict[task].exp_comp_t for task in glb_n_task_dict])/32
 
     if args.test_case == "ert_ddl" or args.test_all:
-        logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
+        logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks, None, "manual")
         ert, ddl = estim_release_dll_time(logical_graph_nx, temporal_rel=0.05, temporal_abs_en=sim_step, 
                                           profiling_filename=args.profiling_filename, verbose=args.verbose)
         df = pd.read_csv(args.profiling_filename, sep=",", index_col=0) 
@@ -1228,7 +1281,7 @@ if __name__ == "__main__":
     elif args.test_case == "graph" or args.test_all:
         # task_graph_nx, job_graph_nx = creat_jobTask_graph(task_graph, int(f_gcd), plot=True)
         # init_depen(task_dict, job_graph_nx, verbose=args.verbose)
-        logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
+        logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks, None, "manual")
         physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), args.profiling_filename)
         init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
 

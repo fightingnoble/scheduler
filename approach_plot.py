@@ -1,7 +1,11 @@
+from __future__ import annotations
+import typing 
+if typing.TYPE_CHECKING:
+    from approach_util import BaseProcessor
+from typing import List
 from approach_util import Acc_p, Sen_p, MyGraph, PartitionConfig, acc_p_factory, GlobalEvent_t, old_timestep
 from global_var import elim_nume_error, BW_DRAM, GLB_BUFFER_SIZE_PER_CORE
 from task_estimation import trasfer_realloc_as_task
-
 
 def print_progress(curr_t, pred_t, processors):
     print(f"===Decision metadata at {curr_t}===")
@@ -60,7 +64,9 @@ def print_progress(curr_t, pred_t, processors):
 
 
 def instantiate_processors(G, partition_cfg, event_t, policy="glb"):
-    sen_p0 = Sen_p("sen_p", 3, 1, G, G.srcs)
+    # 创建传感器处理器，使用动态映射模式
+    src_nodes = [n for n, x in G.logical_graph.in_degree() if x == 0]
+    sen_p0 = Sen_p("sen_p", 3, 1, G, set(src_nodes))
     acc_p_list = acc_p_factory(policy, partition_cfg)
     processors = [sen_p0] + acc_p_list
     for i, proc in enumerate(processors):
@@ -68,13 +74,27 @@ def instantiate_processors(G, partition_cfg, event_t, policy="glb"):
     event_t = GlobalEvent_t(event_t)
     return processors, event_t
 
-
-def run_simulation(processors, event_t, G):
+def run_simulation(processors:List[BaseProcessor], event_t:GlobalEvent_t, G:MyGraph, num_hp=1, T_hp=float('inf')):
     pred_t = 0
     curr_t = 0
-    while G.nodes():
+    curr_hp = 0
+    # TODO: check the condition (num_hp + 1) * T_hp
+    sim_hp = num_hp + 1
+    while (G.nodes() and curr_hp < sim_hp) or curr_t == 0:
         if curr_t != 0:
             print(f"\nmove from {pred_t} to {curr_t}\n") 
+
+        if (curr_t >= (curr_hp) * T_hp and pred_t < (curr_hp) * T_hp) and curr_hp < num_hp or curr_t == 0:
+            # update the graph
+            G.duplicate_for_hyperperiod(curr_hp, 0, T_hp)
+            # 更新处理器映射
+            for processor in processors:
+                processor.update_mapped_nodes_for_hyperperiod(curr_hp)
+            # 更新事件队列
+            event_t.add_events_for_hyperperiod(curr_hp, T_hp)
+            curr_hp += 1
+
+
         print(f"===At the beginning of {curr_t}===")
         
         # Two types of divice is considered: sen_p0 and acc_p0
@@ -148,7 +168,8 @@ def run_simulation(processors, event_t, G):
         print_progress(curr_t, pred_t, processors)
         
         # status backup
-        curr_t, pred_t = min(curr_t + duation, next_timer_event[0]), curr_t
+        curr_t, pred_t = min(curr_t + duation, next_timer_event[0], sim_hp * T_hp), curr_t
+        assert curr_t != pred_t
         event_type = next_timer_event[1] if curr_t == next_timer_event[0] else "finish"
         # check the event type: finish, external
         assert event_type in ["finish", "external"]
@@ -164,15 +185,16 @@ if __name__ == "__main__":
     if args.case == "case1":
         G = MyGraph(
             task_graph_srcs, task_graph_ops, task_graph_sinks, 
-            task_attr, src_attr
+            task_attr, src_attr, sink_attr
         )
 
         # # Suppose there is only one partition
+        sink_and_op_nodes = [n for n, x in G.logical_graph.in_degree() if x > 0]
         partition_cfg = PartitionConfig(
             num_partitions=1,
             cap_list=[tot_core],
             base_pwr_list=[1],
-            mapped_node_list=[G.sinks+G.ops],
+            mapped_node_list=[sink_and_op_nodes],
             TSmap_list=[None],  # 如果用cyclic策略可传入具体map
             swt_lat_list=[5],  # case1使用固定值5
             G=G, # nodes other than sources
@@ -182,6 +204,7 @@ if __name__ == "__main__":
         processors, event_t = instantiate_processors(
             G, partition_cfg, list(event_t), policy="pglb"
             )
+        run_simulation(processors, event_t, G, num_hp=1, T_hp=100)
 
     elif args.case == "case2":
         print("case2: single partition glb")
@@ -209,16 +232,18 @@ if __name__ == "__main__":
             G=G, # nodes other than sources
         )
 
-        # collect the event_t from the 
+        # collect the event_t from:
         event_t = set()
+        # 1. bin_list (from the sparse_list of each bin)
+        for bin in bin_list:
+            for cfg_slot_s, next_cfg, cfg_slot_num in bin.sparse_list:
+                event_t.add((elim_nume_error(cfg_slot_s*old_timestep), "external"))
         # 2. the offset of the sensor and the length to be simulated 
-        num_hp = 3
-        T_hp = 0.1
-        for i in range(num_hp):
-            for node in G.srcs:
-                t = elim_nume_error(G.nodes[node]['offset'] + i * T_hp)
-                event_t.add((t, "external"))
-                print(f"{node}'s {i}th event at {t}")
+        # 只初始化第一个超周期的事件，后续事件将动态添加
+        for node in G.srcs:
+            t = elim_nume_error(G.nodes[node]['offset'])
+            event_t.add((t, "external"))
+            print(f"{node}'s 0th event at {t}")
         processors, event_t = instantiate_processors(
             G, partition_cfg, list(event_t), policy="pglb"
             )
@@ -254,14 +279,16 @@ if __name__ == "__main__":
         )
         # collect the event_t from:
         event_t = set()
+        # 1. bin_list (from the sparse_list of each bin)
+        for bin in bin_list:
+            for cfg_slot_s, next_cfg, cfg_slot_num in bin.sparse_list:
+                event_t.add((elim_nume_error(cfg_slot_s*old_timestep), "external"))
         # 2. the offset of the sensor and the length to be simulated 
-        num_hp = 3
-        T_hp = 0.1
-        for i in range(num_hp):
-            for node in G.srcs:
-                t = elim_nume_error(G.nodes[node]['offset'] + i * T_hp)
-                event_t.add((t, "external"))
-                print(f"{node}'s {i}th event at {t}")
+        # 只初始化第一个超周期的事件，后续事件将动态添加
+        for node in G.srcs:
+            t = elim_nume_error(G.nodes[node]['offset'])
+            event_t.add((t, "external"))
+            print(f"{node}'s 0th event at {t}")
         
         processors, event_t = instantiate_processors(
             G, partition_cfg, list(event_t), policy="pglb"
@@ -305,13 +332,11 @@ if __name__ == "__main__":
             for cfg_slot_s, next_cfg, cfg_slot_num in bin.sparse_list:
                 event_t.add((elim_nume_error(cfg_slot_s*old_timestep), "external"))
         # 2. the offset of the sensor and the length to be simulated 
-        num_hp = 3
-        T_hp = 0.1
-        for i in range(num_hp):
-            for node in G.srcs:
-                t = elim_nume_error(G.nodes[node]['offset'] + i * T_hp)
-                event_t.add((t, "external"))
-                print(f"{node}'s {i}th event at {t}")
+        # 只初始化第一个超周期的事件，后续事件将动态添加
+        for node in G.srcs:
+            t = elim_nume_error(G.nodes[node]['offset'])
+            event_t.add((t, "external"))
+            print(f"{node}'s 0th event at {t}")
         processors, event_t = instantiate_processors(
             G, partition_cfg, list(event_t), policy="cyc"
             )
@@ -326,7 +351,7 @@ if __name__ == "__main__":
             time_norm_factor=time_norm_factor
             )
         if args.case == "case7":
-            bin_list = load_pickle('./cache/coalescing_scan/n_bins_max/x1_0.1s_rda-20.00%(J)_100.00%(T)_30.00%(S)_ignore/bin_list_477.pkl')
+            bin_list = load_pickle('./cache/coalescing_scan/n_bins_8/x1_0.1s_rda-20.00%(J)_100.00%(T)_30.00%(S)_ignore/bin_list_371.pkl')
         else:
             bin_list = load_pickle('./cache/coalescing_scan/n_bins_1/x1_0.1s_rda-20.00%(J)_100.00%(T)_30.00%(S)_ignore/bin_list_371.pkl')
         
@@ -354,13 +379,11 @@ if __name__ == "__main__":
             for cfg_slot_s, next_cfg, cfg_slot_num in bin.sparse_list:
                 event_t.add((elim_nume_error(cfg_slot_s*old_timestep), "external"))
         # 2. the offset of the sensor and the length to be simulated 
-        num_hp = 3
-        T_hp = 0.1
-        for i in range(num_hp):
-            for node in G.srcs:
-                t = elim_nume_error(G.nodes[node]['offset'] + i * T_hp)
-                event_t.add((t, "external"))
-                print(f"{node}'s {i}th event at {t}")
+        # 只初始化第一个超周期的事件，后续事件将动态添加
+        for node in G.srcs:
+            t = elim_nume_error(G.nodes[node]['offset'])
+            event_t.add((t, "external"))
+            print(f"{node}'s 0th event at {t}")
         processors, event_t = instantiate_processors(
             G, partition_cfg, list(event_t), policy="reserv"
             )
@@ -368,4 +391,3 @@ if __name__ == "__main__":
     else:
         raise ValueError(f"Invalid case: {args.case}")
 
-    run_simulation(processors, event_t, G)

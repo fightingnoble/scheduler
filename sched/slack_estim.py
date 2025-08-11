@@ -693,7 +693,7 @@ def test():
     parser.add_argument("--aux_scale_factor", default=1, type=int, help="aux scale factor")
     args = parser.parse_args() 
 
-    from task.task_cfg import task_graph_srcs, task_graph_sinks, creat_logical_graph, task_graph_ops, sink_attr
+    from task.task_cfg import task_graph_srcs, task_graph_sinks, creat_logical_graph, task_graph_ops, task_sink_attr
     from task.task_cfg import load_taskattrib, gen_taskint_from_cfg
     taskattr_dict, f_gcd = load_taskattrib(args.profiling_filename, verbose=args.verbose) 
     hyper_p = 1/f_gcd
@@ -705,7 +705,7 @@ def test():
     logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
     slack_threshold = args.slack_threshold
     deduce_cfg2(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, task_graph_srcs, 
-                         task_graph_sinks, sink_attr, slack_threshold, 
+                         task_graph_sinks, task_sink_attr, slack_threshold, 
                          args.e2e_latency, args.exec_t_comp_ratioA, args.wsc_slack_ratio, 
                          verbose=True)
     glb_n_task_dict = gen_taskint_from_cfg(taskattr_dict, f_gcd)

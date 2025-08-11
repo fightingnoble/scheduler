@@ -1,5 +1,5 @@
 __all__ = ['task_graph_srcs', 'task_graph_ops', 'task_graph_sinks', 
-           'affinity_cfg', 'sink_attr', 'src_attr', 'pre_assign_priority']
+           'affinity_cfg', 'task_sink_attr', 'task_src_attr', 'pre_assign_priority']
 
 task_graph_srcs = {
     # "Entry": ["surr_view_camera_pub", "streo_camera_pub", "LiDAR_pub"],
@@ -12,11 +12,11 @@ task_graph_sinks = {
     "Sink_control": [],
     "Sink_screen": [],
 }
-sink_attr={
+task_sink_attr={
     "Sink_control": "deadline",
     "Sink_screen": "realtime"
 }
-src_attr={
+task_src_attr={
     "LiDAR_pub": 10,
     "surr_view_camera_pub": 30,
     "IMU_pub": 240,
