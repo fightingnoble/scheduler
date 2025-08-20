@@ -2,8 +2,8 @@ import networkx as nx
 from queue import Queue
 from task.task_cfg import creat_logical_graph
 # from example.bm4 import swt_lat
-from collections import defaultdict
-from typing import OrderedDict, Callable, Set, List
+from collections import defaultdict, OrderedDict
+from typing import Callable, Set, List
 import math
 from utils import core_distr, elim_nume_error
 import functools
@@ -12,21 +12,25 @@ from global_var import FLOPS_PER_CORE, GLB_BUFFER_SIZE_PER_CORE, BW_DRAM
 from warnings import warn
 import numpy as np
 from task_estimation import (
-    estimate_task_execution_time, 
+    sim_comp_time, 
     estimate_resource_requirement, 
     normalize_time_to_unit,
     get_task_load_and_base_size,
     calculate_slack_time,
-    estimate_task_progress
+    update_task_progress,
+    cal_load,
+    time_eq,
+    time_gt,
+    time_gtq,
+    time_lt,
+    time_ltq,
+    time_add,
+    time_sub
 )
 from scipy.stats import truncnorm
 from scipy.stats import poisson
+import re
 
-# TODO: These numbers are temporal magic numbers, which must be removed. 
-old_timestep = 10e-6
-
-
-time_unit = 1 
 
 def build_logical_graph(srcs, ops, sinks, task_attr, src_attr, sink_attr):
     dag = nx.DiGraph()
@@ -115,7 +119,7 @@ class MyGraph(nx.DiGraph):
                 continue
             self.rng_fn_list[_node] = get_var_t_fn(self.logical_graph, _node, _type)
 
-    def duplicate_for_hyperperiod(self, hp_idx: int, seed: int, T_hp: float = 0.1):
+    def duplicate_for_hyperperiod(self, hp_idx: int, seed: int, T_hp: float = 0.1, var_en: bool = False):
         """
         按给定的超周期索引 hp_idx 和随机种子 seed，复制当前图中的节点与边：
         - 新节点名称为 "原名_" + hp_idx
@@ -151,7 +155,10 @@ class MyGraph(nx.DiGraph):
 
             # 对 src/op 做执行时间随机化；sink 保持不变
             if node_type in ['src', 'op']:
-                attr['exp_comp_t'] = elim_nume_error(self.rng_fn_list[node](rng))
+                if var_en:
+                    attr['exp_comp_t'] = elim_nume_error(self.rng_fn_list[node](rng))
+                else:
+                    attr['exp_comp_t'] = elim_nume_error(attr['exp_comp_t']) # if node_type == "op" else 0
 
             # 添加超周期偏移到时间相关属性
             time_offset = hp_idx * T_hp
@@ -217,9 +224,9 @@ class GlobalEvent_t:
         self.event_t = [(float("inf"), "external")]
 
         # 存储原始事件模式，用于动态更新
-        self._original_events = set(event_t)
+        self._original_events = sorted(set(event_t))
 
-    def add_events_for_hyperperiod(self, hp_idx: int, T_hp: float):
+    def add_events_for_hyperperiod(self, hp_idx: int, T_hp: float, curr_t:float, type_list:List=None):
         """
         为新的超周期添加事件
         
@@ -229,11 +236,21 @@ class GlobalEvent_t:
             src_nodes: 源节点列表（用于生成传感器事件）
             graph: 图实例（用于获取节点属性）
         """
+        if type_list is None:
+            type_list = ["external", "table"]
         # add the original events to the event_t
-        self.event_t.extend(set((elim_nume_error(_t + hp_idx * T_hp), _type) for _t, _type in self._original_events))
+        self.event_t.extend(
+            OrderedDict(
+                (
+                    elim_nume_error(_t + hp_idx * T_hp), _type) 
+                    for _t, _type in self._original_events 
+                    if _type in type_list
+                ).items()
+                )
 
         # 重新排序事件队列
         self.event_t.sort()
+        self.remove_ood_events(curr_t)
 
     def get_next_event_time(self, curr_t):
         """返回下一个事件时间和类型"""
@@ -243,13 +260,29 @@ class GlobalEvent_t:
         # A good math format:
         # future_events = [e for e in self.event_t if e[0] > curr_t]
         # A high efficiency format:
-        if self.event_t[0][0] <= curr_t:
-            self.event_t.pop(0)
+        while self.event_t[0][0] <= curr_t:
+            assert False, f"out of date event {self.event_t[0]} is detected"
         # We assume an event at inf is all ready inserted to the event_t
         # if not self.event_t:
         #     return float('inf'), 'finish'
-        next_timer_event = min(self.event_t, key=lambda x:x[0])
-        return next_timer_event
+        # next_timer_event = min(self.event_t, key=lambda x:x[0])
+        return self.event_t[0][0]
+    
+    def confirm_next_event(self, curr_t):
+        while self.event_t[0][0] <= curr_t:
+            assert False, f"out of date event {self.event_t[0]} is detected"
+        return self.event_t.pop(0)
+
+    def remove_ood_events(self, curr_t):
+        while self.event_t[0][0] <= curr_t:
+            self.event_t.pop(0)
+
+    def detect_empty(self, curr_t):
+        self.remove_ood_events(curr_t)
+        if self.event_t[0][0] == float('inf'):
+            return True
+        else:
+            return False
 
 class BaseProcessor:
     def __init__(self, id, cap, base_pwr, G:MyGraph, mapped_node:Set=None):
@@ -263,6 +296,60 @@ class BaseProcessor:
         # 存储原始映射模式，用于动态更新
         self._original_mapped_pattern = set(mapped_node) if mapped_node is not None else set()
 
+        # 存储原始静态调度表，用于动态更新
+        self.static_schedule_map = []
+        self._original_static_schedule_map = None
+            
+    def update_static_schedule_for_hyperperiod(self, hp_idx: int, T_hp: float):
+        """
+        根据超周期索引更新静态调度表，复制原始调度模式并添加时间偏移
+        
+        参数：
+            hp_idx: 超周期索引
+            T_hp: 超周期长度
+        """
+        if self._original_static_schedule_map is None:
+            return
+        
+        # 静态调度表的扩展
+        new_static_schedule = []
+        time_offset = hp_idx * T_hp
+        
+        for slot_time, slot_config in self._original_static_schedule_map:
+            # 为每个时间槽添加超周期偏移
+            new_slot_time = elim_nume_error(slot_time + time_offset)
+            
+            # 为每个任务配置添加超周期后缀
+            new_slot_config = {}
+            for task_name, resource_count in slot_config.items():
+                new_task_name = f"{task_name}_{hp_idx}"
+                new_slot_config[new_task_name] = resource_count
+            
+            new_static_schedule.append((new_slot_time, new_slot_config))
+        
+        # 更新静态调度表
+        self.static_schedule_map.extend(new_static_schedule)        
+        print(f"\t[{self.id}] 更新静态调度表到超周期 {hp_idx}: {len(new_static_schedule)} 个时间槽")
+    
+    def update_prev_slot_schedule(self, curr_slot_index: int, T_hp: float):
+        """
+        update the static schedule map for the previous slot, when moving the curr_slot_index. 
+        """
+        if self.static_schedule_map is None:
+            return
+        t, cfg = self.static_schedule_map[curr_slot_index]
+        # increase the hp_idx of the task name in the cfg
+        new_cfg = {}
+        for task_name, size in cfg.items():
+            # match the current hp_idx
+            match = re.search(r'_(-?[0-9]+)$', task_name)
+            assert match is not None, "task_name should end with _hp_idx"
+            hp_idx = int(match.group(1))
+            new_task_name = re.sub(r'_(-?[0-9]+)$', f'_{hp_idx+1}', task_name)
+            new_cfg[new_task_name] = size
+        self.static_schedule_map[curr_slot_index] = (elim_nume_error(t+T_hp), new_cfg)
+
+            
     def update_mapped_nodes_for_hyperperiod(self, hp_idx: int):
         """
         根据超周期索引更新mapped_node，复制原始映射模式
@@ -314,7 +401,7 @@ class Sen_p(BaseProcessor):
     def update_run(self, pred_t, curr_t) -> bool:
         for node in list(self.running.keys()):
             # rem_t  = self.running[node] - (curr_t - pred_t) * self.base_pwr
-            rem_t = estimate_task_progress(self.running[node], curr_t - pred_t, 1, self.base_pwr)
+            rem_t = update_task_progress(self.running[node], curr_t - pred_t, 1, self.base_pwr)
             if rem_t <= 0:
                 self.G_ptr.mark_finish(node)
                 self.running.pop(node)
@@ -331,7 +418,7 @@ class Sen_p(BaseProcessor):
         """
         # for node in list(self.G_ptr.srcs):
         for node in list(self.mapped_node):
-            if curr_t == self.G_ptr.nodes[node]["offset"]:
+            if time_eq(curr_t, self.G_ptr.nodes[node]["offset"]):
                 load = cal_load(self.G_ptr.nodes[node]["exp_comp_t"], self.G_ptr.nodes[node]["base_size"])
                 if load > 0:
                     self.ready.put((node, load))
@@ -360,7 +447,8 @@ class Sen_p(BaseProcessor):
         if duation_sen_p == float("inf"):
             print(f"\t[{self.id}] No sensor event in future at {curr_t}")
         else:
-            print(f"\t[{self.id}] Next sensor event at {curr_t + duation_sen_p}")
+            next_event_time = time_add(curr_t, duation_sen_p)
+            print(f"\t[{self.id}] Next sensor event at {next_event_time}")
         return duation_sen_p
 
 class Acc_p(BaseProcessor):
@@ -379,12 +467,11 @@ class Acc_p(BaseProcessor):
         self.slack_map = dict()
         # TODO: init the switch latency by cap and cap_sram, and DRAM_bw
         self.swt_lat: float
-        self.static_schedule_map = None
         # These will be bound by the factory function
         self.alloc_fn: Callable
         self.trigger_cond: Callable
         self.curr_slot_index = 0
-            
+
     def update_run(self, pred_t, curr_t) -> bool:
         """
         Updates the remaining workload for running tasks and checks for finishing events.
@@ -397,7 +484,7 @@ class Acc_p(BaseProcessor):
                 f"R should be in running at {curr_t}"
             assert "R" not in self.res_map, \
                 f"R should not be in res_map at {curr_t}"
-            rem_t = estimate_task_progress(self.running["R"], curr_t - pred_t, 1, 1)
+            rem_t = update_task_progress(self.running["R"], curr_t - pred_t, 1, 1)
             if rem_t <= 0:
                 self.sys_state = "S"
                 print(f"\t[{self.id}] exist reallocation state at {curr_t}") 
@@ -408,9 +495,9 @@ class Acc_p(BaseProcessor):
         else:
             for node in list(self.res_map.keys()):
                 # rem_t  = self.running[node] - (curr_t - pred_t) * self.res_map[node] * self.base_pwr
-                rem_t = estimate_task_progress(self.running[node], curr_t - pred_t, self.res_map[node], self.base_pwr)
+                rem_t = update_task_progress(self.running[node], curr_t - pred_t, self.res_map[node], self.base_pwr)
                 if rem_t <= 0:
-                    if curr_t > self.G_ptr.ddl_map[node]:
+                    if time_gt(curr_t, self.G_ptr.ddl_map[node]):
                         print(f"\t[{self.id}] {node} is timeout at {curr_t}")
                     self.G_ptr.mark_finish(node)
                     new_complete_flag |= True
@@ -436,7 +523,7 @@ class Acc_p(BaseProcessor):
             n_pred = self.G_ptr.n_pred_map[node]
             if n_pred == 0:
                 if node in self.G_ptr.sinks:
-                    if curr_t > self.G_ptr.ddl_map[node]:
+                    if time_gt(curr_t, self.G_ptr.ddl_map[node]):
                         print(f"\t[{self.id}] {node} is timeout at {curr_t}")
                     self.G_ptr.mark_finish(node)
                     print(f"\t[{self.id}] sink {node} finish at {curr_t}")
@@ -528,10 +615,10 @@ class Acc_p(BaseProcessor):
     def predict_next(self, curr_t) -> float:
         """Helper to predict the next event duration based on current resource map."""
         if self.sys_state == "R":
-            duation_acc_p = estimate_task_execution_time(self.running["R"], 1, 1)
+            duation_acc_p = sim_comp_time(self.running["R"], 1, 1)
         else:
             # predict the next event in this queue
-            actual_running = [estimate_task_execution_time(
+            actual_running = [sim_comp_time(
                         self.running[pid], 
                         self.res_map[pid], 
                         self.base_pwr
@@ -539,9 +626,6 @@ class Acc_p(BaseProcessor):
             if not actual_running:
                 return float("inf")
             duation_acc_p = min(actual_running)
-
-        if duation_acc_p < float("inf"):
-            duation_acc_p = normalize_time_to_unit(duation_acc_p, time_unit)
         return duation_acc_p
 
 def trigger_cond_dyn(self, new_comp, new_ready_list):
@@ -605,7 +689,7 @@ def alloc_fn_pglb(acc_p, curr_t, realloc=True,
     """
 
     # calculate slack 
-    realloc_slack = 0 if not realloc else estimate_task_execution_time(acc_p.swt_lat, 1, 1)
+    realloc_slack = 0 if not realloc else sim_comp_time(acc_p.swt_lat, 1, 1)
     if not reserv_en:
         acc_p.slack_map = {
             node: calculate_slack_time(acc_p.G_ptr.ddl_map[node], curr_t, realloc_slack)
@@ -672,7 +756,7 @@ def trigger_cond_cyclic(acc_p, new_comp, new_ready_list, static_schedule_map=Non
     """    
     return False
 
-def alloc_fn_cyclic(acc_p, curr_t, realloc=True, static_schedule_map=None, force=False):
+def alloc_fn_cyclic(acc_p:Acc_p, curr_t:float, realloc:bool=True, T_hp:float=None, force:bool=False):
     """
     Allocation function for cyclic scheduler.
     Allocates resources based on a pre-defined static schedule map.
@@ -684,30 +768,38 @@ def alloc_fn_cyclic(acc_p, curr_t, realloc=True, static_schedule_map=None, force
     """
     alloc_map_curr = OrderedDict()
 
-    if static_schedule_map is None:
-        print("Error: 'static_schedule_map' must be provided for 'cyclic' policy's alloc_fn.")
-        return alloc_map_curr
+    if acc_p.static_schedule_map is None:
+        assert False, "Error: 'static_schedule_map' must be provided for 'cyclic' policy's alloc_fn."
+        
 
     # 这里考虑到curr_t 可能不属于static_schedule_map的key，要怎么处理，可以保证数学上有较好的抽象
     # 保存一个状态变量，用来记录当前选中的静态调度表中的slot
     # 在数学上，是一个查表操作，循环的行为可以忽略，认为有一个足够长的表，足以覆盖所有的执行时间。
     # find the largest slot index that is less than curr_t
-    assert acc_p.curr_slot_index < len(static_schedule_map), \
-        f"Cyclic scheduler: curr_slot_index {acc_p.curr_slot_index} is out of range {len(static_schedule_map)}"
-    # check the next slot
-    if acc_p.curr_slot_index == len(static_schedule_map) - 1:
-        t = float("inf")
-        cfg = {}
-    else:
-        t, cfg = static_schedule_map[acc_p.curr_slot_index+1]
-    if curr_t >= t:
-        acc_p.curr_slot_index += 1
-        # ensure not slot is skipped: next slot's start time is larger than curr_t
-        t_next = static_schedule_map[acc_p.curr_slot_index+1][0]
-        assert curr_t < t_next, \
-            f"Cyclic scheduler: next slot's start time {t_next} is less than curr_t {curr_t}"
-    else:
-        t, cfg = static_schedule_map[acc_p.curr_slot_index]
+    assert acc_p.curr_slot_index < len(acc_p.static_schedule_map), \
+        f"Cyclic scheduler: curr_slot_index {acc_p.curr_slot_index} is out of range {len(acc_p.static_schedule_map)}"
+    
+    # Special case: the length of static_schedule_map is 1, 
+    # where the next slot is always the same as the current slot.
+    if len(acc_p.static_schedule_map) == 1:
+        # t = (curr_t > t)? t+T_hp: t
+        t, cfg = acc_p.static_schedule_map[0]
+        if curr_t >= elim_nume_error(t + T_hp):
+            acc_p.update_prev_slot_schedule(0, T_hp)
+    else: 
+        curr_idx = acc_p.curr_slot_index
+        nxt_idx = (curr_idx + 1)%len(acc_p.static_schedule_map)
+        nxt2_idx = (curr_idx + 2)%len(acc_p.static_schedule_map)
+        t, cfg = acc_p.static_schedule_map[nxt_idx]
+        if time_gtq(curr_t, t):
+            acc_p.update_prev_slot_schedule(curr_idx, T_hp)
+            acc_p.curr_slot_index = nxt_idx
+            # ensure not slot is skipped: next slot's start time is larger than curr_t
+            t_next = acc_p.static_schedule_map[nxt2_idx][0]
+            assert time_ltq(curr_t, t_next), \
+                f"Cyclic scheduler: next slot's start time {t_next} is less than curr_t {curr_t}"
+        else:
+            t, cfg = acc_p.static_schedule_map[curr_idx]
 
     if force:
         if cfg:
@@ -741,6 +833,31 @@ def alloc_fn_cyclic(acc_p, curr_t, realloc=True, static_schedule_map=None, force
             print(f"\t[{acc_p.id}] Cyc-Sched: No static allocation defined for time {curr_t}. Allocating nothing.")    
     return alloc_map_curr
 
+def get_var_t_fn(logical_graph, node, type):
+    if type == "src":
+        # follow truncated normal distribution
+        half_len = logical_graph.nodes[node]['comp_ratio'] / logical_graph.nodes[node]['freq']
+        ZScore = 3
+        loc = half_len
+        scale = half_len / ZScore
+        a, b = -ZScore, ZScore
+        var_t_fn = lambda rng: truncnorm.rvs(a, b, loc=loc, scale=scale, random_state=rng).item()
+    elif type == "op":
+        # follow truncated poisson distribution
+        lambda_ld = 1
+        exp_comp_t = logical_graph.nodes[node]['exp_comp_t']
+        k = logical_graph.nodes[node]['var_factor']
+        if k == 1:
+            var_t_fn = lambda rng: exp_comp_t
+        else:
+            ini_probs = np.zeros(k+1)
+            for j in range(k+1):
+                ini_probs[j] = poisson.pmf(j,lambda_ld)
+            ini_probs = ini_probs/ini_probs.sum()
+            var_t_fn = lambda rng: np.random.choice(k+1, p=ini_probs, replace=False) * exp_comp_t
+    return var_t_fn
+
+
 
 # factory function
 class PartitionConfig:
@@ -757,7 +874,7 @@ class PartitionConfig:
     """
     def __init__(
         self, num_partitions, cap_list, base_pwr_list, 
-        G, TSmap_list=None, mapped_node_list=None, swt_lat_list=None
+        G, TSmap_list=None, mapped_node_list=None, swt_lat_list=None, T_hp=None
         ):
         self.num_parts = num_partitions
         self.cap_list = cap_list
@@ -766,6 +883,7 @@ class PartitionConfig:
         self.TSmap_list = TSmap_list or [None]*num_partitions
         self.mapped_node_list = mapped_node_list or [None]*num_partitions
         self.swt_lat_list = swt_lat_list or [None]*num_partitions
+        self.T_hp = T_hp
 
 
 def acc_p_factory(
@@ -802,9 +920,10 @@ def acc_p_factory(
             acc_p.trigger_cond = types.MethodType(trigger_cond_dyn, acc_p)
         elif policy in ["cyc"]:
             assert cfg.TSmap_list[i] is not None, "TSmap_list is not None"
-            static_schedule_map = cfg.TSmap_list[i]
-            acc_p.alloc_fn = types.MethodType(functools.partial(alloc_fn_cyclic, static_schedule_map=static_schedule_map, force=True), acc_p)
-            acc_p.trigger_cond = types.MethodType(functools.partial(trigger_cond_cyclic, static_schedule_map=static_schedule_map), acc_p)
+            # 存储原始静态调度表用于动态更新
+            acc_p.static_schedule_map = cfg.TSmap_list[i]
+            acc_p.alloc_fn = types.MethodType(functools.partial(alloc_fn_cyclic, T_hp=cfg.T_hp, force=True), acc_p)
+            acc_p.trigger_cond = types.MethodType(functools.partial(trigger_cond_cyclic), acc_p)
 
         elif policy == "reserv":
             acc_p.alloc_fn = types.MethodType(functools.partial(alloc_fn_pglb, reserv_en=True), acc_p)
@@ -818,51 +937,6 @@ def acc_p_factory(
         acc_p_list.append(acc_p)
     return acc_p_list
 
-def get_partition_info(bin_list, graph:MyGraph, pid2name=None):
-    # 1. 分区的任务映射
-    partition_task_map = []
-    for _bin in bin_list:
-        task_set = set()
-        for rsc_agent in _bin.scheduling_table:
-            task_set.update(rsc_agent.rsc_map.keys())
-        if pid2name is not None:
-            partition_task_map.append([pid2name[pid] for pid in task_set])
-        else:
-            partition_task_map.append(list(task_set))
-    
-    for node in graph.sinks: 
-        preds = graph.pred[node]
-        assert len(preds) == 1, f"sink node {node} should have only one predecessor, but got {len(preds)}"
-        pred = list(preds.keys())[0]
-        for i, partition_tasks in enumerate(partition_task_map):
-            if pred in partition_tasks:
-                partition_task_map[i].append(node)
-                break
-        else:
-            assert False, "sink node should be assigned to a partition"
-
-
-    bin_name_list = [bin.name for bin in bin_list]
-    # 2. 分区的大小
-    partition_size = [_bin.num_resources for _bin in bin_list]
-
-    # 3. cyclic方法下的静态调度表
-    TSMap_list = []
-    for _bin in bin_list:
-        TSmap = []
-        for cfg_slot_s, next_cfg, cfg_slot_num in getattr(_bin, "sparse_list", []):
-            if pid2name is not None:
-                TSmap.append((elim_nume_error(cfg_slot_s*old_timestep), {pid2name[pid]: size for pid, size in next_cfg.items()}))
-            else:
-                TSmap.append((elim_nume_error(cfg_slot_s*old_timestep), next_cfg))
-        TSMap_list.append(TSmap)
-
-    # 打印结果
-    # print("Partition-Task Mapping:", partition_task_map)
-    # print("Partition Size:", partition_size)
-    # print("Cyclic Static Schedule:", cyclic_static_schedule)    
-
-    return len(bin_list), partition_size, [FLOPS_PER_CORE]*len(bin_list), partition_task_map, TSMap_list 
 
 
 # latency model: 
@@ -879,121 +953,3 @@ def get_partition_info(bin_list, graph:MyGraph, pid2name=None):
 # 设备定义：单位计算单元算力，计算单元容量
 # 运行时参数：通信延迟占比
 
-def set_time_unit(timestep, int_slot):
-    global time_unit
-    if int_slot:
-        time_unit = 1
-        normalize_factor = timestep
-    else:
-        time_unit = timestep
-        normalize_factor = 1
-    return time_unit, normalize_factor
-
-# seting_size, time_unit, base_pwr
-# if int_slot is True, the time_unit is 1, and all exe_comp_t should divide by timestep;
-# otherwise, the time_unit is timestep
-def load_graph_from_json(json_path, time_norm_factor):
-
-    from task.task_cfg import load_json_graph_utils
-    G = load_json_graph_utils(json_path)
-    nodes = G.nodes
-    edges = G.edges
-
-    # get the pid2name map
-    pid2name = {n_att['node_id']: n for n, n_att in G.nodes(data=True)}
-
-    # 分类节点
-    srcs, ops, sinks = {}, {}, {}
-    task_attr, src_attr, sink_attr = {}, {}, {}
-
-    # 先统计所有节点的入度和出度
-    src_nodes = [n for n, x in G.in_degree() if x == 0]
-    sink_nodes = [n for n, x in G.out_degree() if x == 0]
-
-    # if int_slot is True, the time_unit is 1, and all exe_comp_t should divide by timestep;
-    # otherwise, the time_unit is timestep
-
-    # 分类
-    for node_id in nodes:
-        node = nodes[node_id]
-
-        exp_comp_t, base_size = get_task_load_and_base_size(node, time_norm_factor)
-        offset = elim_nume_error(node['offset'])
-        # 源节点
-        if node_id in src_nodes:
-            # 找到所有后继
-            srcs[node_id] = list(G.successors(node_id))
-            src_attr[node_id] = {
-                'offset': offset,
-                'exp_comp_t': node['comp_ratio'] / node['freq'],
-                'base_size': base_size,
-                'comp_ratio': node['comp_ratio'],
-                'freq': node['freq'],
-                # 'tgt_device': n.get('tgt_device', 'sen_p0')
-            }
-        # 汇节点
-        elif node_id in sink_nodes:
-            sinks[node_id] = []
-            sink_attr[node_id] = {
-                'exp_comp_t': exp_comp_t,
-                'base_size': base_size,
-                'ddl': node['ddl'] + offset,
-                'var_factor': node['var_factor'],
-                # 'tgt_device': n.get('tgt_device', 'sink')
-            }
-        # 中间节点
-        else:
-            ops[node_id] = list(G.successors(node_id))
-            task_attr[node_id] = {
-                'offset': offset,
-                'exp_comp_t': exp_comp_t,
-                'base_size': base_size,
-                # 'tgt_device': n.get('tgt_device', 'acc_p0'),
-                'ert': node['ert'] + offset,
-                'ddl': node['ddl'] + offset
-            }
-
-    return srcs, ops, sinks, task_attr, src_attr, sink_attr, pid2name
-    # TODO: duplicate nodes in the graph, add noise to their exp_comp_t as the simulation time expands
-
-def get_var_t_fn(logical_graph, node, type):
-    if type == "src":
-        # follow truncated normal distribution
-        half_len = logical_graph.nodes[node]['comp_ratio'] / logical_graph.nodes[node]['freq']
-        ZScore = 3
-        loc = logical_graph.nodes[node]['exp_comp_t']
-        scale = half_len / ZScore
-        a, b = -ZScore, ZScore
-        var_t_fn = lambda rng: truncnorm.rvs(a, b, loc=loc, scale=scale, random_state=rng).item()
-    elif type == "op":
-        # follow truncated poisson distribution
-        lambda_ld = 1
-        exp_comp_t = logical_graph.nodes[node]['exp_comp_t']
-        k = logical_graph.nodes[node]['var_factor']
-        if k == 1:
-            var_t_fn = lambda rng: exp_comp_t
-        else:
-            ini_probs = np.zeros(k+1)
-            for j in range(k+1):
-                ini_probs[j] = poisson.pmf(j,lambda_ld)
-            ini_probs = ini_probs/ini_probs.sum()
-            var_t_fn = lambda rng: np.random.choice(k+1, p=ini_probs, replace=False).item() * exp_comp_t
-    return var_t_fn
-
-# 实例化MyGraph
-def instantiate_mygraph_from_json(json_path, time_norm_factor):
-    srcs, ops, sinks, task_attr, src_attr, sink_attr, pid2name = load_graph_from_json(json_path, time_norm_factor)
-    G = MyGraph(srcs, ops, sinks, task_attr, src_attr, sink_attr)
-    return G, pid2name
-
-def cal_load(exp_comp_t, base_size):
-    """
-    统一计算任务load的函数
-    
-    Args:
-        node: 任务节点
-        G_ptr: MyGraph实例    
-    Returns:
-        float: 任务的load值
-    """
-    return exp_comp_t * base_size

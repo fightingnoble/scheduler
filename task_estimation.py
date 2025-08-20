@@ -5,62 +5,82 @@ import math
 from typing import Dict, Any
 from global_var import elim_nume_error
 
+time_unit = 1 
+unit_align = True
 
 
-def estimate_task_progress(init_load: float, elapsed_time: float, res: float, base_pwr: float) -> float:
-    """
-    估计任务的进度
-    
+def set_time_unit(timestep, int_slot):
+    global time_unit
+    if int_slot:
+        time_unit = 1
+        normalize_factor = timestep
+    else:
+        time_unit = timestep
+        normalize_factor = 1
+    return time_unit, normalize_factor
+
+
+
+def update_task_progress(init_load: float, elapsed_time: float, res: float, base_pwr: float) -> float:
+    """    
     Args:
-        init_load: 初始进度
-        elapsed_time: 已用时间
-        res: 资源
-        base_pwr: 基础算力
-    
+        init_load: 初始进度, elapsed_time: 已用时间, res: 资源, base_pwr: 基础算力
     Returns:
-        估计的进度
+        更新后的进度
     """
     return elim_nume_error(init_load - elapsed_time * res * base_pwr)
 
 
-def estimate_task_execution_time(task_load: float, allocated_resources: int, base_power: float) -> float:
+# Note that the 
+def sim_comp_time(task_load: float, allocated_resources: int, base_power: float) -> float:
     """
-    估计任务执行时间
-    
     Args:
-        task_load: 任务负载（剩余工作量）
-        allocated_resources: 分配的资源数量
-        base_power: 基础算力
-    
+        task_load: 任务负载（剩余工作量）, allocated_resources: 分配的资源数量, base_power: 基础算力
     Returns:
         估计的执行时间
     """
     if allocated_resources <= 0 or base_power <= 0:
         return float('inf')
-    
     execution_time = task_load / (allocated_resources * base_power)
-    return execution_time
+    if unit_align:
+        quant_fn = lambda x: normalize_time_to_unit(x, time_unit)
+    else:
+        quant_fn = lambda x: elim_nume_error(x)
+    return quant_fn(execution_time)
 
+def calculate_slack_time(deadline: float, current_time: float, reallocation_slack: float = 0) -> float:
+    """
+    计算任务的松弛时间
+    
+    Args:
+        deadline: 截止时间
+        current_time: 当前时间
+        reallocation_slack: 重分配开销
+    
+    Returns:
+        松弛时间
+    """
+    if unit_align:
+        quant_fn = lambda x: normalize_time_to_unit(x, time_unit, mod='down')
+    else:
+        quant_fn = lambda x: elim_nume_error(x)
+    return quant_fn(deadline - current_time - reallocation_slack) 
 
 def estimate_resource_requirement(task_load: float, slack_time: float, base_power: float) -> int:
-    """
-    估计任务所需的资源数量
-    
+    """    
     Args:
         task_load: 任务负载（剩余工作量）
         slack_time: 可用时间窗口
         base_power: 基础算力
-    
     Returns:
         估计所需的资源数量
     """
     if slack_time <= 0 or base_power <= 0:
         return 0
-    
     return math.ceil(task_load / (slack_time * base_power))
 
 
-def normalize_time_to_unit(time_value: float, time_unit: float) -> float:
+def normalize_time_to_unit(time_value: float, time_unit: float, mod:str='up') -> float:
     """
     将时间值标准化到时间单位
     
@@ -71,7 +91,17 @@ def normalize_time_to_unit(time_value: float, time_unit: float) -> float:
     Returns:
         标准化后的时间值
     """
-    return elim_nume_error(math.ceil(time_value / time_unit) * time_unit)
+    assert mod in ['round', 'up', 'down']
+    assert time_unit <= 1
+    n_bit = round(math.log10(1/time_unit))
+    if mod == 'round':
+        return round(time_value, n_bit)
+    elif mod == 'up':
+        return math.ceil(time_value / time_unit) * time_unit
+    elif mod == 'down':
+        return math.floor(time_value / time_unit) * time_unit
+    else:
+        raise ValueError(f"Invalid mode: {mod}")
 
 
 def trasfer_realloc_as_task(BW_DRAM, cap, tile_buffer_size, time_norm_factor: float = 1.0):
@@ -101,16 +131,37 @@ def get_task_load_and_base_size(node_attr: Dict[str, Any], time_norm_factor: flo
     return exp_comp_t, base_size
 
 
-def calculate_slack_time(deadline: float, current_time: float, reallocation_slack: float = 0) -> float:
+def cal_load(exp_comp_t, base_size):
     """
-    计算任务的松弛时间
+    统一计算任务load的函数
     
     Args:
-        deadline: 截止时间
-        current_time: 当前时间
-        reallocation_slack: 重分配开销
-    
+        node: 任务节点
+        G_ptr: MyGraph实例    
     Returns:
-        松弛时间
+        float: 任务的load值
     """
-    return deadline - current_time - reallocation_slack 
+    return exp_comp_t * base_size
+
+
+# 专门的时间比较函数
+def time_eq(time1: float, time2: float) -> bool:
+    return elim_nume_error(time1) == elim_nume_error(time2)
+
+def time_gt(time1: float, time2: float) -> bool:
+    return elim_nume_error(time1) > elim_nume_error(time2)
+
+def time_gtq(time1: float, time2: float) -> bool:
+    return elim_nume_error(time1) >= elim_nume_error(time2)
+
+def time_lt(time1: float, time2: float) -> bool:
+    return elim_nume_error(time1) < elim_nume_error(time2)
+
+def time_ltq(time1: float, time2: float) -> bool:
+    return elim_nume_error(time1) <= elim_nume_error(time2)
+
+def time_add(time1: float, time2: float) -> float:
+    return elim_nume_error(time1 + time2)
+
+def time_sub(time1: float, time2: float) -> float:
+    return elim_nume_error(time1 - time2)

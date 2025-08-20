@@ -996,14 +996,13 @@ def gen_workloads(args):
         algorithm = 'gurobi'
     else:
         algorithm = 'avg'
-    if args.binpack_cfg["algorithm"] in init_packing_algo_required:
-        deduce_cfg2(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, 
-                    srcs, sinks, sink_attr, src_attr, 
-                    args.slack_threshold, args.e2e_latency, 
-                    args.exec_t_comp_ratioA, args.jitter_t_comp_ratio, 
-                    args.wsc_slack_ratio, algorithm, args.timestepxus, 
-                    args.var_estimation
-                    )
+    deduce_cfg2(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, 
+                srcs, sinks, sink_attr, src_attr, 
+                args.slack_threshold, args.e2e_latency, 
+                args.exec_t_comp_ratioA, args.jitter_t_comp_ratio, 
+                args.wsc_slack_ratio, algorithm, args.timestepxus, 
+                args.var_estimation
+                )
 
     physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), taskattr_dict=taskattr_dict, mode=unfold_mode)
     glb_n_task_dict = gen_taskint_from_cfg(taskattr_dict, f_gcd)
