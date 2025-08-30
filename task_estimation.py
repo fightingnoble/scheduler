@@ -4,6 +4,7 @@
 import math
 from typing import Dict, Any
 from global_var import elim_nume_error
+from sched.ref_alloc_search import find_legal
 
 time_unit = 1 
 unit_align = True
@@ -21,14 +22,14 @@ def set_time_unit(timestep, int_slot):
 
 
 
-def update_task_progress(init_load: float, elapsed_time: float, res: float, base_pwr: float) -> float:
+def update_task_progress(init_load: float, elapsed_time: float, res: float, base_pwr: float) -> tuple:
     """    
     Args:
         init_load: 初始进度, elapsed_time: 已用时间, res: 资源, base_pwr: 基础算力
     Returns:
-        更新后的进度
+        更新后的进度, 变化量
     """
-    return elim_nume_error(init_load - elapsed_time * res * base_pwr)
+    return elim_nume_error(init_load - elapsed_time * res * base_pwr), elim_nume_error(elapsed_time * res * base_pwr) 
 
 
 # Note that the 

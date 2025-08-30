@@ -1,19 +1,24 @@
+from __future__ import annotations
+import typing 
+if typing.TYPE_CHECKING:
+    from approach_collector import StatisticsCollector
+
 import networkx as nx
 from queue import Queue
-from task.task_cfg import creat_logical_graph
 # from example.bm4 import swt_lat
-from collections import defaultdict, OrderedDict
+from collections import OrderedDict
 from typing import Callable, Set, List
 import math
 from utils import core_distr, elim_nume_error
 import functools
 import types, json
-from global_var import FLOPS_PER_CORE, GLB_BUFFER_SIZE_PER_CORE, BW_DRAM
+
 from warnings import warn
 import numpy as np
 from task_estimation import (
     sim_comp_time, 
     estimate_resource_requirement, 
+    find_legal,
     normalize_time_to_unit,
     get_task_load_and_base_size,
     calculate_slack_time,
@@ -285,7 +290,7 @@ class GlobalEvent_t:
             return False
 
 class BaseProcessor:
-    def __init__(self, id, cap, base_pwr, G:MyGraph, mapped_node:Set=None):
+    def __init__(self, id, cap, base_pwr, G:MyGraph, mapped_node:Set=None, stats_collector=None):
         # 统一的基础属性
         self.id = id
         self.base_pwr = base_pwr
@@ -299,6 +304,9 @@ class BaseProcessor:
         # 存储原始静态调度表，用于动态更新
         self.static_schedule_map = []
         self._original_static_schedule_map = None
+        
+        # 统计信息收集器
+        self.stats_collector:StatisticsCollector = stats_collector
             
     def update_static_schedule_for_hyperperiod(self, hp_idx: int, T_hp: float):
         """
@@ -385,6 +393,47 @@ class BaseProcessor:
     def __repr__(self):
         return self.__str__()
 
+    def repr_info(self):
+        print(f"\n\tProcessor {self.id}: {self}")
+        # Print sys_state if it exists
+        if hasattr(self, 'sys_state'):
+            print(f"\t\tstate: {self.sys_state}")
+        # Print running if it exists
+        if hasattr(self, 'running'):
+            print(f"\t\tRunning_queue: {self.running}")
+        # Print res_map if it exists
+        if hasattr(self, 'res_map'):
+            print(f"\t\tRes_map: {self.res_map}")
+        # Print slack_map if it exists
+        if hasattr(self, 'slack_map'):
+            print(f"\t\tSlack_map: {self.slack_map}")
+
+    def has_action(self) -> bool:
+        """
+        检查处理器是否有实际动作
+        返回 True 如果处理器有运行中的任务、就绪任务、资源分配或状态变化
+        """
+        # 检查是否有运行中的任务
+        if hasattr(self, 'running') and self.running:
+            return True
+        
+        # 检查是否有就绪任务
+        if hasattr(self, 'ready'):
+            if isinstance(self.ready, dict) and self.ready:
+                return True
+            elif hasattr(self.ready, 'qsize') and self.ready.qsize() > 0:
+                return True
+        
+        # 检查是否有资源分配
+        if hasattr(self, 'res_map') and self.res_map:
+            return True
+        
+        # 检查是否有状态变化
+        if hasattr(self, 'sys_state') and self.sys_state == "R":
+            return True
+        
+        return False
+
 
 class Sen_p(BaseProcessor):
     """ Execution model of multi-sequential processor (MSSP), 
@@ -392,8 +441,8 @@ class Sen_p(BaseProcessor):
         and scheduler will determine the which tasks are served, 
         and which processor is responsible for each task. 
     """
-    def __init__(self, id, cap, base_pwr, G:MyGraph, mapped_node:Set):
-        super(Sen_p, self).__init__(id, cap, base_pwr, G, mapped_node)
+    def __init__(self, id, cap, base_pwr, G:MyGraph, mapped_node:Set, stats_collector=None):
+        super(Sen_p, self).__init__(id, cap, base_pwr, G, mapped_node, stats_collector)
         self.running = dict()
         self.ready = Queue(-1)
         self.policy = 'FCFS'
@@ -401,13 +450,13 @@ class Sen_p(BaseProcessor):
     def update_run(self, pred_t, curr_t) -> bool:
         for node in list(self.running.keys()):
             # rem_t  = self.running[node] - (curr_t - pred_t) * self.base_pwr
-            rem_t = update_task_progress(self.running[node], curr_t - pred_t, 1, self.base_pwr)
-            if rem_t <= 0:
+            rem_load, delta_load = update_task_progress(self.running[node], curr_t - pred_t, 1, self.base_pwr)
+            if rem_load <= 0:
                 self.G_ptr.mark_finish(node)
                 self.running.pop(node)
                 print(f"\t[{self.id}] src {node} arrives at {curr_t}")             
             else:
-                self.running[node] = rem_t
+                self.running[node] = rem_load
         return False # No new task completion in Sen_p
 
     def update_ready(self, curr_t) -> List:
@@ -452,8 +501,8 @@ class Sen_p(BaseProcessor):
         return duation_sen_p
 
 class Acc_p(BaseProcessor):
-    def __init__(self, id, cap, base_pwr, G:MyGraph, mapped_node:Set):
-        super(Acc_p, self).__init__(id, cap, base_pwr, G, mapped_node)
+    def __init__(self, id, cap, base_pwr, G:MyGraph, mapped_node:Set, stats_collector=None):
+        super(Acc_p, self).__init__(id, cap, base_pwr, G, mapped_node, stats_collector)
 
         # all keys in res_map should be in running
         # running: records the remaining load of task that is selected to be issued, including the system task "R"
@@ -484,28 +533,42 @@ class Acc_p(BaseProcessor):
                 f"R should be in running at {curr_t}"
             assert "R" not in self.res_map, \
                 f"R should not be in res_map at {curr_t}"
-            rem_t = update_task_progress(self.running["R"], curr_t - pred_t, 1, 1)
-            if rem_t <= 0:
+            rem_load, delta_load = update_task_progress(self.running["R"], curr_t - pred_t, 1, 1)
+            if rem_load <= 0:
                 self.sys_state = "S"
                 print(f"\t[{self.id}] exist reallocation state at {curr_t}") 
                 self.running.pop("R")
                 print(f"\t[{self.id}] Task R finishes at {curr_t}") 
             else:
-                self.running["R"] = rem_t
+                self.running["R"] = rem_load
+                
+            # info collector, schedule-unrelated
+            if self.stats_collector:
+                # 记录realloc overhead
+                task_list = list(self.res_map.keys())  # 假设ready队列中的任务受realloc影响
+                self.stats_collector.record_realloc(self.id, delta_load, task_list)
         else:
             for node in list(self.res_map.keys()):
                 # rem_t  = self.running[node] - (curr_t - pred_t) * self.res_map[node] * self.base_pwr
-                rem_t = update_task_progress(self.running[node], curr_t - pred_t, self.res_map[node], self.base_pwr)
-                if rem_t <= 0:
-                    if time_gt(curr_t, self.G_ptr.ddl_map[node]):
+                rem_load, delta_load = update_task_progress(self.running[node], curr_t - pred_t, self.res_map[node], self.base_pwr)
+                if rem_load <= 0:
+                    # 检查是否超时
+                    is_timeout = time_gt(curr_t, self.G_ptr.ddl_map[node])
+                    if is_timeout:
                         print(f"\t[{self.id}] {node} is timeout at {curr_t}")
+                    
+                    # info collector, schedule-unrelated
+                    if self.stats_collector:
+                        # 任务完成的时候记录：完成时间-offset
+                        self.stats_collector.record_task_finish(self.G_ptr, node, curr_t)
+                    
                     self.G_ptr.mark_finish(node)
                     new_complete_flag |= True
                     self.running.pop(node)
                     self.res_map.pop(node)
                     print(f"\t[{self.id}] Task {node} finishes at {curr_t}") 
                 else:
-                    self.running[node] = rem_t
+                    self.running[node] = rem_load
         return new_complete_flag
 
     def update_ready(self, curr_t) -> List:
@@ -525,6 +588,11 @@ class Acc_p(BaseProcessor):
                 if node in self.G_ptr.sinks:
                     if time_gt(curr_t, self.G_ptr.ddl_map[node]):
                         print(f"\t[{self.id}] {node} is timeout at {curr_t}")
+                    # info collector, schedule-unrelated
+                    if self.stats_collector:
+                        # 任务完成的时候记录：完成时间-offset
+                        self.stats_collector.record_e2e_finish(self.G_ptr, node, curr_t)
+
                     self.G_ptr.mark_finish(node)
                     print(f"\t[{self.id}] sink {node} finish at {curr_t}")
                 elif node in self.G_ptr.ops:
@@ -533,6 +601,12 @@ class Acc_p(BaseProcessor):
                         assert False, "task should not be in running or ready queue"
                     self.ready[node] = cal_load(self.G_ptr.nodes[node]["exp_comp_t"], self.G_ptr.nodes[node]["base_size"])
                     new_ready_list.append(node)
+                    
+                    # info collector, schedule-unrelated
+                    # 记录任务开始统计（当任务进入ready队列时）
+                    if self.stats_collector:
+                        self.stats_collector.record_task_start(node, curr_t)
+                    
                     print(f"\t[{self.id}] task {node} ready at {curr_t}")
                 self.mapped_node.remove(node)
                 self.G_ptr.mark_ready(node)
@@ -576,10 +650,16 @@ class Acc_p(BaseProcessor):
         # these two lines of logic are deliberately placed outside the conditional statement, which is not elegant.
         # TODO: double check
         alloc_map_curr = self.alloc_fn(curr_t, realloc)
+        # info collector, schedule-unrelated
+        # 记录任务开始统计（当任务进入ready队列时）
+        if self.stats_collector and realloc:
+            # all running and incomming tasks undergo reallocation
+            self.stats_collector.record_realloc_num(self.id, list(set(self.res_map.keys()) | set(alloc_map_curr.keys())))
         self.res_map.clear()
         self.res_map.update(alloc_map_curr) 
         self.update_queue(alloc_map_curr)
-        
+
+
         # predict the next event in this queue
         duation_acc_p = self.predict_next(curr_t)
         # state display 
@@ -720,6 +800,7 @@ def alloc_fn_pglb(acc_p, curr_t, realloc=True,
             assert not (node in acc_p.ready and node in acc_p.running) 
             task_load = acc_p.running.get(node, 0) + acc_p.ready.get(node, 0)
             req_rsc_size = estimate_resource_requirement(task_load, slack, acc_p.base_pwr)
+            
             if req_rsc_size > curr_aval_rsc:
                 print(f"\t[{acc_p.id}] {node} is hungry at {curr_t}: lack {req_rsc_size - curr_aval_rsc} tiles") 
                 req_rsc_size = curr_aval_rsc
@@ -889,6 +970,7 @@ class PartitionConfig:
 def acc_p_factory(
     policy: str,
     cfg: PartitionConfig,
+    stats_collector:StatisticsCollector=None,
     **kwargs
 ):
     """
@@ -909,7 +991,10 @@ def acc_p_factory(
         assert cfg.mapped_node_list[i] is not None, "mapped_node_list is not None"
         
         # create acc_p instance
-        acc_p = Acc_p(f"acc_p{i}", cfg.cap_list[i], cfg.base_pwr_list[i], cfg.G, cfg.mapped_node_list[i])
+        acc_p = Acc_p(f"acc_p{i}", cfg.cap_list[i], cfg.base_pwr_list[i], cfg.G, cfg.mapped_node_list[i], stats_collector)
+        
+        # init partition stats
+        stats_collector.init_partition_stats(f"acc_p{i}", cfg.cap_list[i], cfg.base_pwr_list[i])
         
         # policy binding
         if policy in ["pglb", "glb"]:
@@ -935,6 +1020,8 @@ def acc_p_factory(
         assert cfg.swt_lat_list[i] is not None, f"swt_lat is not None for partition {i}"
         acc_p.swt_lat = cfg.swt_lat_list[i]
         acc_p_list.append(acc_p)
+    
+    # 返回处理器列表和统计收集器
     return acc_p_list
 
 

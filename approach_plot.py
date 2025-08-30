@@ -2,11 +2,12 @@ from __future__ import annotations
 import typing 
 if typing.TYPE_CHECKING:
     from approach_util import BaseProcessor
+    from approach_collector import StatisticsCollector
 from typing import List
 from approach_util import Acc_p, Sen_p, MyGraph, PartitionConfig, GlobalEvent_t
 from global_var import elim_nume_error, BW_DRAM, GLB_BUFFER_SIZE_PER_CORE
 from task_estimation import trasfer_realloc_as_task, time_eq, time_gt, time_gtq, time_lt, time_ltq, time_add, time_sub
-from approach_initiator import instantiate_mygraph_from_json, get_partition_info, instantiate_processors
+from approach_initiator import instantiate_processors, instantiate_mygraph_from_json, get_partition_info
 from task_estimation import set_time_unit
 from utils import load_pickle
 from global_var import FLOPS_PER_CORE
@@ -24,57 +25,25 @@ def print_progress(curr_t, pred_t, processors):
     active_processors = []
     for i, proc in enumerate(processors):
         # 检查处理器是否有实际动作
-        has_action = False
-        
-        # 检查是否有运行中的任务
-        if hasattr(proc, 'running') and proc.running:
-            has_action = True
-        
-        # 检查是否有就绪任务
-        if hasattr(proc, 'ready'):
-            if isinstance(proc.ready, dict) and proc.ready:
-                has_action = True
-            elif hasattr(proc.ready, 'qsize') and proc.ready.qsize() > 0:
-                has_action = True
-        
-        # 检查是否有资源分配
-        if hasattr(proc, 'res_map') and proc.res_map:
-            has_action = True
-        
-        # 检查是否有状态变化
-        if hasattr(proc, 'sys_state') and proc.sys_state == "R":
-            has_action = True
-        
-        if has_action:
+        if proc.has_action():
             active_processors.append((i, proc))
     
     # 只打印活跃的处理器
     for i, proc in active_processors:
-        print(f"\n\tProcessor {i}: {proc}")
-        # Print sys_state if it exists
-        if hasattr(proc, 'sys_state'):
-            print(f"\t\tstate: {proc.sys_state}")
-        # Print running if it exists
-        if hasattr(proc, 'running'):
-            print(f"\t\tRunning_queue: {proc.running}")
-        # Print res_map if it exists
-        if hasattr(proc, 'res_map'):
-            print(f"\t\tRes_map: {proc.res_map}")
-        # Print slack_map if it exists
-        if hasattr(proc, 'slack_map'):
-            print(f"\t\tSlack_map: {proc.slack_map}")
-    
+        proc.repr_info() # 调用新函数
+
     # 如果没有活跃处理器，打印一个简短的提示
     if not active_processors:
         print(f"\tNo active processors")
 
 
 
-def run_simulation(processors:List[BaseProcessor], event_t:GlobalEvent_t, G:MyGraph, num_hp=1, T_hp=float('inf')):
+def run_simulation(processors:List[BaseProcessor], event_t:GlobalEvent_t, G:MyGraph, num_hp=1, T_hp=float('inf'), verbose=False):
     pred_t = -float('inf')
     curr_t = -T_hp
     curr_hp = -2
     sim_hp = num_hp + 1
+    stats_collector: StatisticsCollector = processors[0].stats_collector  # 假设共享
 
     while (G.nodes() or curr_hp < num_hp) or time_eq(curr_t, 0):
         # if curr_t != 0:
@@ -84,6 +53,9 @@ def run_simulation(processors:List[BaseProcessor], event_t:GlobalEvent_t, G:MyGr
         # next_hp_boundary: -T_hp, 0, T_hp, 2T_hp, 3T_hp, 
         # curr_t: -T_hp, 0, T_hp, 2T_hp, 3T_hp, 
         if (time_gtq(curr_t, next_hp_boundary) and time_lt(pred_t, next_hp_boundary)):
+            if curr_hp >= 0:
+                stats_collector.forward_hyperperiod()
+            
             # -2, -1, 0, 1, 2 -> -1, 0, 1, 2, 3
             curr_hp += 1
             # 0, 1, 2, 3, 4,
@@ -171,7 +143,8 @@ def run_simulation(processors:List[BaseProcessor], event_t:GlobalEvent_t, G:MyGr
         # 统一事件队列（可扩展为每个处理器独立event_t）
         next_timer_event = event_t.get_next_event_time(curr_t)
 
-        print_progress(curr_t, pred_t, processors)
+        if verbose:
+            print_progress(curr_t, pred_t, processors)
         
         # status backup
         next_curr_t = time_add(curr_t, duation)
@@ -186,6 +159,10 @@ def run_simulation(processors:List[BaseProcessor], event_t:GlobalEvent_t, G:MyGr
         # check the event type: finish, external
         assert event_type in ["finish", "external", "table"]
 
+    # 仿真结束后输出统计摘要
+    if stats_collector:
+        stats_collector.export_summary()
+
 
 if __name__ == "__main__":
     import argparse
@@ -199,6 +176,7 @@ if __name__ == "__main__":
 
     from example.bm4 import *
     if args.case == "case1":
+        policy = "pglb"
         G = MyGraph(
             task_graph_srcs, task_graph_ops, task_graph_sinks, 
             task_attr, src_attr, sink_attr
@@ -218,14 +196,10 @@ if __name__ == "__main__":
         )
         event_t = [(0, "external")]
 
-        processors, event_t = instantiate_processors(
-            G, partition_cfg, list(event_t), policy="pglb"
-            )
-        run_simulation(processors, event_t, G, num_hp=num_hp, T_hp=T_hp)
-
     elif args.case == "case2":
         print("case2: single partition glb")
         # similar to case1, but with a actual load graph 
+        policy = "pglb"
         
         time_unit, time_norm_factor = set_time_unit(1e-6, False)
 
@@ -239,7 +213,7 @@ if __name__ == "__main__":
         sink_and_op_nodes = [n for n, x in G.logical_graph.in_degree() if x > 0]
         partition_cfg = PartitionConfig(
             num_partitions=1,
-            cap_list=[500],
+            cap_list=[190],
             base_pwr_list=[FLOPS_PER_CORE],
             mapped_node_list=[sink_and_op_nodes],
             TSmap_list=[None],  # 如果用cyclic策略可传入具体map
@@ -256,14 +230,11 @@ if __name__ == "__main__":
             t = elim_nume_error(G.logical_graph.nodes[node]['offset'])
             event_t.add((t, "external"))
             print(f"{node}'s 0th event at {t}")
-        processors, event_t = instantiate_processors(
-            G, partition_cfg, list(event_t), policy="pglb"
-            )
-        run_simulation(processors, event_t, G, num_hp=num_hp, T_hp=T_hp)
-
+        
     elif args.case == "case3":
         print("case3: multi partition pglb")
-        
+        policy = "pglb"
+
         time_unit, time_norm_factor = set_time_unit(1e-6, False)
         G, pid2name = instantiate_mygraph_from_json(
             'cache/graph_w_ert_ddl.json',
@@ -298,13 +269,9 @@ if __name__ == "__main__":
             event_t.add((t, "external"))
             print(f"{node}'s 0th event at {t}")
         
-        processors, event_t = instantiate_processors(
-            G, partition_cfg, list(event_t), policy="pglb"
-            )
-        run_simulation(processors, event_t, G, num_hp=num_hp, T_hp=T_hp)
     elif args.case in ["case4", "case5"]:
         print(f"case{args.case}: {'single' if args.case == 'case4' else 'multi'}-partition cyclic")
-        
+        policy = "cyc"
         time_unit, time_norm_factor = set_time_unit(1e-6, False)
         G, pid2name = instantiate_mygraph_from_json(
             'cache/graph_w_ert_ddl.json',
@@ -345,12 +312,11 @@ if __name__ == "__main__":
             t = elim_nume_error(G.logical_graph.nodes[node]['offset'])
             event_t.add((t, "external"))
             print(f"{node}'s 0th event at {t}")
-        processors, event_t = instantiate_processors(
-            G, partition_cfg, list(event_t), policy="cyc"
-            )
-        run_simulation(processors, event_t, G, num_hp=num_hp, T_hp=T_hp)
+        
+        
     elif args.case in ["case6", "case7"]:
         print(f"case{args.case}: {'single' if args.case == 'case6' else 'multi'}-partition reservation")
+        policy = "reserv"
         
         time_unit, time_norm_factor = set_time_unit(1e-6, False)
         G, pid2name = instantiate_mygraph_from_json(
@@ -393,11 +359,14 @@ if __name__ == "__main__":
             t = elim_nume_error(G.logical_graph.nodes[node]['ert'])
             event_t.add((t, "external"))
             print(f"{node}'s ert event at {t}")
-        processors, event_t = instantiate_processors(
-            G, partition_cfg, list(event_t), policy="reserv"
-            )
-
-        run_simulation(processors, event_t, G, num_hp=num_hp, T_hp=T_hp)
+        
     else:
         raise ValueError(f"Invalid case: {args.case}")
 
+    processors, event_t, stats_collector = instantiate_processors(
+        G, partition_cfg, list(event_t), policy=policy
+        )
+    run_simulation(processors, event_t, G, num_hp=num_hp, T_hp=T_hp)
+    # 仿真结束后输出统计摘要
+    if stats_collector:
+        stats_collector.export_summary()

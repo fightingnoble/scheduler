@@ -498,7 +498,8 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filen
     
     if mode == "full":
         # propagate the offset from src nodes to all downstream nodes
-        # sort src nodes by their offset 
+        # sort src nodes by their offset, 
+        # to make sure the nodes that have multiple preds with different offset can inherit the latest offset
         src_nodes = [node_n for node_n, type_n in physical_graph_nx.nodes(data="type") if type_n == "src"]
         src_nodes.sort(key=lambda x: physical_graph_nx.nodes[x]["offset"])
         for src_n in src_nodes:

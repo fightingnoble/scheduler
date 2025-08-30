@@ -13,6 +13,7 @@ from approach_util import (
     acc_p_factory, 
     GlobalEvent_t, 
 )
+from approach_collector import StatisticsCollector
 
 # TODO: These numbers are temporal magic numbers, which must be removed. 
 old_timestep = 10e-6
@@ -143,6 +144,7 @@ def load_graph_from_json(json_path, time_norm_factor):
             sink_attr[node_id] = {
                 'exp_comp_t': exp_comp_t,
                 'base_size': base_size,
+                'offset': offset,
                 'ddl': node['ddl'] + offset,
                 # 'tgt_device': n.get('tgt_device', 'sink')
             }
@@ -171,11 +173,12 @@ def instantiate_mygraph_from_json(json_path, time_norm_factor):
 def instantiate_processors(G, partition_cfg, event_t, policy="glb"):
     # 创建传感器处理器，使用动态映射模式
     src_nodes = [n for n, x in G.logical_graph.in_degree() if x == 0]
-    sen_p0 = Sen_p("sen_p", 3, 1, G, set(src_nodes))
-    acc_p_list = acc_p_factory(policy, partition_cfg)
+    stats_collector = StatisticsCollector()
+    sen_p0 = Sen_p("sen_p", 3, 1, G, set(src_nodes), stats_collector)
+    acc_p_list = acc_p_factory(policy, partition_cfg, stats_collector)
     processors = [sen_p0] + acc_p_list
     for i, proc in enumerate(processors):
         print(f"Processor {i}: {proc}")
     event_t = GlobalEvent_t(event_t)
-    return processors, event_t
+    return processors, event_t, stats_collector
 
