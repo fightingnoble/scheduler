@@ -147,16 +147,17 @@ class TDigestStreamingHistogram:
     
     def get_summary(self, num_bins: int = 20, p_list: List[float] = None, nbit=1) -> Dict:
         """
-        Gets a statistical summary, including histogram and quantiles.
+        Gets a statistical summary, including histogram, quantiles and total count.
         :param num_bins: Number of bins for the histogram.
         :param p_list: List of percentiles (e.g., [0.5, 0.9, 0.99]) to calculate.
-        :return: A dictionary containing 'histogram' and 'percentiles'.
+        :return: A dictionary containing 'histogram', 'percentiles', and 'total_processed_count'.
         """
         # calculate the percentiles
         percentiles = {f'p{round(p*100, nbit)}': self.percentile(round(p*100, nbit)) for p in p_list}
         summary = {
             'histogram': self.get_histogram_data(num_bins),
-            'percentiles': percentiles
+            'percentiles': percentiles,
+            'total_processed_count': self.total_processed_count
         }
         return summary
 

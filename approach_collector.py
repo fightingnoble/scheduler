@@ -240,7 +240,8 @@ class StatisticsCollector:
         else:
             summary['overall_e2e_latency'] = {
                 'histogram': [],
-                'percentiles': {f'p{p*100:.1f}': float('nan') for p in p_list}
+                'percentiles': {f'p{p*100:.1f}': float('nan') for p in p_list},
+                'total_processed_count': 0
             }
 
 
@@ -263,6 +264,7 @@ class StatisticsCollector:
                 continue
 
             if isinstance(data, dict) and 'histogram' in data and 'percentiles' in data: # It's a single distribution summary
+                formatted_output.append(f"  Total processed count: {int(data.get('total_processed_count', 0))}")
                 formatted_output.append("  Percentiles:")
                 for p_key, p_val in data['percentiles'].items():
                     formatted_output.append(f"    {p_key}: {p_val:.4f}")
@@ -286,6 +288,7 @@ class StatisticsCollector:
                         formatted_output.append("    No data available.\n")
                         continue
 
+                    formatted_output.append(f"    Total processed count: {int(dist_summary.get('total_processed_count', 0))}")
                     formatted_output.append("    Percentiles:")
                     for p_key, p_val in dist_summary['percentiles'].items():
                         formatted_output.append(f"      {p_key}: {p_val:.4f}")
@@ -306,7 +309,7 @@ class StatisticsCollector:
 
         return "\n".join(formatted_output)
 
-    def export_summary(self, num_bins: int = 20, p_list: List[float] = None, output_path: str = None):
+    def export_summary(self, num_bins: int = 20, p_list: List[float] = None, output_path: str = None, verbose: bool = False):
         """
         Prints the statistical summary to console and optionally to a file.
         
@@ -324,7 +327,8 @@ class StatisticsCollector:
         
         formatted_summary = self._format_summary_for_print(self.summary, p_list)
         
-        print(formatted_summary)
+        if verbose:
+            print(formatted_summary)
 
         if output_path:
             try:

@@ -4,7 +4,7 @@ if typing.TYPE_CHECKING:
     from approach_util import BaseProcessor
     from approach_collector import StatisticsCollector
 from typing import List
-from approach_util import Acc_p, Sen_p, MyGraph, PartitionConfig, GlobalEvent_t
+from approach_util import Acc_p, Sen_p, MyGraph, PartitionConfig, GlobalEvent_t, set_verbose_output, print_if_verbose
 from global_var import elim_nume_error, BW_DRAM, GLB_BUFFER_SIZE_PER_CORE
 from task_estimation import trasfer_realloc_as_task, time_eq, time_gt, time_gtq, time_lt, time_ltq, time_add, time_sub
 from approach_initiator import instantiate_processors, instantiate_mygraph_from_json, get_partition_info
@@ -14,12 +14,12 @@ from global_var import FLOPS_PER_CORE
 
 
 def print_progress(curr_t, pred_t, processors):
-    print(f"===Decision metadata at {curr_t}===")
+    print_if_verbose(f"===Decision metadata at {curr_t}===")
     if time_gt(curr_t, 0):
         duration = time_sub(curr_t, pred_t)
-        print(f"\tDuration: {duration}")
+        print_if_verbose(f"\tDuration: {duration}")
     else:
-        print(f"\tInitial decision")
+        print_if_verbose(f"\tInitial decision")
     
     # 只打印有实际动作的处理器
     active_processors = []
@@ -34,7 +34,7 @@ def print_progress(curr_t, pred_t, processors):
 
     # 如果没有活跃处理器，打印一个简短的提示
     if not active_processors:
-        print(f"\tNo active processors")
+        print_if_verbose(f"\tNo active processors")
 
 
 
@@ -73,7 +73,7 @@ def run_simulation(processors:List[BaseProcessor], event_t:GlobalEvent_t, G:MyGr
                 # curr_hp >= num_hp: only add the table events
                 event_t.add_events_for_hyperperiod(tgt_hp, T_hp, curr_t, type_list=["table"])
 
-        print(f"===At the beginning of {curr_t}===")
+        print_if_verbose(f"===At the beginning of {curr_t}===")
         
         # Two types of divice is considered: sen_p0 and acc_p0
         # sen_p0: sensor processor
@@ -143,8 +143,7 @@ def run_simulation(processors:List[BaseProcessor], event_t:GlobalEvent_t, G:MyGr
         # 统一事件队列（可扩展为每个处理器独立event_t）
         next_timer_event = event_t.get_next_event_time(curr_t)
 
-        if verbose:
-            print_progress(curr_t, pred_t, processors)
+        print_progress(curr_t, pred_t, processors)
         
         # status backup
         next_curr_t = time_add(curr_t, duation)
@@ -159,23 +158,29 @@ def run_simulation(processors:List[BaseProcessor], event_t:GlobalEvent_t, G:MyGr
         # check the event type: finish, external
         assert event_type in ["finish", "external", "table"]
 
+    # count remaining tasks
+    print(f"Remaining tasks: {len(G.nodes())}")
+
     # 仿真结束后输出统计摘要
-    if stats_collector:
-        stats_collector.export_summary()
+    if stats_collector and verbose:
+        stats_collector.export_summary(verbose=verbose)
 
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Run simulation")
     parser.add_argument("--case", type=str, default="case1", help="Case name")
-    parser.add_argument("--var_en", type=bool, default=False, help="Enable variable execution time")
+    parser.add_argument("--var_en", action="store_true", help="Enable variable execution time")
     parser.add_argument("--num_hp", type=int, default=1, help="Number of hyperperiods")
+    parser.add_argument("--verbose", action="store_true", help="verbose")
+    parser.add_argument("--output_path", type=str, default="output.txt", help="output path")
     args = parser.parse_args()
     num_hp = args.num_hp
     T_hp = 0.1 if args.case != "case1" else 100
+    set_verbose_output(args.verbose)
 
-    from example.bm4 import *
     if args.case == "case1":
+        from example.bm4 import *
         policy = "pglb"
         G = MyGraph(
             task_graph_srcs, task_graph_ops, task_graph_sinks, 
@@ -213,7 +218,7 @@ if __name__ == "__main__":
         sink_and_op_nodes = [n for n, x in G.logical_graph.in_degree() if x > 0]
         partition_cfg = PartitionConfig(
             num_partitions=1,
-            cap_list=[190],
+            cap_list=[500],
             base_pwr_list=[FLOPS_PER_CORE],
             mapped_node_list=[sink_and_op_nodes],
             TSmap_list=[None],  # 如果用cyclic策略可传入具体map
@@ -229,7 +234,7 @@ if __name__ == "__main__":
         for node in [n_ for n_ in G.logical_graph.nodes if G.logical_graph.nodes[n_]['type'] == "src"]:
             t = elim_nume_error(G.logical_graph.nodes[node]['offset'])
             event_t.add((t, "external"))
-            print(f"{node}'s 0th event at {t}")
+            print_if_verbose(f"{node}'s 0th event at {t}")
         
     elif args.case == "case3":
         print("case3: multi partition pglb")
@@ -267,7 +272,7 @@ if __name__ == "__main__":
         for node in [n_ for n_ in G.logical_graph.nodes if G.logical_graph.nodes[n_]['type'] == "src"]:
             t = elim_nume_error(G.logical_graph.nodes[node]['offset'])
             event_t.add((t, "external"))
-            print(f"{node}'s 0th event at {t}")
+            print_if_verbose(f"{node}'s 0th event at {t}")
         
     elif args.case in ["case4", "case5"]:
         print(f"case{args.case}: {'single' if args.case == 'case4' else 'multi'}-partition cyclic")
@@ -311,7 +316,7 @@ if __name__ == "__main__":
         for node in [n_ for n_ in G.logical_graph.nodes if G.logical_graph.nodes[n_]['type'] == "src"]:
             t = elim_nume_error(G.logical_graph.nodes[node]['offset'])
             event_t.add((t, "external"))
-            print(f"{node}'s 0th event at {t}")
+            print_if_verbose(f"{node}'s 0th event at {t}")
         
         
     elif args.case in ["case6", "case7"]:
@@ -353,12 +358,12 @@ if __name__ == "__main__":
         for node in [n_ for n_ in G.logical_graph.nodes if G.logical_graph.nodes[n_]['type'] == "src"]:
             t = elim_nume_error(G.logical_graph.nodes[node]['offset'])
             event_t.add((t, "external"))
-            print(f"{node}'s trigger event at {t}")
+            print_if_verbose(f"{node}'s trigger event at {t}")
 
         for node in [n_ for n_ in G.logical_graph.nodes if G.logical_graph.nodes[n_]['type'] == "op"]:
             t = elim_nume_error(G.logical_graph.nodes[node]['ert'])
             event_t.add((t, "external"))
-            print(f"{node}'s ert event at {t}")
+            print_if_verbose(f"{node}'s ert event at {t}")
         
     else:
         raise ValueError(f"Invalid case: {args.case}")
@@ -366,7 +371,5 @@ if __name__ == "__main__":
     processors, event_t, stats_collector = instantiate_processors(
         G, partition_cfg, list(event_t), policy=policy
         )
-    run_simulation(processors, event_t, G, num_hp=num_hp, T_hp=T_hp)
-    # 仿真结束后输出统计摘要
-    if stats_collector:
-        stats_collector.export_summary()
+    run_simulation(processors, event_t, G, num_hp=num_hp, T_hp=T_hp, verbose=args.verbose)
+

@@ -38,3 +38,10 @@ New features:
     4. 所有分区，reallc时间*分区cap*base_pwr的和
 
 4. 添加find_legal函数，用于在分配资源的时候，根据任务的资源约束，找到最优的资源分配方案。相对于之前一大堆奇奇怪怪的函数，这个函数利用了区间操作来计算，并且有详细的注释，方便后续的扩展和维护。
+
+## 20250830 
+1. 添加verbose参数，用于控制输出详细信息。
+2. 添加output_path参数，用于控制输出路径。
+3. Fix bug: 复制节点的时候，复制属性字典，保证logic graph 不变。
+4. 统计信息输出，添加total_processed_count，用于检查任务完成情况。
+TODO: 统计miss rate，利用率

@@ -37,6 +37,20 @@ from scipy.stats import poisson
 import re
 
 
+# 在文件顶部添加全局控制
+VERBOSE_OUTPUT = False
+
+def set_verbose_output(verbose: bool):
+    """全局设置是否输出详细信息"""
+    global VERBOSE_OUTPUT
+    VERBOSE_OUTPUT = verbose
+
+def print_if_verbose(*args, **kwargs):
+    """全局条件打印函数"""
+    if VERBOSE_OUTPUT:
+        print(*args, **kwargs)
+
+
 def build_logical_graph(srcs, ops, sinks, task_attr, src_attr, sink_attr):
     dag = nx.DiGraph()
     for src_n in srcs:
@@ -156,25 +170,26 @@ class MyGraph(nx.DiGraph):
         # 先创建所有新节点
         for node,attr in orig_nodes:
             new_name = f"{str(node)}_{hp_idx}"
-            node_type = attr['type']
+            new_attr = attr.copy()
+            node_type = new_attr['type']
 
             # 对 src/op 做执行时间随机化；sink 保持不变
             if node_type in ['src', 'op']:
                 if var_en:
-                    attr['exp_comp_t'] = elim_nume_error(self.rng_fn_list[node](rng))
+                    new_attr['exp_comp_t'] = elim_nume_error(self.rng_fn_list[node](rng))
                 else:
-                    attr['exp_comp_t'] = elim_nume_error(attr['exp_comp_t']) # if node_type == "op" else 0
+                    new_attr['exp_comp_t'] = elim_nume_error(new_attr['exp_comp_t']) # if node_type == "op" else 0
 
             # 添加超周期偏移到时间相关属性
             time_offset = hp_idx * T_hp
-            if 'offset' in attr:
-                attr['offset'] = elim_nume_error(attr['offset'] + time_offset)
-            if 'ert' in attr:
-                attr['ert'] = elim_nume_error(attr['ert'] + time_offset)
-            if 'ddl' in attr:
-                attr['ddl'] = elim_nume_error(attr['ddl'] + time_offset)
+            if 'offset' in new_attr:
+                new_attr['offset'] = elim_nume_error(new_attr['offset'] + time_offset)
+            if 'ert' in new_attr:
+                new_attr['ert'] = elim_nume_error(new_attr['ert'] + time_offset)
+            if 'ddl' in new_attr:
+                new_attr['ddl'] = elim_nume_error(new_attr['ddl'] + time_offset)
 
-            self.add_node(new_name, **attr)
+            self.add_node(new_name, **new_attr)
 
             # 维护分类列表
             if node_type == 'src':
@@ -186,15 +201,15 @@ class MyGraph(nx.DiGraph):
 
             # ddl/ert 缓存复制（R 特殊键保持原状，不新增）
             if node_type in ['op', 'sink']:
-                if 'ddl' in attr:
-                    self.ddl_map[new_name] = attr['ddl']
-                if 'ert' in attr:
-                    self.ert_map[new_name] = attr['ert']
+                if 'ddl' in new_attr:
+                    self.ddl_map[new_name] = new_attr['ddl']
+                if 'ert' in new_attr:
+                    self.ert_map[new_name] = new_attr['ert']
             
             # 更新 offset_map 缓存
             if node_type == 'src':
-                if 'offset' in attr:
-                    self.offset_map[new_name] = attr['offset']
+                if 'offset' in new_attr:
+                    self.offset_map[new_name] = new_attr['offset']
 
         # 再复制所有边（保持原边属性）
         for u, v, eattr in orig_edges:
@@ -204,8 +219,8 @@ class MyGraph(nx.DiGraph):
                 self.add_edge(new_u, new_v, **eattr)
 
         # 更新 n_pred_map：对于非 src 节点，设置其未就绪前驱计数
-        for node, attr in orig_nodes:
-            node_type = attr['type']
+        for node, new_attr in orig_nodes:
+            node_type = new_attr['type']
             if node_type == 'src':
                 continue
             dup = f"{str(node)}_{hp_idx}"
@@ -337,7 +352,7 @@ class BaseProcessor:
         
         # 更新静态调度表
         self.static_schedule_map.extend(new_static_schedule)        
-        print(f"\t[{self.id}] 更新静态调度表到超周期 {hp_idx}: {len(new_static_schedule)} 个时间槽")
+        print_if_verbose(f"\t[{self.id}] 更新静态调度表到超周期 {hp_idx}: {len(new_static_schedule)} 个时间槽")
     
     def update_prev_slot_schedule(self, curr_slot_index: int, T_hp: float):
         """
@@ -394,6 +409,8 @@ class BaseProcessor:
         return self.__str__()
 
     def repr_info(self):
+        if not VERBOSE_OUTPUT:
+            return
         print(f"\n\tProcessor {self.id}: {self}")
         # Print sys_state if it exists
         if hasattr(self, 'sys_state'):
@@ -454,7 +471,7 @@ class Sen_p(BaseProcessor):
             if rem_load <= 0:
                 self.G_ptr.mark_finish(node)
                 self.running.pop(node)
-                print(f"\t[{self.id}] src {node} arrives at {curr_t}")             
+                print_if_verbose(f"\t[{self.id}] src {node} arrives at {curr_t}")             
             else:
                 self.running[node] = rem_load
         return False # No new task completion in Sen_p
@@ -471,10 +488,10 @@ class Sen_p(BaseProcessor):
                 load = cal_load(self.G_ptr.nodes[node]["exp_comp_t"], self.G_ptr.nodes[node]["base_size"])
                 if load > 0:
                     self.ready.put((node, load))
-                    print(f"\t[{self.id}] src {node} is triggered at {curr_t}")
+                    print_if_verbose(f"\t[{self.id}] src {node} is triggered at {curr_t}")
                 else:
                     self.G_ptr.mark_finish(node)
-                    print(f"\t[{self.id}] src {node} arrives at {curr_t}")
+                    print_if_verbose(f"\t[{self.id}] src {node} arrives at {curr_t}")
                 # self.G_ptr.srcs.remove(node)
                 self.mapped_node.remove(node)
         return [] # No new ready tasks in Sen_p
@@ -487,17 +504,17 @@ class Sen_p(BaseProcessor):
         while not self.ready.empty() and len(self.running) < self.cap:
             node, rem_t = self.ready.get()
             self.running[node] = rem_t
-            print(f"\t[{self.id}] sen starts task {node} at {self.G_ptr.nodes[node]['offset']}")
+            print_if_verbose(f"\t[{self.id}] sen starts task {node} at {self.G_ptr.nodes[node]['offset']}")
 
         # predict the next event in this queue
         duation_sen_p = float("inf")
         for node in self.running:
             duation_sen_p = min(duation_sen_p, self.running[node])
         if duation_sen_p == float("inf"):
-            print(f"\t[{self.id}] No sensor event in future at {curr_t}")
+            print_if_verbose(f"\t[{self.id}] No sensor event in future at {curr_t}")
         else:
             next_event_time = time_add(curr_t, duation_sen_p)
-            print(f"\t[{self.id}] Next sensor event at {next_event_time}")
+            print_if_verbose(f"\t[{self.id}] Next sensor event at {next_event_time}")
         return duation_sen_p
 
 class Acc_p(BaseProcessor):
@@ -536,9 +553,9 @@ class Acc_p(BaseProcessor):
             rem_load, delta_load = update_task_progress(self.running["R"], curr_t - pred_t, 1, 1)
             if rem_load <= 0:
                 self.sys_state = "S"
-                print(f"\t[{self.id}] exist reallocation state at {curr_t}") 
+                print_if_verbose(f"\t[{self.id}] exist reallocation state at {curr_t}") 
                 self.running.pop("R")
-                print(f"\t[{self.id}] Task R finishes at {curr_t}") 
+                print_if_verbose(f"\t[{self.id}] Task R finishes at {curr_t}") 
             else:
                 self.running["R"] = rem_load
                 
@@ -555,7 +572,7 @@ class Acc_p(BaseProcessor):
                     # 检查是否超时
                     is_timeout = time_gt(curr_t, self.G_ptr.ddl_map[node])
                     if is_timeout:
-                        print(f"\t[{self.id}] {node} is timeout at {curr_t}")
+                        print_if_verbose(f"\t[{self.id}] {node} is timeout at {curr_t}")
                     
                     # info collector, schedule-unrelated
                     if self.stats_collector:
@@ -566,7 +583,7 @@ class Acc_p(BaseProcessor):
                     new_complete_flag |= True
                     self.running.pop(node)
                     self.res_map.pop(node)
-                    print(f"\t[{self.id}] Task {node} finishes at {curr_t}") 
+                    print_if_verbose(f"\t[{self.id}] Task {node} finishes at {curr_t}") 
                 else:
                     self.running[node] = rem_load
         return new_complete_flag
@@ -587,14 +604,14 @@ class Acc_p(BaseProcessor):
             if n_pred == 0:
                 if node in self.G_ptr.sinks:
                     if time_gt(curr_t, self.G_ptr.ddl_map[node]):
-                        print(f"\t[{self.id}] {node} is timeout at {curr_t}")
+                        print_if_verbose(f"\t[{self.id}] {node} is timeout at {curr_t}")
                     # info collector, schedule-unrelated
                     if self.stats_collector:
                         # 任务完成的时候记录：完成时间-offset
                         self.stats_collector.record_e2e_finish(self.G_ptr, node, curr_t)
 
                     self.G_ptr.mark_finish(node)
-                    print(f"\t[{self.id}] sink {node} finish at {curr_t}")
+                    print_if_verbose(f"\t[{self.id}] sink {node} finish at {curr_t}")
                 elif node in self.G_ptr.ops:
                     # illegal check
                     if node in self.running or node in self.ready:
@@ -607,7 +624,7 @@ class Acc_p(BaseProcessor):
                     if self.stats_collector:
                         self.stats_collector.record_task_start(node, curr_t)
                     
-                    print(f"\t[{self.id}] task {node} ready at {curr_t}")
+                    print_if_verbose(f"\t[{self.id}] task {node} ready at {curr_t}")
                 self.mapped_node.remove(node)
                 self.G_ptr.mark_ready(node)
         return new_ready_list
@@ -664,7 +681,7 @@ class Acc_p(BaseProcessor):
         duation_acc_p = self.predict_next(curr_t)
         # state display 
         if self.sys_state == "R":
-            print(f"\t[{self.id}] Enter reallocation progress at {curr_t}")
+            print_if_verbose(f"\t[{self.id}] Enter reallocation progress at {curr_t}")
             type_ = "reallocate"
         else:
             type_ = "finish" 
@@ -685,12 +702,12 @@ class Acc_p(BaseProcessor):
         for node in list(self.running.keys()):
             if node != "R" and node not in alloc_map_curr: 
                 self.ready[node] = self.running.pop(node)
-                print(f"\t[{self.id}] Task {node} preempted and moved to ready queue.")
+                print_if_verbose(f"\t[{self.id}] Task {node} preempted and moved to ready queue.")
             
         for node in list(self.ready.keys()):
             if node in alloc_map_curr: 
                 self.running[node] = self.ready.pop(node)
-                print(f"\t[{self.id}] Task {node} moved from ready to running queue.")
+                print_if_verbose(f"\t[{self.id}] Task {node} moved from ready to running queue.")
 
     def predict_next(self, curr_t) -> float:
         """Helper to predict the next event duration based on current resource map."""
@@ -802,7 +819,7 @@ def alloc_fn_pglb(acc_p, curr_t, realloc=True,
             req_rsc_size = estimate_resource_requirement(task_load, slack, acc_p.base_pwr)
             
             if req_rsc_size > curr_aval_rsc:
-                print(f"\t[{acc_p.id}] {node} is hungry at {curr_t}: lack {req_rsc_size - curr_aval_rsc} tiles") 
+                print_if_verbose(f"\t[{acc_p.id}] {node} is hungry at {curr_t}: lack {req_rsc_size - curr_aval_rsc} tiles") 
                 req_rsc_size = curr_aval_rsc
                 curr_aval_rsc = 0
                 alloc_map_curr[node] = req_rsc_size
@@ -819,14 +836,14 @@ def alloc_fn_pglb(acc_p, curr_t, realloc=True,
     # if there are still resources left, 
     # it means no late process is waiting for resources
     if curr_aval_rsc > 0 and len(alloc_map_curr) and not reserv_en:
-        print(f"\t[{acc_p.id}] Minimum resource requirement at {curr_t}: {alloc_map_curr}")
+        print_if_verbose(f"\t[{acc_p.id}] Minimum resource requirement at {curr_t}: {alloc_map_curr}")
         assert sum([score == float('inf') and constr_dict[pid] != "upb" for pid, score in score_dict.items()]) == 0
         # also, there is no process waiting for resources in the ready queue
         assert len(score) == 0
         core_distr(alloc_map_curr, score_dict, curr_aval_rsc)
     
     if reserv_en and curr_aval_rsc > 0 and len(alloc_map_curr):
-        print(f"\t[{acc_p.id}] Reservation (en): {curr_aval_rsc} tiles reserved.") 
+        print_if_verbose(f"\t[{acc_p.id}] Reservation (en): {curr_aval_rsc} tiles reserved.") 
     return alloc_map_curr
 
 # Cyclic specific alloc_fn and trigger_cond
@@ -895,10 +912,10 @@ def alloc_fn_cyclic(acc_p:Acc_p, curr_t:float, realloc:bool=True, T_hp:float=Non
                     temp_aval_rsc -= alloc_rsc
                     assert temp_aval_rsc >= 0
         else:
-            print(f"\t[{acc_p.id}] Cyc-Sched  (force=True): No static allocation defined for time {curr_t}. Allocating nothing.")
+            print_if_verbose(f"\t[{acc_p.id}] Cyc-Sched  (force=True): No static allocation defined for time {curr_t}. Allocating nothing.")
     else:
         if cfg:
-            print(f"\t[{acc_p.id}] Cyc-Sched: Applying static allocation for time {curr_t}: {cfg}")
+            print_if_verbose(f"\t[{acc_p.id}] Cyc-Sched: Applying static allocation for time {curr_t}: {cfg}")
             temp_aval_rsc = acc_p.cap
             for node, requested_rsc in cfg.items():
                 if temp_aval_rsc <= 0:
@@ -909,9 +926,9 @@ def alloc_fn_cyclic(acc_p:Acc_p, curr_t:float, realloc:bool=True, T_hp:float=Non
                     alloc_map_curr[node] = alloc_rsc
                     temp_aval_rsc -= alloc_rsc
                 else:
-                    print(f"\t[{acc_p.id}] Cyc-Sched: Task {node} not found in running/ready queues, skipping static allocation.")
+                    print_if_verbose(f"\t[{acc_p.id}] Cyc-Sched: Task {node} not found in running/ready queues, skipping static allocation.")
         else:
-            print(f"\t[{acc_p.id}] Cyc-Sched: No static allocation defined for time {curr_t}. Allocating nothing.")    
+            print_if_verbose(f"\t[{acc_p.id}] Cyc-Sched: No static allocation defined for time {curr_t}. Allocating nothing.")    
     return alloc_map_curr
 
 def get_var_t_fn(logical_graph, node, type):
