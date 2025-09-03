@@ -2,17 +2,16 @@ from utils import elim_nume_error
 
 from global_var import FLOPS_PER_CORE
 
-from task_estimation import (
+from approach_Eq import (
     get_task_load_and_base_size,
 )
-from approach_util import (
+from approach_def import (
     Acc_p, 
     Sen_p, 
     MyGraph, 
-    PartitionConfig, 
-    acc_p_factory, 
     GlobalEvent_t, 
 )
+from approach_sched import acc_p_factory, PartitionConfig
 from approach_collector import StatisticsCollector
 
 # TODO: These numbers are temporal magic numbers, which must be removed. 

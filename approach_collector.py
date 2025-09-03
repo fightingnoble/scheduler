@@ -1,14 +1,14 @@
 from __future__ import annotations
 import typing 
 if typing.TYPE_CHECKING:
-    from approach_util import MyGraph
+    from approach_def import MyGraph
 from typing import Dict, List, Set
 from collections import defaultdict
 import re
 import json
 import os
 from functools import reduce
-from task_estimation import time_gt, elim_nume_error
+from approach_Eq import time_gt, elim_nume_error
 from ref_tdigest import TDigestStreamingHistogram # Assuming ref_tdigest.py is in the same directory
 
 """

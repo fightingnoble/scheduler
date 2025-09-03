@@ -1,14 +1,15 @@
 from __future__ import annotations
 import typing 
 if typing.TYPE_CHECKING:
-    from approach_util import BaseProcessor
+    from approach_def import BaseProcessor
     from approach_collector import StatisticsCollector
 from typing import List
-from approach_util import Acc_p, Sen_p, MyGraph, PartitionConfig, GlobalEvent_t, set_verbose_output, print_if_verbose
+from approach_def import Acc_p, Sen_p, MyGraph, GlobalEvent_t, set_verbose_output, print_if_verbose
+from approach_sched import PartitionConfig
 from global_var import elim_nume_error, BW_DRAM, GLB_BUFFER_SIZE_PER_CORE
-from task_estimation import trasfer_realloc_as_task, time_eq, time_gt, time_gtq, time_lt, time_ltq, time_add, time_sub
+from approach_Eq import trasfer_realloc_as_task, time_eq, time_gt, time_gtq, time_lt, time_ltq, time_add, time_sub
 from approach_initiator import instantiate_processors, instantiate_mygraph_from_json, get_partition_info
-from task_estimation import set_time_unit
+from approach_Eq import set_time_unit
 from utils import load_pickle
 from global_var import FLOPS_PER_CORE
 

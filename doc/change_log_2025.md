@@ -19,7 +19,7 @@ New features:
     同时将这些信息添加到，n_pred_map, ..., ert_map 这些状态缓存中，
     除了sink_node之外的src和op予随机的执行时间。
 3. python数值计算精度和仿真需要的时间精度不同，不希望存在这些游离态的时间计算。
-    现在所有产生新的时间度量、时间比较、参考时间推进仿真、参考时间决策调度的行为，都包含在task_estimation.py或者经过elim_nume_error处理。
+    现在所有产生新的时间度量、时间比较、参考时间推进仿真、参考时间决策调度的行为，都包含在approach_Eq.py或者经过elim_nume_error处理。
 
 特别处理：
     1. 在生成静态表的时候
@@ -45,3 +45,6 @@ New features:
 3. Fix bug: 复制节点的时候，复制属性字典，保证logic graph 不变。
 4. 统计信息输出，添加total_processed_count，用于检查任务完成情况。
 TODO: 统计miss rate，利用率
+
+计算延迟break down
+延迟和负载之间的相关性（按照周期统计）

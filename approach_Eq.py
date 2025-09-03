@@ -6,6 +6,10 @@ from typing import Dict, Any
 from global_var import elim_nume_error
 from sched.ref_alloc_search import find_legal
 
+from scipy.stats import truncnorm
+from scipy.stats import poisson
+import numpy as np
+
 time_unit = 1 
 unit_align = True
 
@@ -20,6 +24,29 @@ def set_time_unit(timestep, int_slot):
         normalize_factor = 1
     return time_unit, normalize_factor
 
+def get_var_t_fn(logical_graph, node, type):
+    if type == "src":
+        # follow truncated normal distribution
+        half_len = logical_graph.nodes[node]['comp_ratio'] / logical_graph.nodes[node]['freq']
+        ZScore = 3
+        loc = half_len
+        scale = half_len / ZScore
+        a, b = -ZScore, ZScore
+        var_t_fn = lambda rng: truncnorm.rvs(a, b, loc=loc, scale=scale, random_state=rng).item()
+    elif type == "op":
+        # follow truncated poisson distribution
+        lambda_ld = 1
+        exp_comp_t = logical_graph.nodes[node]['exp_comp_t']
+        k = logical_graph.nodes[node]['var_factor']
+        if k == 1:
+            var_t_fn = lambda rng: exp_comp_t
+        else:
+            ini_probs = np.zeros(k+1)
+            for j in range(k+1):
+                ini_probs[j] = poisson.pmf(j,lambda_ld)
+            ini_probs = ini_probs/ini_probs.sum()
+            var_t_fn = lambda rng: np.random.choice(k+1, p=ini_probs, replace=False) * exp_comp_t
+    return var_t_fn
 
 
 def update_task_progress(init_load: float, elapsed_time: float, res: float, base_pwr: float) -> tuple:

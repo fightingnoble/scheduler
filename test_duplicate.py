@@ -8,7 +8,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from approach_util import MyGraph
+from approach_def import MyGraph
 
 def test_duplicate_for_hyperperiod():
     """测试超周期复制功能"""
