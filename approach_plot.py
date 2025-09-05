@@ -3,7 +3,8 @@ import typing
 if typing.TYPE_CHECKING:
     from approach_def import BaseProcessor
     from approach_collector import StatisticsCollector
-from typing import List
+from typing import List, Iterable
+from itertools import chain
 from approach_def import Acc_p, Sen_p, MyGraph, GlobalEvent_t, set_verbose_output, print_if_verbose
 from approach_sched import PartitionConfig
 from global_var import elim_nume_error, BW_DRAM, GLB_BUFFER_SIZE_PER_CORE
@@ -39,7 +40,7 @@ def print_progress(curr_t, pred_t, processors):
 
 
 
-def run_simulation(processors:List[BaseProcessor], event_t:GlobalEvent_t, G:MyGraph, num_hp=1, T_hp=float('inf'), verbose=False):
+def run_simulation(processors:List[BaseProcessor], event_t:GlobalEvent_t, G:MyGraph, num_hp=1, T_hp=float('inf'), verbose=False, var_en=False):
     pred_t = -float('inf')
     curr_t = -T_hp
     curr_hp = -2
@@ -55,8 +56,11 @@ def run_simulation(processors:List[BaseProcessor], event_t:GlobalEvent_t, G:MyGr
         # curr_t: -T_hp, 0, T_hp, 2T_hp, 3T_hp, 
         if (time_gtq(curr_t, next_hp_boundary) and time_lt(pred_t, next_hp_boundary)):
             if curr_hp >= 0:
-                stats_collector.forward_hyperperiod()
-            
+                stats_collector.forward_hyperperiod(T_hp)
+                stats_collector.record_miss(
+                    chain(processor.iter_timeout(curr_t)
+                        for processor in processors if hasattr(processor, 'iter_timeout'))
+                    )
             # -2, -1, 0, 1, 2 -> -1, 0, 1, 2, 3
             curr_hp += 1
             # 0, 1, 2, 3, 4,
@@ -64,7 +68,7 @@ def run_simulation(processors:List[BaseProcessor], event_t:GlobalEvent_t, G:MyGr
             # the final hp is used for draining the unscheduled tasks
             if tgt_hp < num_hp:
                 # a) duplicate the graph
-                G.duplicate_for_hyperperiod(tgt_hp, 0, T_hp)
+                G.duplicate_for_hyperperiod(tgt_hp, 0, T_hp, var_en)
                 # b) update the mapping
                 for processor in processors:
                     processor.update_mapped_nodes_for_hyperperiod(tgt_hp)
@@ -163,7 +167,7 @@ def run_simulation(processors:List[BaseProcessor], event_t:GlobalEvent_t, G:MyGr
     print(f"Remaining tasks: {len(G.nodes())}")
 
     # 仿真结束后输出统计摘要
-    if stats_collector and verbose:
+    if stats_collector:
         stats_collector.export_summary(verbose=verbose)
 
 
@@ -174,7 +178,7 @@ if __name__ == "__main__":
     parser.add_argument("--var_en", action="store_true", help="Enable variable execution time")
     parser.add_argument("--num_hp", type=int, default=1, help="Number of hyperperiods")
     parser.add_argument("--verbose", action="store_true", help="verbose")
-    parser.add_argument("--output_path", type=str, default="output.txt", help="output path")
+    parser.add_argument("--output_path", type=str, default="./output.txt", help="output path")
     args = parser.parse_args()
     num_hp = args.num_hp
     T_hp = 0.1 if args.case != "case1" else 100
@@ -219,7 +223,7 @@ if __name__ == "__main__":
         sink_and_op_nodes = [n for n, x in G.logical_graph.in_degree() if x > 0]
         partition_cfg = PartitionConfig(
             num_partitions=1,
-            cap_list=[500],
+            cap_list=[250],
             base_pwr_list=[FLOPS_PER_CORE],
             mapped_node_list=[sink_and_op_nodes],
             TSmap_list=[None],  # 如果用cyclic策略可传入具体map
@@ -372,5 +376,6 @@ if __name__ == "__main__":
     processors, event_t, stats_collector = instantiate_processors(
         G, partition_cfg, list(event_t), policy=policy
         )
-    run_simulation(processors, event_t, G, num_hp=num_hp, T_hp=T_hp, verbose=args.verbose)
+    stats_collector.set_output_path(args.output_path)
+    run_simulation(processors, event_t, G, num_hp=num_hp, T_hp=T_hp, verbose=args.verbose, var_en=args.var_en)
 

@@ -4,6 +4,7 @@ if typing.TYPE_CHECKING:
     from approach_collector import StatisticsCollector
 
 import networkx as nx
+from itertools import chain
 from queue import Queue
 # from example.bm4 import swt_lat
 from collections import OrderedDict
@@ -537,6 +538,15 @@ class Acc_p(BaseProcessor):
         self.trigger_cond: Callable
         self.curr_slot_index = 0
 
+    def iter_timeout(self, curr_t: float):
+        """Iterate over the timeout tasks.
+        """
+        # Use itertools.chain to safely iterate over multiple dictionaries
+        for node, rem in chain(self.ready.items(), self.running.items()):
+            ddl = self.G_ptr.ddl_map.get(node, float("inf"))
+            if time_gt(curr_t, ddl):
+                yield (node, rem)
+
     def update_run(self, pred_t, curr_t) -> bool:
         """
         Updates the remaining workload for running tasks and checks for finishing events.
@@ -567,6 +577,18 @@ class Acc_p(BaseProcessor):
             for node in list(self.res_map.keys()):
                 # rem_t  = self.running[node] - (curr_t - pred_t) * self.res_map[node] * self.base_pwr
                 rem_load, delta_load = update_task_progress(self.running[node], curr_t - pred_t, self.res_map[node], self.base_pwr)
+                
+                # info collector, schedule-unrelated
+                if self.stats_collector:
+                    self.stats_collector.record_compute_progress(node, elim_nume_error(curr_t - pred_t))
+
+                # record idle capacity over [pred_t, curr_t]
+                if self.stats_collector:
+                    dt = curr_t - pred_t
+                    size = self.cap - sum(self.res_map.values()) 
+                    idle_ld = elim_nume_error(dt * size * self.base_pwr) 
+                    self.stats_collector.record_idle_capacity(idle_ld, self.sys_state)
+
                 if rem_load <= 0:
                     # 检查是否超时
                     is_timeout = time_gt(curr_t, self.G_ptr.ddl_map[node])
@@ -616,6 +638,12 @@ class Acc_p(BaseProcessor):
                     if node in self.running or node in self.ready:
                         assert False, "task should not be in running or ready queue"
                     self.ready[node] = cal_load(self.G_ptr.nodes[node]["exp_comp_t"], self.G_ptr.nodes[node]["base_size"])
+                    
+                    # info collector, schedule-unrelated
+                    if self.stats_collector:
+                        # record submitted load in this hyperperiod
+                        self.stats_collector.record_period_load_arrival(self.ready[node])
+                    
                     new_ready_list.append(node)
                     
                     # info collector, schedule-unrelated

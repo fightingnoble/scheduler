@@ -44,7 +44,21 @@ New features:
 2. 添加output_path参数，用于控制输出路径。
 3. Fix bug: 复制节点的时候，复制属性字典，保证logic graph 不变。
 4. 统计信息输出，添加total_processed_count，用于检查任务完成情况。
-TODO: 统计miss rate，利用率
 
+## 20250903
 计算延迟break down
 延迟和负载之间的相关性（按照周期统计）
+
+当前的collector 能够记录调度开销和延迟，现在我需要添加下面几种统计：
+端到端延迟的break down，包括：等待时间，调度开销，计算时间 （其中等待时间不用显示统计，用端到端延迟-累计调度开销-计算延迟
+按周期统计，每个周期内：
+（总负载，在周期内完成的任务的端到端最差延迟）
+（闲置算力，miss任务剩余负载）
+
+Fix: var_en参数 is added
+Add: 更新了可执行任务过滤逻辑
+    filter timeout task if drop
+        if op_miss_en, only the sink will be dropped for timeout;
+        otherwise, all the tasks will be dropped for timeout.
+    filter ert < curr_t task if reserve
+    filter R task

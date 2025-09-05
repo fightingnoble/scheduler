@@ -58,6 +58,8 @@ def update_task_progress(init_load: float, elapsed_time: float, res: float, base
     """
     return elim_nume_error(init_load - elapsed_time * res * base_pwr), elim_nume_error(elapsed_time * res * base_pwr) 
 
+def cal_cost(elapsed_time: float, res: float, base_pwr: float) -> float:
+    return elim_nume_error(elapsed_time * res * base_pwr)
 
 # Note that the 
 def sim_comp_time(task_load: float, allocated_resources: int, base_power: float) -> float:

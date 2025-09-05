@@ -9,7 +9,7 @@ from collections import OrderedDict
 from utils import core_distr, elim_nume_error
 import functools
 import types
-
+from itertools import chain
 from warnings import warn
 from approach_Eq import (
     sim_comp_time, 
@@ -74,7 +74,7 @@ def trigger_cond_dyn(self, new_comp, new_ready_list):
 
 def alloc_fn_pglb(acc_p, curr_t, realloc=True, 
                   # static parameters, which will be removed by lambda or functools.partial
-                  reserv_en=False):
+                  reserv_en=False, drop=False, op_miss_en=False):
     """
     Allocation function for reservation-aware scheduler.
     Only allocates minimum required resources, respects EST.
@@ -82,20 +82,22 @@ def alloc_fn_pglb(acc_p, curr_t, realloc=True,
 
     # calculate slack 
     realloc_slack = 0 if not realloc else sim_comp_time(acc_p.swt_lat, 1, 1)
-    if not reserv_en:
-        acc_p.slack_map = {
-            node: calculate_slack_time(acc_p.G_ptr.ddl_map[node], curr_t, realloc_slack)
-            for node in list(acc_p.running.keys()) + list(acc_p.ready.keys())
-            if node != "R"
-        }
-    else:
-        # In reservation-aware scheduler, only tasks with ERT >= curr_t can be allocated.
-        acc_p.slack_map = {
-            node: calculate_slack_time(acc_p.G_ptr.ddl_map[node], curr_t, realloc_slack)
-            for node in list(acc_p.running.keys()) + list(acc_p.ready.keys()) 
-            if acc_p.G_ptr.ert_map[node] <= curr_t and node != "R"
-        } 
-        
+    iter_tasks = chain(acc_p.running, acc_p.ready)
+    # filter timeout task if drop
+        # if op_miss_en, only the sink will be dropped for timeout;
+        # otherwise, all the tasks will be dropped for timeout.
+    # filter ert < curr_t task if reserve
+    # filter R task
+
+    filter_cond = [
+        lambda node: node != "R",
+        lambda node: (acc_p.G_ptr.ddl_map[node] > curr_t or (op_miss_en and node in acc_p.G_ptr.ops)) or not drop,
+        lambda node: acc_p.G_ptr.ert_map[node] <= curr_t if reserv_en else True,
+    ]
+    acc_p.slack_map = {
+        node: calculate_slack_time(acc_p.G_ptr.ddl_map[node], curr_t, realloc_slack)
+        for node in iter_tasks if all(cond(node) for cond in filter_cond)
+    }
     score = acc_p.slack_map.copy()
     alloc_map_curr = {}
     acc_p.starving = False
@@ -285,7 +287,7 @@ def acc_p_factory(
             if policy == "pglb" and cfg.num_parts <= 1:
                 warn("pglb policy is not supported for single partition, use glb instead")
                 policy = "glb"
-            acc_p.alloc_fn = types.MethodType(functools.partial(alloc_fn_pglb, reserv_en=False), acc_p)
+            acc_p.alloc_fn = types.MethodType(functools.partial(alloc_fn_pglb, reserv_en=False, drop=True), acc_p)
             acc_p.trigger_cond = types.MethodType(trigger_cond_dyn, acc_p)
         elif policy in ["cyc"]:
             assert cfg.TSmap_list[i] is not None, "TSmap_list is not None"
@@ -295,7 +297,7 @@ def acc_p_factory(
             acc_p.trigger_cond = types.MethodType(functools.partial(trigger_cond_cyclic), acc_p)
 
         elif policy == "reserv":
-            acc_p.alloc_fn = types.MethodType(functools.partial(alloc_fn_pglb, reserv_en=True), acc_p)
+            acc_p.alloc_fn = types.MethodType(functools.partial(alloc_fn_pglb, reserv_en=True, drop=True, op_miss_en=True), acc_p)
             acc_p.trigger_cond = types.MethodType(trigger_cond_dyn, acc_p)
         else:
             raise ValueError(f"Unknown strategy: {policy}")
