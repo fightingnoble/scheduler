@@ -334,7 +334,7 @@ def cyclic_sched(task_spec:Spec, affinity,
                 sensor_pipe:TriggerPipe=None,
                 a_data_pipe:DataPipe=None,
                 w_data_pipe:DataPipe=None, 
-                path_builder=None,
+                path_ctx=None,
                 verbose=False, *, warmup=False, drain=False, case="dynamic",):
     """
     partition the scheduling table
@@ -442,7 +442,7 @@ def cyclic_sched(task_spec:Spec, affinity,
                         e2e_ddl, aux_scale_factor = event
                         if e2e_ddl != scheduler_list[0].e2e_latency:
                             assert scheduler_list[0]._SchedTab_L0 is None
-                            map_new_to_old, new_map_rev = load_sched_tab(total_cores, e2e_ddl, aux_scale_factor, path_builder, scheduler_list)                                
+                            map_new_to_old, new_map_rev = load_sched_tab(total_cores, e2e_ddl, aux_scale_factor, path_ctx, scheduler_list)                                
                         break
                     else:
                         break

@@ -201,10 +201,6 @@ def args_postprocess(args):
     args.binpack_cfg.update({"exec_t_comp_ratioB": args.exec_t_comp_ratioB}) 
     para_scan_group2 = {"num_cores": args.num_cores}
 
-    if args.force_num_cores and args.aux_scale_factor!= 9:
-        args.force_suffix="force_"
-    else:
-        args.force_suffix=""
 
     cfg_para_dict, para_scan_group1, cfg_n = get_cfg_n(args)
     path_para_dict = {"root_dir": root_dir, "cfg_n": cfg_n, "i_file_suffix": args.i_file_suffix, "force_suffix": args.force_suffix}
@@ -226,25 +222,6 @@ def args_postprocess(args):
                       "seed": args.seed, "file_suffix": args.file_suffix,
                       "force_suffix": args.force_suffix
                       }
-    
-    # worst case: state seed = -1, seed value is not used but set to 0, print as -1
-
-    if args.seed == -1:
-        args.seed = 0
-        # set enforce_wc
-        args.jitter_sim_para.update({"enforce_wc": True})
-        args.exec_var_para.update({"enforce_wc": True})
-        
-    if args.jitter_sim_en: 
-        enforce_wc = args.jitter_sim_para.get("enforce_wc", False) 
-    else:
-        enforce_wc = False
-
-    if enforce_wc:
-        assert args.jitter_sim_en
-        plot_path_para.update({"seed": "-1"})
-        trace_path_para.update({"seed": "-1"})
-
     csv_xlxs_root = get_csv_path_str(args)
     return cfg_para_dict,para_scan_group1,para_scan_group2,path_para_dict,bin_path_format,trace_path_para,plot_path_para,csv_xlxs_root
 

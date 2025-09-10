@@ -19,20 +19,20 @@ from model.task_queue_agent import TaskQueue
 from utils import dump_and_check, load_pickle, update_df, check_parents_path, args_postprocess, get_case_path_str
 from global_var import *
 from utils import core_distr, save_chunk, load_h5_file, time_cnt, pyinstr_profiler
-from paths import PathContext, PathBuilder
+from paths import PathContext
 import numpy as np 
 import argparse
 
 
-def generate_bin_paths(path_para_dict, path_builder, num_cores, check_hints, extra_suffix=""):
+def generate_bin_paths(path_para_dict, path_ctx: PathContext, num_cores, check_hints, extra_suffix=""):
     """
     统一的二进制路径生成函数，处理所有算法分支中的重复路径生成代码
     
     Args:
         path_para_dict: 路径参数字典
-        path_builder: PathBuilder 实例
+        path_ctx: PathContext 实例
         num_cores: 核心数
-        algorithm_name: 算法名称（用于错误信息）
+        check_hints: 检查说明
         extra_suffix: 额外的后缀（如 repack 的 "_ov_0.80_repack"）
     
     Returns:
@@ -42,13 +42,13 @@ def generate_bin_paths(path_para_dict, path_builder, num_cores, check_hints, ext
     old_bin_list_save_path = bin_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
     old_routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
     
-    # 使用新方法生成路径
-    path_builder = path_builder.with_num_cores(num_cores)
+    # 使用新方法生成路径：直接改 PathContext
+    path_ctx.num_cores = num_cores
     if extra_suffix:
-        path_builder = path_builder.with_suffix(extra_suffix)
-    
-    new_bin_list_save_path = path_builder.bin_list_path()
-    new_routing_table_save_path = path_builder.routing_table_path()
+        path_ctx.file_suffix = f"{path_ctx.file_suffix}{extra_suffix}"
+        path_ctx.i_file_suffix = f"{path_ctx.i_file_suffix}{extra_suffix}"
+    new_bin_list_save_path = path_ctx.get_bin_list_path()
+    new_routing_table_save_path = path_ctx.get_routing_table_path()
     
     # 比较路径
     compare_paths(old_bin_list_save_path, new_bin_list_save_path, f"bin_list_save_path ({check_hints})")
@@ -57,32 +57,6 @@ def generate_bin_paths(path_para_dict, path_builder, num_cores, check_hints, ext
     # 返回新路径
     return new_bin_list_save_path, new_routing_table_save_path
 
-def create_path_builder(args, cfg_para_dict, para_scan_group1, para_scan_group2, path_para_dict):
-    """
-    创建 PathBuilder 实例，用于生成各种路径
-    """
-    # 从 args_postprocess 的结果中提取参数
-    root_dir = args.root_dir
-    cfg_n = path_para_dict["cfg_n"]
-    
-    # 创建 PathContext
-    ctx = PathContext(
-        root_dir=root_dir,
-        cfg_n=cfg_n,
-        case="",  # 将在具体使用时设置
-        aux_scale_factor=args.aux_scale_factor,
-        e2e_latency=args.e2e_latency,
-        num_cores=args.num_cores,
-        num_bins=args.num_bins,
-        seed=args.seed if args.jitter_sim_en else None,
-        jitter=args.jitter_sim_en,
-        file_suffix=args.file_suffix,
-        i_file_suffix=args.i_file_suffix,
-        force_suffix=args.force_suffix,
-        csv_root=None  # 使用默认值
-    )
-    
-    return PathBuilder(ctx)
 
 def compare_paths(old_path, new_path, path_type=""):
     """
@@ -96,57 +70,12 @@ def compare_paths(old_path, new_path, path_type=""):
     else:
         print(f"✅ 路径匹配 ({path_type}): {old_path}")
 
-def setup_workload_and_args(args):
-    """
-    简单的包装函数，处理参数并生成workload
-    返回: (hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list, num_cores, cfg_para_dict, para_scan_group1, para_scan_group2, path_para_dict, bin_path_format, trace_path_para, plot_path_para, csv_xlxs_root, case_pth, path_builder)
-    """
-    # ======================== porcess arguments ========================
-    num_cores = args.num_cores
-    assert args.aux_scale_factor <= 9, "aux_scale_factor should be less than or equal to 9"
-
-    cfg_para_dict, para_scan_group1, para_scan_group2, path_para_dict, \
-    bin_path_format, trace_path_para, plot_path_para, csv_xlxs_root = args_postprocess(args)
-    case_pth = get_case_path_str(args)
-    
-    # 创建新的 PathBuilder 实例
-    ctx = PathContext(
-        root_dir=args.root_dir,
-        case=case_pth,
-        num_bins=args.num_bins,
-        aux_scale_factor=args.aux_scale_factor,
-        e2e_latency=args.e2e_latency,
-        exec_t_comp_ratioA=args.exec_t_comp_ratioA,
-        jitter_t_comp_ratio=args.jitter_t_comp_ratio,
-        wsc_slack_ratio=args.wsc_slack_ratio,
-        num_cores=args.num_cores,
-        exec_t_comp_ratioB=args.exec_t_comp_ratioB,
-        seed=args.seed,
-        jitter=args.jitter_sim_en
-    )
-    path_builder = PathBuilder(ctx)
-    
-    # 使用新方法生成 CSV 路径并比较
-    old_csv_root = csv_xlxs_root
-    new_csv_root = path_builder.csv_root()
-    compare_paths(old_csv_root, new_csv_root, "csv_root")
-    csv_xlxs_root = new_csv_root
-    csv_path_and_fn = os.path.join(csv_xlxs_root, 'coalescing_req_cores.csv')
-    check_parents_path(csv_path_and_fn)
-
-    # ======================== workload settings ========================
-    hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list = gen_workloads(args)
-    
-    return hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list, \
-        num_cores, cfg_para_dict, para_scan_group1, para_scan_group2, \
-        path_para_dict, bin_path_format, trace_path_para, \
-        plot_path_para, csv_path_and_fn, case_pth, path_builder
 
 def perform_bin_packing(args, glb_p_list, num_cores, trace_path_para, case_pth, hyper_p,
                         scheduler_args, sim_step, path_para_dict, para_scan_group1,
                         para_scan_group2, event_iter_dict, quantumSize, num_periods,
                         csv_path_and_fn, cfg_para_dict, physical_graph_nx,
-                        plot_path_para, path_builder):
+                        plot_path_para, path_ctx: PathContext):
     """
     执行 bin-packing 算法，生成调度表并保存
     """
@@ -159,7 +88,7 @@ def perform_bin_packing(args, glb_p_list, num_cores, trace_path_para, case_pth, 
             monitor_list, trace_path = create_common_scheduler_elements(
                 args, trace_path_para, case_pth, 
                 hyper_p, glb_p_list, scheduler_args, 
-                sim_step, bin_list, path_builder
+                sim_step, bin_list, path_ctx
                 )        
 
     print("sim_step: ", sim_step)
@@ -220,7 +149,7 @@ def perform_bin_packing(args, glb_p_list, num_cores, trace_path_para, case_pth, 
             _path_para_dict = {"root_dir": args.root_dir, "cfg_n": _cfg_n_t, 
                                "i_file_suffix": args.i_file_suffix,
                                "force_suffix": ""}
-            folder, files, match = get_core_num_from_trace_name(_path_para_dict, path_builder)
+            folder, files, match = get_core_num_from_trace_name(_path_para_dict, path_ctx)
             if not match:
                 return None, num_cores, glb_p_list, hyper_p
             args.num_cores = int(match.group(1)) 
@@ -298,14 +227,14 @@ def perform_bin_packing(args, glb_p_list, num_cores, trace_path_para, case_pth, 
 
 
     elif args.binpack_cfg["algorithm"] == "repack":
-        folder, files, match = get_core_num_from_trace_name(path_para_dict, path_builder)
+        folder, files, match = get_core_num_from_trace_name(path_para_dict, path_ctx)
         if not match:
             return None, num_cores, glb_p_list, hyper_p
         num_cores = int(match.group(1))
         
         # NOTE: repack 算法需要先加载 bin_list 文件，所以这里需要单独生成路径
         bin_list_save_path, _ = generate_bin_paths(
-            path_para_dict, path_builder, num_cores, "repack_initial"
+            path_para_dict, path_ctx, num_cores, "repack_initial"
         )
         bin_list = load_pickle(bin_list_save_path)
 
@@ -393,7 +322,7 @@ def perform_bin_packing(args, glb_p_list, num_cores, trace_path_para, case_pth, 
     else:
         extra_suffix = ""
     bin_list_save_path, routing_table_save_path = generate_bin_paths(
-        path_para_dict, path_builder, num_cores, "packing save path", 
+        path_para_dict, path_ctx, num_cores, "packing save path", 
         extra_suffix
     )
     Bin_list_print(bin_list, glb_p_list, sim_step)
@@ -404,10 +333,10 @@ def perform_bin_packing(args, glb_p_list, num_cores, trace_path_para, case_pth, 
         old_plot_path_cyclic = plt_fn_wo_seed_fmt.format(**plot_path_para, **{"case": "new_task_bin_pack", "plt_size": "cyclic"})
         old_plot_path_full = plt_fn_wo_seed_fmt.format(**plot_path_para, **{"case": "new_task_bin_pack", "plt_size": "full"})
         
-        # 使用新方法生成绘图路径
-        path_builder = path_builder.with_case("new_task_bin_pack")
-        new_plot_path_cyclic = path_builder.plot_path("cyclic")
-        new_plot_path_full = path_builder.plot_path("full")
+        # 使用新方法生成绘图路径（PathContext）
+        path_ctx.case = "new_task_bin_pack"
+        new_plot_path_cyclic = path_ctx.get_plot_path("cyclic")
+        new_plot_path_full = path_ctx.get_plot_path("full")
         
         # 比较路径
         compare_paths(old_plot_path_cyclic, new_plot_path_cyclic, "plot_path (cyclic)")
@@ -438,6 +367,28 @@ def perform_bin_packing(args, glb_p_list, num_cores, trace_path_para, case_pth, 
 # @pyinstr_profiler("main")
 def main(args: argparse.Namespace):
     # ======================== porcess arguments ========================
+    if args.force_num_cores and args.aux_scale_factor!= 9:
+        args.force_suffix="force_"
+    else:
+        args.force_suffix=""
+
+    enforce_wc = args.seed == -1 and args.jitter_sim_en
+    args.jitter_sim_para.update({"enforce_wc": enforce_wc})
+    args.exec_var_para.update({"enforce_wc": enforce_wc})
+
+    # assert all the process has hard deadline
+    if args.lateness_mode == "all_hard":
+        for _p in glb_p_list:
+            _p.task.criticality = "hard"
+            _p.task.chain_criticality = "hard"
+    elif args.lateness_mode == "all_soft":
+        for _p in glb_p_list:
+            _p.task.criticality = "soft"
+            _p.task.chain_criticality = "soft"
+    elif args.lateness_mode == "ignore":
+        pass
+
+
     num_cores = args.num_cores
     assert args.aux_scale_factor <= 9, "aux_scale_factor should be less than or equal to 9"
 
@@ -445,26 +396,33 @@ def main(args: argparse.Namespace):
     bin_path_format, trace_path_para, plot_path_para, csv_xlxs_root = args_postprocess(args)
     case_pth = get_case_path_str(args)
     
-    # 创建新的 PathBuilder 实例
-    ctx = PathContext(
+    # 创建 PathContext 实例
+    path_ctx = PathContext(
         root_dir=args.root_dir,
         case=case_pth,
         num_bins=args.num_bins,
         aux_scale_factor=args.aux_scale_factor,
         e2e_latency=args.e2e_latency,
+
+        file_suffix=args.file_suffix,
+        i_file_suffix=args.i_file_suffix,
+        force_suffix=args.force_suffix,
+        
         exec_t_comp_ratioA=args.exec_t_comp_ratioA,
         jitter_t_comp_ratio=args.jitter_t_comp_ratio,
         wsc_slack_ratio=args.wsc_slack_ratio,
+        lateness_mode=args.lateness_mode,
+
         num_cores=args.num_cores,
         exec_t_comp_ratioB=args.exec_t_comp_ratioB,
+        
         seed=args.seed,
         jitter=args.jitter_sim_en
     )
-    path_builder = PathBuilder(ctx)
     
     # 使用新方法生成 CSV 路径并比较
     old_csv_root = csv_xlxs_root
-    new_csv_root = path_builder.csv_root()
+    new_csv_root = path_ctx.csv_root
     compare_paths(old_csv_root, new_csv_root, "csv_root")
     csv_xlxs_root = new_csv_root
     csv_path_and_fn = os.path.join(csv_xlxs_root, 'coalescing_req_cores.csv')
@@ -482,17 +440,6 @@ def main(args: argparse.Namespace):
         "allow_realloc": args.allow_realloc,
     }
 
-    # assert all the process has hard deadline
-    if args.lateness_mode == "all_hard":
-        for _p in glb_p_list:
-            _p.task.criticality = "hard"
-            _p.task.chain_criticality = "hard"
-    elif args.lateness_mode == "all_soft":
-        for _p in glb_p_list:
-            _p.task.criticality = "soft"
-            _p.task.chain_criticality = "soft"
-    elif args.lateness_mode == "ignore":
-        pass
 
     # ======================== simlation settings ========================
     num_periods = args.n_p
@@ -518,7 +465,7 @@ def main(args: argparse.Namespace):
             scheduler_args, sim_step, path_para_dict, para_scan_group1,
             para_scan_group2, event_iter_dict, quantumSize, num_periods,
             csv_xlxs_root, cfg_para_dict, physical_graph_nx,
-            plot_path_para, path_builder
+            plot_path_para, path_ctx
         )
         if bin_list_save_path is None:
             return
@@ -538,7 +485,7 @@ def main(args: argparse.Namespace):
             ddl_update_iter = discrete_event_sim(args.e2e_var_sim_para['event_list'], 1, args.e2e_var_sim_para["period"], event_range, args.seed)
             ddl_stream = TaskQueue(sort_f=lambda x: x[0], descending=False)
             # check max number of bins
-            num_bins = check_max_bin_num(args, args.num_bins, bin_path_format, path_builder)
+            num_bins = check_max_bin_num(args, args.num_bins, bin_path_format, path_ctx)
         else:
             ddl_update_iter = None
             ddl_stream = None
@@ -546,11 +493,11 @@ def main(args: argparse.Namespace):
 
         if args.test_all or args.test_case in two_stage_case_coll:
             if "core_size" in args.binpack_cfg and args.binpack_cfg["core_size"] == "induced":
-                folder, files, match = get_core_num_from_trace_name(path_para_dict, path_builder)
+                folder, files, match = get_core_num_from_trace_name(path_para_dict, path_ctx)
                 if not match:
                     return
                 args.num_cores = num_cores = int(match.group(1))
-            bin_list_save_path, routing_table_save_path = generate_bin_paths(path_para_dict, path_builder, num_cores, "induced")
+            bin_list_save_path, routing_table_save_path = generate_bin_paths(path_para_dict, path_ctx, num_cores, "induced")
             plot_path_para['num_cores'] = num_cores
             trace_path_para['num_cores'] = num_cores
             bin_list = load_bin_list(bin_list_save_path, num_bins)
@@ -560,7 +507,7 @@ def main(args: argparse.Namespace):
                     monitor_list, trace_path = create_common_scheduler_elements(
                         args, trace_path_para, case_pth, 
                         hyper_p, glb_p_list, scheduler_args, 
-                        sim_step, bin_list, path_builder
+                        sim_step, bin_list, path_ctx
                         )        
 
             sensor_pipe = TriggerPipe(len(bin_list))
@@ -582,7 +529,7 @@ def main(args: argparse.Namespace):
                     msg_dispatcher,
                     sensor_pipe,
                     a_data_pipe, w_data_pipe, 
-                    path_builder,
+                    path_ctx,
                     args.verbose, warmup=True, drain=True, 
                     case=args.test_case,)
 
@@ -610,7 +557,7 @@ def main(args: argparse.Namespace):
                     monitor_list, trace_path = create_common_scheduler_elements(
                         args, trace_path_para, case_pth, 
                         hyper_p, glb_p_list, scheduler_args, 
-                        sim_step, bin_list, path_builder
+                        sim_step, bin_list, path_ctx
                         )        
 
             print("sim_step: ", sim_step)
@@ -649,24 +596,24 @@ def main(args: argparse.Namespace):
             else:
                 old_plot_path = plt_fn_w_seed_fmt.format(**plot_path_para, **{"case": case_pth, "plt_size": "full"})
             
-            # 使用新方法生成绘图路径
-            plot_path = path_builder.with_case(case_pth)
-            new_plot_path = plot_path.plot_path("full", with_seed=args.jitter_sim_en)
+            # 使用新方法生成绘图路径（直接使用 PathContext）
+            path_ctx.case = case_pth
+            new_plot_path = path_ctx.get_plot_path("full", with_seed=args.jitter_sim_en)
             
             # 比较路径
             compare_paths(old_plot_path, new_plot_path, f"plot_path ({case_pth})")
 
-            get_task_layout_compact1bin(actual_sched_record, pid2name, save= True, time_step= sim_step,
+            get_task_layout_compact1bin(actual_sched_record, pid2name, save= True, time_step= sim_step, 
             hyper_p=hyper_p, n_p=num_periods, warmup=True, drain=True, plot_legend=False, format=args.plt_fmt, 
-            txt_size=40, tick_dens=4, plot_start=0, save_path=plot_path)
+            txt_size=40, tick_dens=4, plot_start=0, save_path=new_plot_path)
 
         # save trace_list to trace_file
         # save_chunk(trace_path.replace(".pkl", ".h5"), trace_list, True)
         dump_and_check(trace_path, trace_list)
 
-def create_common_scheduler_elements(args, trace_path_para, case_pth, hyper_p, glb_p_list, scheduler_args, sim_step, bin_list, path_builder):
+def create_common_scheduler_elements(args, trace_path_para, case_pth, hyper_p, glb_p_list, scheduler_args, sim_step, bin_list, path_ctx: PathContext):
     # ======================== path settings ================
-    trace_path = get_trace_path(args, trace_path_para, case_pth, path_builder)
+    trace_path = get_trace_path(args, trace_path_para, case_pth, path_ctx)
     scheduler_args.update({"trace_path": trace_path})
     task_spec = Spec(0.1, [1 for _ in glb_p_list]) 
     # process_dict_list = [{pid:init_p_list[pid] for pid in _SchedTab.index_occupy_by_id()} for _SchedTab in bin_list]
@@ -682,27 +629,26 @@ def create_common_scheduler_elements(args, trace_path_para, case_pth, hyper_p, g
     monitor_list = [Monitor(_SchedTab.num_resources, int(3*hyper_p/sim_step), id=_SchedTab.id, name=_SchedTab.name) for _SchedTab in bin_list]
     return task_spec,rsc_list,msg_dispatcher,a_data_pipe,w_data_pipe,scheduler_list,monitor_list, trace_path
 
-def get_trace_path(args, trace_path_para, case_pth, path_builder):
+def get_trace_path(args, trace_path_para, case_pth, path_ctx: PathContext):
     # 使用旧方法生成路径
     if args.jitter_sim_en:
         old_trace_path = trace_fn_w_seed_fmt.format(**trace_path_para, **{"case": case_pth})
     else:
         old_trace_path = trace_fn_wo_seed_fmt.format(**trace_path_para, **{"case": case_pth})
     
-    # 使用新方法生成路径
-    path_builder = path_builder.with_case(case_pth)
-    new_trace_path = path_builder.trace_path()
+    path_ctx.case = case_pth
+    new_trace_path = path_ctx.get_trace_path()
     
     # 比较路径
     compare_paths(old_trace_path, new_trace_path, f"trace_path ({case_pth})")
     return new_trace_path
 
-def get_core_num_from_trace_name(path_para_dict, path_builder):
+def get_core_num_from_trace_name(path_para_dict, path_ctx: PathContext):
     # 使用旧方法生成路径
     old_folder = cache_root_fmt.format(**path_para_dict)
 
     # 使用新方法生成路径并比较
-    new_folder = path_builder.cache_root()
+    new_folder = path_ctx.cache_root
     compare_paths(old_folder, new_folder, "cache_root")
     folder = new_folder
 
@@ -710,7 +656,7 @@ def get_core_num_from_trace_name(path_para_dict, path_builder):
     old_bin_fn_regex = bin_fn_fmt.format(**path_para_dict, **{"num_cores": r"(\d*)"})
     
     # 使用新方法生成正则表达式
-    new_bin_fn_regex = path_builder.bin_fn_regex()
+    new_bin_fn_regex = path_ctx.get_bin_fn_regex()
     # 比较正则表达式
     compare_paths(old_bin_fn_regex, new_bin_fn_regex, "bin_fn_regex")
     bin_fn_regex = new_bin_fn_regex
@@ -724,15 +670,18 @@ def get_core_num_from_trace_name(path_para_dict, path_builder):
         print(f"!!! Warning: no bin_list file "+ bin_fn_regex +f" in {folder}:{files} !!!")
     return folder,files,match
 
-def check_max_bin_num(args, num_cores, bin_path_format, path_builder):
+def check_max_bin_num(args, num_cores, bin_path_format, path_ctx: PathContext):
     max_num_bins = 0
     for e2e_latency, aux_scale_factor in args.e2e_var_sim_para['event_list']:            
         # 使用旧方法生成路径
         old_bin_list_save_path = bin_path_format.format(aux_scale_factor, e2e_latency, num_cores)
         
-        # 使用新方法生成路径
-        new_path_builder = path_builder.with_load_params(aux_scale_factor, e2e_latency).with_num_cores(num_cores)
-        new_bin_list_save_path = new_path_builder.bin_list_path()
+        # 使用新方法生成路径（直接更新 ctx 并刷新）
+        path_ctx.aux_scale_factor = aux_scale_factor
+        path_ctx.e2e_latency = e2e_latency
+        path_ctx.refresh_config()
+        path_ctx.num_cores = num_cores
+        new_bin_list_save_path = path_ctx.get_bin_list_path()
         
         # 比较路径
         compare_paths(old_bin_list_save_path, new_bin_list_save_path, f"bin_list_save_path (e2e_var: {aux_scale_factor}, {e2e_latency})")
