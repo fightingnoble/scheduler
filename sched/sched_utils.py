@@ -229,8 +229,10 @@ def check_depends(task_list:List[ProcessInt])->List[ProcessInt]:
             print("		TASK {:d}:{:s}({:d}) is avtivated!!".format(_p.task.id, _p.task.name, _p.pid))
     return active
 
-def load_sched_tab(num_cores, e2e_latency:float, aux_scale_factor:int, bin_path_format:str, scheduler_list:List[Scheduler]):
-    bin_list_save_path = bin_path_format.format(aux_scale_factor, e2e_latency, num_cores)
+def load_sched_tab(num_cores, e2e_latency:float, aux_scale_factor:int, path_builder, scheduler_list:List[Scheduler]):
+    # 使用新方法生成路径
+    new_path_builder = path_builder.with_load_params(aux_scale_factor, e2e_latency).with_num_cores(num_cores)
+    bin_list_save_path = new_path_builder.bin_list_path()
     bin_list = load_pickle(bin_list_save_path)
     for _SchedTab, scheduler in zip(bin_list, scheduler_list):
         scheduler._SchedTab_L0 = _SchedTab

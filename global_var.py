@@ -1,4 +1,6 @@
 import math
+import os
+
 FLOPS_PER_CORE = 0.5
 
 overhead_pushpull_per_core = {0.6:83, 0.8:87,} # cycles
@@ -58,12 +60,18 @@ log_dir = "./log"
 plot_dir = "./plot"
 trace_dir = "./trace"
 cache_dir = "./cache"
+csv_dir = "./csv"
 
-import os 
+
 cfg_root_fmt = r"x{aux_scale_factor}_{e2e_latency}s_rda-{jitter_t_comp_ratio:.2%}(J)_{wsc_slack_ratio:.2%}(T)_{exec_t_comp_ratioA:.2%}(S)_ignore"
 cache_root_fmt = os.path.join(cache_dir, r"{root_dir}", r"{cfg_n}")
 plot_root_fmt = os.path.join(plot_dir, r"{root_dir}", r"{cfg_n}")
 trace_root_fmt = os.path.join(trace_dir, r"{root_dir}", r"{cfg_n}")
+
+# New root formats for logs/configs/csv (for new path builder)
+log_root_fmt = os.path.join(log_dir, r"{root_dir}", r"{cfg_n}")
+cfg_root_dir_fmt = os.path.join(cfg_dir, r"{root_dir}", r"{cfg_n}")
+csv_root_fmt = os.path.join(csv_dir, r"{root_dir}")
 
 bin_fn_fmt = r"bin_list_{force_suffix}{num_cores}{i_file_suffix}.pkl"
 routing_table_fn_fmt = r"routing_table_{force_suffix}{num_cores}{i_file_suffix}.pkl"

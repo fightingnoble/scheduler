@@ -162,6 +162,7 @@ def input_parser():
     # parser.add_argument("--progress_aware", default=False, action="store_true", help="consider the execution porgress")
     parser.add_argument("--allow_realloc", default=False, action="store_true", help="allow reallocation of resources amount")
     parser.add_argument("--G_decomp_mode", default="manual", type=str, help="mode: manual, full")
+    parser.add_argument("--policy", default="pglb", type=str, help="policy")
     args = parser.parse_args()
 
     jitter_sim_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['jitter'] 
@@ -244,8 +245,14 @@ def args_postprocess(args):
         plot_path_para.update({"seed": "-1"})
         trace_path_para.update({"seed": "-1"})
 
-    csv_xlxs_root = os.path.join(log_dir, root_dir)
+    csv_xlxs_root = get_csv_path_str(args)
     return cfg_para_dict,para_scan_group1,para_scan_group2,path_para_dict,bin_path_format,trace_path_para,plot_path_para,csv_xlxs_root
+
+def get_log_path_str(args):
+    return os.path.join(log_dir, args.root_dir)
+
+def get_csv_path_str(args):
+    return os.path.join(csv_dir, args.root_dir)
 
 def get_cfg_n(args):
     cfg_para_dict = {
@@ -350,6 +357,27 @@ def csv_fmt_check(filename, cols):
         df = pd.read_csv(filename)
         if set(df.columns) != set(cols):
             pd.DataFrame(columns=cols).to_csv(filename, index=False)
+
+# ---------------------------------------------------------------------------
+# New: path consistency helpers (to compare old vs new path building results)
+# ---------------------------------------------------------------------------
+
+def _normalize_path(p):
+    if p is None:
+        return None
+    return os.path.normpath(p)
+
+def check_paths_equal(old_path, new_path, label: str = ""):
+    """
+    Compare two paths (after normpath). If mismatch, print a clear diagnostic line.
+    This is a soft check used during migration. Return bool.
+    """
+    op = _normalize_path(old_path)
+    np_ = _normalize_path(new_path)
+    eq = (op == np_)
+    if not eq:
+        print(f"[PathCheck] {label} mismatch:\n  old: {op}\n  new: {np_}")
+    return eq
 
 def core_distr(rsc_map, score_dict, curr_aval_rsc, order_fn=lambda x:x[1], sort=True):
     sorted_score_dict = OrderedDict(sorted(score_dict.items(), key=order_fn) if sort else score_dict.items())

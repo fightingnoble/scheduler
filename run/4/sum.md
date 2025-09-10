@@ -26,7 +26,7 @@ e2e_latency=0.1                                     # 端到端延迟（秒）
 aux_scale_factor=4                                  # 辅助缩放因子
 test_case="bin_pack_new"                            # 固定
 num_bins=-1                                         # bin数量，-1表示自动
-root_dir="new_scan/n_bins_max"               # 结果输出根目录
+root_dir="new_scan/n_bins_max"                      # 结果输出根目录
 bin_pack_cfg="Bp_split.json"                        # bin packing配置文件
 
 python sim_main.py {plot_flag}\
