@@ -10,6 +10,7 @@ from approach_def import (
     Sen_p, 
     MyGraph, 
     GlobalEvent_t, 
+    print_if_verbose,
 )
 from approach_sched import acc_p_factory, PartitionConfig
 from approach_collector import StatisticsCollector
@@ -169,7 +170,7 @@ def instantiate_mygraph_from_json(json_path, time_norm_factor):
     G = MyGraph(srcs, ops, sinks, task_attr, src_attr, sink_attr)
     return G, pid2name
 
-def instantiate_processors(G, partition_cfg, event_t, policy="glb"):
+def instantiate_processors(G, partition_cfg: PartitionConfig, event_t, policy:str=None):
     # 创建传感器处理器，使用动态映射模式
     src_nodes = [n for n, x in G.logical_graph.in_degree() if x == 0]
     stats_collector = StatisticsCollector()
@@ -181,3 +182,33 @@ def instantiate_processors(G, partition_cfg, event_t, policy="glb"):
     event_t = GlobalEvent_t(event_t)
     return processors, event_t, stats_collector
 
+def initialize_events(policy: str, G: MyGraph, TSMap_list: list) -> set:
+    """
+    Initializes the event set based on the scheduling policy.
+    """
+    event_t = set()
+    # 1. Common events: all policies have external events from sensor triggers
+    for node in [n_ for n_ in G.logical_graph.nodes if G.logical_graph.nodes[n_]['type'] == "src"]:
+        t = elim_nume_error(G.logical_graph.nodes[node]['offset'])
+        event_t.add((t, "external"))
+        print_if_verbose(f"SRC node {node}'s 0th event at {t}")
+
+    # 2. Policy-specific events
+    if policy == "cyc":
+        # Cyclic scheduling has table-driven events
+        for TSmap in TSMap_list:
+            if TSmap:
+                for t, cfg in TSmap:
+                    event_t.add((t, "table"))
+        print_if_verbose(f"Initialized table events for CYC policy.")
+
+    elif policy == "reserv":
+        # Reservation-based scheduling also considers earliest release times (ert)
+        for node in [n_ for n_ in G.logical_graph.nodes if G.logical_graph.nodes[n_]['type'] == "op"]:
+            t = elim_nume_error(G.logical_graph.nodes[node]['ert'])
+            event_t.add((t, "external")) # Can be treated as an external trigger
+            print_if_verbose(f"OP node {node}'s ert event at {t}")
+    
+    # 'pglb' does not have additional specific events initially.
+    
+    return event_t
