@@ -964,8 +964,7 @@ def new_bin(spatial_size:int, temporal_size:int, id:int = 0, name:str = "bin"):
     SchedTab = SchedulingTableInt(spatial_size, temporal_size, id=id, name=name)
     return SchedTab
             
-def load_bin_list(bin_list_save_path, min_num_bins=-1):
-    bin_list = load_pickle(bin_list_save_path)
+def extend_dummy_bins(bin_list, min_num_bins=-1):
     min_num_bins = len(bin_list) if min_num_bins == -1 else min_num_bins
     for bin_id in range(min_num_bins):
         if bin_id >= len(bin_list):

@@ -196,7 +196,7 @@ def input_parser():
     args.plt_fmt = args.plot_fmt.split(",")
     return args
 
-def args_postprocess(args):
+def build_path_old(args):
     root_dir = args.root_dir
     args.binpack_cfg.update({"exec_t_comp_ratioB": args.exec_t_comp_ratioB}) 
     para_scan_group2 = {"num_cores": args.num_cores}

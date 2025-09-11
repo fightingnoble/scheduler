@@ -62,3 +62,14 @@ Add: 更新了可执行任务过滤逻辑
         otherwise, all the tasks will be dropped for timeout.
     filter ert < curr_t task if reserve
     filter R task
+
+## 20250910
+- 统一强制核数逻辑（force_num_cores）：抽取 `apply_forced_num_cores`，适配单/多分区
+- 抽取绘图封装：`render_bin_pack_plots` 与 `render_runtime_full_plot`，减少重复
+- CSV 初始化统一：新增 `ensure_csv`，替换分支内重复 DataFrame 初始化
+- 修复：`bin_split` 分支调用 `get_core_num_from_trace_name` 时缺少 `path_ctx`
+- 统一 runtime induced 环境准备：新增 `prepare_induced_env_if_needed`，收敛核数解析/路径生成/加载 bin_list，替换两阶段分支重复逻辑
+
+## 20250911
+- 新增 API 函数：`build_paths_and_ctx`、`build_workload_and_criticality`、`build_scheduler_elements`、`build_simulation_env`，支持 `approach_setup` 复用
+- 重构 `main` 函数：使用新 API 函数替换原有代码段，保持功能不变

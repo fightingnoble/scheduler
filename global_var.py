@@ -98,7 +98,7 @@ case_suffix_N_barrier = r"_barrier_dis"
 
 case_name_bp_input = r"bin_pack_new"
 case_name_glb_input = r"glb_dynamic"
-other_case_coll = [case_name_glb_input]
+one_stage_case_coll = [case_name_glb_input]
 
 case_name_dyn_input = r"dynamic"
 case_name_cyc_input = r"cyclic"
