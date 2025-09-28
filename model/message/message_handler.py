@@ -1,5 +1,4 @@
 from __future__ import annotations
-from scipy.stats import truncnorm
 from typing import List, Dict, Union, Generator
 from typing import TYPE_CHECKING
 from global_var import *

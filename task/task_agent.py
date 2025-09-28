@@ -12,7 +12,6 @@ import bisect
 import copy
 import numpy as np
 import math
-from scipy.stats import truncnorm
 
 from global_var import *
 from model.message.Context_message import ContextMsg
@@ -675,7 +674,7 @@ class TaskAttr:
     core_list_compile: List[int] = None  # Core list for compilation
     thread_scaling_factor: int = 1  # Thread scaling factor
     freq_division_factor: int = 1  # Frequency division factor
-    var_factor: int = 1  # Variable factor
+    var_factor: List[int] = field(default_factory=lambda: [1])  # Variable factor
 
     jitter_max: int = 0  # Maximum jitter
 
@@ -740,7 +739,7 @@ class TaskBase(object):
 
         self.thread_scaling_factor = 1
         self.freq_division_factor = 1
-        self.var_factor = 1
+        self.var_factor = [1]
 
         self.jitter_max = jitter_max # max jitter
 

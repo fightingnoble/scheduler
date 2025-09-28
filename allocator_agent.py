@@ -771,7 +771,7 @@ if __name__ == "__main__":
             bin_list,
             glb_p_list, affinity_cfg, event_iter_dict,
             num_cores, args.quantum_check_en, quantumSize, 
-            sim_step, hyper_p, args.jitter_t_comp_ratio, args.exec_t_comp_ratioA,
+            sim_step, hyper_p, args.exec_t_comp_ratioA,
 
             scheduler_list, monitor_list,
             msg_dispatcher,

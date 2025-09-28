@@ -62,8 +62,9 @@ trace_dir = "./trace"
 cache_dir = "./cache"
 csv_dir = "./csv"
 
+ld_fmt = r"x{aux_scale_factor}_{e2e_latency}s"
 
-cfg_root_fmt = r"x{aux_scale_factor}_{e2e_latency}s_rda-{jitter_t_comp_ratio:.2%}(J)_{wsc_slack_ratio:.2%}(T)_{exec_t_comp_ratioA:.2%}(S)_ignore"
+cfg_root_fmt = r"x{aux_scale_factor}_{e2e_latency}s_rda-{exec_t_comp_ratioA:.2%}(S)_{lateness_mode:s}"
 cache_root_fmt = os.path.join(cache_dir, r"{root_dir}", r"{cfg_n}")
 plot_root_fmt = os.path.join(plot_dir, r"{root_dir}", r"{cfg_n}")
 trace_root_fmt = os.path.join(trace_dir, r"{root_dir}", r"{cfg_n}")

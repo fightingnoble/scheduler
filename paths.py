@@ -6,7 +6,7 @@ from global_var import (
   trace_fn_w_seed_fmt, trace_fn_wo_seed_fmt,
   plt_fn_w_seed_fmt, plt_fn_wo_seed_fmt,
   csv_root_fmt, trace_root_fmt, plot_root_fmt, cfg_root_fmt,
-  log_root_fmt, cfg_root_dir_fmt
+  log_root_fmt, cfg_root_dir_fmt, ld_fmt
 )
 
 
@@ -30,8 +30,6 @@ class PathContext:
 
     # compensation parameters, affect core count
     exec_t_comp_ratioA: float
-    jitter_t_comp_ratio: float
-    wsc_slack_ratio: float
     lateness_mode: str 
 
     num_cores: int
@@ -50,26 +48,32 @@ class PathContext:
     plot_root: str = field(init=False)
     log_root: str = field(init=False)
     cfg_root_dir: str = field(init=False)
-
+    graph_fn: str = field(init=False)
     cfg_n: str = field(init=False)
+    
 
     def __post_init__(self):
         """generate static paths, reduce dependencies on utils.py"""
         self.refresh_config()
 
+    def _ensure_dir_exists(self, path: str) -> None:
+        """确保路径的目录存在，如果不存在则创建。"""
+        dir_path = os.path.dirname(path)
+        if dir_path and not os.path.exists(dir_path):
+            os.makedirs(dir_path, exist_ok=True)
+
     def refresh_config(self):
         """根据影响 cfg_n 的字段刷新配置名与静态路径。"""
         cfg_para_dict = {
-            "wsc_slack_ratio": self.wsc_slack_ratio,
             "exec_t_comp_ratioA": self.exec_t_comp_ratioA,
             "lateness_mode": self.lateness_mode,
-            "jitter_t_comp_ratio": self.jitter_t_comp_ratio,
         }
         para_scan_group1 = {
             "aux_scale_factor": self.aux_scale_factor,
             "e2e_latency": self.e2e_latency
         }
         self.cfg_n = cfg_root_fmt.format(**cfg_para_dict, **para_scan_group1)
+        self.graph_fn = ld_fmt.format(**para_scan_group1)
 
         # init static paths
         self.cache_root = cache_root_fmt.format(root_dir=self.root_dir, cfg_n=self.cfg_n)
@@ -78,6 +82,12 @@ class PathContext:
         self.log_root = log_root_fmt.format(root_dir=self.root_dir, cfg_n=self.cfg_n)
         self.cfg_root_dir = cfg_root_dir_fmt.format(root_dir=self.root_dir, cfg_n=self.cfg_n)
         self.csv_root = csv_root_fmt.format(root_dir=self.root_dir)
+        self.graph_fn = os.path.join(self.cache_root, f"graph_{self.graph_fn}.json")
+
+        # create path folders
+        for path in [self.cache_root, self.trace_root, self.plot_root, self.log_root, self.cfg_root_dir, self.csv_root]:
+            if not os.path.exists(path):
+                os.makedirs(path, exist_ok=True)
 
     # ---------- Path helpers on context ----------
     def get_bin_list_path(self) -> str:
@@ -88,7 +98,9 @@ class PathContext:
             "num_cores": self.num_cores,
             "i_file_suffix": self.i_file_suffix,
         }
-        return bin_save_fmt.format(**params)
+        path = bin_save_fmt.format(**params)
+        self._ensure_dir_exists(path)
+        return path
 
     def get_routing_table_path(self) -> str:
         params = {
@@ -98,7 +110,9 @@ class PathContext:
             "i_file_suffix": self.i_file_suffix,
             "force_suffix": self.force_suffix,
         }
-        return routing_table_save_fmt.format(**params)
+        path = routing_table_save_fmt.format(**params)
+        self._ensure_dir_exists(path)
+        return path
 
     def get_bin_fn_regex(self) -> str:
         return bin_fn_fmt.format(num_cores=r"(\d*)", force_suffix=self.force_suffix, i_file_suffix=self.i_file_suffix)
@@ -113,7 +127,9 @@ class PathContext:
             "seed": self.seed,
             "file_suffix": self.file_suffix,
         }
-        return fmt.format(**params)
+        path = fmt.format(**params)
+        self._ensure_dir_exists(path)
+        return path
 
     def get_plot_path(self, plt_size: str, case: Optional[str] = None, with_seed: Optional[bool] = None) -> str:
         fmt = plt_fn_w_seed_fmt if (self.jitter if with_seed is None else with_seed) else plt_fn_wo_seed_fmt
@@ -126,15 +142,30 @@ class PathContext:
             "seed": self.seed,
             "file_suffix": self.file_suffix,
         }
-        return fmt.format(**params)
+        path = fmt.format(**params)
+        self._ensure_dir_exists(path)
+        return path
 
     def get_csv_path(self, name: str) -> str:
-        return os.path.join(self.csv_root, name)
+        path = os.path.join(self.csv_root, name)
+        self._ensure_dir_exists(path)
+        return path
 
     def get_log_path(self, case: Optional[str] = None) -> str:
         case_name = case or self.case
         filename = f"{case_name}_{self.force_suffix}{self.num_cores}{self.file_suffix}.log.txt"
-        return os.path.join(self.log_root, filename)
+        path = os.path.join(self.log_root, filename)
+        self._ensure_dir_exists(path)
+        return path
+    
+    def get_stat_log_path(self, case: Optional[str] = None) -> str:
+        case_name = case or self.case
+        filename = f"stat_{case_name}_{self.force_suffix}{self.num_cores}{self.file_suffix}.txt"
+        path = os.path.join(self.log_root, filename)
+        self._ensure_dir_exists(path)
+        return path
 
     def get_cfg_path(self, cfg_name: str) -> str:
-        return os.path.join(self.cfg_root_dir, cfg_name)
+        path = os.path.join(self.cfg_root_dir, cfg_name)
+        self._ensure_dir_exists(path)
+        return path

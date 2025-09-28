@@ -79,8 +79,8 @@ class ClusterGurobiSolverSemi2D:
                     # print(f"remove {i}")
         self.util = {}
         self.usage = {}
-        if self.mode != "mux_min_nbin": 
-            self.bin_size = {}
+        # if self.mode != "mux_min_nbin": 
+        self.bin_size = {}
         
 
     def create_variables(self):
@@ -101,10 +101,10 @@ class ClusterGurobiSolverSemi2D:
         
         if self.mode == "mux_min_nbin": 
             self.bin_sel = self.model.addVars(self.M, vtype=GRB.BINARY, name="bin_sel") 
-        else: 
-            self.tot_size = self.model.addVar(lb=0, ub=self.max_size, vtype=GRB.INTEGER, name="tot_size")
-            for m in range(self.M):
-                self.bin_size[m] = self.model.addVar(lb=0, ub=self.max_size, vtype=GRB.INTEGER, name=f'bin_{m}_size')
+        # else: 
+        self.tot_size = self.model.addVar(lb=0, ub=self.max_size, vtype=GRB.INTEGER, name="tot_size")
+        for m in range(self.M):
+            self.bin_size[m] = self.model.addVar(lb=0, ub=self.max_size, vtype=GRB.INTEGER, name=f'bin_{m}_size')
                     
     def create_constraints(self):
         try:
@@ -133,11 +133,10 @@ class ClusterGurobiSolverSemi2D:
                         self.model.addConstr(
                             gp.quicksum([self.x[i, m] for i in item_idx]) + is_pre_selected <= self.bin_sel[m],
                             name=f'bin_{m}_selected_once_constr_Prob{j}')
-            else: 
-                for m in range(self.M):
-                    self.model.addGenConstrMax(self.bin_size[m], [self.usage[j, m] for j in range(self.J)]
-                                            , name=f'bin_{m}_size_constr')
-                self.model.addConstr(self.tot_size == gp.quicksum(self.bin_size[m] for m in range(self.M)), name="tot_size_constr")
+            for m in range(self.M):
+                self.model.addGenConstrMax(self.bin_size[m], [self.usage[j, m] for j in range(self.J)]
+                                        , name=f'bin_{m}_size_constr')
+            self.model.addConstr(self.tot_size == gp.quicksum(self.bin_size[m] for m in range(self.M)), name="tot_size_constr")
 
             # calculate the affinity score
             if self.N > 0:
@@ -164,6 +163,7 @@ class ClusterGurobiSolverSemi2D:
             self.model.setObjectiveN(self.tot_size, index=0, priority=2, name="min_tot_size")
         else:
             self.model.setObjectiveN(gp.quicksum(self.bin_sel[m] for m in range(self.M)), index=0, priority=2, name="min_nbin")
+            self.model.setObjectiveN(self.tot_size, index=0, priority=2, name="min_tot_size")
         self.model.setObjectiveN(-self.affinity_score, index=1, priority=1, name="max_affinity_score")
         self.model.setObjectiveN(self.max_util-self.min_util, index=2, priority=0, name="util")
         try:
@@ -183,11 +183,11 @@ class ClusterGurobiSolverSemi2D:
                     for m in range(self.M):
                         if self.x[pid, m].X > 0:
                             sel[pid]=m
-                if self.mode == "mux_min_nbin": 
-                    # bin_size = [max([self.x[i, m] * size_ for i, size_ in self.Items_tbd_size.items()]) for m in range(self.M)]
-                    bin_size = [round(max([self.usage[j, m].X for j in range(self.J)])) for m in range(self.M)]
-                else: 
-                    bin_size = [round(self.bin_size[m].X) for m in range(self.M)]
+                # if self.mode == "mux_min_nbin": 
+                #     # bin_size = [max([self.x[i, m] * size_ for i, size_ in self.Items_tbd_size.items()]) for m in range(self.M)]
+                #     bin_size = [round(max([self.usage[j, m].X for j in range(self.J)])) for m in range(self.M)]
+                # else: 
+                bin_size = [round(self.bin_size[m].X) for m in range(self.M)]
                 return sel, bin_size
             elif status == GRB.INF_OR_UNBD or status == GRB.INFEASIBLE:
                 print('Optimization was stopped with status %d' % status)

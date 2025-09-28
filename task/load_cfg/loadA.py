@@ -13,8 +13,8 @@ task_graph_sinks = {
     "Sink_screen": [],
 }
 task_sink_attr={
-    "Sink_control": "deadline",
-    "Sink_screen": "realtime"
+    "Sink_control": ["deadline", float("nan")],
+    "Sink_screen": ["realtime", float("nan")]
 }
 task_src_attr={
     "LiDAR_pub": 10,

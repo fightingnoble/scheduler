@@ -1,4 +1,5 @@
 from __future__ import annotations
+from itertools import chain
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from task.task_agent import ProcessInt
@@ -49,7 +50,7 @@ def push_task_into_bins_new(
         bin_list: List[SchedulingTableInt], 
         glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,
         total_cores:int, quantum_check_en, quantumSize, 
-        timestep, hyper_p, wsc_slack_ratio, exec_t_comp_ratioB,
+        timestep, hyper_p, exec_t_comp_ratioB,
 
         scheduler_list: List[Scheduler], monitor_list:List[Monitor],
         msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
@@ -287,7 +288,7 @@ def naive_iso(
         bin_list: List[SchedulingTableInt], 
         glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,
         total_cores:int, quantum_check_en, quantumSize, 
-        timestep, hyper_p, wsc_slack_ratio, exec_t_comp_ratioB,
+        timestep, hyper_p, exec_t_comp_ratioB,
 
         scheduler_list: List[Scheduler], monitor_list:List[Monitor],
         msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
@@ -324,7 +325,7 @@ def test_mem_planner(
         bin_list: List[SchedulingTableInt], 
         glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,
         total_cores:int, quantum_check_en, quantumSize, 
-        timestep, hyper_p, wsc_slack_ratio, exec_t_comp_ratioB,
+        timestep, hyper_p, exec_t_comp_ratioB,
 
         scheduler_list: List[Scheduler], monitor_list:List[Monitor],
         msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
@@ -382,7 +383,7 @@ def coleasing_alloc_1bin(
         bin_list: List[SchedulingTableInt], 
         glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,
         total_cores:int, quantum_check_en, quantumSize, 
-        timestep, hyper_p, wsc_slack_ratio, exec_t_comp_ratioB,
+        timestep, hyper_p, exec_t_comp_ratioB,
 
         scheduler_list: List[Scheduler], monitor_list:List[Monitor],
         msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
@@ -568,19 +569,23 @@ def coleasing_alloc_1bin(
     
     # sparsify the Scheduling table
     # initialize the interval info: slot_s, slot_e, core_size, flops
-    # _bin.to_sparse_dict()
     _bin.alloc_mod = "compress"
     
-    print("max_core_layout:", max_core_layout)
     assert max_core_num == sum(max_core_layout[1].values()), "max_core_num should be equal to the sum of the core size of the current items"
+    _bin.to_sparse_dict()
+
+    bin_size_list = {_bin.id: _bin.num_resources}
+    pid2_bin_id = {p.pid: _bin.id for p in glb_p_list}
     print("max_core_num:", max_core_num)
-    return max_core_layout
+    print(f"max_core_layout: {bin_size_list}: \n {max_core_layout}")
+    print(f"pid2_bin_id: all in one bin")
+    return max_core_num, pid2_bin_id, bin_size_list
 
 def coleasing_alloc_cluster(
         bin_list: List[SchedulingTableInt], 
         glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,
         total_cores:int, quantum_check_en, quantumSize, 
-        timestep, hyper_p, wsc_slack_ratio, exec_t_comp_ratioB,
+        timestep, hyper_p, exec_t_comp_ratioB,
 
         scheduler_list: List[Scheduler], monitor_list:List[Monitor],
         msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
@@ -594,11 +599,11 @@ def coleasing_alloc_cluster(
         warmup=False, drain=False,                     
 ):
 
-    max_core_layout = coleasing_alloc_1bin(
+    max_core_num, pid2_bin_id, bin_size_list = coleasing_alloc_1bin(
         bin_list,
         glb_p_list, affinity, event_iter_dict,
         total_cores, quantum_check_en, quantumSize, 
-        timestep, hyper_p, wsc_slack_ratio, exec_t_comp_ratioB,
+        timestep, hyper_p, exec_t_comp_ratioB,
 
         scheduler_list, monitor_list,
         msg_dispatcher,
@@ -609,13 +614,17 @@ def coleasing_alloc_cluster(
         verbose, DEBUG_FG,
         warmup=warmup, drain=drain
         )
+
+    # bypass clustering when target partition number is 1 or less
+    if n_partition == 1:
+        return max_core_num, pid2_bin_id, bin_size_list
+
     # split the bin
     sim_range = hyper_p * (n_p+warmup+drain)
     sim_slot_num = int(sim_range/timestep)
     tab_spatial_size = total_cores
     assert len(bin_list) == 1
     _bin_tb_split = bin_list[0]
-    process_dict = OrderedDict(sorted([(p.pid, p) for p in glb_p_list]))
 
     def _new_bin(id, size=tab_spatial_size, name=None): 
         if name is None:
@@ -624,18 +633,31 @@ def coleasing_alloc_cluster(
         return new_bin(size, sim_slot_num, id=id, name=name)
 
     # use a gurobi solver to determine the placement of the tasks
-    placed_p, bin_name_list, sol, bin_size = gurobi_split_solver(glb_p_list, n_partition, _bin_tb_split, job_graph)
+    src_nodes = [n for n, x in job_graph.in_degree() if x == 0]
+    end_nodes = [n for n, x in job_graph.out_degree() if x == 0]
+    process_dict = OrderedDict(sorted([(p.pid, p) for p in glb_p_list]))
+    task_dict = {_p.task.name: _p.task for _p in process_dict.values()}
+    node_var_dists = [job_graph.nodes[p.task.name]['var_dist'] for p in glb_p_list]
+
+    sorted_chains = get_chains(job_graph, src_nodes, end_nodes, task_dict, 
+                            quantile=exec_t_comp_ratioB,
+                            node_var_dists=node_var_dists,
+                            remove_src_sink=True)
+
+    placed_p, bin_name_list, sol, bin_size = gurobi_split_solver(
+        glb_p_list, n_partition, _bin_tb_split, job_graph, sorted_chains
+    )
 
     update_bp_result2_schedtab(bin_list, _bin_tb_split, _new_bin, bin_name_list, sol, bin_size)
 
     # layout format: start slot, allocation map, duation slot
     bin_size_list = {_bin.id:_bin.num_resources for _bin in bin_list}
     pid2_bin_id = sol
-    print("max_core_num:", sum(bin_size_list.values()))
+    max_core_num = sum(bin_size_list.values())
+    print("max_core_num:", max_core_num)
     print(f"max_core_layout: {bin_size_list}")
     print(f"pid2_bin_id: {pid2_bin_id}")
-    max_core_num = sum(bin_size_list.values())
-    return pid2_bin_id, bin_size_list
+    return max_core_num, pid2_bin_id, bin_size_list
 
 def update_bp_result2_schedtab(bin_list, _bin_tb_split, _new_bin, bin_name_list, sel, bin_size):
 
@@ -650,7 +672,6 @@ def update_bp_result2_schedtab(bin_list, _bin_tb_split, _new_bin, bin_name_list,
             _bin.allocate(pid, [cfg_slot_s,], [size,], [cfg_slot_num,], False)
     # for _bin in planed_bin_list:
     #     _bin: SchedulingTableInt
-    #     _bin.to_sparse_dict()
     
     # rebuild the sparse_cores and sparse_flops
     for cores, flops, cfgs in zip(_bin_tb_split.sparse_cores, _bin_tb_split.sparse_flops, _bin_tb_split.sparse_list):
@@ -735,9 +756,8 @@ def update_bp_result2_schedtab(bin_list, _bin_tb_split, _new_bin, bin_name_list,
     bin_list.clear()
     bin_list.extend(planed_bin_list)
 
-def gurobi_split_solver(glb_p_list, n_partition, _bin_tb_split, job_graph):
+def gurobi_split_solver(glb_p_list, n_partition, _bin_tb_split, job_graph, sorted_chains):
 
-    _bin_tb_split.to_sparse_dict()
     probs = [list(cfg.keys()) for slot_s, cfg, slot_num in _bin_tb_split.sparse_list]
     J = len(probs)
     duation = [slot_num for slot_s, cfg, slot_num in _bin_tb_split.sparse_list]
@@ -745,15 +765,13 @@ def gurobi_split_solver(glb_p_list, n_partition, _bin_tb_split, job_graph):
     assert affinity_mode in ["manual", "search", "greedy"]
     # collect used items from problems
     col_pid = set(reduce(lambda x,y: x+y, probs))
-    src_nodes = [n for n, x in job_graph.in_degree() if x == 0]
-    end_nodes = [n for n, x in job_graph.out_degree() if x == 0]
     
     if n_partition == partition_max:
-        bin_name_list,affinity_dict1, affinity_dict2, placed_p, tbd_p = build_search_obj(glb_p_list, job_graph, src_nodes, end_nodes, col_pid)
+        bin_name_list,affinity_dict1, affinity_dict2, placed_p, tbd_p = build_search_obj(glb_p_list, sorted_chains, job_graph, col_pid)
         
         gurobi_obj = "mux_min_nbin"
     else: 
-        bin_name_list,affinity_dict1, affinity_dict2, placed_p, tbd_p = build_greedy_obj(n_partition, glb_p_list, job_graph, src_nodes, end_nodes, col_pid)
+        bin_name_list,affinity_dict1, affinity_dict2, placed_p, tbd_p = build_greedy_obj(n_partition, glb_p_list, sorted_chains, col_pid)
         gurobi_obj = "colocate_fix_nbin_min_size"
 
     M = len(bin_name_list)
@@ -807,30 +825,30 @@ def rename_bins_and_relable_assignments(glb_p_list, placed_p, tbd_p, M, sel, bin
     sel = {pid:bin_name_list.index(pid2_bin_name[pid]) for pid in sel}
     return sel,bin_size,bin_name_list
 
-def build_greedy_obj(n_partition, glb_p_list, job_graph, src_nodes, end_nodes, col_pid):
+def build_greedy_obj(
+        n_partition, glb_p_list, sorted_chains, 
+        col_pid):
     placed_p, tbd_p = {}, {}
     affinity_dict1, affinity_dict2 = {}, {}
     process_dict = OrderedDict(sorted([(p.pid, p) for p in glb_p_list]))
     name2pid = {p.task.name:p.pid for p in glb_p_list}
-        # generate the bin name list, 
-        # for the chain that contain the node allowed to start a new bin, 
-        # occupy the a quota to use a bin. Continue this process until the quota of bin creation is exhausted.
-        # If a node located in a chain that has already been placed in a bin, mark it as placed.
-        # otherwise, mark it as tbd.
-    rt_chains, ddl_chains = get_chains(job_graph, src_nodes, end_nodes, {
-            _p.task.name:_p.task.flops for pid, _p in process_dict.items()
-        })
+    # generate the bin name list, 
+    # for the chain that contain the node allowed to start a new bin, 
+    # occupy the a quota to use a bin. Continue this process until the quota of bin creation is exhausted.
+    # If a node located in a chain that has already been placed in a bin, mark it as placed.
+    # otherwise, mark it as tbd.
         
-        # create bins
-        # get allowed Bin names and sizes
+    # create bins
+    # get allowed Bin names and sizes
     allowed_bin_name = []
     for _p in glb_p_list:
         if _p.task.pre_assigned_resource_flag:
             allowed_bin_name.append(_p.task.name)
             
     bin_name_list = []
-    for chain, tot_ops, slack in ddl_chains+rt_chains:
-            # check if the chain is allowed to start a new bin, and occupy the quota
+    for info in sorted_chains:
+        # check if the chain is allowed to start a new bin, and occupy the quota
+        chain = info["chain_nodes"]
         tgt_bin_id = None
         for node in chain:
             pid = name2pid[node]
@@ -865,26 +883,26 @@ def build_greedy_obj(n_partition, glb_p_list, job_graph, src_nodes, end_nodes, c
 
     return bin_name_list,affinity_dict1, affinity_dict2, placed_p, tbd_p
 
-def build_search_obj(glb_p_list, job_graph, src_nodes, end_nodes, col_pid): 
+def build_search_obj(
+    glb_p_list, sorted_chains, 
+        job_graph, col_pid): 
 
     placed_p, tbd_p = {}, {}
     affinity_dict1, affinity_dict2 = {}, {}
     process_dict = OrderedDict(sorted([(p.pid, p) for p in glb_p_list]))
     name2pid = {p.task.name:p.pid for p in glb_p_list}
-        # initialize a bin list 
-    rt_chains, ddl_chains = get_chains(job_graph, src_nodes, end_nodes, {
-            _p.task.name:_p.task.flops for pid, _p in process_dict.items()
-        })
-        
-        # create bins
-        # get allowed Bin names and sizes
-        # find the largest item on each chain
+    # create bins
+    # get allowed Bin names and sizes
+    # find the largest item on each chain
     used = []
     bin_name_list = []
+    end_nodes = [n for n, x in job_graph.out_degree() if x == 0]
+    src_nodes = [n for n, x in job_graph.in_degree() if x == 0]
     size_dict = {x: process_dict[name2pid[x]].task.pre_assigned_resource.main_size\
-            +process_dict[name2pid[x]].task.pre_assigned_resource.RDA_size 
-                        for x in job_graph.nodes if x not in end_nodes and x not in src_nodes}
-    for chain, tot_ops, slack in ddl_chains+rt_chains:
+             +process_dict[name2pid[x]].task.pre_assigned_resource.RDA_size 
+                         for x in job_graph.nodes if x not in end_nodes and x not in src_nodes}
+    for info in sorted_chains:
+        chain = info["chain_nodes"]
         free_nodes = [x for x in chain if x not in used]
         if free_nodes:
             bgest = max(free_nodes, key=lambda x: size_dict[x])

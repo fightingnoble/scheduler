@@ -125,8 +125,8 @@ class SchedulerBase:
         
         for i in range(self.num_src):
             sen_period.append(1/self.graph.nodes[self.node_list[i]]['freq'])
-            ft_ratio.append(self.graph.nodes[self.node_list[i]]['comp_ratio'])
-            ft_offset.append(self.graph.nodes[self.node_list[i]]['comp_ratio']/self.graph.nodes[self.node_list[i]]['freq'])
+            # ft_ratio.append(self.graph.nodes[self.node_list[i]]['comp_ratio'])
+            # ft_offset.append(self.graph.nodes[self.node_list[i]]['comp_ratio']/self.graph.nodes[self.node_list[i]]['freq'])
         sen_period = torch.tensor(sen_period)
         ft_ratio = torch.tensor(ft_ratio)
         ft_ref = torch.tensor(ft_offset)
@@ -151,9 +151,11 @@ class SchedulerBase:
         ld_standard = torch.tensor([self.graph.nodes[self.node_list[i]]['flops']/FLOPS_PER_CORE for i in range(self.num_src, self.num_tasks)])
         for i in range(self.num_src, self.num_tasks):
             # middle nodes
-            k = self.graph.nodes[self.node_list[i]]['var_factor']
-            # 0, 1, ..., k 
-            assert k+1 <= self.cat_num
+            var_factor_list = self.graph.nodes[self.node_list[i]]['var_factor']
+            # var_factor is now a list, get the length
+            k = len(var_factor_list)
+            # 0, 1, ..., k-1 
+            assert k <= self.cat_num
             # poisson_cdf(i)/sum_i^{k+1} poisson_cdf(i) 
             import scipy.stats as stats
             # ***********************************************************************
@@ -166,11 +168,11 @@ class SchedulerBase:
                 ld_values.append(torch.tensor([ld_standard[i-self.num_src]]))
                 self.ld_mask[i] = True
             else: 
-                ini_probs = torch.zeros(k+1)
-                for j in range(k+1):
+                ini_probs = torch.zeros(k)
+                for j in range(k):
                     ini_probs[j] = stats.poisson.pmf(j,lambda_ld)
                 ld_probs.append(ini_probs/ini_probs.sum())
-                ld_values.append(torch.arange(k+1, dtype=torch.float)*ld_standard[i-self.num_src])
+                ld_values.append(torch.tensor(var_factor_list, dtype=torch.float)*ld_standard[i-self.num_src])
         return ld_values, ld_probs
 
     def quant_t_e_r(self, x, scale):
@@ -207,9 +209,11 @@ def build_cat_prob_tensor(self):
             ld_probs.append(torch.ones(self.cat_num, dtype=torch.float)/self.cat_num)
             continue
         # middle nodes
-        k = self.graph.nodes[self.node_list[i]]['var_factor']
-        # 0, 1, ..., k 
-        assert k+1 <= self.cat_num
+        var_factor_list = self.graph.nodes[self.node_list[i]]['var_factor']
+        # var_factor is now a list, get the length
+        k = len(var_factor_list)
+        # 0, 1, ..., k-1 
+        assert k <= self.cat_num
         # poisson_cdf(i)/sum_i^{k+1} poisson_cdf(i) 
         ini_probs = torch.zeros(self.cat_num)
         import scipy.stats as stats
@@ -219,10 +223,10 @@ def build_cat_prob_tensor(self):
         # if k == 1, mean the node has no variance, the only legal value is 1x load
         # we mark the node in the ld_mask 
         if k==1: 
-            ini_probs[1] = 1.
+            ini_probs[0] = 1.
             self.ld_mask[i] = True
         else: 
-            for j in range(k+1):
+            for j in range(k):
                 ini_probs[j] = stats.poisson.pmf(j,lambda_ld)
         # ***********************************************************************
         ld_probs.append(ini_probs/ini_probs.sum())

@@ -91,7 +91,7 @@ def dict_type(string):
         return ast.literal_eval(string)
     except ValueError:
         raise argparse.ArgumentTypeError("Invalid dictionary format")
-    
+
 def input_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("--verbose", action="store_true", help="verbose")
@@ -99,6 +99,7 @@ def input_parser():
     parser.add_argument("--plot", type=bool, default=False, help="plot")
     parser.add_argument("--plot_fmt", type=str, default="svg,pdf", help="plot format")
     parser.add_argument("--test_all", default=False, help="test all the task")
+
     parser.add_argument("--num_cores", default=266, type=int, help="number of cores")
     parser.add_argument("--force_num_cores", default=False, action="store_true", help="force to use the number of cores")
     
@@ -108,6 +109,7 @@ def input_parser():
     parser.add_argument("--preemptable", default=False, action="store_true", help="enable preemption")
     parser.add_argument("--quantum_check_en", default=False, action="store_true", help="enable quantum check")
     parser.add_argument("--quantumSize", default=2, type=int, help="quantum size, # of simulation steps")
+
     # parser.add_argument("--hyper_p", default=None, type=float, help="hyper period")
     parser.add_argument("--warmup_dis", default=False, action="store_true", help="warmup disable")
     # parser.add_argument("--drain", default=False, action="store_true", help="drain")
@@ -127,18 +129,15 @@ def input_parser():
 
     parser.add_argument("--e2e_var_sim_en", default=False, action="store_true", help="enable e2e latency variation simulation")
     parser.add_argument("--e2e_var_sim_para", default=dict(), type=dict_type, help="e2e latency variation simulation parameters")
+    parser.add_argument("--seed", default=0, type=int, help="random seed")
     
     parser.add_argument("--file_suffix", default="", type=str, help="file suffix")
     parser.add_argument("--i_file_suffix", default="", type=str, help="file suffix")
-    parser.add_argument("--seed", default=0, type=int, help="random seed")
     parser.add_argument("--barrier_dis", default=False, action="store_true", help="disable barrier")
     parser.add_argument("--data_lifetime_mode", default="static", type=str, help="lifetime mode: most_recent, ref_count, timeout, watermark") 
     
-    parser.add_argument("--jitter_t_comp_ratio", default=0.2, type=float, help="spatial ratio")
-    parser.add_argument("--exec_t_comp_ratioA", default=0.05, type=float, help="temporal ratio")
-    parser.add_argument("--exec_t_comp_ratioB", default=0.05, type=float, help="temporal ratio")
-    parser.add_argument("--load_t_comp_ratio", default=0.05, type=float, help="temporal ratio")
-    parser.add_argument("--var_estimation", default={}, type=dict_type, help="estimation parameters")
+    parser.add_argument("--exec_t_comp_ratioA", default=0.95, type=float, help="temporal ratio")
+    parser.add_argument("--exec_t_comp_ratioB", default=0.5, type=float, help="temporal ratio")
     
     parser.add_argument("--profiling_filename", type=str, default="profiling/profiling_light.csv", help="profiling filename")
     parser.add_argument("--lateness_mode", type=str, default="ignore", help="lateness mode")
@@ -181,14 +180,6 @@ def input_parser():
     binpack_cfg = json.load(open(os.path.join(cfg_dir, args.bin_pack_cfg), "r"))
     binpack_cfg.update(args.bin_pack_para)
     args.binpack_cfg = binpack_cfg
-    # copy from jitter_t_comp_ratio, exec_t_comp_ratioA, load_t_comp_ratio
-    var_estimation = {
-        "jitter": args.jitter_t_comp_ratio,
-        "exec": args.exec_t_comp_ratioA,
-        "load_var": args.load_t_comp_ratio,
-    }
-    var_estimation.update(args.var_estimation)
-    args.var_estimation = var_estimation
     
     if args.e2e_var_sim_en:
         assert args.gen_benchmark == True
@@ -233,8 +224,8 @@ def get_csv_path_str(args):
 
 def get_cfg_n(args):
     cfg_para_dict = {
-        "wsc_slack_ratio": args.wsc_slack_ratio, "exec_t_comp_ratioA": args.exec_t_comp_ratioA, 
-        "lateness_mode": args.lateness_mode, "jitter_t_comp_ratio": args.jitter_t_comp_ratio,
+        "exec_t_comp_ratioA": args.exec_t_comp_ratioA,
+        "lateness_mode": args.lateness_mode,
         }
     para_scan_group1 = {"aux_scale_factor": args.aux_scale_factor, "e2e_latency": args.e2e_latency}
     if not args.gen_benchmark:

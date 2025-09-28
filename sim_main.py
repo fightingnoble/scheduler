@@ -1,9 +1,8 @@
 import os, re
 import warnings
-from task.task_cfg import create_init_p_list, gen_workloads
+from task.task_cfg import gen_workloads, export_json_graph_utils
 from task.task_cfg import affinity_cfg
-from task.task_cfg import init_affinity
-from sched.global_sched import push_task_into_bins_new, coleasing_alloc_1bin, naive_iso
+from sched.global_sched import push_task_into_bins_new, coleasing_alloc_1bin
 from task.task_agent import TaskInt
 from task.spec import Spec
 from model.message.msg_dispatcher import MsgDispatcher
@@ -19,7 +18,7 @@ from model.event_gen.e2e_latency import discrete_event_sim
 from model.task_queue_agent import TaskQueue
 from utils import dump_and_check, load_pickle, update_df, check_parents_path, build_path_old, get_case_path_str
 from global_var import *
-from utils import core_distr, save_chunk, load_h5_file, time_cnt, pyinstr_profiler
+from utils import core_distr, time_cnt
 from paths import PathContext
 import numpy as np 
 import argparse
@@ -34,7 +33,7 @@ def generate_bin_paths(path_para_dict, path_ctx: PathContext, num_cores, check_h
         path_ctx: PathContext 实例
         num_cores: 核心数
         check_hints: 检查说明
-        extra_suffix: 额外的后缀（如 repack 的 "_ov_0.80_repack"）
+        extra_suffix: 额外的后缀（如 repack 的 "_ov_0.80_repack(T)"）
     
     Returns:
         tuple: (bin_list_save_path, routing_table_save_path)
@@ -227,8 +226,6 @@ def build_paths_and_ctx(args):
         force_suffix=args.force_suffix,
         
         exec_t_comp_ratioA=args.exec_t_comp_ratioA,
-        jitter_t_comp_ratio=args.jitter_t_comp_ratio,
-        wsc_slack_ratio=args.wsc_slack_ratio,
         lateness_mode=args.lateness_mode,
 
         num_cores=args.num_cores,
@@ -358,6 +355,7 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
     """
     for _p in glb_p_list:
         _p.task.criticality = "hard"
+        _p.task.chain_criticality = "hard"
     
     print("sim_step: ", sim_step)
     # 保持同一 list 对象，避免与 scheduler_list 等引用脱节
@@ -366,7 +364,7 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
             bin_list,
             glb_p_list, affinity_cfg, event_iter_dict,
             num_cores, args.quantum_check_en, quantumSize, 
-            sim_step, hyper_p, args.wsc_slack_ratio, args.exec_t_comp_ratioB,
+            sim_step, hyper_p, args.exec_t_comp_ratioB,
 
             scheduler_list, monitor_list,
             msg_dispatcher,
@@ -376,31 +374,13 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
             verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
             warmup=True, drain=True, 
             )
-
-    elif args.binpack_cfg["algorithm"] == "mem_plan": 
-        from sched.global_sched import test_mem_planner
-        bin_list = test_mem_planner(
-            bin_list,
-            glb_p_list, affinity_cfg, event_iter_dict,
-            num_cores, args.quantum_check_en, quantumSize, 
-            sim_step, hyper_p, args.wsc_slack_ratio, args.exec_t_comp_ratioB,
-
-            scheduler_list, monitor_list,
-            msg_dispatcher,
-            a_data_pipe, w_data_pipe,
-
-            num_periods, binpack_cfg=args.binpack_cfg,
-            verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
-            warmup=True, drain=True, 
-            )
-        return None, num_cores, glb_p_list, hyper_p
 
     elif args.binpack_cfg["algorithm"] == "coalescing":
-        max_core_layout = coleasing_alloc_1bin(
+        max_core_num, pid2_bin_id, bin_size_list = coleasing_alloc_1bin(
             bin_list,
             glb_p_list, affinity_cfg, event_iter_dict,
             num_cores, args.quantum_check_en, quantumSize, 
-            sim_step, hyper_p, args.wsc_slack_ratio, args.exec_t_comp_ratioB,
+            sim_step, hyper_p, args.exec_t_comp_ratioB,
 
             scheduler_list, monitor_list,
             msg_dispatcher,
@@ -410,10 +390,7 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
             verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
             warmup=True, drain=True, 
             )
-        bin_list[0].to_sparse_dict()
-        
-        num_cores = sum(max_core_layout[1].values())
-        num_cores = apply_forced_num_cores(args, bin_list, num_cores, cfg_para_dict, para_scan_group1, path_ctx)
+        num_cores = apply_forced_num_cores(args, bin_list, max_core_num, cfg_para_dict, para_scan_group1, path_ctx)
         # Load the dataframe                        
         # df = pd.read_csv(filename)
         # df = update_df(df, {**cfg_para_dict, **para_scan_group1}, 
@@ -423,11 +400,11 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
     elif args.binpack_cfg["algorithm"] == "bin_split":
         from sched.global_sched import coleasing_alloc_cluster
         from task.task_cfg import task_graph_srcs, task_graph_sinks
-        pid2_bin_id, bin_size_list = coleasing_alloc_cluster(
+        max_core_num, pid2_bin_id, bin_size_list = coleasing_alloc_cluster(
             bin_list,
             glb_p_list, affinity_cfg, event_iter_dict,
             num_cores, args.quantum_check_en, quantumSize, 
-            sim_step, hyper_p, args.wsc_slack_ratio, args.exec_t_comp_ratioB,
+            sim_step, hyper_p, args.exec_t_comp_ratioB,
 
             scheduler_list, monitor_list,
             msg_dispatcher,
@@ -439,9 +416,7 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
             verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
             warmup=True, drain=True, 
             )
-        
-        num_cores = sum(bin_size_list.values())
-        num_cores = apply_forced_num_cores(args, bin_list, num_cores, cfg_para_dict, para_scan_group1, path_ctx)
+        num_cores = apply_forced_num_cores(args, bin_list, max_core_num, cfg_para_dict, para_scan_group1, path_ctx)
 
         # Load the dataframe                        
         # df = pd.read_csv(filename)
@@ -488,7 +463,7 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
             bin_list,
             glb_p_list, affinity_cfg, event_iter_dict,
             num_cores, args.quantum_check_en, quantumSize, 
-            sim_step, hyper_p, args.wsc_slack_ratio, args.exec_t_comp_ratioB,
+            sim_step, hyper_p, args.exec_t_comp_ratioB,
 
             scheduler_list, monitor_list,
             msg_dispatcher,
@@ -498,9 +473,27 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
             verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
             warmup=True, drain=True, 
             )
-        path_para_dict['i_file_suffix'] += f"_ov_{args.exec_t_comp_ratioB:.2f}_repack"
-        plot_path_para['file_suffix'] += f"_ov_{args.exec_t_comp_ratioB:.2f}_repack"
+        path_para_dict['i_file_suffix'] += f"_ov_{args.exec_t_comp_ratioB:.2f}_repack(T)"
+        plot_path_para['file_suffix'] += f"_ov_{args.exec_t_comp_ratioB:.2f}_repack(T)"
         
+    elif args.binpack_cfg["algorithm"] == "mem_plan": 
+        from sched.global_sched import test_mem_planner
+        bin_list = test_mem_planner(
+            bin_list,
+            glb_p_list, affinity_cfg, event_iter_dict,
+            num_cores, args.quantum_check_en, quantumSize, 
+            sim_step, hyper_p, args.exec_t_comp_ratioB,
+
+            scheduler_list, monitor_list,
+            msg_dispatcher,
+            a_data_pipe, w_data_pipe,
+
+            num_periods, binpack_cfg=args.binpack_cfg,
+            verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
+            warmup=True, drain=True, 
+            )
+        return None, num_cores, glb_p_list, hyper_p
+
     elif args.binpack_cfg["algorithm"] == "full":
         from sched.global_sched import single_turn_solver
         from task.task_cfg import task_graph_srcs, task_graph_sinks
@@ -508,7 +501,7 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
             bin_list,
             glb_p_list, affinity_cfg, event_iter_dict,
             num_cores, args.quantum_check_en, quantumSize, 
-            sim_step, hyper_p, args.wsc_slack_ratio, args.exec_t_comp_ratioB,
+            sim_step, hyper_p, args.exec_t_comp_ratioB,
 
             scheduler_list, monitor_list,
             msg_dispatcher,
@@ -527,7 +520,7 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
     # ensure_csv(csv_path_and_fn, cfg_para_dict, para_scan_group1)
 
     if args.binpack_cfg["algorithm"] == "repack":
-        extra_suffix = f"_ov_{args.exec_t_comp_ratioB:.2f}_repack"
+        extra_suffix = f"_ov_{args.exec_t_comp_ratioB:.2f}_repack(T)"
     else:
         extra_suffix = ""
     bin_list_save_path, routing_table_save_path = generate_bin_paths(
@@ -590,6 +583,7 @@ def main(args: argparse.Namespace):
     # ======================== workload settings ========================
     workload = build_workload_and_criticality(args)
     hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list = workload
+    export_json_graph_utils(physical_graph_nx, path_ctx.graph_fn)
 
     # ======================== build simulation ================
     scheduler_result = build_scheduler_elements(args, path_params, path_ctx, workload)

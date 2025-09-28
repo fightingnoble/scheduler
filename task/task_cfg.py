@@ -6,13 +6,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
 import pandas as pd
+import ast
 
 from global_var import *
 from task.task_agent import TaskInt, TaskIntAttr
 from model.task_queue_agent import TaskQueue 
 from task.task_agent import ProcessInt
 from task.graph_scaling import build_node_relationship
-from sched.slack_estim import estim_release_dll_time, deduce_cfg2, deduce_flops_ModelSum, deduce_flops_ModelSumMax, deduce_equiv_core
+from sched.slack_estim import deduce_cfg2, deduce_flops_ModelSum, deduce_flops_ModelSumMax, deduce_equiv_core
+from approach_Eq import init_var_dist
 
 # 'ID', 'Task (chain) names', 'Flops on path (G)', 'Expected Latency (ms)', 'T release (ms)', 'Freq.', 'DDL (ms)', 'Cores/Req.', 
 # 'Throuput factor (Spat.)', 'Thread factor (S)', 'Min required cores', 'Timing_flag', 'Max required Cores', 'RDA./Req.', 'Resource Type', 'Pre-assigned', 'Priority'
@@ -245,7 +247,11 @@ def process_sink_nodes_for_full_mode(logical_graph_nx, sinks, ops, taskattr_dict
         logical_graph_nx.remove_node(sink_n)
         sinks.pop(sink_n)
 
-def creat_logical_graph(srcs:Dict[str, List[str]], ops:Dict[str, List[str]], sinks:Dict[str, List[str]]): 
+def creat_logical_graph(
+        srcs:Dict[str, List[str]], ops:Dict[str, List[str]], sinks:Dict[str, List[str]], 
+        src_attr:Dict[str, Any]=None, sink_attr:Dict[str, Any]=None, 
+        taskattr_dict:Dict[str, TaskIntAttr]=None,
+    ): 
     """
     Logical Graph:
         A logical graph is a directed graph where the nodes are Operators and the edges define 
@@ -257,111 +263,122 @@ def creat_logical_graph(srcs:Dict[str, List[str]], ops:Dict[str, List[str]], sin
     for src_n in srcs:
         logical_graph_nx.add_node(src_n, type="src")
         logical_graph_nx.nodes[src_n]["partition"] = src_n
+        # add src_attr to the node: freq
+        logical_graph_nx.nodes[src_n]['freq'] = src_attr[src_n]
         for op_n in srcs[src_n]:
             logical_graph_nx.add_node(op_n)
             logical_graph_nx.add_edge(src_n, op_n, type="control")
+    
     for op_n in ops:
         logical_graph_nx.add_node(op_n, type="op")
+        # add taskattr_dict to the node: freq, flops, var_factor, exp_io_t
+        logical_graph_nx.nodes[op_n]['freq'] = taskattr_dict[op_n].freq
+        
+        logical_graph_nx.nodes[op_n]['flops'] = taskattr_dict[op_n].flops
+        logical_graph_nx.nodes[op_n]['var_factor'] = taskattr_dict[op_n].var_factor
+        logical_graph_nx.nodes[op_n]['exp_io_t'] = taskattr_dict[op_n].io_time
         for sink_n in ops[op_n]:
             logical_graph_nx.add_node(sink_n)
             logical_graph_nx.add_edge(op_n, sink_n, type="data")
+
+
+
     for sink_n in sinks:
         logical_graph_nx.add_node(sink_n, type="sink")
+        # add sink_attr to the node: freq, ddl_type, exp_comp_t
+
+        logical_graph_nx.nodes[sink_n]['ddl_type'] = sink_attr[sink_n][0]
+        logical_graph_nx.nodes[sink_n]['ddl'] = sink_attr[sink_n][1]
+
+        # TODO: Special case!! Need parameterize the sink's execution time   
+        logical_graph_nx.nodes[sink_n]["exp_comp_t"] = 0
+        logical_graph_nx.nodes[sink_n]["ert"] = sink_attr[sink_n][1] - 0 
+
         for op_n in sinks[sink_n]:
             logical_graph_nx.add_node(op_n)
             logical_graph_nx.add_edge(op_n, sink_n, type="data")
-    return logical_graph_nx
 
-def init_timing_feature(
-        logical_graph_nx,
-        taskattr_dict,
-        task_graph_srcs,
-        task_graph_ops,
-        task_graph_sinks,
-        src_attr,
-        sink_attr,
-        hyper_p,
-        jitter_t_comp_ratio,
-        e2e_latency,
-        init_jitter_offset,
-        mode="manual",
-    ):
-
+    # propagate the chain_criticality to all nodes from the sink nodes
+    # init all node attr chain_criticality as True
     for node in logical_graph_nx:
-        # propagate the chain_criticality to all nodes from the sink nodes
-        # init all node attr chain_criticality as True
         logical_graph_nx.nodes[node]["chain_criticality"] = True
-        # TODO: double check
-        # if node in taskattr_dict:
-        #     taskattr_dict[node].chain_criticality = 'hard'
+        if node in taskattr_dict:
+            taskattr_dict[node].chain_criticality = 'hard'
 
-        # set the the ert and ddl of the sink nodes and the src nodes
-        if logical_graph_nx.nodes[node]["type"] == "src":
-            assert node in task_graph_srcs
-            src = node
-            jitter_t_comp = elim_nume_error(1/src_attr[src]*jitter_t_comp_ratio) if init_jitter_offset else 0
-            logical_graph_nx.nodes[src]["ert"] = 0
-            logical_graph_nx.nodes[src]["ddl"] = jitter_t_comp 
-            logical_graph_nx.nodes[src]["exp_comp_t"] = jitter_t_comp 
-            logical_graph_nx.nodes[src]['jitter'] = jitter_t_comp
-            logical_graph_nx.nodes[src]['freq'] = src_attr[src]
-            logical_graph_nx.nodes[src]['comp_ratio'] = jitter_t_comp_ratio
-
-        elif logical_graph_nx.nodes[node]["type"] == "op":
-            assert node in task_graph_ops
-            op = node
-            logical_graph_nx.nodes[op]["flops"] = taskattr_dict[op].flops
-            logical_graph_nx.nodes[op]["var_factor"] = taskattr_dict[op].var_factor
-            logical_graph_nx.nodes[op]["freq"] = taskattr_dict[op].freq
-        
-    for sink in task_graph_sinks:
-        # use re to check if there is a '_'+str(idx) in the sink node name
-        if re.search(r"_\d+$", sink):
-            # remove the idx from the sink node name
-            sink_name = re.sub(r"_\d+$", "", sink)
-        else:
-            sink_name = sink
-        e2e_constr = e2e_latency if sink_attr[sink_name] == "deadline" else hyper_p
-        logical_graph_nx.nodes[sink]["ert"] = e2e_constr
-        logical_graph_nx.nodes[sink]["ddl"] = e2e_constr
-        logical_graph_nx.nodes[sink]["exp_comp_t"] = 0
-        
-        # propagate the ddl to the pred nodes of the sink nodes
-        for pred in logical_graph_nx.pred[sink]:
-            # if the sink is it unique succ, then set the ddl of the pred to the sink's ddl
-            if len(logical_graph_nx.succ[pred]) == 1:
-                logical_graph_nx.nodes[pred]["ddl"] = e2e_constr
-
-        # propagate the freq to the sink nodes
-        if mode == "full":
-            # assert each sink has only one pred
-            assert len(logical_graph_nx.pred[sink]) == 1
-            pred = list(logical_graph_nx.pred[sink])[0]
-            # set freq of sink to the freq of the pred
-            logical_graph_nx.nodes[sink]["freq"] = logical_graph_nx.nodes[pred]["freq"]
-
-                
+    for sink_n in sinks:                
         # propagage the chain_criticality from sinks to all upstream nodes
-        if sink_attr[sink_name] != "deadline":
-            logical_graph_nx.nodes[sink]["chain_criticality"] = False
+        # by default, the tasks with explicit deadline are critical tasks
+        if sink_attr[sink_n] != "deadline":
+            logical_graph_nx.nodes[sink_n]["chain_criticality"] = False
             # Mark all ancestors (not just direct parents) as soft criticality
-            for node in nx.ancestors(logical_graph_nx, sink):
+            for node in nx.ancestors(logical_graph_nx, sink_n):
                 logical_graph_nx.nodes[node]["chain_criticality"] = False
                 if node in taskattr_dict:
                     taskattr_dict[node].chain_criticality = 'soft'
-    
+    return logical_graph_nx
+
+
 def export_json_graph_utils(G:nx.DiGraph, fn:str):
     from networkx.readwrite import json_graph
     import json
+    import numpy as np
+    
+    class GraphJSONEncoder(json.JSONEncoder):
+        """自定义JSON编码器，处理NetworkX图中的特殊对象"""
+        def default(self, obj):
+            # 处理自定义分布对象
+            if hasattr(obj, 'to_dict'):
+                return obj.to_dict()
+            # 处理numpy数组
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            # 处理numpy数值类型
+            elif isinstance(obj, (np.integer, np.floating)):
+                return obj.item()
+            # 处理numpy bool类型
+            elif isinstance(obj, np.bool_):
+                return bool(obj)
+            # 处理其他不可序列化的对象
+            elif hasattr(obj, '__dict__'):
+                return obj.__dict__
+            return super().default(obj)
+    
     data = json_graph.node_link_data(G)  # 提取节点和边数据
-    with open(fn if fn.endswith(".json") else fn + ".json", "w") as f:
-        json.dump(data, f)
+    with open(fn if fn.endswith(".json") else fn + ".json", "w", encoding='utf-8') as f:
+        json.dump(data, f, cls=GraphJSONEncoder, ensure_ascii=False, indent=2)
 
 def load_json_graph_utils(f:str):
     from networkx.readwrite import json_graph
     import json
-    with open(f, "r") as f:
-        data = json.load(f)
+    
+    def restore_distributions(obj):
+        """递归恢复分布对象"""
+        if isinstance(obj, dict):
+            # 检查是否是分布对象
+            if '__dist_type__' in obj:
+                # 导入分布恢复函数
+                try:
+                    from approach_Eq import dist_from_dict
+                    return dist_from_dict(obj.copy())  # 使用副本避免修改原数据
+                except ImportError:
+                    print("警告: 无法导入dist_from_dict函数，分布对象将保持为字典格式")
+                    return obj
+            else:
+                # 递归处理字典中的其他值
+                return {k: restore_distributions(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            # 递归处理列表
+            return [restore_distributions(item) for item in obj]
+        else:
+            # 其他类型直接返回
+            return obj
+    
+    with open(f, "r", encoding='utf-8') as file:
+        data = json.load(file)
+    
+    # 恢复分布对象
+    data = restore_distributions(data)
+    
     G = json_graph.node_link_graph(data, directed=True)  # 导入节点和边数据
     return G
     
@@ -729,7 +746,12 @@ def load_taskint(profiling_filename:str="profiling/profiling.csv",
                 task.freq = task_attr["Freq."]
                 task.thread_scaling_factor = task_attr["Thread factor (Spat.)"]
                 task.freq_division_factor = task_attr["Throuput factor (Spat.)"] 
-                task.var_factor = task_attr["Var. factor (Tmp.)"] 
+                var_factor_raw = ast.literal_eval(task_attr["Var. factor (Tmp.)"])
+                # Convert single value to list if needed
+                if isinstance(var_factor_raw, (int, float)):
+                    task.var_factor = list(range(int(var_factor_raw) + 1))  # 0 to var_factor
+                else:
+                    task.var_factor = var_factor_raw 
                 if freq_div_en:
                     division_factor = task_attr["Throuput factor (Spat.)"]
                     freq_div_mode = 'interleave' if task_attr["Freq."]/f_gcd <= task_attr["Throuput factor (Spat.)"] else 'repeat'
@@ -780,7 +802,7 @@ def load_taskattrib(profiling_filename:str="profiling/profiling.csv",
     # print(task_attr_dict)
 
     # calculate the gcd of all the task's frequency
-    f_gcd = np.gcd.reduce(df["Freq."].to_list())
+    f_gcd = float(np.gcd.reduce(df["Freq."].to_list()))
 
     for task_n in df.T:
         # print(task_n)
@@ -799,30 +821,36 @@ def load_taskattrib(profiling_filename:str="profiling/profiling.csv",
         task_name=task_n
 
         timing_flag=task_attr["Timing_flag"]        
-        ERT=task_attr["T release (ms)"]/1000
-        ddl=(task_attr['DDL (ms)']-task_attr["T release (ms)"])/1000
-        RDA_size=task_attr['RDA./Req.']
-        main_size=task_attr['Cores/Req.']
-        exp_comp_t=task_attr['Expected Latency (ms)']/1000
-        i_offset=0
+        # ERT=task_attr["T release (ms)"]/1000
+        # ddl=(task_attr['DDL (ms)']-task_attr["T release (ms)"])/1000
+        # RDA_size=task_attr['RDA./Req.']
+        # main_size=task_attr['Cores/Req.']
+        # exp_comp_t=task_attr['Expected Latency (ms)']/1000
+        # i_offset=0
         task_flag=task_attr["Resource Type"]
         pre_assigned_resource_flag=task_attr["Pre-assigned"]>0
                 
         # flops=flops_on_path        
         # seq_cpu_time=flops_on_path
         # op_cpu_time=flops_on_path
-        op_io_time=1e-6*BW_DRAM
+        op_io_time=task_attr["Data Size(GB)"]*1e9/BW_DRAM
+        # op_io_time=[size*1e9/BW_DRAM for size in ast.literal_eval(task_attr["Data Size(GB)"])]
         jitter_max=0
         criti_flag="soft" if task_attr["Criti_flag"]=='S' else "hard"
         
-        cbs_en=True
+        # cbs_en=True
         # if task_attr["Cbs_en"]=='Y' else False
         
         trigger_mode=task_attr["Trigger_mode"] # event-triggered or periodic
         freq = task_attr["Freq."]
         thread_scaling_factor = task_attr["Thread factor (Spat.)"]
         freq_division_factor = task_attr["Throuput factor (Spat.)"] if mode=="manual" else int(freq/f_gcd)
-        var_factor = task_attr["Var. factor (Tmp.)"] 
+        var_factor_raw = ast.literal_eval(task_attr["Var. factor (Tmp.)"] )
+        # Convert single value to list if needed
+        if isinstance(var_factor_raw, (int, float)):
+            var_factor = list(range(int(var_factor_raw) + 1))  # 0 to var_factor
+        else:
+            var_factor = var_factor_raw
         
         task = TaskIntAttr(name=task_name, 
                         freq=freq, 
@@ -841,7 +869,7 @@ def load_taskattrib(profiling_filename:str="profiling/profiling.csv",
 
                         thread_scaling_factor=thread_scaling_factor, # unused
                         freq_division_factor=freq_division_factor, 
-                        var_factor=var_factor, # unused
+                        var_factor=var_factor, 
 
                         jitter_max=jitter_max, # unused
                         flops=flops_on_path, 
@@ -851,7 +879,7 @@ def load_taskattrib(profiling_filename:str="profiling/profiling.csv",
                         )
         flops_ModelSum = deduce_flops_ModelSum(task.flops, task.thread_scaling_factor, task.freq, f_gcd)
         task.flops_ModelSum = flops_ModelSum
-        task.flops_ModelSumMax = deduce_flops_ModelSumMax(flops_ModelSum, task.var_factor)
+        task.flops_ModelSumMax = deduce_flops_ModelSumMax(flops_ModelSum, max(task.var_factor))
         equiv_core = deduce_equiv_core(flops_ModelSum, 1/f_gcd)
         task.equiv_core = equiv_core
 
@@ -972,7 +1000,7 @@ def gen_workloads(args):
             if taskattr.timing_flag == "realtime":
                 taskattr.thread_scaling_factor *= args.aux_scale_factor
 
-    print(f"Ops per second of Workload: {sum([(v.flops*v.var_factor*v.thread_scaling_factor*v.freq) for n,v in taskattr_dict.items()]):.2f} T")
+    print(f"Ops per second of Workload: {sum([(v.flops*max(v.var_factor)*v.thread_scaling_factor*v.freq) for n,v in taskattr_dict.items()]):.2f} T")
     
     # 2. create logical graph
     _srcs = task_graph_srcs 
@@ -980,29 +1008,48 @@ def gen_workloads(args):
     _sinks = task_graph_sinks
     _src_attr = task_src_attr
     _sink_attr = task_sink_attr
+
     srcs, ops, sinks = copy.deepcopy(_srcs), copy.deepcopy(_ops), copy.deepcopy(_sinks)
     src_attr = copy.deepcopy(_src_attr)
     sink_attr = copy.deepcopy(_sink_attr)
-    logical_graph_nx = creat_logical_graph(srcs, ops, sinks)
+
+    # init deadline of the sink nodes
+    for sink_n in sinks:
+        sink_attr[sink_n][1] = args.e2e_latency if sink_attr[sink_n][0] == "deadline" else hyper_p
+
+    logical_graph_nx = creat_logical_graph(
+        srcs, ops, sinks,
+        src_attr, sink_attr, taskattr_dict
+        )
 
     # 3. graph structure considering the following modes
     if unfold_mode == "full":
         process_sink_nodes_for_full_mode(logical_graph_nx, sinks, ops, taskattr_dict)
-    init_timing_feature(logical_graph_nx, taskattr_dict, 
-                        srcs, ops, sinks, src_attr, sink_attr, hyper_p, 
-                        args.jitter_t_comp_ratio, args.e2e_latency, not args.binpack_cfg["slack_sharing"],
-                        mode=unfold_mode)
+        for sink_n in sinks:
+            # TODO: Special case!! Assert each sink has only one pred
+            assert len(logical_graph_nx.pred[sink_n]) == 1
+            # propagate the freq to the sink nodes
+            pred = list(logical_graph_nx.pred[sink_n])[0]
+            logical_graph_nx.nodes[sink_n]["freq"] = logical_graph_nx.nodes[pred]["freq"]
 
-    if not args.binpack_cfg["slack_sharing"]:
+    # 4. Initialize variation distributions for all nodes
+    init_var_dist(args, logical_graph_nx)
+
+    # detect if gurobi is available
+    try:
+        import gurobipy as gp
+        m = gp.Model()
         algorithm = 'gurobi'
-    else:
+    except Exception as e:
+        print(f"Gurobi 模块未安装或未正确配置：{e}")
         algorithm = 'avg'
     deduce_cfg2(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, 
-                srcs, sinks, sink_attr, src_attr, 
+                srcs, sinks,
                 args.slack_threshold, args.e2e_latency, 
-                args.exec_t_comp_ratioA, args.jitter_t_comp_ratio, 
-                args.wsc_slack_ratio, algorithm, args.timestepxus, 
-                args.var_estimation
+                args.exec_t_comp_ratioA, 
+                lcomp_quantileB=args.exec_t_comp_ratioB,
+                algorithm = algorithm, timestep_size=args.timestepxus, 
+                verbose=args.verbose
                 )
 
     physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), taskattr_dict=taskattr_dict, mode=unfold_mode)
@@ -1033,7 +1080,6 @@ def gen_workloads(args):
         _sinks=sinks,
         verbose=args.verbose,
     )
-    # export_json_graph_utils(physical_graph_nx, "cache/graph_w_ert_ddl.json")
     
     return hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list
 
@@ -1264,6 +1310,7 @@ if __name__ == "__main__":
 
     if args.test_case == "ert_ddl" or args.test_all:
         logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks, None, "manual")
+        from sched.slack_estim import estim_release_dll_time
         ert, ddl = estim_release_dll_time(logical_graph_nx, temporal_rel=0.05, temporal_abs_en=sim_step, 
                                           profiling_filename=args.profiling_filename, verbose=args.verbose)
         df = pd.read_csv(args.profiling_filename, sep=",", index_col=0) 

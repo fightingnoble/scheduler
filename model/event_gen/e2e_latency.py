@@ -1,5 +1,5 @@
 from __future__ import annotations
-from scipy.stats import truncnorm, truncexpon
+from scipy.stats import truncnorm as _scipy_truncnorm, truncexpon as _scipy_truncexpon, expon as _scipy_expon, norm as _scipy_norm
 from typing import List, Dict, Union, Callable
 from global_var import *
 import numpy as np
@@ -64,9 +64,9 @@ def jitter_gen_biside(ref_value, jitter_sim_para:Dict, size=1,
         return lambda: np.full(size, myclip_b) if size>1 else np.float64(myclip_b)
     generator = np.random.default_rng(seed)
     if size == 1:
-        jitter_gen_inst = lambda: truncnorm.rvs(a, b, loc=loc, scale=scale, random_state=generator)
+        jitter_gen_inst = lambda: _scipy_truncnorm.rvs(a, b, loc=loc, scale=scale, random_state=generator)
     else:
-        jitter_gen_inst = lambda: truncnorm.rvs(a, b, loc=loc, scale=scale, size=size, random_state=generator)
+        jitter_gen_inst = lambda: _scipy_truncnorm.rvs(a, b, loc=loc, scale=scale, size=size, random_state=generator)
     return jitter_gen_inst
 
 def get_truncnorm_para(range_max, jitter_sim_para, ZScore=3, loc=0):
@@ -102,9 +102,9 @@ def exp_jitter(ref_value, jitter_sim_para:Dict, size=1,
         return lambda: np.full(size, scope) if size>1 else np.float64(scope)
     generator = np.random.default_rng(seed)
     if size == 1:
-        jitter_gen_inst = lambda: truncexpon.rvs(b, loc=loc, scale=scale, random_state=generator)
+        jitter_gen_inst = lambda: _scipy_truncexpon.rvs(b, loc=loc, scale=scale, random_state=generator)
     else:
-        jitter_gen_inst = lambda: truncexpon.rvs(b, loc=loc, scale=scale, size=size, random_state=generator)
+        jitter_gen_inst = lambda: _scipy_truncexpon.rvs(b, loc=loc, scale=scale, size=size, random_state=generator)
     return jitter_gen_inst
 
 def get_truncexpon_param(ref_value, jitter_sim_para, lamda_exp:float=100.):
