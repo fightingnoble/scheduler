@@ -1,5 +1,4 @@
 from __future__ import annotations
-from itertools import chain
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from task.task_agent import ProcessInt
@@ -34,23 +33,18 @@ from networkx import DiGraph
 from functools import reduce
 from sched.slack_estim import get_chains
 from sched.scheduling_table import init_event
+from sched.binpack_config import BinPackConfig
 
-default_binpack_cfg = {
-            "sort":"EAT", "sort_reverse":True, "mode": 'non-block', "partial_alloc_en":False, 
-            "quantum_check_en":False, "release_temp_rda":True, "reservation_policy": "manual", 
-            "algorithm": "coalescing",
-            "bin_sel_mod": "search", # "pre_defined", "search"
-            "affinity_en": True, 
-            "affinity_level": 2,
-            "mapping": {}
-}
+# 默认配置实例（使用 BinPackConfig 包装器）
+# 注意：这些默认值主要作为函数签名的 fallback，实际运行时由 input_parser 从 JSON 文件加载
+default_binpack_cfg = BinPackConfig()
 # ==================== top-level scheduling procedure ====================
 def push_task_into_bins_new(
         
         bin_list: List[SchedulingTableInt], 
         glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,
         total_cores:int, quantum_check_en, quantumSize, 
-        timestep, hyper_p, exec_t_comp_ratioB,
+        timestep, hyper_p, quantile,
 
         scheduler_list: List[Scheduler], monitor_list:List[Monitor],
         msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
@@ -72,6 +66,11 @@ def push_task_into_bins_new(
     sim_range = hyper_p * (n_p+warmup+drain)
     sim_slot_num = int(sim_range/timestep)
     tab_spatial_size = total_cores
+
+    # --- 入口参数检查与读取 ---
+    bin_sel_mod = binpack_cfg.get("bin_sel_mod", "search")
+    reservation_policy = binpack_cfg.get("reservation_policy", "manual")
+    # -----------------------
 
     glb_name_p_dict = {p.task.name:p for p in glb_p_list}
 
@@ -104,15 +103,11 @@ def push_task_into_bins_new(
         print("Create a new bin: ", id, "name:", name, "size:", size)
         return new_bin(size, sim_slot_num, id=id, name=name)
 
-    def get_core_size(_p):
-        _, _, req_rsc_size = _p.rsc_req_estm(0, timestep, FLOPS_PER_CORE)
-        return req_rsc_size
 
-    bin_sel_mod = binpack_cfg.get("bin_sel_mod", "search")
     if bin_sel_mod != "pre_defined":
         iter_next_bin_obj, bin_name_list = get_initlist_and_biniter(
             bin_list, glb_p_list, total_cores, 
-            _new_bin, binpack_cfg["reservation_policy"])
+            _new_bin, reservation_policy)
     else:
         bin_name_list = [_bin.name for _bin in bin_list]
         iter_next_bin_obj = iter([])
@@ -132,7 +127,7 @@ def push_task_into_bins_new(
         message_trigger_event_new(event_iter_dict, inactive_list, glb_p_list, None, None, None, timestep, curr_t, True) 
         push_step_new(
             sched, msg_dispatcher, a_data_pipe, w_data_pipe, 
-            n_slot, timestep, exec_t_comp_ratioB, 
+            n_slot, timestep, 
             event_range, sim_slot_num, curr_t, 
                         
             glb_name_p_dict, None, 
@@ -156,7 +151,7 @@ def push_task_into_bins_new(
 def push_step_new(
         sched: Scheduler, msg_dispatcher: MsgDispatcher,
         a_data_pipe: DataPipe, w_data_pipe: DataPipe,
-        n_slot: int, timestep: float, exec_t_comp_ratioB: float, 
+        n_slot: int, timestep: float, 
         event_range: float, sim_slot_num: int, curr_t: float,
 
         glb_name_p_dict, res_cfg: Resource_model_int,
@@ -185,13 +180,9 @@ def push_step_new(
     a_msg_queue = a_data_pipe.queues[0]
     bin_name = ""
     _SchedTab = sched._SchedTab
-    bin_spatial_size = _SchedTab.num_resources
-    binpack_cfg["exec_t_comp_ratioB"] = exec_t_comp_ratioB
 
     # (running_queue)
     # check running tasks
-    release_temp_rda = binpack_cfg.get("release_temp_rda", True)
-    # bp_rls_mode = "future" if release_temp_rda else "none"
     bin_event_flg = check_complete(sched, None, timestep, msg_dispatcher, a_data_pipe, curr_t, None, 
                                    running_queue, completed_list, inactive_list, buffer, 
                                    bin_event_flg, bin_name, save_trace=False, 
@@ -282,7 +273,7 @@ def push_step_new(
     for _SchedTab in bin_list:
         curr_cfg:Resource_model_int = _SchedTab.scheduling_table[n_slot]
         curr_cfg.updateRunningQueue(timestep, running_queue) 
-        # curr_cfg.updateRunningQueue(timestep, running_queue, mode="verify" if release_temp_rda else "normal") 
+ 
 
 def naive_iso(
         bin_list: List[SchedulingTableInt], 
@@ -383,7 +374,7 @@ def coleasing_alloc_1bin(
         bin_list: List[SchedulingTableInt], 
         glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,
         total_cores:int, quantum_check_en, quantumSize, 
-        timestep, hyper_p, exec_t_comp_ratioB,
+        timestep, hyper_p, old_flops_relase_rate,
 
         scheduler_list: List[Scheduler], monitor_list:List[Monitor],
         msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
@@ -395,16 +386,18 @@ def coleasing_alloc_1bin(
         verbose=False, DEBUG_FG=False, *, 
         warmup=False, drain=False,                     
         ):
+    # --- 入口参数检查与读取 ---
+    reservation_policy = binpack_cfg.get("reservation_policy", "manual")
+    # -----------------------
     event_range = hyper_p * (n_p+warmup)
     sim_range = hyper_p * (n_p+warmup+drain)
     tab_temp_size = int(hyper_p//timestep)
     # assert math.isclose(hyper_p, tab_temp_size*timestep, abs_tol=numerical_error_tol_abs), \
     #         "hyper_p should be the multiple of timestep"
     sim_slot_num = int(sim_range/timestep)
-    tab_spatial_size = total_cores
     # glb_name_p_dict = {p.task.name:p for p in glb_p_list}
 
-    def _new_bin(id, size=tab_spatial_size, name=None): 
+    def _new_bin(id, size, name=None): 
         if name is None:
             name = "bin"+str(id)
         print("Create a new bin: ", id, "name:", name, "size:", size)
@@ -412,7 +405,7 @@ def coleasing_alloc_1bin(
 
     iter_next_bin_obj, bin_name_list = get_initlist_and_biniter(
         bin_list, glb_p_list, 0, 
-        _new_bin, binpack_cfg["reservation_policy"])
+        _new_bin, reservation_policy)
     _bin = bin_list[0]
 
     # build event list
@@ -485,7 +478,7 @@ def coleasing_alloc_1bin(
                 # ratioB is used for adjusting the rate for fueling the budget, 
                 # rather than the bw of the core
                 # such rate should be less than bw * flops_per_core, but > truely allocated number of ops
-                slack = slack_comp((ddl_t-start_t), 0, exec_t_comp_ratioB)
+                slack = slack_comp((ddl_t-start_t), 0, old_flops_relase_rate)
                 size_del_rda = process_dict[pid].task.flops/FLOPS_PER_CORE/slack
                 # size_del_rda = item[2] 
                 cores_dict[pid] = int(math.ceil(item[2]))
@@ -585,7 +578,7 @@ def coleasing_alloc_cluster(
         bin_list: List[SchedulingTableInt], 
         glb_p_list: List[ProcessInt], affinity, event_iter_dict:Dict,
         total_cores:int, quantum_check_en, quantumSize, 
-        timestep, hyper_p, exec_t_comp_ratioB,
+        timestep, hyper_p, quantile,
 
         scheduler_list: List[Scheduler], monitor_list:List[Monitor],
         msg_dispatcher:MsgDispatcher=None, # msg_pipe:Message=Message(),
@@ -598,12 +591,15 @@ def coleasing_alloc_cluster(
         verbose=False, DEBUG_FG=False, *, 
         warmup=False, drain=False,                     
 ):
+    # --- 入口参数检查与读取 ---
+    # 目前此函数主要作为包装器，参数通过 quantile 和 n_partition 显式传递
+    # -----------------------
 
     max_core_num, pid2_bin_id, bin_size_list = coleasing_alloc_1bin(
         bin_list,
         glb_p_list, affinity, event_iter_dict,
         total_cores, quantum_check_en, quantumSize, 
-        timestep, hyper_p, exec_t_comp_ratioB,
+        timestep, hyper_p, quantile,
 
         scheduler_list, monitor_list,
         msg_dispatcher,
@@ -622,11 +618,10 @@ def coleasing_alloc_cluster(
     # split the bin
     sim_range = hyper_p * (n_p+warmup+drain)
     sim_slot_num = int(sim_range/timestep)
-    tab_spatial_size = total_cores
     assert len(bin_list) == 1
     _bin_tb_split = bin_list[0]
 
-    def _new_bin(id, size=tab_spatial_size, name=None): 
+    def _new_bin(id, size, name=None): 
         if name is None:
             name = "bin"+str(id)
         print("Create a new bin: ", id, "name:", name, "size:", size)
@@ -640,7 +635,7 @@ def coleasing_alloc_cluster(
     node_var_dists = [job_graph.nodes[p.task.name]['var_dist'] for p in glb_p_list]
 
     sorted_chains = get_chains(job_graph, src_nodes, end_nodes, task_dict, 
-                            quantile=exec_t_comp_ratioB,
+                            quantile=quantile,
                             node_var_dists=node_var_dists,
                             remove_src_sink=True)
 

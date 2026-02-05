@@ -2,7 +2,7 @@ import os
 import pickle, argparse, time
 from functools import wraps, reduce
 from global_var import cfg_dir
-from typing import Dict, Callable
+from typing import Dict, Callable, List
 import pandas as pd
 import numpy as np
 import json
@@ -100,8 +100,8 @@ def input_parser():
     parser.add_argument("--plot_fmt", type=str, default="svg,pdf", help="plot format")
     parser.add_argument("--test_all", default=False, help="test all the task")
 
-    parser.add_argument("--num_cores", default=266, type=int, help="number of cores")
-    parser.add_argument("--force_num_cores", default=False, action="store_true", help="force to use the number of cores")
+    # for ablation study: force the num_cores, and change the size of bins in bin_list
+    parser.add_argument("--num_cores", default=None, type=int, help="number of cores")
     
     parser.add_argument("--num_bins", default=-1, type=int, help="number of bins")
     parser.add_argument("--timestepxus", default=10, type=int, help="timestep in us")
@@ -122,6 +122,7 @@ def input_parser():
     parser.add_argument("--exec_var_en", default=False, action="store_true", help="enable exec jitter simulation")
     parser.add_argument("--exec_var_para", default={}, type=dict_type, help="exec jitter simulation parameters")
 
+    parser.add_argument("--var_sim_en", default=False, action="store_true", help="enable global variation simulation")
     parser.add_argument("--var_sim_cfg", default="var_sim_cfg.json", type=str, help="variation simulation config file")
 
     parser.add_argument("--load_var_sim_en", default=False, action="store_true", help="enable dynamic object simulation")
@@ -137,7 +138,7 @@ def input_parser():
     parser.add_argument("--data_lifetime_mode", default="static", type=str, help="lifetime mode: most_recent, ref_count, timeout, watermark") 
     
     parser.add_argument("--exec_t_comp_ratioA", default=0.95, type=float, help="temporal ratio")
-    parser.add_argument("--exec_t_comp_ratioB", default=0.5, type=float, help="temporal ratio")
+    parser.add_argument("--exec_t_comp_ratioB", default=-1, type=float, help="temporal ratio")
     
     parser.add_argument("--profiling_filename", type=str, default="profiling/profiling_light.csv", help="profiling filename")
     parser.add_argument("--lateness_mode", type=str, default="ignore", help="lateness mode")
@@ -148,20 +149,21 @@ def input_parser():
     parser.add_argument("--wsc_slack_ratio", default=0.8, type=float, help="wsc slack ratio")
     parser.add_argument("--slack_threshold", default=5e-4, type=float, help="slack threshold")
     parser.add_argument("--aux_scale_factor", default=1, type=int, help="aux scale factor")
+    parser.add_argument("--load_factor", default=1.0, type=float, help="load factor multiplier")
     parser.add_argument("--gen_benchmark", default=False, action="store_true", help="generate benchmark")
     parser.add_argument("--root_dir", default=".", type=str, help="root directory")
 
-    parser.add_argument("--bin_pack_cfg", default="bin_pack_cfg.json", type=str, help="bin pack config file")
+    parser.add_argument("--bin_pack_cfg", default="BP_guided.json", type=str, help="bin pack config file")
     parser.add_argument("--bin_pack_para", default=dict(), type=dict_type, help="bin pack algorithm parameters")
-    # parser.add_argument("--bin_sort", default="EAT", type=str, help="bin sort: EAT, barycenter")
-    # parser.add_argument("--bin_sort_reverse", default=True, type=bool, help="bin sort reverse")
-    
+
     parser.add_argument("--max_core_stat", default=False, type=bool, help="max core stat")
     parser.add_argument("--forbid_miss", default=False, action="store_true", help="forbid miss")
     # parser.add_argument("--progress_aware", default=False, action="store_true", help="consider the execution porgress")
     parser.add_argument("--allow_realloc", default=False, action="store_true", help="allow reallocation of resources amount")
     parser.add_argument("--G_decomp_mode", default="manual", type=str, help="mode: manual, full")
     parser.add_argument("--policy", default="pglb", type=str, help="policy")
+
+    parser.add_argument("--stat_param", default=dict(), type=dict_type, help="stat parameter")
     args = parser.parse_args()
 
     jitter_sim_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['jitter'] 
@@ -177,9 +179,11 @@ def input_parser():
     e2e_var_sim_para = json.load(open(os.path.join(cfg_dir, args.var_sim_cfg), "r"))['e2e_var']
     e2e_var_sim_para.update(args.e2e_var_sim_para)
     args.e2e_var_sim_para = e2e_var_sim_para
-    binpack_cfg = json.load(open(os.path.join(cfg_dir, args.bin_pack_cfg), "r"))
-    binpack_cfg.update(args.bin_pack_para)
-    args.binpack_cfg = binpack_cfg
+    binpack_cfg_dict = json.load(open(os.path.join(cfg_dir, args.bin_pack_cfg), "r"))
+    binpack_cfg_dict.update(args.bin_pack_para)
+    
+    from sched.binpack_config import BinPackConfig
+    args.binpack_cfg = BinPackConfig(binpack_cfg_dict)
     
     if args.e2e_var_sim_en:
         assert args.gen_benchmark == True
@@ -191,7 +195,6 @@ def build_path_old(args):
     root_dir = args.root_dir
     args.binpack_cfg.update({"exec_t_comp_ratioB": args.exec_t_comp_ratioB}) 
     para_scan_group2 = {"num_cores": args.num_cores}
-
 
     cfg_para_dict, para_scan_group1, cfg_n = get_cfg_n(args)
     path_para_dict = {"root_dir": root_dir, "cfg_n": cfg_n, "i_file_suffix": args.i_file_suffix, "force_suffix": args.force_suffix}
@@ -361,3 +364,96 @@ def core_distr(rsc_map, score_dict, curr_aval_rsc, order_fn=lambda x:x[1], sort=
             size = int(cum_size[i] - cum_size[i - 1])
             rsc_map[pid] += size
             cum_size[i] = size + cum_size[i - 1]
+
+
+def vectorized_core_allocation(bin_list: List, target_total_cores: int):
+    """
+    使用向量化的方法（单纯形投影/比例舍入法），按比例将核心分配到各个 bin 中。
+    这种方法比迭代法更高效、精确且代码简洁。
+
+    Args:
+        bin_list: bin 对象列表 (需要有 .num_resources 属性)。
+        target_total_cores: 目标核心总数。
+    """
+    num_bins = len(bin_list)
+    if num_bins == 0 or target_total_cores <= 0:
+        return
+
+    # 提取当前核心数作为权重
+    current_cores = np.array([b.num_resources for b in bin_list], dtype=float)
+    current_total = np.sum(current_cores)
+
+    if current_total == 0:
+        # Fallback: 如果当前所有 bin 都没有核心，则平均分配
+        base_cores = target_total_cores // num_bins
+        remainder = target_total_cores % num_bins
+        new_cores = np.full(num_bins, base_cores, dtype=int)
+        if remainder > 0:
+            new_cores[:remainder] += 1
+    else:
+        # 1. 计算理想的浮点数分配方案
+        ideal_alloc = current_cores / current_total * target_total_cores
+        
+        # 2. 先分配整数部分
+        floor_alloc = np.floor(ideal_alloc).astype(int)
+        
+        # 3. 计算小数部分（余数），作为分配优先级
+        remainders = ideal_alloc - floor_alloc
+        
+        # 4. 计算因向下取整而需要重新分配的核心数
+        cores_to_distribute = int(target_total_cores - np.sum(floor_alloc))
+        
+        # 5. 根据小数部分从大到小排序，分配剩余的核心
+        indices_to_add = np.argsort(remainders)[::-1]
+        
+        add_cores = np.zeros_like(floor_alloc)
+        if cores_to_distribute > 0:
+            add_cores[indices_to_add[:cores_to_distribute]] = 1
+        
+        new_cores = floor_alloc + add_cores
+    
+    # 约束检查：确保每个 bin 至少有 1 个核心 (如果目标总数允许)
+    if target_total_cores >= num_bins:
+        zero_mask = new_cores < 1
+        num_zeros = np.sum(zero_mask)
+        if num_zeros > 0:
+            # 将这些 bin 的核心数补到 1
+            new_cores[zero_mask] = 1
+            # 计算需要从其他 bin 中“借”多少核心
+            cores_to_borrow = num_zeros
+            
+            # 从核心数 > 1 的 bin 中按比例借
+            can_donate_mask = new_cores > 1
+            donatable_cores = new_cores[can_donate_mask] - 1
+            
+            if np.sum(donatable_cores) >= cores_to_borrow:
+                 # 使用同样的向量化逻辑来分配负增量（借核心）
+                borrow_ideal = donatable_cores / np.sum(donatable_cores) * cores_to_borrow
+                borrow_floor = np.floor(borrow_ideal).astype(int)
+                borrow_remainders = borrow_ideal - borrow_floor
+                borrow_to_distribute = int(cores_to_borrow - np.sum(borrow_floor))
+                
+                indices_to_add_borrow = np.argsort(borrow_remainders)[::-1]
+                
+                add_borrow = np.zeros_like(borrow_floor)
+                if borrow_to_distribute > 0:
+                    add_borrow[indices_to_add_borrow[:borrow_to_distribute]] = 1
+                
+                borrowed_cores = borrow_floor + add_borrow
+                
+                new_cores[can_donate_mask] -= borrowed_cores
+
+    # 将计算结果写回 bin_list
+    for i, b in enumerate(bin_list):
+        b.num_resources = new_cores[i]
+
+    # 最终断言，确保总数正确
+    if not sum(b.num_resources for b in bin_list) == target_total_cores:
+        # 如果出现极小误差，则在最大的 bin 上修正
+        diff = target_total_cores - sum(b.num_resources for b in bin_list)
+        if diff != 0:
+            richest_idx = np.argmax(new_cores)
+            bin_list[richest_idx].num_resources += diff
+            
+    assert sum(b.num_resources for b in bin_list) == target_total_cores, \
+        f"Allocation failed: got {sum(b.num_resources for b in bin_list)}, expected {target_total_cores}"

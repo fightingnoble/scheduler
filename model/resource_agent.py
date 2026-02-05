@@ -9,8 +9,7 @@ if typing.TYPE_CHECKING:
 from global_var import *
 from typing import Dict, List, Tuple, Union, Any, OrderedDict
 from model.event_gen.e2e_latency import exp_jitter
-from model.performance import cal_lat, slack_comp
-from model.lru import LRUCache
+from model.performance import slack_comp
 from functools import reduce
 
 class RscMapInt(OrderedDict[int, Tuple[int, ...]]): 

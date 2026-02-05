@@ -13,7 +13,7 @@ from task.task_agent import TaskInt, TaskIntAttr
 from model.task_queue_agent import TaskQueue 
 from task.task_agent import ProcessInt
 from task.graph_scaling import build_node_relationship
-from sched.slack_estim import deduce_cfg2, deduce_flops_ModelSum, deduce_flops_ModelSumMax, deduce_equiv_core
+from sched.slack_estim import deduce_cfg2, deduce_flops_ModelSum, deduce_flops_ModelSumMax, deduce_equiv_core, update_taskattr_dict
 from approach_Eq import init_var_dist
 
 # 'ID', 'Task (chain) names', 'Flops on path (G)', 'Expected Latency (ms)', 'T release (ms)', 'Freq.', 'DDL (ms)', 'Cores/Req.', 
@@ -397,7 +397,8 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filen
     # list the scaling factors of each node depending on the type and mode
     node_parall_dict = {}
     for node_n in logical_graph_nx.nodes:
-        if logical_graph_nx.nodes[node_n]["type"] == "op":
+        _type = logical_graph_nx.nodes[node_n]["type"]
+        if _type == "op":
             # for node_n, node_attr in taskattr_dict.items():
             assert node_n in taskattr_dict
             node_attr:TaskIntAttr = taskattr_dict[node_n]
@@ -407,7 +408,15 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filen
             node_parall_dict[node_n] = [copy_n, factor, freq]
         elif mode == "full":
             freq = int(logical_graph_nx.nodes[node_n]["freq"]/f_gcd) 
-            node_parall_dict[node_n] = [1, freq, freq]
+            # In full mode, align sink copy_n with its unique predecessor's copy_n to avoid cross-copy fan-in
+            if _type == "sink":
+                assert len(logical_graph_nx.pred[node_n]) == 1
+                pred_n = list(logical_graph_nx.pred[node_n])[0]
+                copy_n = taskattr_dict[pred_n].thread_scaling_factor
+            else:
+                copy_n = 1
+            node_parall_dict[node_n] = [copy_n, freq, freq]
+
 
     # add nodes
     for node_n, node_attr in logical_graph_nx.nodes(data=True):
@@ -433,14 +442,25 @@ def creat_physical_graph(logical_graph_nx:nx.DiGraph, f_gcd:int, profiling_filen
         if pred_n in node_parall_dict and succ_n in node_parall_dict:
             pred_copy_n, pred_factor, pred_freq = node_parall_dict[pred_n]
             succ_copy_n, succ_factor, succ_freq = node_parall_dict[succ_n]
-            for pred_copy_j in range(pred_copy_n):
-                for succ_copy_j in range(succ_copy_n):   
+            succ_is_sink = logical_graph_nx.nodes[succ_n]["type"] == "sink"
+            if mode == "full" and succ_is_sink:
+                # one-to-one mapping between pred/succ copies to preserve unique predecessor at physical level
+                # Expect aligned copy sizes after the adjustment above
+                assert pred_copy_n == succ_copy_n
+                for j in range(pred_copy_n):
                     build_node_relationship(physical_graph_nx, 
                                             pred_freq, succ_freq, 
                                             pred_factor, succ_factor,
-                                            # pred_n+"_"+pred_copy_j, 
-                                            f"{pred_n}_{pred_copy_j}",
-                                            f"{succ_n}_{succ_copy_j}", 'repeat')
+                                            f"{pred_n}_{j}",
+                                            f"{succ_n}_{j}", 'repeat')
+            else:
+                for pred_copy_j in range(pred_copy_n):
+                    for succ_copy_j in range(succ_copy_n):   
+                        build_node_relationship(physical_graph_nx, 
+                                                pred_freq, succ_freq, 
+                                                pred_factor, succ_factor,
+                                                f"{pred_n}_{pred_copy_j}",
+                                                f"{succ_n}_{succ_copy_j}", 'repeat')
             
             # add edge attribute, 
             # reDistPattn: one2one, downscaling, upscaling
@@ -993,6 +1013,13 @@ def gen_workloads(args):
     unfold_mode = args.G_decomp_mode
     taskattr_dict, f_gcd = load_taskattrib(args.profiling_filename, unfold_mode, verbose=args.verbose) 
     hyper_p = 1/f_gcd
+
+    assert args.load_factor >= 0 
+    # scale up the flops of the tasks
+    for node, taskattr in taskattr_dict.items():
+        if args.load_factor != 1:
+            taskattr.flops *= args.load_factor
+
     assert args.aux_scale_factor >= 0
     if args.aux_scale_factor != 1:
         for node, taskattr in taskattr_dict.items():
@@ -1043,16 +1070,14 @@ def gen_workloads(args):
     except Exception as e:
         print(f"Gurobi 模块未安装或未正确配置：{e}")
         algorithm = 'avg'
-    need_repack = deduce_cfg2(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, 
-                srcs, sinks,
-                args.slack_threshold, args.e2e_latency, 
-                args.exec_t_comp_ratioA, 
-                lcomp_quantileB=args.exec_t_comp_ratioB,
-                algorithm = algorithm, timestep_size=args.timestepxus, 
-                verbose=args.verbose
-                )
-
+    ert, ddl, rsc_map_w = deduce_cfg2(
+        taskattr_dict, 
+        logical_graph_nx, srcs, sinks,
+        args.quantile, args.slack_threshold, 
+        verbose=args.verbose, plot=args.plot)
     physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), taskattr_dict=taskattr_dict, mode=unfold_mode)
+
+    update_taskattr_dict(ert, ddl, rsc_map_w, taskattr_dict, f_gcd, hyper_p, logical_graph_nx, verbose=args.verbose)
     glb_n_task_dict = gen_taskint_from_cfg(taskattr_dict, f_gcd)
     init_depen(glb_n_task_dict, physical_graph_nx, verbose=args.verbose)
     # generate the process list
@@ -1081,7 +1106,7 @@ def gen_workloads(args):
         verbose=args.verbose,
     )
     
-    return hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list, need_repack
+    return hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list
 
 
 def extract_parallel_cfg(task_attr, mode="runtime"):

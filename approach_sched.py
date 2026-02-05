@@ -18,9 +18,9 @@ from approach_Eq import (
     cal_load,
     time_gtq,
     time_ltq,
+    time_gt,
 )
 from approach_def import Acc_p, print_if_verbose
-from approach_def import get_drop_disabled
 
 
 def trigger_cond_dyn(acc_p, new_comp, new_ready_list, curr_t):
@@ -76,11 +76,19 @@ def trigger_cond_dyn(acc_p, new_comp, new_ready_list, curr_t):
         # the system exits reallocation progress until the "R" is finished
     return realloc
 
-def task_filter(acc_p, curr_t, iter_tasks, reserv_en=False, drop=False, op_miss_en=False):
+def task_filter(acc_p, curr_t, iter_tasks, reserv_en=False, op_miss_en=False):
+    """
+    Filter tasks based on the following conditions:
+    filter R task
+    filter timeout task if drop
+        if op_miss_en, only the sink will be dropped for timeout;
+        otherwise, all the tasks will be dropped for timeout.
+    filter ert < curr_t task if reserve
+    """
     filter_cond = [
         lambda node: node != "R",
-        lambda node: (acc_p.G_ptr.ddl_map[node] > curr_t or (op_miss_en and node in acc_p.G_ptr.ops)) or not drop,
-        lambda node: acc_p.G_ptr.ert_map[node] <= curr_t if reserv_en else True,
+        lambda node: (time_gt(acc_p.G_ptr.ddl_map[node], curr_t) or (op_miss_en and node in acc_p.G_ptr.ops)) or not acc_p.drop,
+        lambda node: time_ltq(acc_p.G_ptr.ert_map[node], curr_t) if reserv_en else True,
     ]
     for node in iter_tasks:
         if all(cond(node) for cond in filter_cond):
@@ -97,11 +105,6 @@ def alloc_fn_pglb(acc_p, curr_t, realloc=True,
     # calculate slack 
     realloc_slack = 0 if not realloc else sim_comp_time(acc_p.swt_lat, 1, 1)
     iter_tasks = chain(acc_p.running, acc_p.ready)
-    # filter timeout task if drop
-        # if op_miss_en, only the sink will be dropped for timeout;
-        # otherwise, all the tasks will be dropped for timeout.
-    # filter ert < curr_t task if reserve
-    # filter R task
 
     acc_p.slack_map = {node: calculate_slack_time(acc_p.G_ptr.ddl_map[node], curr_t, realloc_slack) for node in acc_p.task_filter(curr_t, iter_tasks)}
     score = acc_p.slack_map.copy()
@@ -288,7 +291,6 @@ def acc_p_factory(
         
         # create acc_p instance
         acc_p = Acc_p(f"acc_p{i}", cfg.cap_list[i], cfg.base_pwr_list[i], cfg.G, cfg.mapped_node_list[i], stats_collector)
-        drop_flag = not get_drop_disabled() and True
 
         # policy binding
         if policy in ["pglb", "glb"]:
@@ -296,18 +298,19 @@ def acc_p_factory(
                 warn("pglb policy is not supported for single partition, use glb instead")
                 policy = "glb"
             acc_p.alloc_fn = types.MethodType(functools.partial(alloc_fn_pglb, reserv_en=False), acc_p)
-            acc_p.task_filter = types.MethodType(functools.partial(task_filter, reserv_en=False, drop=drop_flag), acc_p)
+            acc_p.task_filter = types.MethodType(functools.partial(task_filter, reserv_en=False), acc_p)
             acc_p.trigger_cond = types.MethodType(trigger_cond_dyn, acc_p)
-        elif policy in ["cyc"]:
+        elif policy in ["cyc" or "cyc-S"]:
             assert cfg.TSmap_list[i] is not None, "TSmap_list is not None"
             # 存储原始静态调度表用于动态更新
             acc_p.static_schedule_map = cfg.TSmap_list[i]
-            acc_p.alloc_fn = types.MethodType(functools.partial(alloc_fn_cyclic, T_hp=cfg.T_hp, force=True), acc_p)
+            force = True if policy == "cyc" else False
+            acc_p.alloc_fn = types.MethodType(functools.partial(alloc_fn_cyclic, T_hp=cfg.T_hp, force=force), acc_p)
             acc_p.trigger_cond = types.MethodType(functools.partial(no_trigger), acc_p)
 
         elif policy == "reserv":
             acc_p.alloc_fn = types.MethodType(functools.partial(alloc_fn_pglb, reserv_en=True), acc_p)
-            acc_p.task_filter = types.MethodType(functools.partial(task_filter, reserv_en=True, drop=drop_flag, op_miss_en=True), acc_p)
+            acc_p.task_filter = types.MethodType(functools.partial(task_filter, reserv_en=True, op_miss_en=True), acc_p)
             acc_p.trigger_cond = types.MethodType(trigger_cond_dyn, acc_p)
         else:
             raise ValueError(f"Unknown strategy: {policy}")

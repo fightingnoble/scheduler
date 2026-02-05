@@ -1,13 +1,13 @@
 {
-    "sort":"barycenter", 
-    "sort_reverse":true, 
-    "quantum_check_en": false,
-    "partial_alloc_en": false,
-    "mode": "block",
-    "release_temp_rda":true,
-    "reservation_policy": "manual",
-    "slack_sharing": true,
     "algorithm": "scratch",
+    "sort": "barycenter",
+    "mode": "block",
+    "bin_sel_mod": "search",
+    "reservation_policy": "manual",
+    "affinity_en": true,
+    "affinity_level": 2,
     "preempt_en": true,
+    "partial_alloc_en": false,
+    "quantum_check_en": false,
     "core_size": "specified"
 }

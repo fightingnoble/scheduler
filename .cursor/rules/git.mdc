@@ -1,0 +1,10 @@
+---
+name: git
+description: 当修改代码的时候，将修改内容记录在doc/change_log_{YYYY}.md 中，并记录修改的文件名和行号。
+globs:
+alwaysApply: true
+---
+
+# Overview
+
+及时更新change_log，记录修改的文件名和行号。

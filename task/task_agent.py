@@ -17,7 +17,10 @@ from global_var import *
 from model.message.Context_message import ContextMsg
 from model.resource_agent import DDL_reservation, RT_reservation, dummy_reservation
 from model.event_gen.e2e_latency import jitter_gen_biside
-from model.performance import cal_lat, slack_comp
+from model.performance import slack_comp
+from approach_Eq import AccVarDist, SenVarDist, Variation
+from approach_Eq import find_legal
+from sched.ref_alloc_search import TaskConstraints
 
 # preemptable?/able to preempt others
 scheduling_attr = {
@@ -541,8 +544,6 @@ class ProcessInt(ProcessBase):
 
     def rsc_req_estm(_p, n_slot, timestep, FLOPS_PER_CORE, time_slot_s=None, time_slot_e=None, mode='rt-wsc', over_provision_rate=0., max_size=float("inf")):
         assert mode in ['rt-wsc', 'expected']
-        if time_slot_e is None or time_slot_s is None:
-            time_slot_s, time_slot_e = _p.quant_release_deadline(n_slot, timestep)
         if mode == 'expected':
             num_slot = int(_p.exp_comp_t/timestep)
             req_rsc_size = int(np.ceil(_p.remburst/num_slot/timestep/FLOPS_PER_CORE))
@@ -558,6 +559,37 @@ class ProcessInt(ProcessBase):
                     Warning(f"req_rsc_size({req_rsc_size}) is greater than max_size({max_size})")
                     time_slot_e = time_slot_s + int(np.ceil(_p.remburst/req_rsc_size/timestep/FLOPS_PER_CORE))
         return time_slot_s,time_slot_e,req_rsc_size
+
+    def rsc_req_estm_quantile(
+        _p, slack, FLOPS_PER_CORE, binpack_cfg, constr:TaskConstraints,
+        max_size=float("inf")
+        ):
+        # Quantile-based core sizing using var_dist
+        var_dist_map: Dict[str, Variation] = binpack_cfg.get('var_dist_map', None)
+        q = binpack_cfg.get('quantile', None)
+        node_name = _p.task.name
+        dist = var_dist_map[node_name]
+        if isinstance(dist, SenVarDist):
+            # Sensor-like task: fixed latency quantile, core=1
+            req_rsc_size = 1
+        else:
+            # Acc task: load_q/(cores*FLOPS_PER_CORE) + io_q <= window_time
+            try:
+                load_q = float(dist.load_dist.quantile(q))
+                io_q = float(dist.exec_dist.quantile(q))
+            except Exception:
+                # Fallback: treat as compute-only with zero IO
+                load_q = float(getattr(dist, 'quantile', lambda qq: _p.remburst)(q))
+                io_q = 0.0
+            compute_budget = slack - io_q
+            if compute_budget <= 0:
+                # No time for compute; request the max allowed cores
+                req_rsc_size = max(1, getattr(_p, 'core_max', 1))
+            else:
+                ideal_cores = int(math.ceil(load_q / (compute_budget * FLOPS_PER_CORE)))
+                req_rsc_size, got_constr = find_legal(constr, max_size, ideal_cores)
+                got_latency = elim_nume_error(_p.task.flops / req_rsc_size / FLOPS_PER_CORE)
+        return req_rsc_size, got_latency, got_constr
 
     def quant_release_deadline(_p, n_slot, timestep):
         # release time round up: task should not be released earlier than the release time

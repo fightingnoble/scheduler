@@ -4,18 +4,20 @@ from typing import List, Dict, Iterator, Callable
 from collections import OrderedDict
 import math
 import numpy as np
-import warnings, copy
+import warnings
 
-from utils import Found
 from global_var import *
 from task.task_agent import ProcessInt
 from task.task_agent import TaskInt
 from model.lru import LRUCache
 from model.task_queue_agent import TaskQueue 
-from sched.scheduling_table import SchedulingTableInt, init_event
+from sched.scheduling_table import SchedulingTableInt
 from sched.sort_function import get_process_sort
-from sched.bin_ops import sort_bin_list_EAT, sort_bin_list_by_barycenter, index_preeempt_num_cores_by_interval
+from sched.bin_ops import sort_bin_list_EAT, sort_bin_list_by_barycenter
 from sched.monitor_agent import get_rsc_2b_released, get_target_bin_id
+from sched.ref_alloc_search import TaskConstraints
+
+
 def glb_alloc_new2(process_dict, quantumSize, timestep, 
                     ready_queue, running_queue, rsc_recoder, 
                     rsc_recoder_his:Dict[int, LRUCache], issue_list, preempt_list, iter_next_bin_obj, 
@@ -24,6 +26,10 @@ def glb_alloc_new2(process_dict, quantumSize, timestep,
                     show_warnings=True, 
                     verbose:bool=False, DEBUG_FG:bool=False,
                   ):
+    # --- 入口参数检查与读取 ---
+    affinity_en = binpack_cfg.get("affinity_en", True)
+    affinity_level = binpack_cfg.get("affinity_level", 2)
+    # -----------------------
     # =================================================
     # push the ready task into the idle slot
     # input: 
@@ -52,8 +58,6 @@ def glb_alloc_new2(process_dict, quantumSize, timestep,
             False: 1 -> not start
         """
         return [float("inf"), _p.pid]
-    affinity_en = binpack_cfg.get("affinity_en", True)
-    affinity_level = binpack_cfg.get("affinity_level", 2)
     process_sort = get_process_sort(bin_name_list, rsc_recoder_his, tie_break, affinity_en, affinity_level)
     sorted_ready_l = ready_queue.queue + running_queue.queue + issue_list.queue
     sorted_ready_queue = TaskQueue(sorted_ready_l, descending=False, sort_f=process_sort)
@@ -141,12 +145,37 @@ def allocate_rsc_4_process_new2(
         verbose:bool=False, DEBUG:bool=False,
         ):
 
+    # --- 入口参数检查与读取 ---
+    bin_sel_mod = binpack_cfg.get("bin_sel_mod", "search")
+    affinity_en = binpack_cfg.get("affinity_en", True)
+    affinity_level = binpack_cfg.get("affinity_level", 2)
+    
+    if bin_sel_mod == "pre_defined":
+        if 'mapping' not in binpack_cfg or binpack_cfg['mapping'] is None:
+            raise KeyError("binpack_cfg['mapping'] must be provided when bin_sel_mod is 'pre_defined'")
+        pid2bin_id:Dict[int, int] = binpack_cfg['mapping']
+    # -----------------------
+
     # Step1: initialize the resource request parameters
     # expected rsc_size and slot number
-    time_slot_s, time_slot_e, req_rsc_size = _p.rsc_req_estm(n_slot, timestep, FLOPS_PER_CORE, over_provision_rate=binpack_cfg.get("exec_t_comp_ratioB", 0))
+    time_slot_s, time_slot_e = _p.quant_release_deadline(n_slot, timestep)
+
     if time_slot_s >= time_slot_e:
         return False
     expected_slot_num = time_slot_e - time_slot_s
+    slack = n_slot * (timestep-1)
+    constr = TaskConstraints(
+        parallel_mode=_p.task.parallel_mode,
+        core_min=_p.task.core_min_compile,
+        core_max=_p.task.core_max_compile,
+        core_list=_p.task.core_list_compile
+    )
+    tot_cores = 300 # TODO: Make this a configurable parameter
+    req_rsc_size, got_latency, got_constr = _p.rsc_req_estm_quantile(
+        _p, slack, FLOPS_PER_CORE, binpack_cfg, constr,
+        time_slot_s=None, time_slot_e=None, max_size=tot_cores
+        )
+    time_slot_e = time_slot_s + math.ceil(got_latency/timestep)
 
     def tie_break(_p:ProcessInt):
         if _p.pid in rsc_recoder:
@@ -157,22 +186,15 @@ def allocate_rsc_4_process_new2(
         return [float("inf"), _p.pid]
 
     # Step2: select bin or give a search list
-    bin_sel_mod = binpack_cfg.get("bin_sel_mod", "search")
     if bin_sel_mod == "pre_defined":
-        assert binpack_cfg['mapping'] is not None
-        pid2bin_id:Dict[int, int] = binpack_cfg['mapping']
         bin_id = pid2bin_id[_p.pid]
         affinity_tgt_bin_id_list = [bin_id,]
         affinity_search_bin_id_list = []
         if bin_list[bin_id].num_resources < req_rsc_size: 
-            # warnings.warn(f"The bin({bin_id}) has not enough resources to fit the task({_p.task.name})")
-            _, _, estim_size = _p.rsc_req_estm(n_slot, timestep, FLOPS_PER_CORE, over_provision_rate=0)
-            if estim_size <= bin_list[bin_id].num_resources:
-                print(f"Expected exit (scaled overflowed): The task({_p.task.name}({_p.pid:d}) {estim_size:d} -> {req_rsc_size:d}, Bin({bin_id}):{bin_name_list[bin_id]}): {bin_list[bin_id].num_resources}")
-            else:
-                print("Unexpected exit: The bin({bin_id}) has not enough resources to fit the task({_p.task.name})")
+            # Note: legacy comparison path; estim_size now equals req_rsc_size under quantile model
+            print("Exit: The bin({bin_id}) has not enough resources to fit the task({_p.task.name})")
             import sys; sys.exit(1)
-                
+            
     else:
         affinity_tgt_bin_id_list, affinity_search_bin_id_list = bin_sel(_p, time_slot_s, time_slot_e, req_rsc_size, rsc_recoder_his, 
                                                                     bin_list, bin_name_list, timestep, binpack_cfg, process_dict)
@@ -182,8 +204,6 @@ def allocate_rsc_4_process_new2(
     # try to find bin to fit the task
     for bin_id in affinity_tgt_bin_id_list + affinity_search_bin_id_list: 
         # rearange the task in the ready queue
-        affinity_en = binpack_cfg.get("affinity_en", True)
-        affinity_level = binpack_cfg.get("affinity_level", 2)
         process_sort = get_process_sort([bin_name_list[bin_id]], rsc_recoder_his, tie_break, affinity_en, affinity_level)
         state, succ_info = check_and_preemt_alloc(_p, n_slot, bin_list[bin_id],
                                                 time_slot_s, time_slot_e, timestep,  
@@ -263,6 +283,14 @@ def bin_select_new(
         verbose:bool = False, DEBUG=False
         ):
 
+    # --- 入口参数检查与读取 ---
+    bin_sel_mod = binpack_cfg.get("bin_sel_mod", "search")
+    if bin_sel_mod == "pre_defined":
+        if 'mapping' not in binpack_cfg or binpack_cfg['mapping'] is None:
+            raise KeyError("binpack_cfg['mapping'] must be provided when bin_sel_mod is 'pre_defined'")
+        pid2bin_id:Dict[int, int] = binpack_cfg['mapping']
+    # -----------------------
+
     # strategy: 
     # 1. the resource constraint should be respected
     # 2. the pre-defined resource preservation should be respected 
@@ -272,10 +300,7 @@ def bin_select_new(
     # 6. the resource should be allocated as compact as possible
     # 7. the resource should be allocated as balanced as possible
 
-    bin_sel_mod = binpack_cfg.get("bin_sel_mod", "search")
     if bin_sel_mod == "pre_defined":
-        assert binpack_cfg['mapping'] is not None
-        pid2bin_id:Dict[int, int] = binpack_cfg['mapping']
         bin_id = pid2bin_id[_p.pid]
         affinity_tgt_bin_id_list = [bin_id,]
         affinity_search_bin_id_list = []
@@ -293,6 +318,9 @@ def bin_sel(_p:ProcessInt, time_slot_s, time_slot_e, req_rsc_size:Dict, rsc_reco
     2. the pre-defined resource preservation should be respected 
     3. the affinity settings of all the tasks should be respected 
     """
+    # --- 入口参数检查与读取 ---
+    bin_sort = binpack_cfg.get("sort", "EAT")
+    # -----------------------
     p_name = _p.task.name
     if p_name in bin_name_list:
         bin_id = bin_name_list.index(p_name)
@@ -313,7 +341,6 @@ def bin_sel(_p:ProcessInt, time_slot_s, time_slot_e, req_rsc_size:Dict, rsc_reco
         
         # sort the bin according to the feature
         # - free: slot_s, avil_unit, preemption: slot_s, avil_unit
-        bin_sort = binpack_cfg.get("sort", "EAT")
         if bin_sort == "EAT":
             bin_sort_fn = sort_bin_list_EAT
             affinity_tgt_bin_id_list = bin_sort_fn(_p, time_slot_s, time_slot_e, timestep, _p_index_by_pid,
@@ -382,12 +409,16 @@ def check_and_preemt_alloc(_p:ProcessInt, n_slot:int, bin:SchedulingTableInt,
         preemption_list=list(),
         verbose:bool = False, DEBUG=False):
 
+    # --- 入口参数检查与读取 ---
     mode = binpack_cfg["mode"]
     quantum_check_en = binpack_cfg.get("quantum_check_en", False)
     partial_alloc_en = binpack_cfg.get("partial_alloc_en", False)
-    # release_temp_rda = binpack_cfg.get("release_temp_rda", True)
     preempt_en = binpack_cfg.get("preempt_en", True)
-    assert mode in ["non-block", "block"]
+    
+    if mode not in ["non-block", "block"]:
+        raise ValueError(f"Invalid mode: {mode}. Must be 'non-block' or 'block'")
+    # -----------------------
+
     rsc_avl = bin.idx_free_by_slot(time_slot_s, time_slot_e, key=_p.pid)
     rsc_avl = np.array(rsc_avl)
 
@@ -477,12 +508,8 @@ def check_and_preemt_alloc(_p:ProcessInt, n_slot:int, bin:SchedulingTableInt,
             # pop the task from the bin
             print(f"pop the task {_p_2b_preempt.task.id}:{_p_2b_preempt.task.name}({_pid_2b_preempt})from the bin {bin_id}")
             # resource to be released
-            if False: #not release_temp_rda:
-                # A: the resource occupied from time_slot_s to time_slot_e
-                alloc_s_t, alloc_size_t, alloc_len_t = preemptable_map[_pid_2b_preempt]
-            else:
-                # B: the resource occupied from n_slot to future
-                bin_id_t, alloc_s_t, alloc_size_t, alloc_len_t = get_rsc_2b_released(rsc_recoder, n_slot, _p_2b_preempt) 
+            # the resource occupied from n_slot to future
+            bin_id_t, alloc_s_t, alloc_size_t, alloc_len_t = get_rsc_2b_released(rsc_recoder, n_slot, _p_2b_preempt) 
             # release all resources in this region
             bin.release(_p_2b_preempt, alloc_s_t, alloc_size_t, alloc_len_t)
             # update the resource map

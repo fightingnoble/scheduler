@@ -34,6 +34,7 @@ def get_partition_info(bin_list, graph:MyGraph, pid2name=None):
             partition_task_map.append(list(task_set))
     
     
+    # map the sink node to the partition
     G = graph.logical_graph
     for node in [n_ for n_ in G.nodes if G.nodes[n_]['type'] == "sink"]:
         preds = G.pred[node]
@@ -154,6 +155,7 @@ def load_graph_from_json(json_path, time_norm_factor):
             task_attr[node_id] = {
                 'offset': offset,
                 'exp_comp_t': exp_comp_t,
+                'exp_io_t': node['exp_io_t'],
                 'base_size': base_size,
                 # 'tgt_device': n.get('tgt_device', 'acc_p0'),
                 'var_factor': node['var_factor'],
@@ -171,10 +173,17 @@ def instantiate_mygraph_from_json(json_path, time_norm_factor):
     G = MyGraph(srcs, ops, sinks, task_attr, src_attr, sink_attr)
     return G, pid2name
 
-def instantiate_processors(G, partition_cfg: PartitionConfig, event_t, policy:str=None):
+def instantiate_processors(partition_cfg: PartitionConfig, event_t, policy:str=None, stat_param:dict={}):
     # 创建传感器处理器，使用动态映射模式
+    G = partition_cfg.G
     src_nodes = [n for n, x in G.logical_graph.in_degree() if x == 0]
-    stats_collector = StatisticsCollector()
+    stats_collector = StatisticsCollector(**stat_param)
+    # record the non-src task count
+    stats_collector.set_task_cnt(
+        len([
+            n_ for n_ in G.logical_graph.nodes 
+                if G.logical_graph.nodes[n_]['type'] == "op"
+        ]))
     sen_p0 = Sen_p("sen_p", 3, 1, G, set(src_nodes), stats_collector)
     acc_p_list = acc_p_factory(policy, partition_cfg, stats_collector)
     processors = [sen_p0] + acc_p_list

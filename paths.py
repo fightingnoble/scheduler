@@ -165,6 +165,13 @@ class PathContext:
         self._ensure_dir_exists(path)
         return path
 
+    def get_collector_path(self, case: Optional[str] = None) -> str:
+        case_name = case or self.case
+        filename = f"collector_{case_name}_{self.force_suffix}{self.num_cores}{self.file_suffix}.json"
+        path = os.path.join(self.log_root, filename)
+        self._ensure_dir_exists(path)
+        return path
+
     def get_cfg_path(self, cfg_name: str) -> str:
         path = os.path.join(self.cfg_root_dir, cfg_name)
         self._ensure_dir_exists(path)

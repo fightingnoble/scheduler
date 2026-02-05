@@ -1,0 +1,306 @@
+\section{Case Study and Motivation Analysis} 
+\label{sec::existing_scheduling_policies}
+% Given a function graph, the goal of a scheduling policy is to determine where and when a \singlefunc node is processed so that the \ETEs deadline is satisfied under runtime variations in a best-effort manner. Thus, the detailed scheduling results can be represented by a two-dimensional block diagram, where the x-axis represents the time and the y-axis represents the amount of tiles. For clarity, we continue with the simplified ADS example in Figure~\ref{fig::exe_pattern}. 
+
+This section we case study the design of schedulers in similar requirements, try to migrate them to the \hwname ADS step-by-step. By testing their actual performance under various configurations and runtime variations, we will show their limitations and the necessary to improve them in both the isolation and adaptive allocation ability.
+
+\subsection{Representative Existing Scheduling Policies} \label{subsec::baseline_idea}
+Existing scheduler that can be adapted to the \hwname ADS can be divided into two categories, reservation-based and throughput-driven schedulers.
+They consider both latency and utilization and take efforts in handling variations (F1-F2).
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.99\linewidth]{figures/pdf/baseline_idea_joint.pdf}
+  \caption{Basic idea of two representative schedulers: \CyclicName and \TpFirstName.}\label{fig:two_baseline_ideal}\label{fig::sched_space_plus_tab}
+  \vspace{-1em}
+\end{figure} 
+
+% \begin{figure}[t]
+%   \begin{overpic}[width=0.8\linewidth]{figures/pdf/existing_sched.drawio.pdf}
+%   \end{overpic}        
+% \caption{Limitations of existing scheduling policies}
+% \label{fig::sched_space_plus_tab}
+% \vspace*{-0.5cm}
+% \end{figure}
+
+% 但某些任务有可能会在负载激增的时候过度占用计算时间，导致后续任务的级联超时。
+% 为了避免这类问题，这类方法采用的预留机制：将任务静态绑定到处理器上，在每个周期内，为每个任务保留固定执行时间的份额。如果任务由于执行时间超过了预留量或者违背了子截止时间，则会被终止，即使任务尚未完成。
+% Recent works, such as D3~\cite{Gog2022-Eurosys-D3} and \AbbrCallout{\CyclicName}~\cite{McLean2020-tttech_tablescheduling}, propose real-time schedulers for lightweight driving assistant applications, primarily focusing on time-slice management on multiprocessor systems.
+% Due to execution variation (F1), tasks may excessively consume processor time, leading to cascading timeouts for concurrent tasks. 
+% To isolate interference (F2), these methods adapt reservation mechanisms~\cite{Casini2019,valigi2021lessons,Lelli2016,baker1989cyclic}, where each task is statically pinned to a processor and assigned a budget of processing time that can use at most in per hyper-period. 
+% If a task exceeds its budget or misses its sub-deadline, it is terminated, even if incomplete, thereby preventing excessive delays for other tasks.
+
+\subsubsection{Fully-isolated, time-multiplexing scheduler (\CyclicName)}\label{sec:full_isolated_scheduler}
+Recent works, such as D3~\cite{Gog2022-Eurosys-D3} and etc~\cite{McLean2020-tttech_tablescheduling}, manage time slices on multiprocessors via static reservations~\cite{Casini2019}. The key idea is to (1) statically pin each task to a fixed core and (2) divide each period divided into  \execTime intervals that are reserved for each task. Within each period, a task may run only within its reserved slot and pinned core. 
+\textbf{Strengths.} 1). The strong temporal and spatial isolation can absolotely isolate the interference between tasks (F2). 
+If the task overruns its budget or misses a sub-deadline, it is impossible to affect execution of colocated and succesive tasks, it is terminated, even if incomplete. Second, it incurs low rescheduling overhead, and it works well for compute-dominated kernels whose launch overheads can be hidden by double buffering. 
+%
+In the context of \ADSArch ADS, this method can also be applied by dividing tiles into multiple partitions, divide workflow graph into multiple sub-graphs, and reserve per-task budgets on each partition. As shown in Figure~\ref{fig::sched_space_plus_tab}b, computing tiles are divided into two partitions, with \singlefuncs-A/B and C/D mapped and reserved with budgets.
+
+\subsubsection{Non-isolated, colocation-aware scheduler (\TpFirstName)}% 
+\label{sec::non-isolated_spatial-aware_scheduler}
+% Recent studies, like Planaria~\cite{Ghodrati2020-Planaria}, VELTAIR~\cite{Liu2022-VELTAIR} and~\cite{Liu2022-VELTAIR,Kim2023MoCA,Lee2021-dataflow_mirroring,Choi2020-PREMA,Zhang2019-Laius,Baek2020_AI-MT, Kwon2021-Herald} have explored multi-task colocation on \hwname accelerators in cloud DNN serving scenarios~\cite{Kim2023MoCA, Lee2021-dataflow_mirroring, Ghodrati2020-Planaria, Choi2020-PREMA,Liu2022-VELTAIR}. 
+% To improve overall throughput and latency fairness under variation, they adopt greedy spatial colocation, which tries to utilize all tiles at any time by 1) co-locating as many tasks as possible, 2) distributing all tiles among all candidates and 3) rescheduling tasks once the task queue changes. 
+Recent studies, like Planaria~\cite{Ghodrati2020-Planaria}, VELTAIR~\cite{Liu2022-VELTAIR} and MoCA~\cite{Kim2023MoCA} have explored multi-task colocation on \hwname accelerators in cloud DNN serving scenarios. 
+The core idea is to employ deadline-driven task queue and a on-the-fly rescheduling policy, that 1) co-locate as many tasks as possible, 2) distributing all tiles among all candidates, to keep all processing tiles saturated. Whenever the set of ready tasks changes (e.g., a task arrives or completes), the scheduler immediately reallocates all available tiles among them. \textbf{Strengths:} This continuous, fine-grained rescheduling allows the system to flexibly adapt to workload variations and fill any idle time slices, thus achieving high resource utilization. 
+%
+In the context of ADS, this method can also handle the \ETEs workflow. As shown in Figure~\ref{fig::sched_space_plus_tab}d, the activated tasks are seen as independent requests each with a deadline. Initially, all spatial resources are assigned to \singlefunc-C, as it is the only ready task. Once \singlefunc-A becomes available, resources are reallocated at a sub-\singlefunc granularity to ensure both them meet their sub-deadlines. Computational stalls introduced by rescheduling are represented by the thin white boxes. 
+Afterwards, three rescheduling happens when tasks \singlefunc-C, A, and D compete respectively, each using up all available tiles. 
+
+\subsubsection{Migration of \CyclicName and \TpFirstName to \hwname ADS}\label{subsec:migrate_step_by_step}
+% 调度没有variation的任务是well-study的问题，因此，为了将\CyclicName和\TpFirstName迁移到，tile-based 自动驾驶系统中，需要主要解决三个问题：
+% （1）如前所描述的两种策略，都需要per-task的截止时间。然而，ADS 任务流图只给出了end-to-end的截止时间。因此，需要将end-to-end的截止时间，分解为per-task的\execTime预算。
+% （2）\HWName 存在大量的tile，而且允许DNN执行在多个tile上。而对于\CyclicName模型中，每个任务，只在单个core 上执行。因此要将 tile划分为若干分区，来构造类似粗粒度的多核的执行模型。当然，为了保证映射到每个分区上的任务，能够在分配的时间片内完成，需要合理设置分区的大小。
+% (3) 为了保证variation 下的延迟约束，不论是\execTime预算的划分，还是分区大小的设置，都需要考虑variation 的影响。
+\begin{enumerate}[leftmargin=*, nosep]
+  \item Both \CyclicName and \TpFirstName require per-task timing constraints and resource assignments to operate. However, ADS workflows provide only \ETEB latency constraints, not per-task sub-deadlines. Consequently, we need to decompose the \ETEB latency constraints into per-task sub-deadlines.
+  \item Additionally, the \hwname architecture comprises hundreds of tiles where a single DNN can allocate multiple tiles, whereas \CyclicName assume one-to-one core-task bindings, requiring dividing tiles into multiple partitions to construct a similar multi-core execution model. 
+  \item Most importantly, to ensure the final \ETEB latency constraint is met under runtime variations, both the decomposition of time budgets and the partitioning of hardware resources must be variation-aware. This requires a formal latency model that can statistically characterize task execution times, guiding the allocation process to achieve a predictable level of reliability.
+\end{enumerate}
+
+\subsection{Task Latency Modeling Under Variation}
+To formally handle execution variation, we model each task's latency as a random variable. 
+For DNN tasks, the upper bound of total latency \(L_i\) under $q$ probability is:
+\begin{IEEEeqnarray}{rCl}
+ L_i(q, c_v) = W_i^{(q)}/({c_v \cdot P}) + I_i^{(q)}.
+\end{IEEEeqnarray}
+The first part is the computation time, while the second part models the I/O and memory access delay. 
+$W_i, c_v, P$ are the workload (arithmetic operations), number of allocated tiles, and processing power of each tile (alrithmetic operations per second), respectively.
+The label $q$ subscript means the $q$-th quantile of the latency distribution. $v$ is the task index.
+The workload variation (F1) can be obtained by profiling traffic conditions collected from open-road or digital twin simulations~\cite{NVsaftyAVReport2024}.
+I/O latency is more complex, it is subject to queuing delays of system-level resource (DRAM, NoC) contention (F2). 
+Here, we adapt M/M/1 model, which is commonly used in the literature, where $I_v$ follows \emph{shifted exponential distribution}, capturing a fixed I/O latency with a stochastic queuing tail~\cite{Chang2005}. 
+For sensor processing tasks, each streaming source has a dedicated SPU and I/O port. 
+We used a uni-variate distibution $L_v(q) = \mathcal{D}_v^{q}$ to directly model the latency. 
+Note that, the main contribution of this model lies in that it quantitively associates the latency bound with the resource allocation. 
+Given the distribution of variation sources of task v, we can gurantee that it latency is bounded by $L_i(q, c_i)$ with $q$ probability, if given $c_i$ tiles are allocated to it.
+
+\begin{figure*}
+  \centering
+  \includegraphics[width=0.8\linewidth]{figures/pdf/guided_solver.pdf}
+  \caption{Guided phases for the scheduling problem.}\label{fig::guided_solver}
+  \vspace{-1em}
+\end{figure*}
+
+% \begin{figure*}[t]
+%   \centering
+  
+%   % 子图 (a) 使用 \subfloat 配合 minipage
+%   \subfloat[Limitations of existing scheduling policies]{\label{fig:sub:limitations}%
+%       \begin{minipage}[t]{0.4\linewidth}
+%           \centering
+%           \includegraphics[width=0.95\linewidth]{figures/pdf/existing_sched.drawio.pdf}
+%       \end{minipage}%
+%   }
+%   \hfill % 居中对齐，并在两图之间添加少量水平间距
+%   % 子图 (b) 使用 \subfloat 配合 minipage
+%   \subfloat[Guided phases for the scheduling problem]{\label{fig:sub:guided_phases}%
+%       \begin{minipage}[t]{0.6\linewidth}
+%           \centering
+%           \includegraphics[width=0.95\linewidth]{figures/pdf/guided_solver.pdf}
+%       \end{minipage}%
+%   }
+  
+%   % 主图标题
+%   \caption{A comparison of existing scheduling limitations and the proposed multi-phase solver architecture. (a) highlights the limitations of existing approaches, and (b) illustrates the three guided phases for the resource allocation problem.}
+%   \label{fig::combined_architecture}
+% \end{figure*}
+\subsection{Scheduling space}
+Prior \CyclicName-like (time-reservation) and \TpFirstName-like (throughput-driven colocation) schedulers optimize either the temporal or the spatial dimension in isolation. 
+In contrast, an ADS on \hwname must jointly decide \emph{when} each task executes (start time and duration) and \emph{where} it executes (logical/physical mapping) to satisfy $\slack_{e2e}$ on a DAG while maximizing utilization. This joint spatio-temporal problem is computationally intractable due to the tight coupling among (i) execution order and concurrency on the DAG, (ii) temporal assignment (time), and (iii) spatial assignment (bins/tiles). 
+
+To formally define the scheduling space, we can frame the problem as a spatio-temporal bin-packing problem. In this analogy:
+we are mapping $|V|$ tasks in workflow graph to $M$ tiles, where the tasks and tiles are respectively items to be packed and bins to placed. 
+\eqref{eq:space_bins}: First, $M$ tiles are divided into $S$ partitions, each of with can be seen as a \concept{Bin} with shape $(|B_s|, T_{hp})$.
+\eqref{eq:space_items}: Then, tasks are the \textbf{items} to be packed, with spatial ($c_v$ tiles) and temporal size (latency budget $l_v$).
+\eqref{eq:space_map}: The goal of a static scheduler is to produce a feasible packing plan. Spatially, each item is mapped to a bin ($x_s$), temporally, assigned an offset ($t_{start, v}$), which is the earliest start time and $t_{end, v} = t_{start, v} + l_v$ is the sub-deadline. 
+\begin{small}
+  \begin{IEEEeqnarray}{s'cl} 
+    \IEEEyesnumber\IEEEyessubnumber*
+    Bins partitioning: & (|B_1|, \ldots, |B_S|) \times T_{hp} & \; \text{(capacity)}\\  \label{eq:space_bins}
+    Items: & v \mapsto (c_v, l_v) &\; \text{(shape)} \\  \label{eq:space_items}
+    Mapping: & v \mapsto (x_s, t_{start, v}) &\; \text{(position)}  \label{eq:space_map}
+  \end{IEEEeqnarray}
+  \end{small}
+This unified view allows us to express prior schedulers as special cases:
+{\TpFirstName-like} schedulers determine the temporal scheduling on-the-fly and only decide spatial packing ($c_i$) on a single large bin ($S=1, C_1=M$).
+{\CyclicName-like} schedulers target fixed multicore processor and assume $l_i$ is fixed to worst case execution time (WCET), only selecting sub-core and execution order ($[x_s, t_{start}]$) for each task, performing temporal packing. 
+\highlightit{Note that}, different from vanilla bin packing problem, the shape of both items and bins are not pre-determined, and the packing result should not only meet the \ETEs latency constraints under variation. 
+
+\begin{table}[ht]
+  \centering
+  \caption{Notation of Scheduling space variables.}
+  \label{tab::reservation_template}
+  \resizebox{\linewidth}{!}{%
+  \begin{tabular}{cc|cc|cc}
+      \toprule
+      \multicolumn{2}{c|}{\textbf{Bin (Partition)}} & \multicolumn{4}{c}{\textbf{Item (Task) Position \& Shape}}\\ 
+      \midrule
+      $\mathbf{S}$ & Number of bins & $\mathbf{x_s}$ & Assigned bin & $\mathbf{c_v}$ & Spatial size (\# tiles) \\ 
+      $\mathbf{|B_s|}$ & Bin capacity (tiles) & $\mathbf{t_{start, v}}$ & Earliest start time & $\mathbf{l_v}$ & Temporal size (latency budget) \\
+      $\mathbf{T_{hp}}$ & Hyper-period & $\mathbf{t_{end, v}}$ & Sub-deadline & \\
+      \bottomrule
+\end{tabular}
+  }
+  \vspace{-0.5em}
+  \end{table}
+% With this template, we can split policy from mechanism. 
+% Parameters are collected into a \concept{reservation table} (ResvTab). 
+% Next, we will detail the implementation of  in ~\cref{sec::reservation_runtime}. 
+% And it's clear that the benefit of the proposed isolation mechanism is firmly dependent on the policy of tuning the reservation parameters. 
+
+\subsection{Guided Hybrid Allocation Algorithm}
+From an engineering standpoint, we adopt a hierarchical, \emph{guided} decomposition that progressively fixes part factors in the decision space and searches the remaining part in three sequential phases, refining the plan from an abstract logical specification to a concrete physical schedule:
+% 在第一个阶段，我们固定任务的并行方式和执行顺序：我们假设，每一条链上的任务都被隔离在不同的资源池中，并且链
+% 上的任务都按顺序执行。此时，我们需要将端到端延迟划分为每个节点分配\execTime预算，并确定相应的tile 数量。
+% 在第二个阶段，我们将重新调整资源分区包含的tile数量，以及任务图在分区内的划分，
+% 第三个阶段，我们固定任务流图的切分和资源分区的大小，重新调整分区内任务的执行编排。
+\begin{itemize}[leftmargin=*, nosep]
+  \item \textbf{Phase I}{-Chain-by-Chain Slack Assignment.} \emph{Fix}: position of items. \emph{Search}: shape of items on each chain to satisfy E2E deadlines while minimizing peak tile usage. Output: logical-graph with temporal attributes and the upper-bound of tile usage.
+  \item \textbf{Phase II}{-Spatial Partitioning.} \emph{Fix}: per-task shape from Phase I. \emph{Search}: item-to-bin spatial mapping and bin capacities. Output: Spatial sharing/isolation scheme.
+  \item \textbf{Phase III}{-Intra-partition Temporal Scheduling.} \emph{Fix}: Shape of bins and item-task mapping from Phase II. \emph{Search}: item shape ($c_v, l_v$) and temporal position ($t_{start}$) within each bin. Output: Detailed temporal plan for each task.
+\end{itemize}
+% This decomposition preserves feasibility under variation, exposes clear tuning knobs via $(q_A, q_B)$ for robustness–efficiency trade-offs, and yields an implementable schedule that combines static predictability with dynamic resilience.
+
+\subsubsection{Phase I}
+% 在这一阶段，我们首先将任务流图分解为若干条链。
+To simplify the position assignment, we adopt a chain-based decomposition strategy: each \ETEs chain is isolated into a separate partition, with tasks executing sequentially within their partition (\highlightuline{mirroring the \CyclicName model}). This reduces the full spatio-temporal problem to a series of simpler per-chain subproblems, where we determine the shape ($c_v, l_v$) for each task while keeping their execution order fixed. 
+% 最后一个任务的结束为止，早于端到端deadline，每个item的其实位置，不能早于上游节点对应的块。
+% 每个item的shape有约束。1. 任务并行度的限制：For example, the perception DNNs generate large backbone networks, such as YOLOX and Transformer~\cite{Li2022-BEVFormer, Ge2021-YOLOX}, whereas the 
+% planning and control DNNs are usually small models, such as MLP and GRU, thus varying greatly in the supported maximum parallel degree. 2. 设计规则的约束：只能从a list of configurations that is 
+% compiled in advance (i.e.,\(c_i^{compiled}\)) 选择。
+% 这个问题可以被抽象为一个二次规问题：
+For each chain, the shape assignment problem can be formulated as a constrained optimization problem: 
+\begin{small}
+\begin{IEEEeqnarray}{r'c'l}
+\min & &\max_{i} c_i \IEEEyesnumber \label{eq:phase1_obj} \\
+\text{s.t.} &\forall i  & s_{last} + l_{last} \leq D_{e2e} \IEEEyesnumber \IEEEyessubnumber* \label{eq:phase1_e2e} \\
+& &s_i \geq \max_{j \in \text{pred}(i)} (s_j + l_j), \label{eq:phase1_dep} \\
+& &l_i \geq L_i(q, c_i),  \IEEEyesnumber \IEEEyessubnumber \label{eq:phase1_lat} \\
+& &c_i \in \mathbb{Z}^+, \; c_i^{\min} \leq c_i \leq c_i^{\max} \text{ or } c_i \in c_i^{\text{compiled}}, \label{eq:phase1_core}
+\end{IEEEeqnarray} 
+\end{small}
+\highlight{From workflow graph perspective}, The objective \eqref{eq:phase1_obj} minimizes the peak tile usage across all tasks. Constraint \eqref{eq:phase1_e2e} ensures the \ETEB deadline is met, while \eqref{eq:phase1_dep} enforces graph topological order (each item cannot start earlier than the completion of its predecessor blocks). Constraint \eqref{eq:phase1_lat} links the latency budget to resource allocation via the latency model. 
+\highlight{From per-task perspective}, \eqref{eq:phase1_core} captures practical constraints: (1) \emph{Parallelism limits} imposed by DNN architecture---for example, perception DNNs at the upstream of the chains (e.g., Transformer~\cite{Li2022-BEVFormer}) are inherently larger than models at the tail, supporting higher degrees of parallelism; (2) \emph{Design-rule constraints} that restrict tile allocation to a pre-compiled list of valid configurations (\(c_i^{\text{compiled}}\)). 
+This process is repeated chain-by-chain, ordered by their criticality and total load; previously assigned nodes keep their allocations and consume part of the remaining deadline on subsequent chains, as described in Algorithm~\ref{alg::multi_chain_slack_distribution}.
+
+\begin{algorithm}[t]
+  \setstretch{0.95}
+  \caption{Multi-Chain Slack Distribution (Chain-by-Chain)}
+  \label{alg::multi_chain_slack_distribution}
+  \footnotesize
+  \begin{algorithmic}[1]
+    \renewcommand{\algorithmicrequire}{\textbf{Input:}}
+    \renewcommand{\algorithmicensure}{\textbf{Output:}}
+    \Require Chains set $\{\xi\}$, E2E deadlines $D^{(\xi)}_{e2e}$; workflow graph $G$; quantile $q$; Latency model $L_i(q, c_i)$
+    \Ensure Set $\Omega=\{(c_i, l_i)\}$ for all assigned tasks
+    \State $\Omega \leftarrow \varnothing$ \Comment{assigned nodes and their $(c,l)$}
+    \State Sort ${chain}$ by priority function
+    \For{each chain $\{\xi\}$}
+      \State $C \leftarrow$ nodes of $\xi$ in topological order
+      \Comment{Remove assigned nodes}; 
+      \State $Done \leftarrow C\cap \Omega, U \leftarrow [\, C\setminus \Omega\,]$ 
+      \State $D^{\text{rem}} \leftarrow \slack_{e2e} - \sum_{i\in } l_i$ \label{alg::rem_deadline}
+      \If{$ U=\varnothing$} \textbf{continue}; 
+      \EndIf
+      \Comment{Assign for unassigned nodes}; 
+      \State $(c_i,l_i)_{i\in U} \leftarrow \textsc{SolveSubChain}(q, G, U, D^{\text{rem}}, Done)$ \Comment{minimize peak cores s.t. $\sum l_i\le D^{\text{rem}}$}
+      \State $\Omega \leftarrow \Omega \cup \{(i, c_i, l_i)\}_{i\in U}$
+    \EndFor
+    \State Let $V_{topo}$ be the vertices of $G$ in topological order.
+    \State Initialize $s_i \leftarrow 0, e_i \leftarrow 0$ for all $i \in V$.
+    \For{each task $i$ in $V_{topo}$}
+      \State $s_i \leftarrow \max(\{e_p \mid (p, i) \in E\})$ \Comment{Start after latest predecessor}
+      \State $e_i \leftarrow s_i + l_i$ \Comment{End after its optimistic budget}
+    \EndFor
+  \end{algorithmic}
+\end{algorithm}
+Although Phase I provides a initialization for item shape, bin-capacity, and item-to-bin mapping, 
+it need further refinement for three reasons: 1) initial packing result may be loose, which means poor utilization; 2) depending the runtime scheduling policy, we need to tune the task-to-partition mapping to exploit the sharing opportunities, 3) Alghrough trying to minimize tile usage, maximum tile usage $M$ is not enforced. 
+These are addressed in Phase II and Phase III respectively.
+
+
+\subsubsection{Phase II}
+This phase compact the packing layout on spatial dimension, by searching the number of logical partitions, and corresponding item-to-bin mapping, that is, finding $\{x_{v \forall v \in G}\}$ given $S$. The searching progress is guided by three criteria: 1) total bin size 2) task affinity 3) utilization balance: 
+\begin{center}
+  \begin{tabular}{r c l}
+  \(\min\) & \multicolumn{2}{l}{\(w_1 \cdot (\sum_{m} S_m) - w_2 \cdot A + w_3 \cdot (\max_m U_m - \min_m U_m)\)} \\
+  s.t. & \(\sum_{m=1}^{M} x_{im} = 1\) & \(\forall i \in \text{Tasks}\) \\
+  & \(\sum_{i \in \text{Tasks}_j} c_i \cdot x_{im} \leq S_m\) & \(\forall m \in \text{Bins}, \forall j \in \text{Windows}\) \\
+  & \(A = \sum_{i,m} \alpha_{im} x_{im} + \sum_{i,k,m} \beta_{ik} x_{im} x_{km}\) & \\
+  & \(U_m = \frac{\sum_{j} (\sum_{i \in \text{Tasks}_j} c_i \cdot x_{im}) \cdot d_j}{S_m \cdot T_{hp}}\) & \(\forall m \in \text{Bins}\)
+  \end{tabular}
+  \end{center}
+Affinity defines the relatedness of tasks, for example, each task is prefer to be placed in the same Bin with its predecessors and successors. Althrough, at this phase, we still assume mapping to logical tile, the task that mapped to same bin is more likely to be mapped to same or adjacent tiles in physical graph, bringing lower communication latency. 
+
+
+We define the key variables and parameters for the optimization problem as follows:
+\begin{itemize}
+    \item $S_m \in \mathbb{Z}^+$: The capacity (number of cores) of Bin $m$.
+    \item $c_i \in \mathbb{Z}^+$: The required core count for task $i$ (output from Phase I).
+    \item $x_{im} \in \{0, 1\}$: A binary variable, where $x_{im}=1$ if task $i$ is assigned to Bin $m$.
+    \item $\alpha_{im} \in \mathbb{R}$: The affinity score between task $i$ and Bin $m$.
+    \item $\beta_{ik} \in \mathbb{R}$: The affinity score between task $i$ and task $k$. A high score indicates a strong preference for co-location.
+\end{itemize}
+The total affinity score $A$ is then formulated as one of the objectives to be maximized:
+$$ A = \sum_{i \in V} \sum_{m \in B} \alpha_{im} x_{im} + \sum_{i,k \in V, i \neq k} \sum_{m \in B} \beta_{ik} x_{im} x_{km} $$
+The first term aggregates task-to-Bin preferences, while the second term rewards placing pairs of tasks with high affinity in the same Bin.
+
+The overall problem is formulated as a multi-objective optimization problem where we seek to minimize the total bin sizes ($\sum S_m$), maximize the total affinity score ($A$), and balance the utilization across bins. The formulation is as follows:
+
+
+
+\subsubsection{Phase 3}
+This final phase performs intra-Bin temporal scheduling, answering: *given a fixed group of tasks in a Bin with a fixed resource capacity, what is the best static time-slot assignment for each task?* This is analogous to a classic real-time scheduling problem on a single multiprocessor system. The time slots are calculated using a more **aggressive, optimistic quantile** of task execution times (e.g., \(q_B=0.5\)), allowing for a denser schedule. This static timeline provides predictability and hides system overheads. Any deviation from this timeline at runtime is handled by the resource slack provisioned in Phase 2, creating a hybrid static-dynamic execution model.
+
+% may overfit
+\textbf{Quantile Selection.} The choice of quantiles \(q\) (for partitioning) allows tuning the trade-off between robustness and efficiency. A higher \(q\) reserves more fallback resources, while a lower \(q\) packs the schedule more tightly. 
+
+
+\subsection{Limitations of Previous Scheduling Policies} \label{subsec:limitations}
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.32\linewidth]{figures/exp_data/TC/motiv/case1_tradeoff.pdf}
+  \hfill
+  \includegraphics[width=0.32\linewidth]{figures/exp_data/TC/motiv/case2_breakdown.pdf}
+  \hfill
+  \includegraphics[width=0.32\linewidth]{figures/exp_data/TC/motiv/case2_utilization.pdf}
+  \caption{The overall latency overhead and frequency of rescheduling when applying throughput-driven scheduling policies to an ADS. }\label{fig:overhead}
+  \vspace{-1em}
+\end{figure*} 
+
+
+\textbf{Limitation:} 
+Serve variation {\bf F1} makes Worst-Case Execution Time (WCET) of tasks much greater than its mean ET. 
+Consequently, the budget and deadlines are not firmly calculated by WCET for better utilization (Figure~\ref{fig::sched_space_plus_tab}a), but with degraded algorithm performance. 
+As shown in Figure~\ref{fig::sched_space_plus_tab}c, {\singlefunc-A} experiences severe data delay and burst load, exceeding its budget and is terminated permanently. However, there is idle ET guaranteed to other tasks on both parts that could be utilized in completing \singlefunc-A. 
+% Fully-isolated scheduling policies lack the ability to handle the significant runtime variations inherent in ADS scenarios. Due to unpredictable workload fluctuations and tight deadlines, pre-allocated resources are often insufficient, resulting in early task termination and inefficient resource utilization.
+Although eliminated F2, tight sub-deadlines miss matches the end-to-end nature of ADS, and strict budgets isolation limits dynamical sharing opportunities, resulting in underutilization and unnecessary task drops under variations raised by F1. 
+
+\textbf{Limitation: } 
+% Throughput-driven scheduling policies introduce unacceptable rescheduling overhead due to the uncertainty of arrival of tasks with different priorities in ADS scenarios. 
+% The arrival order of high and low priority tasks is random, so that when the system has no resources, an incoming task with high priority task triggers rescheduling.
+% 由于任务的到达顺序和其优先级关系是随机的，因此当资源耗尽时，后到的高优先级任务总会触发重调度。
+The arrival order of high and low priority tasks is random. 
+However, lack of \ETEs view, \AbbrCallout{\TpFirstName}-like always exhausted all tiles.  
+As a result, high-priority tasks must trigger one rescheduling upon arrival, and the other upon its completion.  
+Rescheduling overhead is overlooked because they are designed to handle low request rate (typically $\leq$10 requests per second (RPS) per chip~\cite{Jiang2018a-Mainstream}), and batch processing helps amortize the cost. However, ADS face fundamentally distinct challenges: (1) ADS workflow integrates dozens of DNNs; (2) each operates at frequencies ranging from 10 to 240 Hz. With the \AbbrCallout{\TpFirstName}'s policies in ADS, each task may trigger rescheduling twice --- upon arrival and completion --- resulting in thousands rescheduling per second ($f_{\text{switch}} \approx 2 \times$ RPS). 
+A full-chip (all tiles) switching on a high-performance tile-based accelerator ($\times$10MB SRAM, $\times$100 GB/s DRAM bandwidth~\cite{Tenstorrent-2023}) can incur hundreds of microseconds of latency. 
+We measure the rescheduling overhead with a 100 ms \ETEs deadline, and find that up to 30\% of computational capability is wasted by rescheduling, as shown in Figure~\ref{fig:overhead}.
+Crucially, rescheduling delay can cascade accumulate along multi-stage pipelines, jeopardizing \ETEs deadlines. 
+As shown in Figure~\ref{fig::sched_space_plus_tab}d, despite scheduler fully utilizing all tiles under F1 variation, F2 frequent stalls \ETEs pipelines, resulting \singlefunc-B's timeout. 
+
+
+\subsection{Opportunity and Challenges} \label{subsec:opportunity}
+% Although the deadline and workload variations lead to suboptimal traditional scheduling strategies, the end-to-end characteristics of ADS still bring the opportunity. The primary scheduling target of the ADS is to meet the \ETEB deadline, rather than individual ones for each \singlefunc. Moreover, the variations of tasks are uncorrelated. the true delay variation of a system is much less severe than the sum of the variation of all individuals. Therefore, we can allow some tasks to miss their sub-deadlines within a limited range and finally achieve proper budget sharing, thereby maximizing resource utilization and ensuring that end-to-end deadlines are met.
+
+% Despite the opportunity, there are still several challenges to be solved. 1) Appropriate mechanisms must be designed to allow budget sharing. In the design process of task resource sharing methods in time and even space, we must fully consider the characteristics of ADS tasks, otherwise it will lead to suboptimal performance. 2) In order to achieve ideal budget sharing, rescheduling must be supported. How to balance the benefits and costs of rescheduling is an important issue. An unreasonable design will cause budget sharing to degenerate into throughput-driven scheduling policies.
+
+While existing schedulers fail to guarantee \ETEs deadlines under dynamic ADS scenarios, two critical opportunities remain unexploited. 
+\begin{itemize}[leftmargin=*, nosep]
+  \item First, the primary objective of ADS is to satisfy the \ETEB deadline constraint, rather than enforcement of each individual \singlefunc sub-deadline. 
+  \item Second, task variations may exhibit statistical independence; the true latency variation of an entire \ETEs system generally is much less severe than the sum of the latency variation of all individuals.   
+\end{itemize}
+
+Above observations necessitate a holistic adaptive scheduling approaches that (1) allow intermediate tasks to violate their sub-deadlines in some extent, and (2) enable dynamic resource allocation across tasks through spatial and temporal sharing. 
+However, there are two challenges need to be addressed. First, we need to design mechanisms that simultaneously support task colocation, interference isolation, and adaptive resource sharing --- Existing approaches demonstrate inadequate coverage of these essential requirements. Second, an effective scheduler must be aware of costs and benefits brought by rescheduling and isolation, to better trade-off utilization gains and rescheduling delay.

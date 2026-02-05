@@ -11,6 +11,7 @@ from functools import reduce
 from approach_Eq import time_gt, elim_nume_error, cal_cost
 from ref_tdigest import TDigestStreamingHistogram # Assuming ref_tdigest.py is in the same directory
 import numpy as np
+import matplotlib.pyplot as plt
 
 """
 Collection policy: 
@@ -42,7 +43,7 @@ class StatisticsCollector:
     Supports long-tailed distributions and high-quantile estimation.
     """
     
-    def __init__(self, delta: float = 0.01, K: int = 25):
+    def __init__(self, delta: float = 0.01, K: int = 25, **kwargs):
         """
         Initializes the statistics collector.
         
@@ -59,17 +60,33 @@ class StatisticsCollector:
         # Store delta and K for creating new TDigestStreamingHistogram objects if needed
         self.path = {"stat": './output.txt', "motiv3": './output.pdf'}
         self.total_pwr = 0.0
+        self.task_cnt = 0
         # Motiv-Exp-(3) storage mode: 'binned' or 'raw'
         self.motiv3_mode = 'binned'
+        self.motiv3_en = False
+        
+        # Parse stat_param from kwargs
+        if 'motiv3_mode' in kwargs:
+            self.set_motiv3_mode(kwargs['motiv3_mode'])
+        if 'motiv3_en' in kwargs:
+            self.motiv3_en = kwargs['motiv3_en']
         
         # Temp cache for Lat breakdown 
         # Per-task (instance) property
         # collected and reset at task completion
         # propagated to and aggregated at downstream
         self.task_at = {} # arrival time of each task
-        self.task_realloc_curr = defaultdict(float) # realloc overhead of each task
-        self.task_realloc_num = defaultdict(int) # realloc number of each task
-        self.task_compute_curr = defaultdict(float) # compute time of each task
+
+        # New logic for critical path tracking by user
+        self.task_curr_stat = defaultdict(
+            lambda: {'realloc': 0.0, 'compute': 0.0, 'realloc_num': 0}
+        )
+        # for each task, use a dict to store the stat of predecessors
+        # task_pred_stat[task][pred] -> {'realloc','compute','realloc_num','e2e_lat'}
+        self.task_pred_stat = defaultdict(
+            lambda: defaultdict(lambda: {'realloc': 0.0, 'compute': 0.0, 'realloc_num': 0, 'e2e_lat': 0.0})
+        )
+
         # distribution for latency breakdown
         self.dist_per_task_exe = defaultdict(
             lambda: TDigestStreamingHistogram(delta=delta, K=K)
@@ -87,6 +104,7 @@ class StatisticsCollector:
         self.part_realloc_num = defaultdict(int) # submitted realloc number
         self.hp_idle_curr = 0.0 # idle compute
         self.hp_miss_curr = 0.0 # missed load (absolute), normalized at period end
+        self.hp_used_curr = 0.0 # used load (absolute), normalized at period end
         self.hp_miss_count = 0 # number of missed tasks per period
         self.system_realloc_cost = 0.0  # System-level total reallocation cost
         # distribution for usage
@@ -96,8 +114,12 @@ class StatisticsCollector:
         self.dist_overall_realloc = TDigestStreamingHistogram(delta=delta, K=K) # normlized by total power
         self.dist_overall_idle = TDigestStreamingHistogram(delta=delta, K=K) 
         self.dist_overall_miss = TDigestStreamingHistogram(delta=delta, K=K)
+        self.dist_overall_used = TDigestStreamingHistogram(delta=delta, K=K)
         self.dist_overall_miss_count = TDigestStreamingHistogram(delta=delta, K=K)  # number of missed tasks per period
         self.dist_overall_total_load = TDigestStreamingHistogram(delta=delta, K=K)  # total load per period
+        self.dist_per_part_realloc_count = defaultdict(
+            lambda: TDigestStreamingHistogram(delta=delta, K=K)
+        )
 
         # For Motiv-Exp-(3): Adaptive binning for load vs. worst E2E latency relationship
         self.binning_warmup_period = 100  # Number of samples to learn the distribution from
@@ -118,13 +140,18 @@ class StatisticsCollector:
 
     def set_path(self, key: str, path: str):
         self.path[key] = path
+    
+    def set_task_cnt(self, task_cnt: int):
+        self.task_cnt = task_cnt
 
     def set_motiv3_mode(self, mode: str):
         """Set Motiv-Exp-(3) collection mode: 'binned' or 'raw'"""
         assert mode in ['binned', 'raw']
         self.motiv3_mode = mode
 
-    def init_partition_stats(self, partition_id: str, cap: int, base_pwr: float):
+    def init_partition_stats(
+            self, partition_id: str, cap: int, base_pwr: float
+        ):
         """Initializes statistics for a partition."""
         if partition_id in self.partition_realloc_stats:
             self.total_pwr -= self.partition_realloc_stats[partition_id]['base_pwr'] * self.partition_realloc_stats[partition_id]['cap']
@@ -159,16 +186,36 @@ class StatisticsCollector:
         # Remove completed task record
         del self.task_at[process_id]
 
-        # Record per-task overhead at task completion, and accumulate overhead to downstream tasks
-        realloc_time = self.task_realloc_curr.pop(process_id, 0.0) # Use .pop with default to avoid KeyError
-        realloc_num = self.task_realloc_num.pop(process_id, 0) # Use .pop with default to avoid KeyError
-        self.dist_per_task_realloc[base_task_name].add(realloc_time)
-        # propagate compute time downstream
-        compute_time = self.task_compute_curr.pop(process_id, 0.0)
+        # Pop this task's own stats
+        my_stat = self.task_curr_stat.pop(process_id, {'realloc': 0.0, 'compute': 0.0, 'realloc_num': 0})
+        compute_time = my_stat['compute']
+        realloc_time = my_stat['realloc']
+        realloc_num = my_stat['realloc_num']
+
+        # --- Critical Path Propagation Logic ---
+        pred_stat = self.task_pred_stat.pop(process_id, {})
+        # 1. Find the critical path predecessor based on e2e_lat (finish time relative to offset)
+        if not pred_stat:
+            # Source node case: its predecessor is the conceptual start
+            crit_pred_stat = {'realloc': 0.0, 'compute': 0.0, 'realloc_num': 0, 'e2e_lat': start_time - offset}
+        else:
+            crit_pred_stat = max(pred_stat.values(), key=lambda x: x['e2e_lat'])
+        
+        # 2. Update the stat of current task's path
+        path_stat = {
+            'compute': crit_pred_stat['compute'] + compute_time,
+            'realloc': crit_pred_stat['realloc'] + realloc_time,
+            'realloc_num': crit_pred_stat['realloc_num'] + realloc_num,
+            'e2e_lat': finish_t_rel,
+        }
+
+        # For non-sink nodes, dists are for path-based accumulation
+        self.dist_per_task_realloc[base_task_name].add(path_stat['realloc'])
+        self.dist_per_task_exe[base_task_name].add(elim_nume_error(path_stat['compute']))
+
+        # 3. Propagate path stat to all successors
         for succ in G.successors(process_id):
-            self.task_realloc_curr[succ] += realloc_time
-            self.task_realloc_num[succ] += realloc_num 
-            self.task_compute_curr[succ] += compute_time
+            self.task_pred_stat[succ][process_id] = path_stat
     
     def record_e2e_finish(self, G: MyGraph, sink_name: str, finish_t: float):
         """
@@ -182,13 +229,22 @@ class StatisticsCollector:
         self.dist_per_task_ft[base_sink_name].add(finish_t_rel)
         # cache chain constraint if available (relative deadline from src to sink)
         self.chain_e2e_constraint[base_sink_name] = G.ddl_map[sink_name] - offset
+        
+        # --- Critical Path Final Calculation for Sink ---
+        pred_stat = self.task_pred_stat.pop(sink_name, {})
+        if not pred_stat:
+            # This can happen if a source is directly connected to a sink
+            crit_pred_stat = {'realloc': 0.0, 'compute': 0.0}
+        else:
+            crit_pred_stat = max(pred_stat.values(), key=lambda x: x['e2e_lat'])
+
+        path_compute = crit_pred_stat['compute']
+        path_realloc = crit_pred_stat['realloc']
+        
         # record realloc overhead
-        realloc_time = self.task_realloc_curr.pop(sink_name, 0.0) # Use .pop with default to avoid KeyError
-        realloc_num = self.task_realloc_num.pop(sink_name, 0) # Use .pop with default to avoid KeyError
-        self.dist_per_task_realloc[base_sink_name].add(realloc_time)
+        self.dist_per_task_realloc[base_sink_name].add(path_realloc)
         # record compute time
-        compute_time = self.task_compute_curr.pop(sink_name, 0.0)
-        self.dist_per_task_exe[base_sink_name].add(elim_nume_error(compute_time))
+        self.dist_per_task_exe[base_sink_name].add(elim_nume_error(path_compute))
 
         # update per-hyperperiod worst e2e
         self._record_period_e2e_candidate(finish_t_rel)
@@ -198,9 +254,9 @@ class StatisticsCollector:
         Records reallocation overhead each time the remaining realloc tasks are updated.
         Maintains per-task realloc overhead and per-hyperperiod overhead.
         """
-        # Update per-task realloc overhead
+        # Update per-task realloc overhead (own time)
         for task_name in task_list:
-            self.task_realloc_curr[task_name] += delta_ld
+            self.task_curr_stat[task_name]['realloc'] += delta_ld
         
         # Update per-part realloc overhead
         self.part_realloc_curr[partition_id] += delta_ld
@@ -218,17 +274,19 @@ class StatisticsCollector:
         """
         # Update per-task realloc overhead
         for task_name in task_list:
-            self.task_realloc_num[task_name] += 1
+            self.task_curr_stat[task_name]['realloc_num'] += 1
         
         # Update per-part realloc overhead
         self.part_realloc_num[partition_id] += 1
 
 
     # ---------------- New minimal APIs for experiments ----------------
-    def record_compute_progress(self, task_name: str, delta_compute_t: float):
+    def record_compute_progress(self, task_name: str, delta_compute_t: float, delta_load: float=None):
         """Accumulate compute time for a task instance (delta time domain)."""
         if delta_compute_t > 0:
-            self.task_compute_curr[task_name] += float(delta_compute_t)
+            self.task_curr_stat[task_name]['compute'] += float(delta_compute_t)
+        if delta_load is not None:
+            self.hp_used_curr += delta_load
 
     def record_period_load_arrival(self, load: float):
         """Accumulate total submitted load within current hyperperiod."""
@@ -273,45 +331,50 @@ class StatisticsCollector:
             self.dist_per_part_realloc[part_id].add(
                 elim_nume_error(realloc_time/T_hp)
             )
+            self.dist_per_part_realloc_count[part_id].add(realloc_num)
         
         # Add system_realloc_cost to the overall distribution
         
         # Normalize by total_pwr * T_hp to get ratios per period
         assert self.total_pwr > 0 and T_hp > 0
         denom = self.total_pwr * T_hp 
+        
         self.dist_overall_realloc.add(elim_nume_error(self.system_realloc_cost/denom))
         self.dist_overall_idle.add(elim_nume_error(self.hp_idle_curr / denom))
         self.dist_overall_miss.add(elim_nume_error(self.hp_miss_curr / denom))
+        self.dist_overall_used.add(elim_nume_error(self.hp_used_curr / denom))
         self.dist_overall_miss_count.add(self.hp_miss_count)
             
         # Reset accumulators for next period
         self.system_realloc_cost = 0.0
         self.hp_idle_curr = 0.0
         self.hp_miss_curr = 0.0
+        self.hp_used_curr = 0.0
         self.hp_miss_count = 0
 
         # --- Motiv-Exp-(3) Adaptive Binning ---
-        total_load = self.hp_total_load_curr
-        worst_e2e = self.hp_worst_e2e_curr
-        
-        # We only add Motiv-Exp-(3) stats if a valid E2E latency was recorded in this period
-        if worst_e2e > float('-inf'):
-            if self.motiv3_mode == 'raw':
-                # Save raw (load, worst_e2e) pair for this period
-                if total_load is not None and total_load >= 0:
-                    self.raw_load_latency.append((float(total_load), float(worst_e2e)))
-            else:
-                # 1. Always learn the load distribution
-                if total_load is not None and total_load >= 0:
-                    self.dist_hp_total_load.add(total_load)
-                # 2. Handle data based on whether bins are finalized
-                if self.adaptive_load_bins is None: # Learning phase
-                    self.hp_temp_records_for_binning.append((total_load, worst_e2e))
-                    # Check if learning period is over
-                    if len(self.hp_temp_records_for_binning) >= self.binning_warmup_period:
-                        self._finalize_adaptive_bins()
-                else: # Bins are finalized, do online binning
-                    self._add_to_adaptive_bin(total_load, worst_e2e)
+        if self.motiv3_en:
+            total_load = self.hp_total_load_curr
+            worst_e2e = self.hp_worst_e2e_curr
+            
+            # We only add Motiv-Exp-(3) stats if a valid E2E latency was recorded in this period
+            if worst_e2e > float('-inf'):
+                if self.motiv3_mode == 'raw':
+                    # Save raw (load, worst_e2e) pair for this period
+                    if total_load is not None and total_load >= 0:
+                        self.raw_load_latency.append((float(total_load), float(worst_e2e)))
+                else:
+                    # 1. Always learn the load distribution
+                    if total_load is not None and total_load >= 0:
+                        self.dist_hp_total_load.add(total_load)
+                    # 2. Handle data based on whether bins are finalized
+                    if self.adaptive_load_bins is None: # Learning phase
+                        self.hp_temp_records_for_binning.append((total_load, worst_e2e))
+                        # Check if learning period is over
+                        if len(self.hp_temp_records_for_binning) >= self.binning_warmup_period:
+                            self._finalize_adaptive_bins()
+                    else: # Bins are finalized, do online binning
+                        self._add_to_adaptive_bin(total_load, worst_e2e)
 
         # reset accumulators for next period
         self.dist_overall_total_load.add(self.hp_total_load_curr)
@@ -449,6 +512,7 @@ class StatisticsCollector:
             'overall_e2e_latency': {},
 
             'per_part_realloc_overhead': {},
+            'per_part_realloc_count': {},
             'per_chain_realloc_overhead': {},
             'overall_realloc_overhead': {},
             'overall_idle_time': {},
@@ -483,11 +547,15 @@ class StatisticsCollector:
         # 3. Per-part realloc overhead distribution
         for part_id, dist in self.dist_per_part_realloc.items():
             summary['per_part_realloc_overhead'][part_id] = dist.get_summary(num_bins, p_list)
+        # 3.1 Per-part realloc count distribution
+        for part_id, dist in self.dist_per_part_realloc_count.items():
+            summary['per_part_realloc_count'][part_id] = dist.get_summary(num_bins, p_list)
         
         # 4. Overall reallocation overhead
         summary['overall_realloc_overhead'] = self.dist_overall_realloc.get_summary(num_bins, p_list)
         summary['overall_idle_time'] = self.dist_overall_idle.get_summary(num_bins, p_list)
         summary['overall_missed_load'] = self.dist_overall_miss.get_summary(num_bins, p_list)
+        summary['overall_used_load'] = self.dist_overall_used.get_summary(num_bins, p_list)
         summary['overall_missed_count'] = self.dist_overall_miss_count.get_summary(num_bins, p_list)
         summary['overall_total_load'] = self.dist_overall_total_load.get_summary(num_bins, p_list)
         
@@ -516,6 +584,7 @@ class StatisticsCollector:
         - idle_mean_ratio: mean of dist_overall_idle 
         - miss_mean_ratio: mean of dist_overall_miss 
         - realloc_mean_ratio: mean of dist_overall_realloc
+        - used_mean_ratio: mean of dist_overall_used
         - miss_mean_count: mean number of missed tasks per period
         (already normalized by total_pwr*T_hp)
         """
@@ -523,7 +592,16 @@ class StatisticsCollector:
             'idle_mean_ratio': float(self.dist_overall_idle.get_mean()),
             'miss_mean_ratio': float(self.dist_overall_miss.get_mean()),
             'realloc_mean_ratio': float(self.dist_overall_realloc.get_mean()),
-            'miss_mean_count': float(self.dist_overall_miss_count.get_mean())
+            'used_mean_ratio': float(self.dist_overall_used.get_mean()),
+            'miss_mean_count': float(self.dist_overall_miss_count.get_mean()/self.task_cnt)
+        }
+    
+    def get_realloc_info(self) -> Dict:
+        """Return the realloc info.
+        """
+        return {
+            'realloc_mean_ratio': float(self.dist_overall_realloc.get_mean()),
+            'realloc_mean_count': sum(dist.get_mean() for dist in self.dist_per_part_realloc_count.values())
         }
     
     # ============ Case-Specific Interfaces ============
@@ -597,7 +675,7 @@ class StatisticsCollector:
         统计指标：
         - spearman_rho: Spearman秩相关系数（单调相关性）
         - binned_summary: 自适应分箱的负载-延迟摘要（仅binned模式）
-        - raw_data_count: 原始数据点数量（仅raw模式）
+        - raw_data: 原始数据点列表（仅raw模式）
         
         Args:
             percentile: 用于计算相关性的分位数（默认0.99，即p99）
@@ -607,8 +685,9 @@ class StatisticsCollector:
             dict: {
                 'mode': 'raw' | 'binned',
                 'spearman_rho': float,
+                'percentile': float,
                 'binned_summary': [...] | None,  # binned模式
-                'raw_data_count': int | None     # raw模式
+                'raw_data': [(load, latency), ...] | None  # raw模式
             }
         """
         if mode is None:
@@ -624,26 +703,29 @@ class StatisticsCollector:
         
         if mode == 'binned':
             result['binned_summary'] = self.get_adaptive_load_latency_summary([0.5, 0.9, percentile, 0.999])
-            result['raw_data_count'] = None
+            result['raw_data'] = None
         else:  # raw
             result['binned_summary'] = None
-            result['raw_data_count'] = len(self.raw_load_latency)
+            result['raw_data'] = self.get_raw_load_latency()
             
         return result
     
-    def plot_motiv_case1(self, data_points: List[Dict] = None, save_path: str = None, show: bool = False):
-        """[Motiv-Exp-1] 绘制利用率-可靠性权衡图（并排双柱状图）
+    @staticmethod
+    def plot_motiv_case1(data_points: List[Dict], save_path: str, show: bool = False):
+        """[Motiv-Exp-1] 绘制利用率-可靠性权衡图（三柱状图+附轴）
         
-        绘制不同预留分位数下的idle_ratio和miss_ratio对比柱状图。
-        需要提供多个配置点的数据（例如不同预留分位数下的结果）。
+        绘制不同预留分位数下的idle_ratio、miss_ratio、realloc_ratio对比柱状图。
+        主轴：百分比对数轴显示三个ratio
+        附轴：线性轴显示miss_count
         
         Args:
             data_points: 数据点列表，每个点为一个dict，包含:
                 - 'idle_mean_ratio': float
                 - 'miss_mean_ratio': float
+                - 'realloc_mean_ratio': float
+                - 'miss_mean_count': float
                 - 'label': str (用于x轴标签，如'p50', 'p60')
-                如果不提供，则仅绘制当前collector的单个数据点
-            save_path: 保存路径，默认使用'./motiv_case1_tradeoff.pdf'
+            save_path: 保存路径
             show: 是否显示图形
             
         Example:
@@ -655,59 +737,77 @@ class StatisticsCollector:
                 results.append({
                     'idle_mean_ratio': stats['idle_mean_ratio'],
                     'miss_mean_ratio': stats['miss_mean_ratio'],
+                    'realloc_mean_ratio': stats['realloc_mean_ratio'],
+                    'miss_mean_count': stats['miss_mean_count'],
                     'label': f'p{int(ratio*100)}'
                 })
             collector.plot_motiv_case1(data_points=results)
         """
-        import matplotlib.pyplot as plt
-        
-        if save_path is None:
-            save_path = './motiv_case1_tradeoff.pdf'
-        
-        # 如果没有提供数据点，使用当前collector的数据
-        if data_points is None:
-            stats = self.get_motiv_case1_stats()
-            data_points = [{
-                'idle_mean_ratio': stats['idle_mean_ratio'],
-                'miss_mean_ratio': stats['miss_mean_ratio'],
-                'label': 'current'
-            }]
-        
         # 提取数据
         labels = [p.get('label', f'config{i}') for i, p in enumerate(data_points)]
         idle_ratios = [p['idle_mean_ratio'] for p in data_points]
         miss_ratios = [p['miss_mean_ratio'] for p in data_points]
+        realloc_ratios = [p['realloc_mean_ratio'] for p in data_points]
+        miss_counts = [p['miss_mean_count'] for p in data_points]
         
-        # 绘制并排双柱状图
-        fig, ax = plt.subplots(figsize=(10, 6))
+        # 创建双轴图 - 调整为论文尺寸（约2.6英寸宽，适合三图并排）
+        fig, ax1 = plt.subplots(figsize=(4, 2.2))
+        ax2 = ax1.twinx()  # 创建附轴
         
         x_pos = np.arange(len(labels))
-        width = 0.35
+        width = 0.25
         
-        # 绘制idle和miss的柱状图
-        bars1 = ax.bar(x_pos - width/2, idle_ratios, width, 
-                       label='Idle Ratio', color='C3', alpha=0.8)
-        bars2 = ax.bar(x_pos + width/2, miss_ratios, width,
-                       label='Miss Ratio', color='C2', alpha=0.8)
+        # 主轴：绘制三个ratio的柱状图（对数轴）
+        bars1 = ax1.bar(x_pos - width, idle_ratios, width, 
+                       label='Idle', color='C3', alpha=0.8)
+        bars2 = ax1.bar(x_pos, miss_ratios, width,
+                       label='Miss', color='C2', alpha=0.8)
+        bars3 = ax1.bar(x_pos + width, realloc_ratios, width,
+                       label='Realloc', color='C1', alpha=0.8)
         
-        # 在柱子上方标注数值
-        for bars in [bars1, bars2]:
+        # 附轴：绘制miss_count的线图
+        line = ax2.plot(x_pos, miss_counts, 'o-', color='C4', linewidth=1.5, 
+                       markersize=4, label='Miss Count', alpha=0.8)
+        
+        # 在柱子上方标注数值（主轴）- 位置下移
+        for bars in [bars1, bars2, bars3]:
             for bar in bars:
                 height = bar.get_height()
-                ax.text(bar.get_x() + bar.get_width()/2., height,
-                       f'{height:.3f}',
-                       ha='center', va='bottom', fontsize=9)
+                if height > 0:  # 只标注非零值
+                    ax1.text(bar.get_x() + bar.get_width()/2., height/5,
+                           f'{height:.2e}' if height < 0.01 else f'{height:.3f}',
+                           ha='center', va='bottom', fontsize=7)
         
-        ax.set_xlabel('Reservation Percentile (预留分位数)', fontsize=12)
-        ax.set_ylabel('Ratio (占比)', fontsize=12)
-        ax.set_title('Case 1: Utilization-Reliability Tradeoff', fontsize=14)
-        ax.set_xticks(x_pos)
-        ax.set_xticklabels(labels)
-        ax.legend(loc='best', fontsize=11)
-        ax.grid(True, alpha=0.3, linestyle='--', axis='y')
+        # 在线上标注数值（附轴）- 增大字体
+        for i, count in enumerate(miss_counts):
+            ax2.text(i, count, f'{count:.1f}', ha='center', va='bottom', 
+                    fontsize=7, color='C4', fontweight='bold')
+        
+
+        # 设置主轴（对数轴）
+        ax1.set_xlabel('Reservation Percentile', fontsize=9)
+        ax1.set_ylabel('Ops Ratio (Log)', fontsize=9, color='black')
+        ax1.set_yscale('log')
+        ax1.set_xticks(x_pos)
+        ax1.set_xticklabels(labels, fontsize=7)
+        ax1.grid(True, alpha=0.3, linestyle='--', axis='y')
+        ax1.tick_params(axis='y', labelcolor='black', labelsize=7)
+        
+        # 设置附轴（线性轴）
+        ax2.set_ylabel('Timeout Rate', fontsize=9, color='C4')
+        ax2.tick_params(axis='y', labelcolor='C4', labelsize=7)
         
         # 添加参考线
-        ax.axhline(y=0.1, color='r', linestyle='--', linewidth=1.5, alpha=0.5, label='10% threshold')
+        ax1.axhline(y=0.1, color='r', linestyle='--', linewidth=1, alpha=0.5, label='10%')
+        ax1.axhline(y=0.01, color='orange', linestyle='--', linewidth=1, alpha=0.5, label='1%')
+        
+        # 合并图例
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        # 不用副轴的图例
+        ax1.legend(lines1, labels1, loc='upper left', fontsize=6, framealpha=0.7)
+        
+        ax1.set_title('Cyc.: Utilization-Reliability Tradeoff', fontsize=9, pad=8)
         
         fig.tight_layout()
         
@@ -721,8 +821,48 @@ class StatisticsCollector:
         
         plt.close(fig)
     
-    def plot_motiv_case2(self, data_points: List[Dict] = None, plot_type: str = 'breakdown', 
-                        save_path: str = None, show: bool = False):
+    @staticmethod
+    def _cluster_case2_data(data_points: List[Dict], group_order: List = None):
+        """辅助函数：将 Case 2 数据按 (tiles, load_factor) 分簇，簇内按 chains 分组
+        
+        按 group_order 指定的顺序组织数据。
+        
+        Args:
+            data_points: 包含 tiles, load_factor, chains 等字段的数据点列表
+            group_order: [cluster_keys_list, chains_list]，指定簇和簇内的顺序
+                        例如：[[(400, 0.5), (400, 1.0), (200, 0.5)], [1, 4, 9]]
+        
+        Returns:
+            clusters: OrderedDict {(tiles, load): OrderedDict{chains: data_point}}
+        """
+        from collections import OrderedDict
+        
+        # 先将数据点按 (tiles, load, chains) 索引化
+        data_index = {}
+        for p in data_points:
+            tiles = p.get('tiles', 0)
+            load_factor = p.get('load_factor', 0)
+            chains = p.get('chains', 0)
+            key = (tiles, load_factor, chains)
+            data_index[key] = p
+            
+        cluster_keys_order = group_order[0]
+        chains_order = group_order[1]
+        
+        # 按指定顺序重建 clusters
+        clusters = OrderedDict()
+        for cluster_key in cluster_keys_order:
+            clusters[cluster_key] = OrderedDict()
+            for chains in chains_order:
+                full_key = (cluster_key[0], cluster_key[1], chains)
+                if full_key in data_index:
+                    clusters[cluster_key][chains] = data_index[full_key]
+        
+        return clusters
+    
+    @staticmethod
+    def plot_motiv_case2(data_points: List[Dict], plot_type: str, 
+                        save_path: str, show: bool = False, group_order: List = None):
         """[Motiv-Exp-2] 绘制可扩展性分析图
         
         支持两种图表类型：
@@ -731,10 +871,13 @@ class StatisticsCollector:
         
         Args:
             data_points: 数据点列表，每个点为一个dict，包含:
-                - 'label': str (x轴标签，例如'300 tiles, 4 chains')
+                - 'tiles': int (硬件tile数)
+                - 'load_factor': float (负载倍数)
+                - 'chains': int (任务链数)
+                - 'label': str (x轴标签，例如'300T-4C')
                 - 'utilization': dict (需要包含idle/miss/realloc_mean_ratio)
                 - 'latency_breakdown': dict (需要包含overall的exec/realloc/wait_ratio)
-                如果不提供，则仅绘制当前collector的单个数据点
+                - 'miss_mean_count': float (miss任务数量)
             plot_type: 'breakdown' 或 'utilization'
             save_path: 保存路径
             show: 是否显示图形
@@ -742,105 +885,233 @@ class StatisticsCollector:
         Example:
             # 扫描多个配置
             results = []
-            for tiles in [300, 500]:
-                for chains in [1, 4]:
-                    collector = run_simulation(num_tiles=tiles, num_chains=chains)
+            tiles_loads = [(400, 1.0), (400, 0.5), (200, 1.0)]
+            chains_list = [1, 4, 9]
+            for tiles, load in tiles_loads:
+                for chains in chains_list:
+                    collector = run_simulation(num_tiles=tiles, load_factor=load, num_chains=chains)
                     stats = collector.get_motiv_case2_stats()
                     results.append({
-                        'label': f'{tiles}T-{chains}C',
+                        'tiles': tiles,
+                        'load_factor': load,
+                        'chains': chains,
+                        'label': f'{tiles}T-{load:.1f}×-{chains}C',
                         **stats
                     })
-            collector.plot_motiv_case2(data_points=results, plot_type='breakdown')
+            StatisticsCollector.plot_motiv_case2(data_points=results, plot_type='breakdown')
         """
         import matplotlib.pyplot as plt
         
-        if save_path is None:
-            save_path = f'./motiv_case2_{plot_type}.pdf'
-        
-        # 如果没有提供数据点，使用当前collector的数据
-        if data_points is None:
-            stats = self.get_motiv_case2_stats()
-            data_points = [{
-                'label': 'current',
-                **stats
-            }]
-        
-        fig, ax = plt.subplots(figsize=(10, 6))
-        
-        labels = [p['label'] for p in data_points]
-        x_pos = np.arange(len(labels))
+        # 根据图表类型设置尺寸
+        if plot_type == 'breakdown':
+            fig, ax = plt.subplots(figsize=(4, 2.2))
+        else:  # utilization
+            fig, ax = plt.subplots(figsize=(4, 2.2))
         
         if plot_type == 'breakdown':
-            # 延迟分解堆叠柱状图
-            exec_ratios = []
-            realloc_ratios = []
-            wait_ratios = []
+            # 延迟分解堆叠柱状图 + miss num ratio 曲线（附轴）
+            # 创建附轴
+            ax2 = ax.twinx()
+
+            # 使用分簇逻辑
+            clusters = StatisticsCollector._cluster_case2_data(data_points, group_order)
             
-            for p in data_points:
-                breakdown = p.get('latency_breakdown', {}).get('overall', {})
-                exec_ratios.append(breakdown.get('exec_ratio', 0))
-                realloc_ratios.append(breakdown.get('realloc_ratio', 0))
-                wait_ratios.append(breakdown.get('wait_ratio', 0))
+            # 从排序好的 clusters 中提取 labels 和 chains
+            cluster_labels = [f'{t}T-{l:.1f}×' for t, l in clusters.keys()]
+            chain_values = list(next(iter(clusters.values())).keys()) if clusters else []
+
+            num_clusters = len(clusters)
+            bars_per_cluster = max(len(v) for v in clusters.values()) if clusters else 0
             
-            # 堆叠柱状图
-            ax.bar(x_pos, exec_ratios, label='Execution', color='C0', alpha=0.8)
-            ax.bar(x_pos, realloc_ratios, bottom=exec_ratios, 
-                   label='Scheduling (Realloc)', color='C1', alpha=0.8)
+            x_pos = np.arange(num_clusters)
+            total_width = 0.8
+            width = total_width / bars_per_cluster
             
-            bottom = np.array(exec_ratios) + np.array(realloc_ratios)
-            ax.bar(x_pos, wait_ratios, bottom=bottom, 
-                   label='Waiting', color='C2', alpha=0.8)
+            # 绘制堆叠柱状图（按 chain 分组）
+            hatch_patterns = ['', '///', 'xxx', '\\\\\\']
+            for i_cluster, (cluster_key, cluster_data) in enumerate(clusters.items()):
+
+                x_cluster = []
+                y_cluster = []
+
+                for i_bar, chains in enumerate(cluster_data.keys()):
+                    p = cluster_data[chains]
+                    x_offset = x_pos[i_cluster] + (i_bar - (bars_per_cluster - 1) / 2) * width
+                    # util = p['utilization']
+                    breakdown = p.get('latency_breakdown', {}).get('overall', {})
+                    miss_num = p.get('miss_mean_count', 0)
+                    temp = {
+                        'exec': breakdown.get('exec_ratio', 0),
+                        'realloc': breakdown.get('realloc_ratio', 0),
+                        'wait': breakdown.get('wait_ratio', 0),
+                        'miss_num': miss_num,
+                        'hatch': hatch_patterns[i_bar % len(hatch_patterns)]
+                    }
+                    bot = 0
+                    # Execution
+                    ax.bar(x_offset, temp['exec'], width=width, bottom=bot,
+                        label='Execution' if i_cluster == 0 and i_bar == 0 else '', color='C0', alpha=0.8, hatch=temp['hatch'])
+                    bot += temp['exec']
+                    # Realloc
+                    ax.bar(x_offset, temp['realloc'], width=width, bottom=bot,
+                        label='Scheduling (Realloc)' if i_cluster == 0 and i_bar == 0 else '', color='C1', alpha=0.8, hatch=temp['hatch'])
+                    bot += temp['realloc']
+                    # Wait
+                    ax.bar(x_offset, temp['wait'], width=width, bottom=bot,
+                        label='Waiting' if i_cluster == 0 and i_bar == 0 else '', color='C2', alpha=0.8, hatch=temp['hatch'])
+                    bot += temp['wait']
+
+                    if not np.isnan(temp['miss_num']):
+                        x_cluster.append(x_offset)
+                        y_cluster.append(temp['miss_num'])
+                # 绘制 miss num ratio 曲线（簇内连接）
+                if len(x_cluster) >= 2:
+                    ax2.plot(x_cluster, y_cluster, 'o-', color='C4', linewidth=2,
+                            markersize=7, alpha=0.8)
+                elif len(x_cluster) == 1:
+                    ax2.plot(x_cluster, y_cluster, 'o', color='C4', 
+                            markersize=7, alpha=0.8)
             
-            ax.set_ylabel('Ratio to E2E Constraint', fontsize=12)
-            ax.set_title('Case 2: Latency Breakdown vs Scale', fontsize=14)
-            ax.axhline(y=1.0, color='r', linestyle='--', linewidth=2, alpha=0.5, label='Constraint (100%)')
+            ax2.plot([], [], 'o-', color='C4', linewidth=1.5, markersize=4, 
+                    label='Miss Rate', alpha=0.8)
+            
+            # 主轴设置
+            ax.set_ylabel(r'Lat. Ratio w.r.t. $\mathcal{D}_{\mathrm{e2e}}$', fontsize=9, color='black')
+            ax.set_title('Tp-driven.: Latency Breakdown vs Scale', fontsize=9, pad=8)
+            ax.set_xticks(x_pos)
+            ax.set_xticklabels(cluster_labels, rotation=0, fontsize=7)  # ha='right',
+            ax.axhline(y=1.0, color='r', linestyle='--', linewidth=1, alpha=0.5, label='Constraint')
+            ax.tick_params(axis='y', labelcolor='black', labelsize=7)
+            
+            # 附轴设置
+            ax2.set_ylabel('Miss Rate', fontsize=9, color='C4')
+            ax2.tick_params(axis='y', labelcolor='C4', labelsize=7)
+            ax.set_xlabel('Scale Configurations', fontsize=9)
+            
+            # 合并图例：堆叠组件 + chains + miss 曲线
+            handles1, labels1 = ax.get_legend_handles_labels()
+            handles2, labels2 = ax2.get_legend_handles_labels()
+            
+            # 添加 chains 的图例（简化标签）
+            from matplotlib.patches import Rectangle
+            for i, ch in enumerate(chain_values):
+                hatch_pattern = hatch_patterns[i % len(hatch_patterns)]
+                handles1.append(Rectangle((0, 0), 1, 1, facecolor='grey', 
+                                         edgecolor='black', hatch=hatch_pattern, alpha=0.8))
+                labels1.append(f'{ch} chains')
+            
+            # 不用副轴的图例
+            ax.legend(handles1, labels1, 
+                     loc='upper left', fontsize=6, framealpha=0.7, ncol=2)
             
         elif plot_type == 'utilization':
-            # 资源利用率堆叠柱状图
-            effective_utils = []
-            idle_ratios = []
-            miss_ratios = []
-            realloc_ratios = []
+            # 分簇柱状图 + miss ops ratio 曲线（附轴）
+            # 簇：(tiles, load_factor)；簇内：chains
             
-            for p in data_points:
-                util = p.get('utilization', {})
-                idle = util.get('idle_mean_ratio', 0)
-                miss = util.get('miss_mean_ratio', 0)
-                realloc = util.get('realloc_mean_ratio', 0)
-                effective = 1.0 - idle - miss - realloc
+            # 图表尺寸已在开头设置为 (2.6, 2.2)
+
+            # 1. 使用分簇逻辑
+            clusters = StatisticsCollector._cluster_case2_data(data_points, group_order)
+
+            # 从排序好的 clusters 中提取 labels 和 chains
+            cluster_labels = [f'{t}T-{l:.1f}×' for t, l in clusters.keys()]
+            chain_values = list(next(iter(clusters.values())).keys()) if clusters else []
+
+            # 2. 计算位置
+            num_clusters = len(clusters)
+            bars_per_cluster = max(len(v) for v in clusters.values()) if clusters else 0
+            
+            x_pos = np.arange(num_clusters)
+            total_width = 0.8
+            width = total_width / bars_per_cluster
+            
+            # 3. 创建附轴用于 miss op ratio
+            ax2 = ax.twinx()
+            
+            # 为附轴腾出空间
+            fig.subplots_adjust(right=0.88)
+            
+            # 4. 绘制堆叠柱状图
+            hatch_patterns = ['', '///', 'xxx', '\\\\\\']
+            for i_cluster, (cluster_key, cluster_data) in enumerate(clusters.items()):
                 
-                effective_utils.append(max(0, effective))
-                idle_ratios.append(idle)
-                miss_ratios.append(miss)
-                realloc_ratios.append(realloc)
+                x_cluster_line = []
+                y_cluster_line = []
+
+                for i_bar, chains in enumerate(cluster_data.keys()):
+                    p = cluster_data[chains]
+                    x_offset = x_pos[i_cluster] + (i_bar - (bars_per_cluster - 1) / 2) * width
+                    
+                    util = p.get('utilization', {})
+                    idle = util.get('idle_mean_ratio', 0.0)
+                    realloc = util.get('realloc_mean_ratio', 0.0)
+                    miss_ops = util.get('miss_mean_ratio', 0.0)
+                    effective = max(0.0, 1.0 - idle - realloc)
+                    hatch = hatch_patterns[i_bar % len(hatch_patterns)]
+                    
+                    # 绘制柱状图
+                    bot = 0
+                    ax.bar(x_offset, realloc, width=width, bottom=bot,
+                           label='Realloc' if i_cluster == 0 and i_bar == 0 else '', color='C3', alpha=0.85, hatch=hatch)
+                    bot += realloc
+                    ax.bar(x_offset, effective, width=width, bottom=bot,
+                           label='Effective' if i_cluster == 0 and i_bar == 0 else '', color='C0', alpha=0.8, hatch=hatch)
+                    bot += effective
+                    ax.bar(x_offset, idle, width=width, bottom=bot,
+                           label='Idle' if i_cluster == 0 and i_bar == 0 else '', color='C4', alpha=0.7, hatch=hatch)
+                    
+                    # 收集曲线数据
+                    if not np.isnan(miss_ops):
+                        x_cluster_line.append(x_offset)
+                        y_cluster_line.append(miss_ops)
+
+                # 5. 绘制 miss ops ratio 曲线在附轴上（簇内连接）
+                if len(x_cluster_line) >= 2:
+                    ax2.plot(x_cluster_line, y_cluster_line, 'o-', color='C2', linewidth=2,
+                             markersize=7, alpha=0.8)
+                elif len(x_cluster_line) == 1:
+                    ax2.plot(x_cluster_line, y_cluster_line, 'o', color='C2', 
+                             markersize=7, alpha=0.8)
             
-            # 堆叠柱状图
-            ax.bar(x_pos, effective_utils, label='Effective Utilization', color='C0', alpha=0.8)
-            ax.bar(x_pos, realloc_ratios, bottom=effective_utils, 
-                   label='Realloc Overhead', color='C1', alpha=0.8)
-            
-            bottom = np.array(effective_utils) + np.array(realloc_ratios)
-            ax.bar(x_pos, idle_ratios, bottom=bottom, 
-                   label='Idle', color='C3', alpha=0.8)
-            
-            bottom = bottom + np.array(idle_ratios)
-            ax.bar(x_pos, miss_ratios, bottom=bottom, 
-                   label='Missed', color='C2', alpha=0.8)
-            
-            ax.set_ylabel('Resource Utilization Ratio', fontsize=12)
-            ax.set_title('Case 2: Resource Utilization vs Scale', fontsize=14)
+            ax2.plot([], [], 'o-', color='C2', linewidth=2, markersize=7, 
+                     label='Miss Ops Ratio', alpha=0.8)
+
+            # 6. 主轴设置
+            ax.set_xlabel('Scale Configurations', fontsize=9)
+            ax.set_ylabel('Tile Util.', fontsize=9, color='black')
+            ax.set_title('Tp.-driven: Resource Utilization vs Scale', fontsize=9, pad=8)
             ax.set_ylim([0, 1.1])
+            ax.set_xticks(x_pos)
+            ax.set_xticklabels(cluster_labels, rotation=0, fontsize=7) #  ha='right',
+            ax.tick_params(axis='y', labelcolor='black', labelsize=7)
+            
+            # 7. 附轴 ax2 设置
+            ax2.set_ylabel('Miss Ops ratio (%)', fontsize=9, color='C2')
+            ax2.tick_params(axis='y', labelcolor='C2', labelsize=7)
+            
+            # 8. 合并图例（简化）
+            handles1, labels1 = ax.get_legend_handles_labels()
+            handles2, labels2 = ax2.get_legend_handles_labels()
+            
+            from matplotlib.patches import Rectangle
+            for i, ch in enumerate(chain_values):
+                hatch_pattern = hatch_patterns[i % len(hatch_patterns)]
+                handles1.append(Rectangle((0, 0), 1, 1, facecolor='grey', 
+                                         edgecolor='black', hatch=hatch_pattern, alpha=0.8))
+                labels1.append(f'{ch} chains')
+            
+            # 不用副轴的图例
+            ax.legend(handles1, labels1, 
+                     loc='upper left', fontsize=6, framealpha=0.7, ncol=3)
         
         else:
-            raise ValueError(f"Invalid plot_type: {plot_type}. Must be 'breakdown' or 'utilization'.")
+            raise NotImplementedError(f"plot_type '{plot_type}' is not supported for case 2.")
         
-        ax.set_xlabel('Configuration', fontsize=12)
-        ax.set_xticks(x_pos)
-        ax.set_xticklabels(labels, rotation=45, ha='right')
-        ax.legend(loc='best', fontsize=10)
+        # xlabel、xticks、图例都已在各分支内设置
         ax.grid(True, alpha=0.3, linestyle='--', axis='y')
         
-        fig.tight_layout()
+        if plot_type != 'utilization':
+            fig.tight_layout()
         
         if save_path:
             os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else '.', exist_ok=True)
@@ -852,29 +1123,6 @@ class StatisticsCollector:
         
         plt.close(fig)
     
-    def plot_motiv_case3(self, percentile: float = 0.99, iqr_band: Tuple[float, float] = (0.25, 0.75), 
-                         fit: str = 'none', save_path: str = None, show: bool = False):
-        """[Motiv-Exp-3] 绘制负载-延迟关系图
-        
-        根据当前模式自动选择绘图方法：
-        - raw模式: 散点图 + 可选拟合曲线
-        - binned模式: pXX曲线 + IQR带 + 可选拟合
-        
-        Args:
-            percentile: binned模式的分位数曲线（默认0.99）
-            iqr_band: binned模式的IQR带范围（默认(0.25, 0.75)）
-            fit: 拟合方式 'none'|'wls'|'lowess'
-            save_path: 保存路径，默认使用self.path['motiv3']
-            show: 是否显示图形
-        """
-        if save_path is None:
-            save_path = self.path.get('motiv3')
-            
-        if self.motiv3_mode == 'raw':
-            self.plot_load_latency_raw(fit=fit, save_path=save_path, show=show)
-        else:
-            self.plot_load_latency_binned(percentile=percentile, iqr_band=iqr_band, 
-                                          fit=fit, save_path=save_path, show=show)
     
     # ============ Case-Specific Formatted Output ============
     
@@ -896,8 +1144,14 @@ class StatisticsCollector:
         lines.append(f"Miss任务数量 (miss_mean_count):        {stats['miss_mean_count']:.2f}")
         lines.append(f"切换开销占比 (realloc_mean_ratio):     {stats['realloc_mean_ratio']:.4f} (应为0)")
         lines.append("-" * 60)
-        effective_util = 1.0 - stats['idle_mean_ratio'] - stats['miss_mean_ratio']
-        lines.append(f"有效利用率:                            {effective_util:.4f}")
+        # 优先使用 used_mean_ratio；若不存在则回退为 1-idle-miss-realloc
+        used = stats.get('used_mean_ratio', None)
+        if used is None:
+            used = 1.0 - stats['idle_mean_ratio'] - stats['miss_mean_ratio'] - stats['realloc_mean_ratio']
+        lines.append(f"有效利用率(used_mean_ratio):           {used:.4f}")
+        # 一致性校验：realloc+idle+used 是否约等于 1
+        trio_sum = stats['realloc_mean_ratio'] + stats['idle_mean_ratio'] + used
+        lines.append(f"一致性校验: realloc+idle+used =        {trio_sum:.4f}  {'(≈1 ✅)' if abs(trio_sum-1.0) < 0.02 else '(偏离1 ⚠)'}")
         lines.append("=" * 60)
         return "\n".join(lines)
     
@@ -1117,12 +1371,12 @@ class StatisticsCollector:
                 wait_ratio = max(0.0, 1.0 - exec_ratio - realloc_ratio)
                 per_chain_vs_e2e[name] = {'exec_ratio': exec_ratio, 'realloc_ratio': realloc_ratio, 'wait_ratio': wait_ratio}
             
-            # vs_constraint
+            # vs_constraint：基于"均值-再归一"的口径，先在绝对时间域取均值，再归一到约束
             if name in self.chain_e2e_constraint and self.chain_e2e_constraint[name] > 0:
                 cons = float(self.chain_e2e_constraint[name])
                 exec_ratio_c = float(exec_mean) / cons
                 realloc_ratio_c = float(realloc_mean) / cons
-                wait_ratio_c = max(0.0, 1.0 - exec_ratio_c - realloc_ratio_c)
+                wait_ratio_c = max(0.0, float(e2e_mean) / cons - exec_ratio_c - realloc_ratio_c)
                 per_chain_vs_constraint[name] = {'exec_ratio': exec_ratio_c, 'realloc_ratio': realloc_ratio_c, 'wait_ratio': wait_ratio_c}
 
         # Overall (merged)
@@ -1144,13 +1398,13 @@ class StatisticsCollector:
                 wait_ratio_o = max(0.0, 1.0 - exec_ratio_o - realloc_ratio_o)
                 overall_vs_e2e = {'exec_ratio': exec_ratio_o, 'realloc_ratio': realloc_ratio_o, 'wait_ratio': wait_ratio_o}
             
-            # vs_constraint (use mean constraint across chains if available)
+            # vs_constraint (use mean constraint across chains if available)：先取均值再做补项，避免比值均值引入负等待
             cons_vals = [self.chain_e2e_constraint[n] for n in sink_names if n in self.chain_e2e_constraint and self.chain_e2e_constraint[n] > 0]
             if cons_vals:
                 cons_o = float(np.mean(cons_vals))
                 exec_ratio_oc = float(exec_mean_o) / cons_o
                 realloc_ratio_oc = float(realloc_mean_o) / cons_o
-                wait_ratio_oc = max(0.0, 1.0 - exec_ratio_oc - realloc_ratio_oc)
+                wait_ratio_oc = max(0.0, float(e2e_mean_o) / cons_o - exec_ratio_oc - realloc_ratio_oc)
                 overall_vs_constraint = {'exec_ratio': exec_ratio_oc, 'realloc_ratio': realloc_ratio_oc, 'wait_ratio': wait_ratio_oc}
 
         return {
@@ -1309,37 +1563,138 @@ class StatisticsCollector:
             return float('nan')
         return cov / (std_rx * std_ry)
 
-    def plot_load_latency_binned(self, percentile: float = 0.99, iqr_band: Tuple[float, float] = (0.25, 0.75), fit: str = 'none', save_path: str = None, show: bool = False):
-        """Plot binned load vs. latency percentile with optional IQR band and Spearman rho.
-        - percentile: e.g., 0.99 for p99 curve
-        - iqr_band: tuple of (p_low, p_high) to draw vertical error band, e.g., (0.25, 0.75)
-        - fit: 'none' | 'wls' | 'lowess' — do trend on binned (xs, pXX), weights=bin counts
-        - save_path: if provided, save the figure to this path
-        - show: if True, display via plt.show()
+    @staticmethod
+    def _calculate_rmse_from_trend(raw_data: List[Tuple[float, float]]) -> float:
         """
-        if self.adaptive_load_bins is None or len(self.adaptive_load_bins) < 2:
+        Calculates the RMSE of raw data points from a simple linear regression trend line.
+        This provides a stable measure of vertical dispersion around the linear trend.
+        """
+        if not raw_data or len(raw_data) < 2:
+            return float('nan')
+        
+        arr = np.asarray(raw_data, dtype=float)
+        x = arr[:, 0]
+        y_actual = arr[:, 1]
+        
+        # Fit a linear trend line (degree 1 polynomial)
+        coef = np.polyfit(x, y_actual, deg=1)
+        y_pred = np.polyval(coef, x)
+        
+        # Calculate RMSE
+        rmse = np.sqrt(np.mean((y_actual - y_pred)**2))
+        return float(rmse)
+
+    @staticmethod
+    def plot_motiv_case3(collector_base: 'StatisticsCollector' = None, 
+                         collector_exp: 'StatisticsCollector' = None,
+                         percentile: float = 0.99, iqr_band: Tuple[float, float] = (0.25, 0.75), 
+                         fit: str = 'none', save_path: str = None, show: bool = False):
+        """[Motiv-Exp-3] 绘制负载-延迟关系图（统一入口）
+        
+        根据collector的motiv3_mode，自动选择绘制raw散点图或binned曲线图。
+        如果提供了collector_exp，则会在同一张图上绘制两组数据进行对比。
+
+        Args:
+            collector_base: 基线/第一组数据的collector
+            collector_exp: (可选) 实验/第二组数据的collector
+            percentile: e.g., 0.99 for p99 curve in binned mode
+            iqr_band: tuple of (p_low, p_high) for binned mode IQR band
+            fit: 'none' | 'wls' | 'lowess' — trend line type
+            save_path: if provided, save the figure to this path
+            show: if True, display via plt.show()
+        """
+        if not collector_base:
+            print("Warning: plot_motiv_case3 requires at least a base collector.")
             return
-        import matplotlib.pyplot as plt
+
+        mode = collector_base.motiv3_mode
+        
+        if mode == 'raw':
+            data_groups = []
+            # Baseline group
+            stats_base = collector_base.get_motiv_case3_stats(percentile=percentile, mode='raw')
+            data_groups.append({
+                'raw_data': stats_base.get('raw_data', []),
+                'spearman_rho': stats_base.get('spearman_rho', float('nan')),
+                'label': 'w/o realloc',
+                'fit': 'wls',
+                'color': 'C0'
+            })
+            
+            # Experiment group (optional)
+            if collector_exp:
+                stats_exp = collector_exp.get_motiv_case3_stats(percentile=percentile, mode='raw')
+                data_groups.append({
+                    'raw_data': stats_exp.get('raw_data', []),
+                    'spearman_rho': stats_exp.get('spearman_rho', float('nan')),
+                    'label': 'w/ realloc',
+                    'fit': fit,
+                    'color': 'C1'
+                })
+
+            StatisticsCollector.plot_load_latency_raw(data_groups=data_groups, save_path=save_path, show=show)
+            
+        else: # binned mode
+            # Binned mode plotting currently only supports single plots, not comparison
+            stats = collector_base.get_motiv_case3_stats(percentile=percentile, mode='binned')
+            StatisticsCollector.plot_load_latency_binned(
+                binned_summary=stats.get('binned_summary', []),
+                spearman_rho=stats.get('spearman_rho', float('nan')),
+                percentile=percentile,
+                iqr_band=iqr_band,
+                fit=fit,
+                save_path=save_path,
+                show=show
+            )
+
+    @staticmethod
+    def plot_load_latency_binned(binned_summary: List[Dict], spearman_rho: float, 
+                                 percentile: float = 0.99, iqr_band: Tuple[float, float] = (0.25, 0.75), 
+                                 fit: str = 'none', save_path: str = None, show: bool = False):
+        """Plot binned load vs. latency percentile with optional IQR band and Spearman rho.
+        
+        Args:
+            binned_summary: List of bin data dicts with keys: load_bin_start, load_bin_end, 
+                           sample_count, p50.0, p90.0, p99.0, etc.
+            spearman_rho: Spearman correlation coefficient
+            percentile: e.g., 0.99 for p99 curve
+            iqr_band: tuple of (p_low, p_high) to draw vertical error band, e.g., (0.25, 0.75)
+            fit: 'none' | 'wls' | 'lowess' — do trend on binned (xs, pXX), weights=bin counts
+            save_path: if provided, save the figure to this path
+            show: if True, display via plt.show()
+        """
+        
+        if not binned_summary:
+            print("Warning: No binned data to plot")
+            return
+            
         xs = []
         ys = []
         ws = []
         y_low = []
         y_high = []
         p_low, p_high = iqr_band
-        for i, bin_start in enumerate(self.adaptive_load_bins[:-1]):
-            td = self.latency_dist_per_adaptive_bin[bin_start]
-            cnt = td.total_processed_count
+        p_key = f'p{percentile*100:.1f}'
+        p_low_key = f'p{p_low*100:.1f}'
+        p_high_key = f'p{p_high*100:.1f}'
+        
+        for bin_data in binned_summary:
+            cnt = bin_data.get('sample_count', 0)
             if cnt <= 0:
                 continue
-            bin_end = self.adaptive_load_bins[i+1]
+            bin_start = bin_data['load_bin_start']
+            bin_end = bin_data['load_bin_end']
             xs.append((bin_start + bin_end) / 2.0)
-            ys.append(td.percentile(percentile * 100))
+            ys.append(bin_data.get(p_key, 0))
             ws.append(cnt)
-            y_low.append(td.percentile(p_low * 100))
-            y_high.append(td.percentile(p_high * 100))
+            y_low.append(bin_data.get(p_low_key, 0))
+            y_high.append(bin_data.get(p_high_key, 0))
+        
         if len(xs) == 0:
+            print("Warning: No valid binned data to plot")
             return
-        rho = self.get_spearman_correlation_binned(percentile=percentile)
+            
+        rho = spearman_rho
         fig, ax = plt.subplots(figsize=(7, 4))
         # plot IQR band
         ax.fill_between(xs, y_low, y_high, color='C0', alpha=0.15, label=f'IQR p{int(p_low*100)}-p{int(p_high*100)}')
@@ -1378,54 +1733,89 @@ class StatisticsCollector:
         ax.grid(True, linestyle='--', alpha=0.3)
         fig.tight_layout()
         if save_path:
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else '.', exist_ok=True)
             fig.savefig(save_path, dpi=150)
+            print(f"Case 3 Binned 图已保存到: {save_path}")
         if show:
             plt.show()
         plt.close(fig)
 
-    def plot_load_latency_raw(self, fit: str = 'wls', save_path: str = None, show: bool = False):
-        """Plot raw (load, worst_e2e) with scatter and optional trend on raw points.
-        - fit: 'none' | 'wls' | 'lowess' — performed directly on raw samples
+    @staticmethod
+    def plot_load_latency_raw(data_groups: List[Dict], save_path: str = None, show: bool = False):
+        """Plot raw (load, worst_e2e) with scatter and optional trend on raw points for multiple groups.
+        
+        Args:
+            data_groups: List of dicts, where each dict represents a data group and contains:
+                - 'raw_data': List of (load, worst_e2e) tuples
+                - 'spearman_rho': Spearman correlation coefficient
+                - 'label': Name of the data group (e.g., 'baseline', 'experiment')
+                - 'fit': 'none' | 'wls' | 'lowess' (optional)
+                - 'color': a valid matplotlib color (optional)
+            save_path: if provided, save the figure to this path
+            show: if True, display via plt.show()
         """
-        if not self.raw_load_latency:
-            return
         import matplotlib.pyplot as plt
-        arr = np.asarray(self.raw_load_latency, dtype=float)
-        x = arr[:, 0]
-        y = arr[:, 1]
-        rho = self._spearman_from_arrays(x, y)
-        fig, ax = plt.subplots(figsize=(7, 4))
-        ax.scatter(x, y, s=12, alpha=0.5, color='C0', linewidths=0)
-        # optional trend on raw data
-        if fit in ('wls', 'lowess') and x.size >= 3:
-            if fit == 'wls':
-                coef = np.polyfit(x, y, deg=1)  # OLS since raw points等权
+        import numpy as np
+        
+        if not data_groups:
+            print("Warning: No data groups to plot")
+            return
+            
+        fig, ax = plt.subplots(figsize=(4, 2.2))
+        
+        for i, group in enumerate(data_groups):
+            raw_data = group.get('raw_data')
+            if not raw_data:
+                continue
+            
+            arr = np.asarray(raw_data, dtype=float)
+            x = arr[:, 0]
+            y = arr[:, 1]
+            rho = group.get('spearman_rho', float('nan'))
+            rmse = group.get('rmse', float('nan'))
+            
+            base_label = group.get('label', f'Group {i}')
+            # 将 ρ 和 RMSE 添加到散点图的标签中（简化）
+            scatter_label = f"{base_label}\n(ρ={rho:.2f},RMSE={rmse:.3f})"
+            
+            fit = group.get('fit', 'none')
+            color = group.get('color', f'C{i}')
+            
+            # Scatter plot for raw data with metrics in label
+            ax.scatter(x, y, s=8, alpha=0.4, color=color, linewidths=0, label=scatter_label)
+            
+            # Optional trend on raw data
+            if fit in ('wls', 'lowess') and x.size >= 3:
                 xx = np.linspace(float(np.min(x)), float(np.max(x)), 200)
-                yy = np.polyval(coef, xx)
-                ax.plot(xx, yy, color='C3', linewidth=2, label='Linear trend (raw)')
-            else:
-                nb = min(100, max(20, int(np.sqrt(x.size))))
-                bins = np.linspace(float(np.min(x)), float(np.max(x)), nb + 1)
-                xc = 0.5 * (bins[:-1] + bins[1:])
-                med = np.full(nb, np.nan)
-                for i in range(nb):
-                    m = (x >= bins[i]) & (x < bins[i+1] if i < nb - 1 else x <= bins[i+1])
-                    if np.any(m):
-                        med[i] = np.median(y[m])
-                mm = ~np.isnan(med)
-                if mm.sum() >= 3:
-                    ax.plot(xc[mm], med[mm], color='C2', lw=2, label='LOWESS-like (raw)')
-        ax.set_xlabel('Load (per period)')
-        ax.set_ylabel('Worst E2E latency (per period)')
-        ax.set_title(f'Load vs Worst E2E (Spearman rho={rho:.3f})')
-        if fit in ('wls', 'lowess'):
-            ax.legend(loc='best')
+                if fit == 'wls':
+                    coef = np.polyfit(x, y, deg=1)
+                    yy = np.polyval(coef, xx)
+                    ax.plot(xx, yy, color=color, linestyle='--', linewidth=1.5, label=f'{base_label} trend')
+                else: # lowess
+                    nb = min(100, max(20, int(np.sqrt(x.size))))
+                    bins = np.linspace(float(np.min(x)), float(np.max(x)), nb + 1)
+                    xc = 0.5 * (bins[:-1] + bins[1:])
+                    med = np.full(nb, np.nan)
+                    for j in range(nb):
+                        m = (x >= bins[j]) & (x < bins[j+1] if j < nb - 1 else x <= bins[j+1])
+                        if np.any(m):
+                            med[j] = np.median(y[m])
+                    mm = ~np.isnan(med)
+                    if mm.sum() >= 3:
+                        ax.plot(xc[mm], med[mm], color=color, linestyle='-', lw=1.5, label=f'{base_label} lowess trend')
+        
+        ax.set_xlabel('Load', fontsize=9)
+        ax.set_ylabel('Worst E2E Lat.', fontsize=9)
+        ax.set_title('Case 3: Load vs Latency\nUncertainty', fontsize=9, pad=8)
+        ax.legend(loc='best', fontsize=6, framealpha=0.9)
         ax.grid(True, linestyle='--', alpha=0.3)
+        ax.tick_params(axis='both', labelsize=7)
         fig.tight_layout()
+        
         if save_path:
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else '.', exist_ok=True)
             fig.savefig(save_path, dpi=150)
+            print(f"Case 3 Raw Comparison图已保存到: {save_path}")
         if show:
             plt.show()
         plt.close(fig)
@@ -1575,13 +1965,15 @@ class StatisticsCollector:
         state = {
             'delta': self._delta,
             'K': self._K,
+            'total_pwr': self.total_pwr,
             'partition_realloc_stats': self.partition_realloc_stats,
             
             'task_at': self.task_at, # Regular dict, directly serializable
-            'task_realloc_curr': dict(self.task_realloc_curr), # Convert defaultdict to dict
-            'task_realloc_num': dict(self.task_realloc_num),   # Convert defaultdict to dict
-            'task_compute_curr': dict(self.task_compute_curr),
             
+            # New critical path data
+            'task_curr_stat': dict(self.task_curr_stat),
+            'task_pred_stat': {k: dict(v) for k, v in self.task_pred_stat.items()},
+
             'part_realloc_curr': dict(self.part_realloc_curr), # Convert defaultdict to dict
             'part_realloc_num': dict(self.part_realloc_num),   # Convert defaultdict to dict
 
@@ -1594,6 +1986,7 @@ class StatisticsCollector:
             'dist_per_task_ft': {k: v.to_dict() for k, v in self.dist_per_task_ft.items()},
             'dist_per_task_realloc': {k: v.to_dict() for k, v in self.dist_per_task_realloc.items()},
             'dist_per_part_realloc': {k: v.to_dict() for k, v in self.dist_per_part_realloc.items()},
+            'dist_per_part_realloc_count': {k: v.to_dict() for k, v in self.dist_per_part_realloc_count.items()},
             'dist_overall_realloc': self.dist_overall_realloc.to_dict(),
             'dist_overall_idle': self.dist_overall_idle.to_dict(),
             'dist_overall_miss': self.dist_overall_miss.to_dict(),
@@ -1650,10 +2043,18 @@ class StatisticsCollector:
         # Initialize with base delta and K from saved state
         collector = cls(delta=state['delta'], K=state['K'])
 
+        collector.total_pwr = state['total_pwr']
         collector.partition_realloc_stats = state['partition_realloc_stats']
         collector.task_at = state['task_at']
-        collector.task_realloc_curr = defaultdict(float, state['task_realloc_curr'])
-        collector.task_realloc_num = defaultdict(int, state['task_realloc_num'])
+        
+        # Restore critical path data
+        collector.task_curr_stat = defaultdict(lambda: {'realloc': 0.0, 'compute': 0.0, 'realloc_num': 0}, state.get('task_curr_stat', {}))
+        collector.task_pred_stat = defaultdict(
+            lambda: defaultdict(lambda: {'realloc': 0.0, 'compute': 0.0, 'realloc_num': 0, 'e2e_lat': 0.0}),
+            {k: defaultdict(lambda: {'realloc': 0.0, 'compute': 0.0, 'realloc_num': 0, 'e2e_lat': 0.0}, v)
+             for k, v in state.get('task_pred_stat', {}).items()}
+        )
+        
         collector.part_realloc_curr = defaultdict(float, state['part_realloc_curr'])
         collector.part_realloc_num = defaultdict(int, state['part_realloc_num'])
         collector.system_realloc_cost = state['system_realloc_cost']
@@ -1670,6 +2071,10 @@ class StatisticsCollector:
         collector.dist_per_part_realloc = defaultdict(
             lambda: TDigestStreamingHistogram(delta=state['delta'], K=state['K']),
             {k: TDigestStreamingHistogram.from_dict(v) for k, v in state.get('dist_per_part_realloc', {}).items()}
+        )
+        collector.dist_per_part_realloc_count = defaultdict(
+            lambda: TDigestStreamingHistogram(delta=state['delta'], K=state['K']),
+            {k: TDigestStreamingHistogram.from_dict(v) for k, v in state.get('dist_per_part_realloc_count', {}).items()}
         )
         collector.dist_overall_realloc = TDigestStreamingHistogram.from_dict(state.get('dist_overall_realloc', {}))
         collector.dist_overall_idle = TDigestStreamingHistogram.from_dict(state.get('dist_overall_idle', {}))
@@ -1723,10 +2128,13 @@ class StatisticsCollector:
         # 比较字典 (Compare dictionaries)
         if (self.partition_realloc_stats != loaded_collector.partition_realloc_stats or
             self.task_at != loaded_collector.task_at or
-            self.task_realloc_curr != loaded_collector.task_realloc_curr or
-            self.task_realloc_num != loaded_collector.task_realloc_num or
             self.part_realloc_curr != loaded_collector.part_realloc_curr or
-            self.part_realloc_num != loaded_collector.part_realloc_num):
+            self.part_realloc_num != loaded_collector.part_realloc_num or
+            # Deep comparison for nested defaultdicts could be complex,
+            # for now, let's just check the top-level keys
+            set(self.task_curr_stat.keys()) != set(loaded_collector.task_curr_stat.keys()) or
+            set(self.task_pred_stat.keys()) != set(loaded_collector.task_pred_stat.keys())
+            ):
             print("--- 测试失败：字典数据不匹配 (Test failed: Dictionary data do not match) ---")
             return
 
@@ -1741,7 +2149,7 @@ class StatisticsCollector:
 
         # 比较 defaultdict 中的 TDigestStreamingHistogram 对象
         # Compare TDigestStreamingHistogram objects in defaultdicts
-        for dist_type in ['dist_per_task_ft', 'dist_per_task_realloc', 'dist_per_part_realloc']:
+        for dist_type in ['dist_per_task_ft', 'dist_per_task_realloc', 'dist_per_part_realloc', 'dist_per_part_realloc_count']:
             orig_dist_dict = getattr(self, dist_type)
             loaded_dist_dict = getattr(loaded_collector, dist_type)
 
@@ -1781,58 +2189,9 @@ class StatisticsCollector:
         print(f"--- 已删除测试文件: {test_file_path} (Removed test file) ---")
 
 
-def run_test():
-    """
-    测试 StatisticsCollector 类的状态保存和加载功能。
-    Test the state saving and loading functionality of the StatisticsCollector class.
-    """
-    print("--- 启动测试 (Starting test) ---")
-
-    class MyGraph:
-        def __init__(self):
-            self.nodes = {
-                'op1_0': {'offset': 10, 'ddl_map': 100},
-                'op2_0': {'offset': 20, 'ddl_map': 200},
-                'sink_0': {'offset': 50, 'ddl_map': 300},
-            }
-            self.succs = {
-                'op1_0': ['op2_0'],
-                'op2_0': ['sink_0'],
-                'sink_0': [],
-            }
-            self.ddl_map = {
-                'op1_0': 100,
-                'op2_0': 200,
-                'sink_0': 300
-            }
-
-    def time_gt(t1, t2):
-        return t1 > t2
-
-    def elim_nume_error(val):
-        return val
-    
-    test_file_path = 'temp_state.json'
-    G = MyGraph()
-
-    # 1. 创建并填充一个 StatisticsCollector 实例 (Create and populate a StatisticsCollector instance)
-    original_collector = StatisticsCollector()
-    original_collector.init_partition_stats('part1', 10, 1.5)
-
-    print("--- 填充原始数据 (Populating original data) ---")
-    original_collector.record_task_start('op1_0', 10.0)
-    original_collector.record_realloc('part1', 0.5, ['op1_0'])
-    original_collector.record_task_finish(G, 'op1_0', 25.0)
-
-    original_collector.record_task_start('op2_0', 30.0)
-    original_collector.record_realloc('part1', 0.8, ['op2_0'])
-    original_collector.record_task_finish(G, 'op2_0', 45.0)
-
-    original_collector.forward_hyperperiod()
-
-    original_collector.record_e2e_finish(G, 'sink_0', 50.0)
-
-    original_collector.load_save_check()
-
 if __name__ == "__main__":
-    run_test()
+    from test_approach_collector import run_all_tests
+
+    # 运行全面功能测试
+    success = run_all_tests()
+    

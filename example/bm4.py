@@ -45,10 +45,10 @@ src_attr={
 }
 
 task_attr = {
-    "A": {"offset":0, "exp_comp_t": case["A"], "base_size": 25, "tgt_device": "acc_p0", "ert": 0, "ddl": 40, "var_factor": [1,]},
-    "B": {"offset":0, "exp_comp_t": case["B"], "base_size": 25, "tgt_device": "acc_p0", "ert": 40, "ddl": 100, "var_factor": [1,]},
-    "C": {"offset":0, "exp_comp_t": case["C"], "base_size": 25, "tgt_device": "acc_p0", "ert": 0, "ddl": 30, "var_factor": [1,]},
-    "D": {"offset":0, "exp_comp_t": case["D"], "base_size": 25, "tgt_device": "acc_p0", "ert": 30, "ddl": 100, "var_factor": [1,]},
+    "A": {"offset":0, "exp_comp_t": case["A"], "exp_io_t": 0, "base_size": 25, "tgt_device": "acc_p0", "ert": 0, "ddl": 40, "var_factor": [1,]},
+    "B": {"offset":0, "exp_comp_t": case["B"], "exp_io_t": 0, "base_size": 25, "tgt_device": "acc_p0", "ert": 40, "ddl": 100, "var_factor": [1,]},
+    "C": {"offset":0, "exp_comp_t": case["C"], "exp_io_t": 0, "base_size": 25, "tgt_device": "acc_p0", "ert": 0, "ddl": 30, "var_factor": [1,]},
+    "D": {"offset":0, "exp_comp_t": case["D"], "exp_io_t": 0, "base_size": 25, "tgt_device": "acc_p0", "ert": 30, "ddl": 100, "var_factor": [1,]},
 }
 
 sink_attr = {

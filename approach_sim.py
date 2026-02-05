@@ -57,7 +57,7 @@ def run_simulation(processors:List[BaseProcessor], event_t:GlobalEvent_t, G:MyGr
         if (time_gtq(curr_t, next_hp_boundary) and time_lt(pred_t, next_hp_boundary)):
             if curr_hp >= 0:
                 stats_collector.record_miss(
-                    chain(processor.iter_timeout(curr_t)
+                    chain.from_iterable(processor.iter_timeout(curr_t, elim_nume_error((curr_hp) * T_hp))
                         for processor in processors if hasattr(processor, 'iter_timeout'))
                     )
                 stats_collector.forward_hyperperiod(T_hp)
@@ -140,6 +140,8 @@ def run_simulation(processors:List[BaseProcessor], event_t:GlobalEvent_t, G:MyGr
                 duation = proc.sched(curr_t)
             duation_dict[proc] = duation
 
+        print_progress(curr_t, pred_t, processors)
+
         # calculate the next 
         # duation = min(duation_acc_p, duation_sen_p)
         # 统一事件推进
@@ -147,8 +149,6 @@ def run_simulation(processors:List[BaseProcessor], event_t:GlobalEvent_t, G:MyGr
 
         # 统一事件队列（可扩展为每个处理器独立event_t）
         next_timer_event = event_t.get_next_event_time(curr_t)
-
-        print_progress(curr_t, pred_t, processors)
         
         # status backup
         next_curr_t = time_add(curr_t, duation)
@@ -166,10 +166,6 @@ def run_simulation(processors:List[BaseProcessor], event_t:GlobalEvent_t, G:MyGr
     # count remaining tasks
     print(f"Remaining tasks: {len(G.nodes())}")
 
-    # 仿真结束后输出统计摘要
-    if stats_collector:
-        stats_collector.export_summary(verbose=verbose)
-
 
 if __name__ == "__main__":
     import argparse
@@ -183,7 +179,7 @@ if __name__ == "__main__":
     num_hp = args.num_hp
     T_hp = 0.1 if args.case != "case1" else 100
     set_verbose_output(args.verbose)
-    graph_json_pth = './cache/coalescing_scan/n_bins_8/x1_0.1s_rda-20.00%(J)_100.00%(T)_30.00%(S)_ignore/graph_x1_0.1s.json'
+    graph_json_pth = './cache/coalescing_scan/n_bins_max/x1_0.1s_rda-99.00%(S)_ignore/graph_x1_0.1s.json'
 
     if args.case == "case1":
         from example.bm4 import *
@@ -376,8 +372,18 @@ if __name__ == "__main__":
         raise ValueError(f"Invalid case: {args.case}")
 
     processors, event_t, stats_collector = instantiate_processors(
-        G, partition_cfg, list(event_t), policy=policy
+        partition_cfg, list(event_t), policy=policy
         )
     stats_collector.set_motiv3_mode("raw")
     run_simulation(processors, event_t, G, num_hp=num_hp, T_hp=T_hp, verbose=args.verbose, var_en=args.var_en)
-
+    # 仿真结束后输出统计摘要
+    if stats_collector:
+        stats_collector.export_summary(verbose=args.verbose)
+        # 使用内置 saver，保存为 JSON 状态
+        collector_path = './stats_collector.json'
+        try:
+            stats_collector.save_state(collector_path)
+        except Exception as e:
+            print(f"[Collector Save Warning] 保存失败: {e}")
+        else:
+            print(f"StatisticsCollector state saved to: {collector_path}")

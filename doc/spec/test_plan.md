@@ -93,6 +93,8 @@
 - 随机测试，模拟运行时的调度，以及负载变化。
 - run_simulation, 包含"cyc, glb, pglb, reserv"四种方法。开始之前，需要加载step1，step2-1，step2-2，step3的结果。
 
+## 重要声明：固定吞吐量
+
 ## 两种方法的比较
 
 **总体目标**：通过三个motivation实验，从不同角度揭示纯静态和纯动态方法的局限性，为混合方法的必要性提供实验依据。
@@ -107,7 +109,7 @@
 - 切换开销占比（`dist_overall_realloc`）：调度器重分配的时间成本
 
 ### Motiv-Exp-(1) 纯静态的调度-利用率问题
-证明静态方法，难以同时满足低miss rate 和 高利用率。存在"**利用率-可靠性权衡**"：保守预留导致低miss但高idle；激进预留导致高利用率但高miss。
+证明静存在"**利用率瓶颈**"：保守预留导致低miss但高idle；激进预留导致高利用率但高miss——难以同时满足低miss rate 和 高利用率。
 
 【实验】
 - 脚本：基于 step 1 得到的静态分配方案，使用cyc进行随机测试
@@ -116,13 +118,27 @@
   - 闲置算力占比（`dist_overall_idle`），miss任务剩余负载占比（`dist_overall_miss`），miss任务数量（`dist_overall_miss_count`）
   - 获取方式：`collector.get_utilization_avg_ratio()`
     - 'idle_mean_ratio', 'miss_mean_ratio', 'miss_mean_count'
+- 可视化：
+  - 主轴对数刻度；合并主/附轴图例
+  - 三柱（idle/miss/realloc）+ 附轴 miss rate（线）
 - 期望看到：
   - 随着预留分位数增加：`idle_ratio ↑`，`miss_ratio ↓`，`miss_count ↓`
   - 切换开销恒为0（纯静态无运行时切换）
+- 结论：纯静态方法无法平衡利用率与miss rate。
+
+【实现对齐】
+- 运行器：`scripts/motiv_exp_runner.py --case 1`
+- 参数：`--case1_ratios` 指定扫描列表（默认 `0.5,0.6,0.7,0.8,0.9,0.99`）
+- 绘图：`StatisticsCollector.plot_motiv_case1`
+  - 主轴：miss op ratio，idle op ratio
+  - 副轴：miss rate
+  - 横轴: exec_t_comp_ratioA
+- 并行：使用 `ProcessPoolExecutor`，并发度=物理核数上限
+- 缓存：生成 `case1_summary.json`，支持 `--use_plot_cache` 直接重绘
 
 
 ### Motiv-Exp-(2) 纯动态的调度-延迟开销问题
-说明动态方法存在"**可扩展性瓶颈**"：随着硬件和任务规模增长，切换开销和排队延迟激增，导致延迟组件失衡，miss rate上升。
+说明动态方法存在"**可扩展性瓶颈**"：随着负载相对于硬件算力增加，利用率增加，但是排队延迟激增但是切换开销反而降低——无法平衡切换开销和miss rate。
 
 【实验】
 - 脚本：无需调度信息，直接使用glb方法进行随机测试
@@ -130,28 +146,45 @@
   - 硬件tile数：\([300, 500]\)
   - 任务链数量：\([1, 4]\)
   - 任务负载倍数：\([0.5, 1]\)（相对于基线workload）
-- 统计 1 - 资源利用率分解： 
-  - 闲置算力占比（`dist_overall_idle`）：负载不足时的未分配容量，miss任务剩余负载占比（`dist_overall_miss`），切换开销占比（`dist_overall_realloc`）
-  - 获取方式：`collector.get_utilization_avg_ratio()`
-    - 'idle_mean_ratio', 'miss_mean_ratio', 'realloc_mean_ratio'.
-  - 期望看到：随着规模增加，`realloc_ratio ↑`，`miss_ratio ↑`，`idle_ratio` 在高负载时应趋近0
+- 可视化：
+  - 统计 1 - **Resource Utilization breakdown**： 
+    - 获取方式：
+      - 利用率：`collector.get_utilization_avg_ratio()`
+        - 'idle_mean_ratio', 'miss_mean_ratio', 'realloc_mean_ratio'.
+      - 期望看到：随着利用率增加
+        - `idle_ratio ↓`
+        - `miss_ratio ↑`
+        - `realloc_ratio ↓`
 
-- 统计 2 - 端到端延迟分解（相对于端到端约束）：
-  - 第一条链执行/调度/等待时间相对于端到端约束的占比 在多个周期内的平均值
-  - 所有链合并的执行/调度/等待时间相对于端到端约束的占比 在多个周期内的平均值
-  - miss任务数量（`dist_overall_miss_count`）
-  - 获取方式：
-    - 延迟分解：`collector.get_latency_breakdown_avg_ratio()`
-      - 'overall_vs_constraint', 'per_chain_vs_constraint'
-        - 'exec_ratio', 'realloc_ratio', 'wait_ratio'
-    - miss count：`collector.get_utilization_avg_ratio()['miss_mean_count']`
-  - 期望看到：随着规模增加
-    - `exec_ratio ↓` 需要更快的完成计算，以补偿延迟开销 
-    - `realloc_ratio ↑`（调度开销随任务数增长）
-    - `wait_ratio ↑`（排队延迟随竞争加剧）
-    - 三者之和可能 > 1（表示超时：实际延迟超过约束）
+  - 统计 2 - 端到端**Latency Breakdown**（相对于端到端约束）：
+    - 堆叠柱状图展示延迟分解（exec/realloc/wait）占比
+    - 附轴：显示 miss rate（超时任务比例），簇内连接
+    - 所有链一起统计，在多个周期内的取平均值
+    - 获取方式：
+      - 延迟分解：`collector.get_latency_breakdown_avg_ratio()`
+        - 'overall_vs_constraint'
+          - 'exec_ratio', 'realloc_ratio', 'wait_ratio'
+      - miss count：`collector.get_utilization_avg_ratio()['miss_mean_count']`
+    - 期望看到：随着规模增加
+      - `exec_ratio ↓` 需要更快的完成计算，以补偿延迟开销 
+      - `realloc_ratio ↑`（调度开销随任务数增长）
+      - `wait_ratio ↑`（排队延迟随竞争加剧）
+      - 三者之和可能 > 1（表示超时：实际延迟超过约束）
+  - 结论：动态方法无法平衡切换开销和miss rate。
 
-> **Takeaway**: 纯静态的方法和纯动态的方法，都难以在延迟，利用率，切换开销之间取得平衡。Motiv-Exp-(1) 显示静态方法为降低miss需大幅牺牲利用率；Motiv-Exp-(2) 显示动态方法在高负载下等待和调度开销激增，延迟组件失衡。
+
+【实现对齐】
+- 运行器：`scripts/motiv_exp_runner.py --case 2`
+- 参数：`--case2_tiles`，`--case2_chains`，`--case2_loads`
+- 并行：使用 `ProcessPoolExecutor`，并发度=物理核数上限
+- 绘图：`StatisticsCollector.plot_motiv_case2`
+  - breakdown：堆叠柱（exec/realloc/wait）+ 附轴 miss num ratio（线）
+  - utilization：分簇堆叠（realloc 底层红色 → effective → idle），簇内按 chains 分组，附轴 miss ops ratio（线，簇内连接、簇间断开）；利用率不包含 miss（未执行不耗功率），满足 `realloc+effective+idle=1`
+  - 簇顺序：按 `(tiles ↑, load_factor ↑)`；簇内按 `chains ↑`
+- 等待口径：vs_constraint 采用“均值-再归一”，`wait = max(0, e2e/cons - exec/cons - realloc/cons)`
+- 缓存：生成 `case2_summary.json`，支持 `--use_plot_cache` 重绘
+
+> **Takeaway**: 纯静态的方法和纯动态的方法，都难以在延迟，利用率，切换开销之间取得平衡。Motiv-Exp-(1) 显示静态方法为降低miss需大幅牺牲利用率；Motiv-Exp-(2) 显示动态方法，必须付出一定调度开销才能保证延迟快速响应。
 
 ### Motiv-Exp-(3) 切换行为带来的不确定性
 
@@ -180,6 +213,22 @@
   - **实验组**：ρ < 0.6（中弱相关），散点分散
   - **对比**：Δρ = ρ_基线 - ρ_实验 > 0.25，证明切换开销引入显著不确定性
   - 可视化：实验组散点图明显比基线组"更宽"，IQR带更大
+
+【实现对齐】
+- 运行器：`scripts/motiv_exp_runner.py --case 3`
+- 参数：`--case3_mode raw|binned`，`--case3_baseline`，`--case3_experiment`，`--case3_num_periods`
+- 并行：baseline 与 experiment 使用 `ProcessPoolExecutor` 并行执行
+- 统计开关：通过 `--stat_param` 将 `{'motiv3_en': True, 'motiv3_mode': 'raw|binned'}` 传入 collector；未启用则不记录 load-latency
+- 绘图：
+  - raw：散点+可选趋势 `fit=('wls'|'lowess'|'none')`
+  - binned：p99 曲线 + IQR 带 + 加权趋势（权重=bin 样本数）
+- 输出：控制台同时打印 Spearman ρ 与切换开销 `realloc_mean_ratio`
+- 缓存：`case3_summary.json`（包含 baseline/experiment 及 Δρ 判断），支持 `--use_plot_cache` 重绘
+
+【命令/运行约定】
+- 统一入口：`scripts/motiv_exp_runner.py`；支持 `--dry_run` 仅打印参数
+- 物理核并行：Case1/2/3 扫描使用进程池并行，`max_workers = min(物理核数, 任务数)`
+- 缓存复用：`--use_plot_cache` 跳过仿真，仅从 `caseX_summary.json` 重建图表
 
 #### 相关性的指标的选择：
 选择  Spearman（秩相关）衡量“单调趋势”，对非线性关系与离群值更稳健，更符合我们“负载增加是否总体趋向延迟更大”的问题设定；特别是我们观察 p99（尾部）时，这一点更重要。
@@ -225,20 +274,55 @@
 消融比较1-(cyc(S) vs cyc)：
 证明引入时间维度的共享，能够平衡利用率和出错概率。
 【试验】
-- 固定资源，固定任务规模，扫描exec_t_comp_ratioB \in [0.5, 0.9]：
-绘制出错概率和资源利用率随着 exec_t_comp_ratioB 的变化的柱状图。
+- 变量控制：exec_t_comp_ratioA = 0.7
+- 脚本：
+  - 基于 **step 1** 得到的调度方案，使用cyc进行随机测试
+  - 基于 **step 2-1** 得到的调度方案，使用cyc-S进行随机测试
+- 扫描：exec_t_comp_ratioB \in [0.5, 0.9]
+- 绘图：`StatisticsCollector.plot_motiv_case1`（同Motiv1）
+  - 主轴：miss op ratio，idle op ratio（同Motiv1）
+  - 副轴：miss rate（同Motiv1）
+  - 横轴: exec_t_comp_ratioB
+  - 标记：exec_t_comp_ratioA = 0.5,0.7,0.99对应的miss rate和idle op ratio
+- 期望看到：
+  存在一个最优的exec_t_comp_ratioB，能最大的提升利用率的同时，降低miss rate。
+
 
 消融比较2-(pglb vs glb)：
 证明引入Spatial Partitioning (Task-to-Bin Clustering) 能平衡利用率和切换开销。
 【试验】
-和cyc 保持相同的资源和任务规模：
+- 变量控制：exec_t_comp_ratioA = 0.7
+- 脚本：
+  - 基于 **step 1** 得到的调度方案，使用glb进行随机测试
+  - 基于 **Step 2-2** 得到的调度方案，使用pglb进行随机测试
 - 扫描：分箱的数量，i.e., \( num_bin \in [1, num_bin_max] \)
-- 绘制切换开销随着分箱数量的变化。
+
+- 绘图：
+  - 主轴：切换次数
+  - 副轴：切换开销
+  - 横轴: num_bin
+  - 获取方式：
+    - 切换次数：`collector.get_realloc_info()['realloc_mean_count']`
+    - 切换开销：`collector.get_realloc_info()['realloc_mean_ratio']`
+  - 期望看到：
+    - （pglb）随着num_bin增加，切换次数不变，但是切换开销降低
+    - （reserv）随着num_bin增加，切换次数和切换开销都降低
 
 消融比较3-(reserv vs pglb)：
 证明调整和分箱和repack，能够保证，即使随着硬件和任务规模的增长，资源利用率和切换开销维持在一个较优的范围内。
-- 扫描：任务规模，i.e., \( n_task \in [1, n_task_max] \)
-- 绘制切换开销&资源利用率 随着任务，资源规模的变化的柱状图。
+- 脚本：
+  - 基于 **Step 2-2** 得到的调度方案，使用pglb进行随机测试
+  - 基于 **step 1** 得到的调度方案，使用reserv进行随机测试
+- 扫描：调整硬件和任务规模（同Motiv2）
+  - 硬件tile数：\([300, 500]\)
+  - 任务链数量：\([1, 4]\)
+  - 任务负载倍数：\([0.5, 1]\)（相对于基线workload）
+- 绘图（同Motiv2）：
+  - 主轴：切换次数
+  - 副轴：切换开销
+  - 横轴: 硬件tile数，任务链数量，任务负载倍数
+  - 期望看到：
+    - 随着硬件和任务规模的变化，切换次数和切换开销都维持在一个较优的范围内
 
 ### 端到端的比较
 
@@ -249,8 +333,5 @@
   - 固定资源和时间约束，查找不超时最大吞吐。
   - 固定资源和任务规模：查找drop任务情况下能满足的最小延迟约束。
   - 固定任务规模和时间约束：查找最小资源需求。
-
-
-
 
   - **权衡曲线**：画出idle_ratio (x) 和 miss_ratio (y) 的曲线。

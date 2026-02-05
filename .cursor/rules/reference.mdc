@@ -1,0 +1,14 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+- doc/ 文件夹下的文档为项目的参考文档，在编写代码时需要参考这些文档。
+- doc/spec 下为已经确定的方案，且用论文标准的语言描述。
+- 修改方案，需要补全doc/spec 下对应的文档，但修改之前需要经过确认，不能直接修改。
+- 修改collector 需要参考 collector.md 中的描述。
+- 修改端到端流程，需要参考 e2e_sched_sim_flow.md 中的描述。
+- 修改测试方案，需要参考 test_plan.md 中的描述。
+- 修改资源分配方案，需要参考 guided_hybrid_allocation_algorithm.md 中的描述。
+- 修改资源分配问题描述，需要参考doc/spec/chain_slack_assignment_algorithm.md 中的描述。
+- 完成一个实验脚本，需要生成一个 试验类型+试验编号+describe.md 的文件，用于描述图片含义，图例含义，以及实验参数，用于插入论文。

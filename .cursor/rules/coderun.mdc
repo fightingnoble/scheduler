@@ -1,0 +1,6 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+- 在 /home/zhangchg/git_repo/scheduler 项目中，每次运行或测试前需要 conda activate gurobi 环境。

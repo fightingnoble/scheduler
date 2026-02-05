@@ -194,3 +194,50 @@ T_compute = load / processing power
     - 移除 `utils.py` 中未使用的 `var_estimation` 相关代码
   - **文件涉及**：`global_var.py`、`paths.py`、`utils.py`、`sched/global_sched.py`、`sim_main.py`、`allocator_agent.py`
   - **优势**：路径管理更加简洁统一，移除了冗余参数，提高了代码的可维护性
+
+## 202510005
+- 重构：StatisticsCollector 测试脚本现代化
+  - **问题**：原有测试代码内嵌在 `approach_collector.py` 中，使用简单的测试函数，缺乏现代测试框架支持
+  - **解决方案**：
+    1. 将测试代码迁移到独立的 `test_approach_collector.py` 文件
+    2. 使用 `pytest` 框架重构测试，提供更好的测试组织和错误报告
+    3. 添加模拟和 fixture 来简化测试设置
+  - **核心改动**：
+    - 创建 `test_approach_collector.py` 文件，包含完整的测试套件
+    - 使用 `pytest` fixtures 提供 `MockMyGraph` 和 `StatisticsCollector` 实例
+    - 添加自动模拟 matplotlib 绘图功能，避免测试时弹出 GUI
+    - 实现全面的测试覆盖：基本功能、超周期统计、Motiv-Exp 特定统计、摘要生成、格式化输出、状态保存/加载和边界条件
+  - **修复问题**：
+    - 修复 `forward_hyperperiod` 中的 KeyError 问题（使用 `pop(part_id, 0)` 提供默认值）
+    - 修复空分布调用百分位数时的 ValueError（在 `ref_tdigest.py` 中添加空分布处理）
+    - 修复状态保存/加载时 `total_pwr` 不匹配的问题
+    - 修复测试数据设置，确保所有必要的记录调用都被正确执行
+  - **文件涉及**：`approach_collector.py`、`test_approach_collector.py`、`ref_tdigest.py`
+  - **优势**：测试代码更加健壮、可维护，符合现代 Python 测试最佳实践
+
+## 20250103
+- 重构：核心分配算法向量化优化
+  - **问题**：`override_total_cores` 和 `apply_forced_num_cores` 使用循环和迭代方式分配核心，代码复杂且性能较低
+  - **解决方案**：
+    1. 实现新的 `vectorized_core_allocation` 函数，使用 NumPy 向量化操作和比例舍入法
+    2. 统一两个函数的实现，都调用新的向量化函数
+    3. 创建完整的测试套件验证新旧实现的正确性
+  - **核心改动**：
+    - 新增 `vectorized_core_allocation` 函数：使用单纯形投影/比例舍入法，先分配整数部分，再按小数余数分配剩余核心
+    - 重构 `override_total_cores` 和 `apply_forced_num_cores`：简化为调用新函数，保持接口不变
+    - 创建 `test_core_allocation.py` 测试文件：对比三种实现（旧 override、旧 apply、新向量化）的行为
+  - **文件涉及**：`utils.py`、`sim_main.py`、`test_core_allocation.py`
+  - **优势**：代码更简洁、性能更优、数学精确性更高，统一了两个相似功能的实现
+
+## 20251009
+- 修复：关键路径延迟分解统计（Critical Path Latency Decomposition）
+  - **问题**：原延迟分解逻辑将任务链上所有祖先节点时间累加（`sum`），在并行路径汇合时导致 `compute_time + realloc_time > finish_t_rel`，违反物理约束
+  - **解决方案**：改用关键路径算法，在汇合点选择耗时最长路径（`max`）而非累加所有路径
+  - **核心改动**：
+    - 重构数据结构：新增 `task_curr_stat`（记录任务自身时间）与 `task_pred_stat`（存储前驱关键路径统计）
+    - 实现传播逻辑：任务完成时，选择 `e2e_lat` 最大的前驱作为关键路径，将关键路径时间+自身时间传播给后继
+    - 修正等待时间计算口径：`wait_ratio = mean(e2e)/cons - mean(exec)/cons - mean(realloc)/cons`，避免"比值均值"产生负等待
+    - 移除旧的累加逻辑（`task_own_*_time`, `task_path_*_time`），统一到新结构
+    - 更新 `save_state/load_state` 以支持新数据结构的序列化
+  - **文件涉及**：`approach_collector.py`、`scripts/collector.md`（新增算法文档）
+  - **优势**：正确处理并行任务图的延迟分解，确保 `exec + realloc + wait = e2e_lat`，符合物理约束

@@ -389,26 +389,16 @@ def deduce_task_attrib(taskattr: TaskIntAttr,
     taskattr.max_tot_rsc = deduce_max_tot_rsc(rda_size, req_rsc_size, taskattr.thread_scaling_factor, taskattr.freq_division_factor, max(taskattr.var_factor))
     taskattr.util = deduce_util(equiv_core, min_tot_rsc)
 
-def deduce_cfg2(taskattr_dict, f_gcd, hyper_p, 
-               logical_graph_nx, task_graph_srcs, task_graph_sinks,
-               slack_threshold, e2e_latency, lcomp_quantileA:float=0.95, lcomp_quantileB:float=None,
-                 algorithm='avg', timestep_size=10, verbose=False, plot=False):
+def deduce_cfg2(taskattr_dict, 
+               logical_graph_nx, task_graph_srcs, task_graph_sinks, 
+               quantile, slack_threshold, 
+               verbose=False, plot=False):
     """
     配置推导函数
     
     Args:
-        lcomp_quantileA: 用于估计资源上限的分位数参数
-        lcomp_quantileB: 用于估计较好情况资源需求的分位数参数（暂时未使用）
         quantile: 用于分布分位数计算的分位数
     """
-
-    # 检查是否需要重新装箱（repack 模式）
-    if (lcomp_quantileB is not None and lcomp_quantileA > lcomp_quantileB):
-        need_repack = True
-        quantile = lcomp_quantileB
-    else:
-        need_repack = False
-        quantile = lcomp_quantileA
 
     chains_info = get_chains(logical_graph_nx, task_graph_srcs, task_graph_sinks, taskattr_dict,
                                quantile=quantile, remove_src_sink=False)
@@ -423,6 +413,17 @@ def deduce_cfg2(taskattr_dict, f_gcd, hyper_p,
         logical_graph_nx, 
         rsc_map_w
     )
+
+    if verbose:
+        print(ert, ddl) 
+
+    if plot:
+        plot_timeline_graph(logical_graph_nx)
+    
+    return ert, ddl, rsc_map_w
+
+def update_taskattr_dict(ert, ddl, rsc_map_w, taskattr_dict, f_gcd, hyper_p, 
+               logical_graph_nx, verbose=False):
     for node, (req_rsc_size, slack_estm, constr) in rsc_map_w.items():
         if logical_graph_nx.nodes[node]['type'] != "op":
             continue
@@ -435,18 +436,9 @@ def deduce_cfg2(taskattr_dict, f_gcd, hyper_p,
         deduce_task_attrib(taskattr, f_gcd, hyper_p, req_rsc_size, spatial_ratio)
 
     if verbose:
-        print(ert, ddl) 
-    
-
-    if plot:
-        plot_timeline_graph(logical_graph_nx)
-
-    if verbose:
         for node, taskattr in taskattr_dict.items():
             print(node, taskattr)
             print()
-    
-    return need_repack
 
 def get_chains_info(task_graph, start_nodes, end_nodes):
     chains = []
@@ -509,11 +501,12 @@ def test():
                 taskattr.thread_scaling_factor *= args.aux_scale_factor
     logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
     slack_threshold = args.slack_threshold
-    need_repack = deduce_cfg2(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, task_graph_srcs, 
-                         task_graph_sinks, slack_threshold, 
-                         args.e2e_latency, args.exec_t_comp_ratioA, 
-                         lcomp_quantileB=args.exec_t_comp_ratioB,
-                         verbose=True)
+    ert, ddl, rsc_map_w = deduce_cfg2(taskattr_dict, 
+               logical_graph_nx, task_graph_srcs, task_graph_sinks, 0.99,
+               slack_threshold, verbose=True)
+    
+    update_taskattr_dict(ert, ddl, rsc_map_w, taskattr_dict, f_gcd, hyper_p, 
+               logical_graph_nx, verbose=False)
     glb_n_task_dict = gen_taskint_from_cfg(taskattr_dict, f_gcd)
 
     for node, taskint in glb_n_task_dict.items():

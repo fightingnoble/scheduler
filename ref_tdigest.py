@@ -159,6 +159,16 @@ class TDigestStreamingHistogram:
         :param p_list: List of percentiles (e.g., [0.5, 0.9, 0.99]) to calculate.
         :return: A dictionary containing 'histogram', 'percentiles', and 'total_processed_count'.
         """
+        # Handle empty distribution
+        if self.total_processed_count == 0:
+            percentiles = {f'p{round(p*100, nbit)}': float('nan') for p in p_list}
+            summary = {
+                'histogram': [],
+                'percentiles': percentiles,
+                'total_processed_count': 0
+            }
+            return summary
+        
         # calculate the percentiles
         percentiles = {f'p{round(p*100, nbit)}': self.percentile(round(p*100, nbit)) for p in p_list}
         summary = {

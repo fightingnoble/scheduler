@@ -213,7 +213,7 @@ class MyGraph(nx.DiGraph):
                         new_attr['exp_io_t'] = 0.
                 else:
                     new_attr['exp_comp_t'] = elim_nume_error(new_attr['exp_comp_t']) # if node_type == "op" else 0
-                    new_attr['exp_io_t'] = elim_nume_error(new_attr['exp_io_t'])
+                    new_attr['exp_io_t'] = elim_nume_error(new_attr['exp_io_t']) if node_type == "op" else 0
 
             # 添加超周期偏移到时间相关属性
             time_offset = hp_idx * T_hp
@@ -340,7 +340,9 @@ class GlobalEvent_t:
             return False
 
 class BaseProcessor:
-    def __init__(self, id, cap, base_pwr, G:MyGraph, mapped_node:Set=None, stats_collector=None):
+    def __init__(self, id, cap, base_pwr, G:MyGraph, mapped_node:Set=None, 
+        stats_collector:StatisticsCollector=None
+    ):
         # 统一的基础属性
         self.id = id
         self.base_pwr = base_pwr
@@ -463,6 +465,17 @@ class BaseProcessor:
         if hasattr(self, 'slack_map'):
             print(f"\t\tSlack_map: {self.slack_map}")
 
+    def clear_timeout(self, node):
+        if node in self.ready:
+            del self.ready[node]
+
+        if node in self.running:
+            del self.running[node]
+            if node in self.res_map: # also remove from resource map if it was running
+                del self.res_map[node]
+        
+        self.G_ptr.mark_finish(node)
+    
     def has_action(self) -> bool:
         """
         检查处理器是否有实际动作
@@ -575,18 +588,36 @@ class Acc_p(BaseProcessor):
         self.alloc_fn: Callable
         self.trigger_cond: Callable
         self.curr_slot_index = 0
+        self.drop_timeout = True
+    
+    @property
+    def drop(self):
+        return not get_drop_disabled() and self.drop_timeout
 
-    def iter_timeout(self, curr_t: float):
-        """Iterate over the timeout tasks.
+    def iter_timeout(self, curr_t: float, hp_start_t: float):
+        """Iterate over the timeout non-src/sink tasks.
+        If DROP_DISABLED is False, remove the timeout tasks from ready and running queues.
         """
         # Use itertools.chain to safely iterate over multiple dictionaries
-        for node, rem in chain(self.ready.items(), self.running.items()):
+        for node, rem in chain(self.ready.copy().items(), self.running.copy().items()):
+            if node == "R":
+                continue
+            _type = self.G_ptr.nodes[node]['type']
+            if _type == "sink":
+                continue
             ddl = self.G_ptr.ddl_map.get(node, float("inf"))
-            if time_gt(curr_t, ddl):
+            # To avoid timeout tasks are repeatively yield, only ones whose ddl belong to this hyperperiod will be yielded
+            if time_gt(curr_t, ddl) and time_gtq(ddl, hp_start_t):
                 # if MISS_DISABLED, peacefully exit the simulation
                 if MISS_DISABLED:
                     import sys; sys.exit(1)
+
+                # if not get_drop_disabled():
+                if self.drop:
+                    self.clear_timeout(node)
+                    print_if_verbose(f"\t[{self.id}] Task {node} is dropped at {curr_t}")
                 yield (node, rem)
+
 
     def update_run(self, pred_t, curr_t) -> bool:
         """
@@ -594,6 +625,10 @@ class Acc_p(BaseProcessor):
         All tasks depends on the system state, 
         the remining load is updated only if the system state is "S" 
         """
+        # 保护：第一次调用时pred_t为-inf，直接返回
+        if time_lt(pred_t, 0):
+            return False
+        
         new_complete_flag = False
         if self.sys_state == "R":
             assert "R" in self.running, \
@@ -613,22 +648,19 @@ class Acc_p(BaseProcessor):
             if self.stats_collector:
                 # 记录realloc overhead
                 task_list = list(self.res_map.keys())  # 假设ready队列中的任务受realloc影响
-                self.stats_collector.record_realloc(self.id, delta_load, task_list)
+                # 内部会使用 cal_cost(delta_ld, cap, pwr) 来计算负载。
+                self.stats_collector.record_realloc(self.id, elim_nume_error(curr_t - pred_t), task_list)
         else:
+            # 先处理所有任务，累积实际使用的负载
+            total_used_load = 0.0
             for node in list(self.res_map.keys()):
                 # rem_t  = self.running[node] - (curr_t - pred_t) * self.res_map[node] * self.base_pwr
                 rem_load, delta_load = update_task_progress(self.running[node], curr_t - pred_t, self.res_map[node], self.base_pwr)
+                total_used_load += delta_load
                 
                 # info collector, schedule-unrelated
                 if self.stats_collector:
-                    self.stats_collector.record_compute_progress(node, elim_nume_error(curr_t - pred_t))
-
-                # record idle capacity over [pred_t, curr_t]
-                if self.stats_collector:
-                    dt = curr_t - pred_t
-                    size = self.cap - sum(self.res_map.values()) 
-                    idle_ld = elim_nume_error(dt * size * self.base_pwr) 
-                    self.stats_collector.record_idle_capacity(idle_ld, self.sys_state)
+                    self.stats_collector.record_compute_progress(node, elim_nume_error(curr_t - pred_t), delta_load)
 
                 if rem_load <= 0:
                     # 检查是否超时
@@ -648,6 +680,14 @@ class Acc_p(BaseProcessor):
                     print_if_verbose(f"\t[{self.id}] Task {node} finishes at {curr_t}") 
                 else:
                     self.running[node] = rem_load
+            
+            # 循环结束后，记录 idle
+            # idle = 总容量 - 实际使用的负载
+            if self.stats_collector and curr_t > pred_t:
+                dt = curr_t - pred_t
+                total_capacity = dt * self.cap * self.base_pwr
+                idle_load = total_capacity - total_used_load
+                self.stats_collector.record_idle_capacity(idle_load, self.sys_state)
         return new_complete_flag
 
     def update_ready(self, curr_t) -> List:

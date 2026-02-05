@@ -2,12 +2,12 @@ import os, re
 import warnings
 from task.task_cfg import gen_workloads, export_json_graph_utils
 from task.task_cfg import affinity_cfg
-from sched.global_sched import push_task_into_bins_new, coleasing_alloc_1bin
+from sched.global_sched import push_task_into_bins_new
 from task.task_agent import TaskInt
 from task.spec import Spec
 from model.message.msg_dispatcher import MsgDispatcher
 from model.message.data_pipe import DataPipe, TriggerPipe
-from sched.scheduling_table import SchedulingTableInt, extend_dummy_bins
+from sched.scheduling_table import SchedulingTableInt
 from sched.bin_list_utils import get_task_layout_compact, get_task_layout_compact1bin, Bin_list_print
 from model.resource_agent import Resource_model_int
 from sched.scheduler_agent import Scheduler
@@ -18,7 +18,7 @@ from model.event_gen.e2e_latency import discrete_event_sim
 from model.task_queue_agent import TaskQueue
 from utils import dump_and_check, load_pickle, update_df, check_parents_path, build_path_old, get_case_path_str
 from global_var import *
-from utils import core_distr, time_cnt
+from utils import core_distr, time_cnt, vectorized_core_allocation
 from paths import PathContext
 import numpy as np 
 import argparse
@@ -89,87 +89,17 @@ def extract_pid2_bin_id(bin_list):
     return pid2_bin_id
 
 
-def override_total_cores(bin_list, target_total_cores):
-    """
-    显式按比例调整 bin 的 num_resources 以匹配目标核数。
-    若只有一个 bin，则直接赋值；多 bin 按现有比例缩放后取整，并在最后补差。
-    """
-    if target_total_cores <= 0:
-        return
-    if len(bin_list) == 1:
-        bin_list[0].num_resources = target_total_cores
-        return
-    current_total = sum(b.num_resources for b in bin_list)
-    if current_total == 0:
-        # fallback: 平分
-        avg = max(1, target_total_cores // len(bin_list))
-        for b in bin_list:
-            b.num_resources = avg
-        # 补差
-        diff = target_total_cores - sum(b.num_resources for b in bin_list)
-        idx = 0
-        while diff > 0:
-            bin_list[idx % len(bin_list)].num_resources += 1
-            idx += 1
-            diff -= 1
-        return
-    scaled = []
-    for b in bin_list:
-        scaled.append(max(1, int(round(b.num_resources / current_total * target_total_cores))))
-    # 调整四舍五入误差
-    diff = target_total_cores - sum(scaled)
-    idx = 0
-    while diff != 0:
-        if diff > 0:
-            scaled[idx % len(scaled)] += 1
-            diff -= 1
-        else:
-            if scaled[idx % len(scaled)] > 1:
-                scaled[idx % len(scaled)] -= 1
-                diff += 1
-        idx += 1
-    for i, b in enumerate(bin_list):
-        b.num_resources = scaled[i]
-
-def apply_forced_num_cores(args, bin_list, estimated_num_cores, cfg_para_dict, para_scan_group1, path_ctx: PathContext):
+def apply_forced_num_cores(bin_list, estimated_num_cores, target):
     """
     统一处理强制核数逻辑：
     - 若未启用强制或无法从 trace 解析则保持估算值
     - 单 bin：直接扩容
     - 多 bin：按原 bin size 比例进行增量分配（沿用 core_distr）
     """
-    if not (args.force_num_cores and args.aux_scale_factor != 9):
-        return estimated_num_cores
-
-    _cfg_n_t = cfg_root_fmt.format(**cfg_para_dict, **{**para_scan_group1, "aux_scale_factor": 9})
-    _path_para_dict = {
-        "root_dir": args.root_dir,
-        "cfg_n": _cfg_n_t,
-        "i_file_suffix": args.i_file_suffix,
-        "force_suffix": ""
-    }
-    folder, files, match = get_core_num_from_trace_name(_path_para_dict, path_ctx)
-    if not match:
-        return estimated_num_cores
-
-    target = int(match.group(1))
-    if target < estimated_num_cores:
-        print(f"Forced specified num of Core should be larger than the estimated num of cores {estimated_num_cores} > {target}")
-        import sys; sys.exit(1)
-
     if target == estimated_num_cores:
         return estimated_num_cores
 
-    if len(bin_list) == 1:
-        bin_list[0].num_resources = target
-    else:
-        score_dict = {_bin.id: _bin.num_resources for _bin in bin_list}
-        rsc_map = dict(score_dict)
-        curr_aval_rsc = target - estimated_num_cores
-        core_distr(rsc_map, score_dict, curr_aval_rsc)
-        assert sum(rsc_map.values()) == target
-        for _bin in bin_list:
-            _bin.num_resources = rsc_map[_bin.id]
+    vectorized_core_allocation(bin_list, target)
 
     print(f"Force the num of Core {estimated_num_cores} -> {target}, the over subcription ratio is {target/estimated_num_cores}")
     return target
@@ -301,7 +231,7 @@ def build_workload_and_criticality(args):
     生成 workload 并设置 criticality，对应 main 中的 "workload settings" 段
     返回: (hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list)
     """
-    hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list, need_repack = gen_workloads(args)
+    hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list = gen_workloads(args)
 
     # assert all the process has hard deadline
     if args.lateness_mode == "all_hard":
@@ -315,10 +245,10 @@ def build_workload_and_criticality(args):
     elif args.lateness_mode == "ignore":
         pass
 
-    return hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list, need_repack
+    return hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list
 
 
-def determine_resource_config(args, path_params, path_ctx, need_repack):
+def determine_resource_config(args, path_params, path_ctx, need_repack, bin_list):
     """
     决定如何获取 num_cores 和 bin_list 的配置
     
@@ -326,6 +256,7 @@ def determine_resource_config(args, path_params, path_ctx, need_repack):
         args: 命令行参数
         path_params: 路径参数元组
         path_ctx: PathContext 实例
+        need_repack: 是否需要重新装箱
         
     Returns:
         tuple: (num_cores, bin_list) 或 None（如果配置失败）
@@ -333,28 +264,54 @@ def determine_resource_config(args, path_params, path_ctx, need_repack):
     cfg_para_dict, para_scan_group1, para_scan_group2, path_para_dict, \
     bin_path_format, trace_path_para, plot_path_para, csv_xlxs_root, case_pth = path_params
     
-    # for static stage: if the stage is marked as repack,
-    # then we need to load the bin_list from the cache file
-    # for dynamic statge: if the scheduler has two stages, 
-    # then we need to read both the num_cores and bin_list from the trace file
-    need_load_bin = need_repack or args.test_case in two_stage_case_coll
-    if need_load_bin:
-        # 从已存在的文件解析核心数并加载bin_list
-        prepared = prepare_induced_env_if_needed(
-            path_para_dict, path_ctx,
-            trace_path_para, plot_path_para,
-        )
-        if prepared is None:
-            raise ValueError("Failed to load bin_list from cache file")
-        matched_num_cores, bin_list = prepared
-    else:
-        bin_list = []
+    # for repack: load packing relation ship from cache file
+    # for dynamic statge of two stage case: read both the num_cores and bin_list from the cache file
+    # for ablation study: force the num_cores, and change the size of bins in bin_list
+    # procedure: get_bin, force_bin, force core
+    # if args.test_case in two_stage_case_coll:
+    #     prepared = prepare_induced_env_if_needed(
+    #         path_para_dict, path_ctx,
+    #         trace_path_para, plot_path_para,
+    #     )
+    #     if prepared is None:
+    #         raise ValueError("Failed to load bin_list from cache file")
+    #     matched_num_cores, bin_list = prepared
+    #     if args.num_cores is not None:
+    #         num_cores = apply_forced_num_cores(bin_list, matched_num_cores, args.num_cores)
+    #     else:
+    #         num_cores = matched_num_cores
+    #     if args.e2e_var_sim_en:
+    #         # check max number of bins
+    #         num_bins = check_max_bin_num(args, args.num_bins, bin_path_format, path_ctx)
+    #         # suitable for the case with variable number of bins
+    #         bin_list = extend_dummy_bins(bin_list, num_bins)
+    # elif need_repack:
+    #     prepared = prepare_induced_env_if_needed(
+    #         path_para_dict, path_ctx,
+    #         trace_path_para, plot_path_para,
+    #     )
+    #     if prepared is None:
+    #         raise ValueError("Failed to load bin_list from cache file")
+    #     matched_num_cores, bin_list = prepared
+    #     num_cores = args.num_cores
+    # else:
+    #     num_cores = args.num_cores
+    #     bin_list = []
 
-    need_deduce_core_num = args.test_case in two_stage_case_coll
-    if need_deduce_core_num:
-        num_cores = matched_num_cores
+    # procedure: get_bin, force core
+
+    # if specify the num_cores, use the forced num_cores
+    # for repack: load packing relation ship from cache file
+    # for dynamic stage of two stage case: read both the num_cores and bin_list from the cache file
+
+    if args.test_case in two_stage_case_coll or need_repack:
+        if args.num_cores is not None:
+            num_cores = apply_forced_num_cores(bin_list, args.num_cores, args.num_cores)
+        else:
+            num_cores = sum(_bin.num_resources for _bin in bin_list)
     else:
         num_cores = args.num_cores
+        bin_list = []
 
     return num_cores, bin_list
 
@@ -437,6 +394,21 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
     """
     执行 bin-packing 算法，生成调度表并保存
     """
+    # --- 入口参数检查 ---
+    if not hasattr(args, "binpack_cfg") or args.binpack_cfg is None:
+        raise ValueError("args.binpack_cfg is not initialized")
+    if "algorithm" not in args.binpack_cfg:
+        raise KeyError("args.binpack_cfg missing required key: 'algorithm'")
+    # ------------------
+
+    # Prepare binpack_cfg with var_dist_map and quantile
+    def prepare_binpack_cfg(cfg, quantile, p_list, graph):
+        from sched.binpack_config import BinPackConfig
+        new_cfg_dict = dict(cfg)
+        new_cfg_dict['var_dist_map'] = {p.task.name: graph.nodes[p.task.name]['var_dist'] for p in p_list}
+        new_cfg_dict['quantile'] = quantile
+        return BinPackConfig(new_cfg_dict)
+
     for _p in glb_p_list:
         _p.task.criticality = "hard"
         _p.task.chain_criticality = "hard"
@@ -444,6 +416,7 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
     print("sim_step: ", sim_step)
     # 保持同一 list 对象，避免与 scheduler_list 等引用脱节
     if args.binpack_cfg["algorithm"] == "scratch":
+        binpack_cfg_scratch = prepare_binpack_cfg(args.binpack_cfg, args.exec_t_comp_ratioB, glb_p_list, physical_graph_nx)
         bin_list = push_task_into_bins_new(
             bin_list,
             glb_p_list, affinity_cfg, event_iter_dict,
@@ -454,7 +427,7 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
             msg_dispatcher,
             a_data_pipe, w_data_pipe,
 
-            num_periods, binpack_cfg=args.binpack_cfg,
+            num_periods, binpack_cfg=binpack_cfg_scratch,
             verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
             warmup=True, drain=True, 
             )
@@ -464,24 +437,28 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
 
         if not need_repack:
             split_ratio = args.exec_t_comp_ratioA
+            binpack_cfg_guided = prepare_binpack_cfg(args.binpack_cfg, split_ratio, glb_p_list, physical_graph_nx)
             print("="* 20 + "Bin-split mode: Cluster-based allocation" + "="* 20 + "\n")
             max_core_num, pid2_bin_id, bin_size_list = coleasing_alloc_cluster(
                 bin_list,
                 glb_p_list, affinity_cfg, event_iter_dict,
-                num_cores, args.quantum_check_en, quantumSize, 
+                None, args.quantum_check_en, quantumSize, 
                 sim_step, hyper_p, split_ratio,
 
                 scheduler_list, monitor_list,
                 msg_dispatcher,
                 a_data_pipe, w_data_pipe,
 
-                num_periods, binpack_cfg=args.binpack_cfg,
+                num_periods, binpack_cfg=binpack_cfg_guided,
                 job_graph=physical_graph_nx, 
                 n_partition = args.num_bins if args.num_bins != -1 else 9999,
                 verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
                 warmup=True, drain=True, 
                 )
-            num_cores = apply_forced_num_cores(args, bin_list, max_core_num, cfg_para_dict, para_scan_group1, path_ctx)
+            if args.num_cores is not None:
+                num_cores = apply_forced_num_cores(bin_list, max_core_num, args.num_cores)
+            else:
+                num_cores = max_core_num
         else:
             # 获取初始 bin 分配
             # 普通 bin_split 模式：使用聚类算法
@@ -494,7 +471,7 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
 
             print("="* 20 + "Repack mode: Redistribute slack and rebin" + "="* 20 + "\n")
             # 构造局部 binpack 配置，避免污染全局 args
-            binpack_cfg_local = dict(args.binpack_cfg)
+            binpack_cfg_local = prepare_binpack_cfg(args.binpack_cfg, args.exec_t_comp_ratioB, glb_p_list, physical_graph_nx)
             binpack_cfg_local["mapping"] = pid2_bin_id
             binpack_cfg_local["bin_sel_mod"] = "pre_defined"
             binpack_cfg_local["affinity_en"] = False
@@ -630,6 +607,11 @@ def preprocess_args(args):
     """
     预处理 args，包括强制后缀、enforce_wc、参数断言和特殊 case 检查。
     """
+    if args.num_cores is not None:
+        args.force_num_cores = True
+    else:
+        args.force_num_cores = False
+    
     if args.force_num_cores and args.aux_scale_factor != 9:
         args.force_suffix = "force_"
     else:
@@ -668,7 +650,7 @@ def main(args: argparse.Namespace):
 
     # ======================== workload settings ========================
     hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list, need_repack = build_workload_and_criticality(args)
-    workload = (hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list)
+    workload = (hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list, need_repack)
     export_json_graph_utils(physical_graph_nx, path_ctx.graph_fn)
 
     # ======================== build simulation ================
@@ -721,21 +703,6 @@ def main(args: argparse.Namespace):
 
 
         if args.test_case in two_stage_case_coll:
-
-            if args.e2e_var_sim_en:
-                # check max number of bins
-                num_bins = check_max_bin_num(args, args.num_bins, bin_path_format, path_ctx)
-                # suitable for the case with variable number of bins
-                bin_list = extend_dummy_bins(bin_list, num_bins)
-
-            task_spec, rsc_list, msg_dispatcher, \
-                a_data_pipe, w_data_pipe, scheduler_list, \
-                    monitor_list, trace_path = create_common_scheduler_elements(
-                        args, trace_path_para, case_pth, 
-                        hyper_p, glb_p_list, scheduler_args, 
-                        sim_step, bin_list, path_ctx
-                        )
-
             sensor_pipe = TriggerPipe(len(bin_list))
             cores = [bin.num_resources for bin in bin_list]
             core_map = core_mapping_1d(cores)
@@ -778,15 +745,6 @@ def main(args: argparse.Namespace):
         elif args.test_case in [case_name_glb_input,]:
 
             assert "core_size" not in args.binpack_cfg or args.binpack_cfg["core_size"] != "induced"
-
-            # 重新定义 scheduler_args 用于 glb_input
-            scheduler_args = {
-                "exec_t_comp_ratioB": args.exec_t_comp_ratioB,
-                "barrier_en": not args.barrier_dis, 
-                "forbid_miss": args.forbid_miss,
-                "progress_aware": True if args.test_case in two_stage_case_coll else False,
-                "allow_realloc": args.allow_realloc,
-            }
 
             print("sim_step: ", sim_step)
             glb_sched(task_spec, affinity_cfg, 
@@ -904,7 +862,6 @@ def check_max_bin_num(args, num_cores, bin_path_format, path_ctx: PathContext):
         max_num_bins = max(max_num_bins, len(bin_list))
     num_bins = max_num_bins
     return num_bins
-
 
 if __name__ == "__main__":
     from utils import input_parser
