@@ -56,11 +56,11 @@ def run_simulation(processors:List[BaseProcessor], event_t:GlobalEvent_t, G:MyGr
         # curr_t: -T_hp, 0, T_hp, 2T_hp, 3T_hp, 
         if (time_gtq(curr_t, next_hp_boundary) and time_lt(pred_t, next_hp_boundary)):
             if curr_hp >= 0:
-                stats_collector.forward_hyperperiod(T_hp)
                 stats_collector.record_miss(
                     chain(processor.iter_timeout(curr_t)
                         for processor in processors if hasattr(processor, 'iter_timeout'))
                     )
+                stats_collector.forward_hyperperiod(T_hp)
             # -2, -1, 0, 1, 2 -> -1, 0, 1, 2, 3
             curr_hp += 1
             # 0, 1, 2, 3, 4,
@@ -178,11 +178,12 @@ if __name__ == "__main__":
     parser.add_argument("--var_en", action="store_true", help="Enable variable execution time")
     parser.add_argument("--num_hp", type=int, default=1, help="Number of hyperperiods")
     parser.add_argument("--verbose", action="store_true", help="verbose")
-    parser.add_argument("--output_path", type=str, default="./output.txt", help="output path")
+    parser.add_argument("--output_path", type=str, default="./", help="output path")
     args = parser.parse_args()
     num_hp = args.num_hp
     T_hp = 0.1 if args.case != "case1" else 100
     set_verbose_output(args.verbose)
+    graph_json_pth = './cache/coalescing_scan/n_bins_8/x1_0.1s_rda-20.00%(J)_100.00%(T)_30.00%(S)_ignore/graph_x1_0.1s.json'
 
     if args.case == "case1":
         from example.bm4 import *
@@ -191,7 +192,8 @@ if __name__ == "__main__":
             task_graph_srcs, task_graph_ops, task_graph_sinks, 
             task_attr, src_attr, sink_attr
         )
-
+        from approach_def import set_drop_disabled
+        set_drop_disabled(True)
         # # Suppose there is only one partition
         sink_and_op_nodes = [n for n, x in G.logical_graph.in_degree() if x > 0]
         partition_cfg = PartitionConfig(
@@ -214,7 +216,7 @@ if __name__ == "__main__":
         time_unit, time_norm_factor = set_time_unit(1e-6, False)
 
         G, pid2name = instantiate_mygraph_from_json(
-            'cache/graph_w_ert_ddl.json',
+            graph_json_pth,
             time_norm_factor=time_norm_factor
             )
 
@@ -223,7 +225,7 @@ if __name__ == "__main__":
         sink_and_op_nodes = [n for n, x in G.logical_graph.in_degree() if x > 0]
         partition_cfg = PartitionConfig(
             num_partitions=1,
-            cap_list=[250],
+            cap_list=[400],
             base_pwr_list=[FLOPS_PER_CORE],
             mapped_node_list=[sink_and_op_nodes],
             TSmap_list=[None],  # 如果用cyclic策略可传入具体map
@@ -247,7 +249,7 @@ if __name__ == "__main__":
 
         time_unit, time_norm_factor = set_time_unit(1e-6, False)
         G, pid2name = instantiate_mygraph_from_json(
-            'cache/graph_w_ert_ddl.json',
+            graph_json_pth,
             time_norm_factor=time_norm_factor
             )
 
@@ -284,7 +286,7 @@ if __name__ == "__main__":
         policy = "cyc"
         time_unit, time_norm_factor = set_time_unit(1e-6, False)
         G, pid2name = instantiate_mygraph_from_json(
-            'cache/graph_w_ert_ddl.json',
+            graph_json_pth,
             time_norm_factor=time_norm_factor
             )
         if args.case == "case5":
@@ -330,11 +332,11 @@ if __name__ == "__main__":
         
         time_unit, time_norm_factor = set_time_unit(1e-6, False)
         G, pid2name = instantiate_mygraph_from_json(
-            'cache/graph_w_ert_ddl.json',
+            graph_json_pth,
             time_norm_factor=time_norm_factor
             )
         if args.case == "case7":
-            bin_list = load_pickle('./cache/coalescing_scan/n_bins_8/x1_0.1s_rda-20.00%(J)_100.00%(T)_30.00%(S)_ignore/bin_list_371.pkl')
+            bin_list = load_pickle('./cache/coalescing_scan/n_bins_8/x1_0.1s_rda-20.00%(J)_100.00%(T)_30.00%(S)_ignore/bin_list_371_ov_0.15_repack.pkl')
         else:
             bin_list = load_pickle('./cache/coalescing_scan/n_bins_1/x1_0.1s_rda-20.00%(J)_100.00%(T)_30.00%(S)_ignore/bin_list_371.pkl')
         
@@ -376,6 +378,6 @@ if __name__ == "__main__":
     processors, event_t, stats_collector = instantiate_processors(
         G, partition_cfg, list(event_t), policy=policy
         )
-    stats_collector.set_output_path(args.output_path)
+    stats_collector.set_motiv3_mode("raw")
     run_simulation(processors, event_t, G, num_hp=num_hp, T_hp=T_hp, verbose=args.verbose, var_en=args.var_en)
 

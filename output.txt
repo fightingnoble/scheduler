@@ -1,0 +1,147 @@
+--- Distribution Statistics Summary ---
+Percentiles calculated: ['50.0%', '90.0%', '99.0%', '99.9%']
+
+=== Per Task Finish Time ===
+  --- C ---
+    Total processed count: 1
+    Percentiles:
+      p50.0: 30.0000
+      p90.0: 30.0000
+      p99.0: 30.0000
+      p99.9: 30.0000
+
+  --- A ---
+    Total processed count: 1
+    Percentiles:
+      p50.0: 45.0000
+      p90.0: 45.0000
+      p99.0: 45.0000
+      p99.9: 45.0000
+
+  --- D ---
+    Total processed count: 1
+    Percentiles:
+      p50.0: 100.0000
+      p90.0: 100.0000
+      p99.0: 100.0000
+      p99.9: 100.0000
+
+  --- O1 ---
+    Total processed count: 1
+    Percentiles:
+      p50.0: 100.0000
+      p90.0: 100.0000
+      p99.0: 100.0000
+      p99.9: 100.0000
+
+  --- B ---
+    Total processed count: 1
+    Percentiles:
+      p50.0: 107.0000
+      p90.0: 107.0000
+      p99.0: 107.0000
+      p99.9: 107.0000
+
+  --- O2 ---
+    Total processed count: 1
+    Percentiles:
+      p50.0: 107.0000
+      p90.0: 107.0000
+      p99.0: 107.0000
+      p99.9: 107.0000
+
+=== Per Task Realloc Overhead ===
+  --- C ---
+    Total processed count: 1
+    Percentiles:
+      p50.0: 10.0000
+      p90.0: 10.0000
+      p99.0: 10.0000
+      p99.9: 10.0000
+
+  --- A ---
+    Total processed count: 1
+    Percentiles:
+      p50.0: 10.0000
+      p90.0: 10.0000
+      p99.0: 10.0000
+      p99.9: 10.0000
+
+  --- D ---
+    Total processed count: 1
+    Percentiles:
+      p50.0: 15.0000
+      p90.0: 15.0000
+      p99.0: 15.0000
+      p99.9: 15.0000
+
+  --- O1 ---
+    Total processed count: 1
+    Percentiles:
+      p50.0: 15.0000
+      p90.0: 15.0000
+      p99.0: 15.0000
+      p99.9: 15.0000
+
+  --- B ---
+    Total processed count: 1
+    Percentiles:
+      p50.0: 20.0000
+      p90.0: 20.0000
+      p99.0: 20.0000
+      p99.9: 20.0000
+
+  --- O2 ---
+    Total processed count: 1
+    Percentiles:
+      p50.0: 20.0000
+      p90.0: 20.0000
+      p99.0: 20.0000
+      p99.9: 20.0000
+
+=== Per Chain Execution Time ===
+  No data available.
+
+=== Per Chain E2E Latency ===
+  No data available.
+
+=== Overall E2E Latency ===
+  Total processed count: 0
+
+=== Per Part Realloc Overhead ===
+  --- Acc P0 ---
+    Total processed count: 1
+    Percentiles:
+      p50.0: 0.2000
+      p90.0: 0.2000
+      p99.0: 0.2000
+      p99.9: 0.2000
+
+=== Per Chain Realloc Overhead ===
+  No data available.
+
+=== Overall Realloc Overhead ===
+  Total processed count: 1
+  Percentiles:
+    p50.0: 0.1887
+    p90.0: 0.1887
+    p99.0: 0.1887
+    p99.9: 0.1887
+
+=== Overall Idle Time ===
+  Total processed count: 1
+  Percentiles:
+    p50.0: 300.0000
+    p90.0: 300.0000
+    p99.0: 300.0000
+    p99.9: 300.0000
+
+=== Overall Missed Load ===
+  Total processed count: 1
+  Percentiles:
+    p50.0: 0.0000
+    p90.0: 0.0000
+    p99.0: 0.0000
+    p99.9: 0.0000
+
+

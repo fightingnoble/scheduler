@@ -1,6 +1,5 @@
 import networkx as nx
 from queue import Queue
-from task.task_cfg import creat_logical_graph
 from example.bm4 import swt_lat
 from collections import defaultdict, OrderedDict
 import math

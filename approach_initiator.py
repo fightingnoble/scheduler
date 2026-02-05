@@ -134,8 +134,8 @@ def load_graph_from_json(json_path, time_norm_factor):
                 'offset': offset,
                 'exp_comp_t': exp_comp_t, # node['comp_ratio'] / node['freq'],
                 'base_size': base_size,
-                'comp_ratio': node['comp_ratio'],
                 'freq': node['freq'],
+                'var_dist': node['var_dist'],
                 # 'tgt_device': n.get('tgt_device', 'sen_p0')
             }
         # 汇节点
@@ -156,9 +156,10 @@ def load_graph_from_json(json_path, time_norm_factor):
                 'exp_comp_t': exp_comp_t,
                 'base_size': base_size,
                 # 'tgt_device': n.get('tgt_device', 'acc_p0'),
-                'var_factor': 1,
+                'var_factor': node['var_factor'],
                 'ert': node['ert'] + offset,
-                'ddl': node['ddl'] + offset
+                'ddl': node['ddl'] + offset,
+                'var_dist': node['var_dist'],
             }
 
     return srcs, ops, sinks, task_attr, src_attr, sink_attr, pid2name

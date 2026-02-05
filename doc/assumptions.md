@@ -109,7 +109,7 @@ sort the bin according to the feature
 
 decision:
 
-- (algorithm:reside/coalescing) Allow spatial sharing among partitions or not?
+- (algorithm:scratch/coalescing) Allow spatial sharing among partitions or not?
   - No: highest Perf.
   - Yes:
     - (mode:non-block/block)(安全资源够) Block or not:

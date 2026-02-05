@@ -28,9 +28,9 @@ def test_duplicate_for_hyperperiod():
     sinks = ['sink1', 'sink2']
     
     task_attr = {
-        'op1': {'exp_comp_t': 10.0, 'ert': 50.0, 'ddl': 100.0, 'var_factor': 1},
-        'op2': {'exp_comp_t': 15.0, 'ert': 60.0, 'ddl': 120.0, 'var_factor': 1},
-        'op3': {'exp_comp_t': 20.0, 'ert': 70.0, 'ddl': 140.0, 'var_factor': 1}
+        'op1': {'exp_comp_t': 10.0, 'ert': 50.0, 'ddl': 100.0, 'var_factor': [0, 1]},
+        'op2': {'exp_comp_t': 15.0, 'ert': 60.0, 'ddl': 120.0, 'var_factor': [0, 1]},
+        'op3': {'exp_comp_t': 20.0, 'ert': 70.0, 'ddl': 140.0, 'var_factor': [0, 1]}
     }
     
     src_attr = {

@@ -1043,7 +1043,7 @@ def gen_workloads(args):
     except Exception as e:
         print(f"Gurobi 模块未安装或未正确配置：{e}")
         algorithm = 'avg'
-    deduce_cfg2(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, 
+    need_repack = deduce_cfg2(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, 
                 srcs, sinks,
                 args.slack_threshold, args.e2e_latency, 
                 args.exec_t_comp_ratioA, 
@@ -1081,7 +1081,7 @@ def gen_workloads(args):
         verbose=args.verbose,
     )
     
-    return hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list
+    return hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list, need_repack
 
 
 def extract_parallel_cfg(task_attr, mode="runtime"):

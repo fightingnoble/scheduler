@@ -57,8 +57,10 @@ class StatisticsCollector:
         self.summary = None
         self.p_list = None
         # Store delta and K for creating new TDigestStreamingHistogram objects if needed
-        self.output_path = None
+        self.path = {"stat": './output.txt', "motiv3": './output.pdf'}
         self.total_pwr = 0.0
+        # Motiv-Exp-(3) storage mode: 'binned' or 'raw'
+        self.motiv3_mode = 'binned'
         
         # Temp cache for Lat breakdown 
         # Per-task (instance) property
@@ -84,17 +86,22 @@ class StatisticsCollector:
         self.part_realloc_curr = defaultdict(float) # submitted realloc overhead 
         self.part_realloc_num = defaultdict(int) # submitted realloc number
         self.hp_idle_curr = 0.0 # idle compute
+        self.hp_miss_curr = 0.0 # missed load (absolute), normalized at period end
+        self.hp_miss_count = 0 # number of missed tasks per period
         self.system_realloc_cost = 0.0  # System-level total reallocation cost
         # distribution for usage
         self.dist_per_part_realloc = defaultdict(
             lambda: TDigestStreamingHistogram(delta=delta, K=K)
         )
-        self.dist_overall_realloc = TDigestStreamingHistogram(delta=delta, K=K)
+        self.dist_overall_realloc = TDigestStreamingHistogram(delta=delta, K=K) # normlized by total power
         self.dist_overall_idle = TDigestStreamingHistogram(delta=delta, K=K) 
         self.dist_overall_miss = TDigestStreamingHistogram(delta=delta, K=K)
+        self.dist_overall_miss_count = TDigestStreamingHistogram(delta=delta, K=K)  # number of missed tasks per period
+        self.dist_overall_total_load = TDigestStreamingHistogram(delta=delta, K=K)  # total load per period
 
         # For Motiv-Exp-(3): Adaptive binning for load vs. worst E2E latency relationship
         self.binning_warmup_period = 100  # Number of samples to learn the distribution from
+        self.num_r2_bins = int(self.binning_warmup_period ** 0.5) # Number of bins for the histograms in the summary.
         self.hp_total_load_curr = 0.0 # submitted load
         self.hp_worst_e2e_curr = float('-inf') # worst e2e latency
         self.hp_temp_records_for_binning = [] # buffer for learning the distribution 
@@ -104,9 +111,18 @@ class StatisticsCollector:
         self.latency_dist_per_adaptive_bin = defaultdict(
             lambda: TDigestStreamingHistogram(delta=delta, K=K)
         ) # Keys will be the start of each bin
+        # Raw storage for Motiv-Exp-(3) if needed
+        self.raw_load_latency: List[Tuple[float, float]] = []
+        # Per-chain E2E constraint (relative deadline) for normalization
+        self.chain_e2e_constraint: Dict[str, float] = {}
 
-    def set_output_path(self, output_path: str):
-        self.output_path = output_path
+    def set_path(self, key: str, path: str):
+        self.path[key] = path
+
+    def set_motiv3_mode(self, mode: str):
+        """Set Motiv-Exp-(3) collection mode: 'binned' or 'raw'"""
+        assert mode in ['binned', 'raw']
+        self.motiv3_mode = mode
 
     def init_partition_stats(self, partition_id: str, cap: int, base_pwr: float):
         """Initializes statistics for a partition."""
@@ -164,6 +180,8 @@ class StatisticsCollector:
         finish_t_rel = elim_nume_error(finish_t - offset)
         # record finish time
         self.dist_per_task_ft[base_sink_name].add(finish_t_rel)
+        # cache chain constraint if available (relative deadline from src to sink)
+        self.chain_e2e_constraint[base_sink_name] = G.ddl_map[sink_name] - offset
         # record realloc overhead
         realloc_time = self.task_realloc_curr.pop(sink_name, 0.0) # Use .pop with default to avoid KeyError
         realloc_num = self.task_realloc_num.pop(sink_name, 0) # Use .pop with default to avoid KeyError
@@ -238,8 +256,10 @@ class StatisticsCollector:
                     for sub in item:
                         yield sub
 
-        miss_sum = elim_nume_error(sum(rem for _, rem in iter_pairs(timeout_iter)))
-        self.dist_overall_miss.add(miss_sum)
+        miss_list = list(iter_pairs(timeout_iter))
+        miss_sum = elim_nume_error(sum(rem for _, rem in miss_list))
+        self.hp_miss_curr += miss_sum
+        self.hp_miss_count += len(miss_list)
 
 
     def forward_hyperperiod(self, T_hp: float=1.0):
@@ -256,31 +276,45 @@ class StatisticsCollector:
         
         # Add system_realloc_cost to the overall distribution
         
-        self.dist_overall_realloc.add(elim_nume_error(self.system_realloc_cost/self.total_pwr/T_hp))
+        # Normalize by total_pwr * T_hp to get ratios per period
+        assert self.total_pwr > 0 and T_hp > 0
+        denom = self.total_pwr * T_hp 
+        self.dist_overall_realloc.add(elim_nume_error(self.system_realloc_cost/denom))
+        self.dist_overall_idle.add(elim_nume_error(self.hp_idle_curr / denom))
+        self.dist_overall_miss.add(elim_nume_error(self.hp_miss_curr / denom))
+        self.dist_overall_miss_count.add(self.hp_miss_count)
+            
+        # Reset accumulators for next period
         self.system_realloc_cost = 0.0
-        self.dist_overall_idle.add(self.hp_idle_curr)
         self.hp_idle_curr = 0.0
+        self.hp_miss_curr = 0.0
+        self.hp_miss_count = 0
 
         # --- Motiv-Exp-(3) Adaptive Binning ---
         total_load = self.hp_total_load_curr
         worst_e2e = self.hp_worst_e2e_curr
         
-        # We only add to binning stats if a valid E2E latency was recorded in this period
+        # We only add Motiv-Exp-(3) stats if a valid E2E latency was recorded in this period
         if worst_e2e > float('-inf'):
-            # 1. Always learn the load distribution
-            if total_load is not None and total_load >= 0:
-                self.dist_hp_total_load.add(total_load)
-
-            # 2. Handle data based on whether bins are finalized
-            if self.adaptive_load_bins is None: # Learning phase
-                self.hp_temp_records_for_binning.append((total_load, worst_e2e))
-                # Check if learning period is over
-                if len(self.hp_temp_records_for_binning) >= self.binning_warmup_period:
-                    self._finalize_adaptive_bins()
-            else: # Bins are finalized, do online binning
-                self._add_to_adaptive_bin(total_load, worst_e2e)
+            if self.motiv3_mode == 'raw':
+                # Save raw (load, worst_e2e) pair for this period
+                if total_load is not None and total_load >= 0:
+                    self.raw_load_latency.append((float(total_load), float(worst_e2e)))
+            else:
+                # 1. Always learn the load distribution
+                if total_load is not None and total_load >= 0:
+                    self.dist_hp_total_load.add(total_load)
+                # 2. Handle data based on whether bins are finalized
+                if self.adaptive_load_bins is None: # Learning phase
+                    self.hp_temp_records_for_binning.append((total_load, worst_e2e))
+                    # Check if learning period is over
+                    if len(self.hp_temp_records_for_binning) >= self.binning_warmup_period:
+                        self._finalize_adaptive_bins()
+                else: # Bins are finalized, do online binning
+                    self._add_to_adaptive_bin(total_load, worst_e2e)
 
         # reset accumulators for next period
+        self.dist_overall_total_load.add(self.hp_total_load_curr)
         self.hp_total_load_curr = 0.0
         self.hp_worst_e2e_curr = float('-inf')
 
@@ -296,9 +330,11 @@ class StatisticsCollector:
             # Not enough data to create meaningful bins
             return
 
-        # 1. Define bin boundaries using quantiles (e.g., 5 bins)
-        quantiles = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
-        boundaries = [self.dist_hp_total_load.percentile(p) for p in quantiles]
+        # 1. Define bin boundaries using quantiles from the TDigest distribution.
+        # The percentile function expects values in [0, 100].
+        quantiles = np.linspace(0, 1, self.num_r2_bins + 1)
+        boundaries = [self.dist_hp_total_load.percentile(p * 100) for p in quantiles]
+
         # Ensure boundaries are unique and sorted
         unique_boundaries = sorted(list(set(boundaries)))
         if len(unique_boundaries) < 2:
@@ -337,6 +373,9 @@ class StatisticsCollector:
         if idx < len(self.adaptive_load_bins) -1:
             bin_start_key = self.adaptive_load_bins[idx]
             self.latency_dist_per_adaptive_bin[bin_start_key].add(latency)
+        else: 
+            bin_start_key = self.adaptive_load_bins[-2]
+            self.latency_dist_per_adaptive_bin[bin_start_key].add(latency)
 
 
     def _get_base_task_name(self, task_name: str) -> str:
@@ -374,7 +413,7 @@ class StatisticsCollector:
             # We can still provide stats for empty bins if desired
             # if count > 0:
             percentiles = {f'p{p*100:.1f}': tdigest.percentile(p*100) for p in p_list} if count > 0 else {f'p{p*100:.1f}': float('nan') for p in p_list}
-            mean = self._td_mean(tdigest) if count > 0 else float('nan')
+            mean = tdigest.get_mean() if count > 0 else float('nan')
 
             summary_list.append({
                 'load_bin_start': bin_start,
@@ -384,6 +423,10 @@ class StatisticsCollector:
                 **percentiles
             })
         return summary_list
+
+    def get_raw_load_latency(self) -> List[Tuple[float, float]]:
+        """Return a copy of raw (load, worst_e2e) samples for Motiv-Exp-(3) when in raw mode."""
+        return list(self.raw_load_latency)
 
     def get_summary(self, num_bins: int = 20, p_list: List[float] = [0.5, 0.9, 0.99, 0.999]) -> Dict:
         """
@@ -409,7 +452,11 @@ class StatisticsCollector:
             'per_chain_realloc_overhead': {},
             'overall_realloc_overhead': {},
             'overall_idle_time': {},
-            'overall_missed_load': {}
+            'overall_missed_load': {},
+            'overall_missed_count': {},
+            'overall_total_load': {},
+            'overall_idle_ratio': {},
+            'overall_miss_ratio': {}
         }
         
         # 1. Per-task finish time distribution and per-chain E2E latency
@@ -441,6 +488,8 @@ class StatisticsCollector:
         summary['overall_realloc_overhead'] = self.dist_overall_realloc.get_summary(num_bins, p_list)
         summary['overall_idle_time'] = self.dist_overall_idle.get_summary(num_bins, p_list)
         summary['overall_missed_load'] = self.dist_overall_miss.get_summary(num_bins, p_list)
+        summary['overall_missed_count'] = self.dist_overall_miss_count.get_summary(num_bins, p_list)
+        summary['overall_total_load'] = self.dist_overall_total_load.get_summary(num_bins, p_list)
         
         # 5. Overall E2E latency (merging all non-sink task finish time distributions)
         # Only perform reduction if there are distributions to merge
@@ -461,8 +510,657 @@ class StatisticsCollector:
         self.summary = summary
         self.p_list = p_list
         return summary
+
+    def get_utilization_avg_ratio(self) -> Dict:
+        """Return mean ratios for utilization-related metrics across periods.
+        - idle_mean_ratio: mean of dist_overall_idle 
+        - miss_mean_ratio: mean of dist_overall_miss 
+        - realloc_mean_ratio: mean of dist_overall_realloc
+        - miss_mean_count: mean number of missed tasks per period
+        (already normalized by total_pwr*T_hp)
+        """
+        return {
+            'idle_mean_ratio': float(self.dist_overall_idle.get_mean()),
+            'miss_mean_ratio': float(self.dist_overall_miss.get_mean()),
+            'realloc_mean_ratio': float(self.dist_overall_realloc.get_mean()),
+            'miss_mean_count': float(self.dist_overall_miss_count.get_mean())
+        }
     
-    def get_load_latency_correlation(self) -> float:
+    # ============ Case-Specific Interfaces ============
+    
+    def get_motiv_case1_stats(self) -> Dict:
+        """[Motiv-Exp-1] 纯静态调度 - 利用率问题
+        
+        统计指标：
+        - idle_mean_ratio: 闲置算力占比
+        - miss_mean_ratio: miss任务剩余负载占比  
+        - miss_mean_count: miss任务数量
+        - realloc_mean_ratio: 切换开销占比（纯静态应为0）
+        
+        Returns:
+            dict: {
+                'idle_mean_ratio': float,
+                'miss_mean_ratio': float, 
+                'miss_mean_count': float,
+                'realloc_mean_ratio': float  # 验证静态方法无切换开销
+            }
+        """
+        return self.get_utilization_avg_ratio()
+    
+    def get_motiv_case2_stats(self) -> Dict:
+        """[Motiv-Exp-2] 纯动态调度 - 延迟开销问题
+        
+        统计1 - 资源利用率分解：
+        - idle_mean_ratio, miss_mean_ratio, realloc_mean_ratio
+        
+        统计2 - 端到端延迟分解（相对于约束）：
+        - overall_vs_constraint: 所有链合并的 exec/realloc/wait 占比
+        - first_chain_vs_constraint: 第一条链的 exec/realloc/wait 占比
+        - miss_mean_count: miss任务数量
+        
+        Returns:
+            dict: {
+                'utilization': {...},
+                'latency_breakdown': {
+                    'overall': {'exec_ratio', 'realloc_ratio', 'wait_ratio'},
+                    'first_chain': {'exec_ratio', 'realloc_ratio', 'wait_ratio'},
+                    'first_chain_name': str
+                },
+                'miss_mean_count': float
+            }
+        """
+        util = self.get_utilization_avg_ratio()
+        breakdown = self.get_latency_breakdown_avg_ratio()
+        
+        # 获取第一条链的名称和breakdown
+        per_chain = breakdown.get('per_chain_vs_constraint', {})
+        first_chain_name = list(per_chain.keys())[0] if per_chain else None
+        first_chain_breakdown = per_chain.get(first_chain_name, {}) if first_chain_name else {}
+        
+        return {
+            'utilization': {
+                'idle_mean_ratio': util['idle_mean_ratio'],
+                'miss_mean_ratio': util['miss_mean_ratio'],
+                'realloc_mean_ratio': util['realloc_mean_ratio']
+            },
+            'latency_breakdown': {
+                'overall': breakdown.get('overall_vs_constraint', {}),
+                'first_chain': first_chain_breakdown,
+                'first_chain_name': first_chain_name
+            },
+            'miss_mean_count': util['miss_mean_count']
+        }
+    
+    def get_motiv_case3_stats(self, percentile: float = 0.99, mode: str = None) -> Dict:
+        """[Motiv-Exp-3] 切换行为的不确定性
+        
+        统计指标：
+        - spearman_rho: Spearman秩相关系数（单调相关性）
+        - binned_summary: 自适应分箱的负载-延迟摘要（仅binned模式）
+        - raw_data_count: 原始数据点数量（仅raw模式）
+        
+        Args:
+            percentile: 用于计算相关性的分位数（默认0.99，即p99）
+            mode: 'raw' or 'binned'，不指定则使用self.motiv3_mode
+            
+        Returns:
+            dict: {
+                'mode': 'raw' | 'binned',
+                'spearman_rho': float,
+                'binned_summary': [...] | None,  # binned模式
+                'raw_data_count': int | None     # raw模式
+            }
+        """
+        if mode is None:
+            mode = self.motiv3_mode
+            
+        rho = self.get_spearman_correlation(percentile=percentile)
+        
+        result = {
+            'mode': mode,
+            'spearman_rho': rho,
+            'percentile': percentile
+        }
+        
+        if mode == 'binned':
+            result['binned_summary'] = self.get_adaptive_load_latency_summary([0.5, 0.9, percentile, 0.999])
+            result['raw_data_count'] = None
+        else:  # raw
+            result['binned_summary'] = None
+            result['raw_data_count'] = len(self.raw_load_latency)
+            
+        return result
+    
+    def plot_motiv_case1(self, data_points: List[Dict] = None, save_path: str = None, show: bool = False):
+        """[Motiv-Exp-1] 绘制利用率-可靠性权衡图（并排双柱状图）
+        
+        绘制不同预留分位数下的idle_ratio和miss_ratio对比柱状图。
+        需要提供多个配置点的数据（例如不同预留分位数下的结果）。
+        
+        Args:
+            data_points: 数据点列表，每个点为一个dict，包含:
+                - 'idle_mean_ratio': float
+                - 'miss_mean_ratio': float
+                - 'label': str (用于x轴标签，如'p50', 'p60')
+                如果不提供，则仅绘制当前collector的单个数据点
+            save_path: 保存路径，默认使用'./motiv_case1_tradeoff.pdf'
+            show: 是否显示图形
+            
+        Example:
+            # 扫描多个配置
+            results = []
+            for ratio in [0.5, 0.6, 0.7, 0.8, 0.9, 0.99]:
+                collector = run_simulation(exec_t_comp_ratioA=ratio)
+                stats = collector.get_motiv_case1_stats()
+                results.append({
+                    'idle_mean_ratio': stats['idle_mean_ratio'],
+                    'miss_mean_ratio': stats['miss_mean_ratio'],
+                    'label': f'p{int(ratio*100)}'
+                })
+            collector.plot_motiv_case1(data_points=results)
+        """
+        import matplotlib.pyplot as plt
+        
+        if save_path is None:
+            save_path = './motiv_case1_tradeoff.pdf'
+        
+        # 如果没有提供数据点，使用当前collector的数据
+        if data_points is None:
+            stats = self.get_motiv_case1_stats()
+            data_points = [{
+                'idle_mean_ratio': stats['idle_mean_ratio'],
+                'miss_mean_ratio': stats['miss_mean_ratio'],
+                'label': 'current'
+            }]
+        
+        # 提取数据
+        labels = [p.get('label', f'config{i}') for i, p in enumerate(data_points)]
+        idle_ratios = [p['idle_mean_ratio'] for p in data_points]
+        miss_ratios = [p['miss_mean_ratio'] for p in data_points]
+        
+        # 绘制并排双柱状图
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        x_pos = np.arange(len(labels))
+        width = 0.35
+        
+        # 绘制idle和miss的柱状图
+        bars1 = ax.bar(x_pos - width/2, idle_ratios, width, 
+                       label='Idle Ratio', color='C3', alpha=0.8)
+        bars2 = ax.bar(x_pos + width/2, miss_ratios, width,
+                       label='Miss Ratio', color='C2', alpha=0.8)
+        
+        # 在柱子上方标注数值
+        for bars in [bars1, bars2]:
+            for bar in bars:
+                height = bar.get_height()
+                ax.text(bar.get_x() + bar.get_width()/2., height,
+                       f'{height:.3f}',
+                       ha='center', va='bottom', fontsize=9)
+        
+        ax.set_xlabel('Reservation Percentile (预留分位数)', fontsize=12)
+        ax.set_ylabel('Ratio (占比)', fontsize=12)
+        ax.set_title('Case 1: Utilization-Reliability Tradeoff', fontsize=14)
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(labels)
+        ax.legend(loc='best', fontsize=11)
+        ax.grid(True, alpha=0.3, linestyle='--', axis='y')
+        
+        # 添加参考线
+        ax.axhline(y=0.1, color='r', linestyle='--', linewidth=1.5, alpha=0.5, label='10% threshold')
+        
+        fig.tight_layout()
+        
+        if save_path:
+            os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else '.', exist_ok=True)
+            fig.savefig(save_path, dpi=150, bbox_inches='tight')
+            print(f"Case 1 权衡图已保存到: {save_path}")
+        
+        if show:
+            plt.show()
+        
+        plt.close(fig)
+    
+    def plot_motiv_case2(self, data_points: List[Dict] = None, plot_type: str = 'breakdown', 
+                        save_path: str = None, show: bool = False):
+        """[Motiv-Exp-2] 绘制可扩展性分析图
+        
+        支持两种图表类型：
+        1. 'breakdown': 延迟分解的堆叠柱状图（exec/realloc/wait占比）
+        2. 'utilization': 资源利用率的堆叠柱状图（effective/idle/miss/realloc）
+        
+        Args:
+            data_points: 数据点列表，每个点为一个dict，包含:
+                - 'label': str (x轴标签，例如'300 tiles, 4 chains')
+                - 'utilization': dict (需要包含idle/miss/realloc_mean_ratio)
+                - 'latency_breakdown': dict (需要包含overall的exec/realloc/wait_ratio)
+                如果不提供，则仅绘制当前collector的单个数据点
+            plot_type: 'breakdown' 或 'utilization'
+            save_path: 保存路径
+            show: 是否显示图形
+            
+        Example:
+            # 扫描多个配置
+            results = []
+            for tiles in [300, 500]:
+                for chains in [1, 4]:
+                    collector = run_simulation(num_tiles=tiles, num_chains=chains)
+                    stats = collector.get_motiv_case2_stats()
+                    results.append({
+                        'label': f'{tiles}T-{chains}C',
+                        **stats
+                    })
+            collector.plot_motiv_case2(data_points=results, plot_type='breakdown')
+        """
+        import matplotlib.pyplot as plt
+        
+        if save_path is None:
+            save_path = f'./motiv_case2_{plot_type}.pdf'
+        
+        # 如果没有提供数据点，使用当前collector的数据
+        if data_points is None:
+            stats = self.get_motiv_case2_stats()
+            data_points = [{
+                'label': 'current',
+                **stats
+            }]
+        
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        labels = [p['label'] for p in data_points]
+        x_pos = np.arange(len(labels))
+        
+        if plot_type == 'breakdown':
+            # 延迟分解堆叠柱状图
+            exec_ratios = []
+            realloc_ratios = []
+            wait_ratios = []
+            
+            for p in data_points:
+                breakdown = p.get('latency_breakdown', {}).get('overall', {})
+                exec_ratios.append(breakdown.get('exec_ratio', 0))
+                realloc_ratios.append(breakdown.get('realloc_ratio', 0))
+                wait_ratios.append(breakdown.get('wait_ratio', 0))
+            
+            # 堆叠柱状图
+            ax.bar(x_pos, exec_ratios, label='Execution', color='C0', alpha=0.8)
+            ax.bar(x_pos, realloc_ratios, bottom=exec_ratios, 
+                   label='Scheduling (Realloc)', color='C1', alpha=0.8)
+            
+            bottom = np.array(exec_ratios) + np.array(realloc_ratios)
+            ax.bar(x_pos, wait_ratios, bottom=bottom, 
+                   label='Waiting', color='C2', alpha=0.8)
+            
+            ax.set_ylabel('Ratio to E2E Constraint', fontsize=12)
+            ax.set_title('Case 2: Latency Breakdown vs Scale', fontsize=14)
+            ax.axhline(y=1.0, color='r', linestyle='--', linewidth=2, alpha=0.5, label='Constraint (100%)')
+            
+        elif plot_type == 'utilization':
+            # 资源利用率堆叠柱状图
+            effective_utils = []
+            idle_ratios = []
+            miss_ratios = []
+            realloc_ratios = []
+            
+            for p in data_points:
+                util = p.get('utilization', {})
+                idle = util.get('idle_mean_ratio', 0)
+                miss = util.get('miss_mean_ratio', 0)
+                realloc = util.get('realloc_mean_ratio', 0)
+                effective = 1.0 - idle - miss - realloc
+                
+                effective_utils.append(max(0, effective))
+                idle_ratios.append(idle)
+                miss_ratios.append(miss)
+                realloc_ratios.append(realloc)
+            
+            # 堆叠柱状图
+            ax.bar(x_pos, effective_utils, label='Effective Utilization', color='C0', alpha=0.8)
+            ax.bar(x_pos, realloc_ratios, bottom=effective_utils, 
+                   label='Realloc Overhead', color='C1', alpha=0.8)
+            
+            bottom = np.array(effective_utils) + np.array(realloc_ratios)
+            ax.bar(x_pos, idle_ratios, bottom=bottom, 
+                   label='Idle', color='C3', alpha=0.8)
+            
+            bottom = bottom + np.array(idle_ratios)
+            ax.bar(x_pos, miss_ratios, bottom=bottom, 
+                   label='Missed', color='C2', alpha=0.8)
+            
+            ax.set_ylabel('Resource Utilization Ratio', fontsize=12)
+            ax.set_title('Case 2: Resource Utilization vs Scale', fontsize=14)
+            ax.set_ylim([0, 1.1])
+        
+        else:
+            raise ValueError(f"Invalid plot_type: {plot_type}. Must be 'breakdown' or 'utilization'.")
+        
+        ax.set_xlabel('Configuration', fontsize=12)
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(labels, rotation=45, ha='right')
+        ax.legend(loc='best', fontsize=10)
+        ax.grid(True, alpha=0.3, linestyle='--', axis='y')
+        
+        fig.tight_layout()
+        
+        if save_path:
+            os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else '.', exist_ok=True)
+            fig.savefig(save_path, dpi=150, bbox_inches='tight')
+            print(f"Case 2 {plot_type}图已保存到: {save_path}")
+        
+        if show:
+            plt.show()
+        
+        plt.close(fig)
+    
+    def plot_motiv_case3(self, percentile: float = 0.99, iqr_band: Tuple[float, float] = (0.25, 0.75), 
+                         fit: str = 'none', save_path: str = None, show: bool = False):
+        """[Motiv-Exp-3] 绘制负载-延迟关系图
+        
+        根据当前模式自动选择绘图方法：
+        - raw模式: 散点图 + 可选拟合曲线
+        - binned模式: pXX曲线 + IQR带 + 可选拟合
+        
+        Args:
+            percentile: binned模式的分位数曲线（默认0.99）
+            iqr_band: binned模式的IQR带范围（默认(0.25, 0.75)）
+            fit: 拟合方式 'none'|'wls'|'lowess'
+            save_path: 保存路径，默认使用self.path['motiv3']
+            show: 是否显示图形
+        """
+        if save_path is None:
+            save_path = self.path.get('motiv3')
+            
+        if self.motiv3_mode == 'raw':
+            self.plot_load_latency_raw(fit=fit, save_path=save_path, show=show)
+        else:
+            self.plot_load_latency_binned(percentile=percentile, iqr_band=iqr_band, 
+                                          fit=fit, save_path=save_path, show=show)
+    
+    # ============ Case-Specific Formatted Output ============
+    
+    def format_motiv_case1_output(self, stats: Dict = None) -> str:
+        """[Motiv-Exp-1] 格式化输出
+        
+        Args:
+            stats: get_motiv_case1_stats()的返回值，不提供则自动调用
+        """
+        if stats is None:
+            stats = self.get_motiv_case1_stats()
+        
+        lines = []
+        lines.append("=" * 60)
+        lines.append("Motiv-Exp-1: 纯静态调度 - 利用率问题")
+        lines.append("=" * 60)
+        lines.append(f"闲置算力占比 (idle_mean_ratio):       {stats['idle_mean_ratio']:.4f}")
+        lines.append(f"Miss任务剩余负载占比 (miss_mean_ratio): {stats['miss_mean_ratio']:.4f}")
+        lines.append(f"Miss任务数量 (miss_mean_count):        {stats['miss_mean_count']:.2f}")
+        lines.append(f"切换开销占比 (realloc_mean_ratio):     {stats['realloc_mean_ratio']:.4f} (应为0)")
+        lines.append("-" * 60)
+        effective_util = 1.0 - stats['idle_mean_ratio'] - stats['miss_mean_ratio']
+        lines.append(f"有效利用率:                            {effective_util:.4f}")
+        lines.append("=" * 60)
+        return "\n".join(lines)
+    
+    def format_motiv_case2_output(self, stats: Dict = None) -> str:
+        """[Motiv-Exp-2] 格式化输出
+        
+        Args:
+            stats: get_motiv_case2_stats()的返回值，不提供则自动调用
+        """
+        if stats is None:
+            stats = self.get_motiv_case2_stats()
+        
+        lines = []
+        lines.append("=" * 60)
+        lines.append("Motiv-Exp-2: 纯动态调度 - 延迟开销问题")
+        lines.append("=" * 60)
+        
+        # 统计1: 资源利用率分解
+        util = stats['utilization']
+        lines.append("统计1 - 资源利用率分解:")
+        lines.append(f"  闲置算力占比 (idle):     {util['idle_mean_ratio']:.4f}")
+        lines.append(f"  Miss负载占比 (miss):     {util['miss_mean_ratio']:.4f}")
+        lines.append(f"  切换开销占比 (realloc):  {util['realloc_mean_ratio']:.4f}")
+        effective_util = 1.0 - util['idle_mean_ratio'] - util['miss_mean_ratio'] - util['realloc_mean_ratio']
+        lines.append(f"  有效利用率:              {effective_util:.4f}")
+        lines.append("")
+        
+        # 统计2: 端到端延迟分解
+        breakdown = stats['latency_breakdown']
+        lines.append("统计2 - 端到端延迟分解 (相对于约束):")
+        lines.append("  Overall (所有链合并):")
+        overall = breakdown['overall']
+        if overall:
+            lines.append(f"    执行时间占比 (exec):    {overall.get('exec_ratio', 0):.4f}")
+            lines.append(f"    调度开销占比 (realloc): {overall.get('realloc_ratio', 0):.4f}")
+            lines.append(f"    等待时间占比 (wait):    {overall.get('wait_ratio', 0):.4f}")
+            total_ratio = overall.get('exec_ratio', 0) + overall.get('realloc_ratio', 0) + overall.get('wait_ratio', 0)
+            lines.append(f"    总和:                   {total_ratio:.4f} {'(>1表示超时)' if total_ratio > 1 else ''}")
+        else:
+            lines.append("    (无数据)")
+        
+        lines.append("")
+        first_chain_name = breakdown.get('first_chain_name')
+        if first_chain_name:
+            lines.append(f"  First Chain ({first_chain_name}):")
+            first_chain = breakdown['first_chain']
+            if first_chain:
+                lines.append(f"    执行时间占比 (exec):    {first_chain.get('exec_ratio', 0):.4f}")
+                lines.append(f"    调度开销占比 (realloc): {first_chain.get('realloc_ratio', 0):.4f}")
+                lines.append(f"    等待时间占比 (wait):    {first_chain.get('wait_ratio', 0):.4f}")
+                total_ratio = first_chain.get('exec_ratio', 0) + first_chain.get('realloc_ratio', 0) + first_chain.get('wait_ratio', 0)
+                lines.append(f"    总和:                   {total_ratio:.4f} {'(>1表示超时)' if total_ratio > 1 else ''}")
+            else:
+                lines.append("    (无数据)")
+        
+        lines.append("")
+        lines.append(f"Miss任务数量 (miss_mean_count): {stats['miss_mean_count']:.2f}")
+        lines.append("=" * 60)
+        return "\n".join(lines)
+    
+    def format_motiv_case3_output(self, stats: Dict = None, percentile: float = 0.99) -> str:
+        """[Motiv-Exp-3] 格式化输出
+        
+        Args:
+            stats: get_motiv_case3_stats()的返回值，不提供则自动调用
+            percentile: 分位数（用于自动调用时）
+        """
+        if stats is None:
+            stats = self.get_motiv_case3_stats(percentile=percentile)
+        
+        lines = []
+        lines.append("=" * 60)
+        lines.append("Motiv-Exp-3: 切换行为的不确定性")
+        lines.append("=" * 60)
+        lines.append(f"数据模式: {stats['mode']}")
+        lines.append(f"Spearman相关系数 (ρ): {stats['spearman_rho']:.4f}")
+        lines.append(f"使用分位数: p{int(stats['percentile']*100)}")
+        lines.append("")
+        
+        if stats['mode'] == 'raw':
+            lines.append(f"原始数据点数量: {stats['raw_data_count']}")
+        else:
+            binned_summary = stats.get('binned_summary', [])
+            if binned_summary:
+                lines.append(f"自适应分箱数量: {len(binned_summary)}")
+                lines.append("")
+                lines.append("负载分箱摘要 (前5个和后5个):")
+                lines.append(f"{'Load Range':^20} | {'Count':>7} | {'p50':>9} | {'p90':>9} | {'p99':>9}")
+                lines.append("-" * 70)
+                
+                # 显示前5个
+                for i, record in enumerate(binned_summary[:5]):
+                    load_range = f"[{record['load_bin_start']:.1f}, {record['load_bin_end']:.1f})"
+                    count = record['sample_count']
+                    p50 = record.get('p50.0', float('nan'))
+                    p90 = record.get('p90.0', float('nan'))
+                    p99 = record.get('p99.0', float('nan'))
+                    lines.append(f"{load_range:^20} | {count:7d} | {p50:9.2f} | {p90:9.2f} | {p99:9.2f}")
+                
+                if len(binned_summary) > 10:
+                    lines.append(f"{'...':^20} | {'...':>7} | {'...':>9} | {'...':>9} | {'...':>9}")
+                    
+                # 显示后5个
+                for record in binned_summary[-5:]:
+                    load_range = f"[{record['load_bin_start']:.1f}, {record['load_bin_end']:.1f})"
+                    count = record['sample_count']
+                    p50 = record.get('p50.0', float('nan'))
+                    p90 = record.get('p90.0', float('nan'))
+                    p99 = record.get('p99.0', float('nan'))
+                    lines.append(f"{load_range:^20} | {count:7d} | {p50:9.2f} | {p90:9.2f} | {p99:9.2f}")
+            else:
+                lines.append("(无分箱数据)")
+        
+        lines.append("=" * 60)
+        lines.append("提示: 使用 plot_motiv_case3() 绘制负载-延迟关系图")
+        lines.append("=" * 60)
+        return "\n".join(lines)
+    
+    def export_motiv_case_results(self, case: int, save_path: str = None, verbose: bool = True, **kwargs):
+        """统一导出指定Motiv-Exp的结果
+        
+        Args:
+            case: 1, 2, or 3，对应三个实验
+            save_path: 保存路径，不提供则使用默认路径
+            verbose: 是否打印到控制台
+            **kwargs: 传递给特定case的额外参数
+                - case 3: percentile, fit, iqr_band等绘图参数
+        """
+        if case == 1:
+            stats = self.get_motiv_case1_stats()
+            output = self.format_motiv_case1_output(stats)
+            default_path = self.path.get('stat', './motiv_case1_output.txt')
+            
+        elif case == 2:
+            stats = self.get_motiv_case2_stats()
+            output = self.format_motiv_case2_output(stats)
+            default_path = self.path.get('stat', './motiv_case2_output.txt')
+            
+        elif case == 3:
+            percentile = kwargs.get('percentile', 0.99)
+            stats = self.get_motiv_case3_stats(percentile=percentile)
+            output = self.format_motiv_case3_output(stats, percentile=percentile)
+            default_path = self.path.get('stat', './motiv_case3_output.txt')
+            
+            # 同时生成图表
+            fit = kwargs.get('fit', 'none')
+            iqr_band = kwargs.get('iqr_band', (0.25, 0.75))
+            show = kwargs.get('show', False)
+            self.plot_motiv_case3(percentile=percentile, iqr_band=iqr_band, 
+                                 fit=fit, show=show)
+        else:
+            raise ValueError(f"Invalid case number: {case}. Must be 1, 2, or 3.")
+        
+        # 打印到控制台
+        if verbose:
+            print(output)
+        
+        # 保存到文件
+        if save_path is None:
+            save_path = default_path
+            
+        if save_path:
+            try:
+                os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                with open(save_path, 'w', encoding='utf-8') as f:
+                    f.write(output)
+                if verbose:
+                    print(f"\n结果已保存到: {save_path}")
+            except Exception as e:
+                print(f"保存文件失败: {e}")
+        
+        return stats
+    
+    def print_motiv_case_summary(self, case: int, **kwargs):
+        """快捷打印指定case的统计摘要（不保存文件）
+        
+        Args:
+            case: 1, 2, or 3
+            **kwargs: 传递给格式化函数的参数
+        """
+        if case == 1:
+            stats = self.get_motiv_case1_stats()
+            print(self.format_motiv_case1_output(stats))
+        elif case == 2:
+            stats = self.get_motiv_case2_stats()
+            print(self.format_motiv_case2_output(stats))
+        elif case == 3:
+            percentile = kwargs.get('percentile', 0.99)
+            stats = self.get_motiv_case3_stats(percentile=percentile)
+            print(self.format_motiv_case3_output(stats, percentile=percentile))
+        else:
+            raise ValueError(f"Invalid case number: {case}. Must be 1, 2, or 3.")
+
+    def get_latency_breakdown_avg_ratio(self) -> Dict:
+        """Compute average ratios of execution, realloc(scheduling), and waiting.
+        提供两套口径：
+          - vs_e2e: mean(component)/mean(e2e)（兼容老口径）
+          - vs_constraint: mean(component)/constraint（统一衡量标准，优先用于比较）
+        等待占比作为补项：max(0, 1 - exec - realloc)。
+        TDigest.get_mean() returns 0 for empty distributions, never NaN.
+        """
+        per_chain_vs_e2e = {}
+        per_chain_vs_constraint = {}
+        sink_names = [name for name in self.dist_per_task_ft.keys() if 'sink' in name.lower()]
+
+        # Per-chain
+        for name in sink_names:
+            # Get means (returns 0 if empty, never NaN)
+            e2e_mean = self.dist_per_task_ft[name].get_mean()
+            exec_mean = self.dist_per_task_exe[name].get_mean() if name in self.dist_per_task_exe else 0.0
+            realloc_mean = self.dist_per_task_realloc[name].get_mean() if name in self.dist_per_task_realloc else 0.0
+            
+            # vs_e2e (only compute if e2e_mean > 0 to avoid division by zero)
+            if e2e_mean > 0:
+                exec_ratio = float(exec_mean) / float(e2e_mean)
+                realloc_ratio = float(realloc_mean) / float(e2e_mean)
+                wait_ratio = max(0.0, 1.0 - exec_ratio - realloc_ratio)
+                per_chain_vs_e2e[name] = {'exec_ratio': exec_ratio, 'realloc_ratio': realloc_ratio, 'wait_ratio': wait_ratio}
+            
+            # vs_constraint
+            if name in self.chain_e2e_constraint and self.chain_e2e_constraint[name] > 0:
+                cons = float(self.chain_e2e_constraint[name])
+                exec_ratio_c = float(exec_mean) / cons
+                realloc_ratio_c = float(realloc_mean) / cons
+                wait_ratio_c = max(0.0, 1.0 - exec_ratio_c - realloc_ratio_c)
+                per_chain_vs_constraint[name] = {'exec_ratio': exec_ratio_c, 'realloc_ratio': realloc_ratio_c, 'wait_ratio': wait_ratio_c}
+
+        # Overall (merged)
+        overall_vs_e2e = {'exec_ratio': 0.0, 'realloc_ratio': 0.0, 'wait_ratio': 0.0}
+        overall_vs_constraint = {'exec_ratio': 0.0, 'realloc_ratio': 0.0, 'wait_ratio': 0.0}
+        sink_e2e_dists = [self.dist_per_task_ft[name] for name in sink_names]
+        sink_exec_dists = [self.dist_per_task_exe[name] for name in sink_names if name in self.dist_per_task_exe]
+        sink_realloc_dists = [self.dist_per_task_realloc[name] for name in sink_names if name in self.dist_per_task_realloc]
+        if sink_e2e_dists:
+            merged_e2e = reduce(lambda a, b: a + b, sink_e2e_dists)
+            e2e_mean_o = merged_e2e.get_mean()
+            exec_mean_o = reduce(lambda a, b: a + b, sink_exec_dists).get_mean() if sink_exec_dists else 0.0
+            realloc_mean_o = reduce(lambda a, b: a + b, sink_realloc_dists).get_mean() if sink_realloc_dists else 0.0
+            
+            # vs_e2e
+            if e2e_mean_o > 0:
+                exec_ratio_o = float(exec_mean_o) / float(e2e_mean_o)
+                realloc_ratio_o = float(realloc_mean_o) / float(e2e_mean_o)
+                wait_ratio_o = max(0.0, 1.0 - exec_ratio_o - realloc_ratio_o)
+                overall_vs_e2e = {'exec_ratio': exec_ratio_o, 'realloc_ratio': realloc_ratio_o, 'wait_ratio': wait_ratio_o}
+            
+            # vs_constraint (use mean constraint across chains if available)
+            cons_vals = [self.chain_e2e_constraint[n] for n in sink_names if n in self.chain_e2e_constraint and self.chain_e2e_constraint[n] > 0]
+            if cons_vals:
+                cons_o = float(np.mean(cons_vals))
+                exec_ratio_oc = float(exec_mean_o) / cons_o
+                realloc_ratio_oc = float(realloc_mean_o) / cons_o
+                wait_ratio_oc = max(0.0, 1.0 - exec_ratio_oc - realloc_ratio_oc)
+                overall_vs_constraint = {'exec_ratio': exec_ratio_oc, 'realloc_ratio': realloc_ratio_oc, 'wait_ratio': wait_ratio_oc}
+
+        return {
+            'overall_vs_e2e': overall_vs_e2e,
+            'per_chain_vs_e2e': per_chain_vs_e2e,
+            'overall_vs_constraint': overall_vs_constraint,
+            'per_chain_vs_constraint': per_chain_vs_constraint
+        }
+    
+    def get_weighted_pearson_corr_binned(self) -> float:
         """
         Calculates the weighted Pearson correlation coefficient from the adaptively binned data.
         This reflects the linear relationship between load (bin centers) and the mean latency within each bin.
@@ -484,7 +1182,7 @@ class StatisticsCollector:
             if count > 0:
                 bin_end = self.adaptive_load_bins[i + 1]
                 x_centers.append((bin_start + bin_end) / 2)
-                y_means.append(self._td_mean(tdigest))
+                y_means.append(tdigest.get_mean())
                 weights.append(count)
 
         # 2. Use numpy to calculate the weighted correlation coefficient
@@ -509,16 +1207,228 @@ class StatisticsCollector:
         
         return correlation
 
-    def _td_mean(self, td: TDigestStreamingHistogram, num_bins: int = 32) -> float:
-        """Approximate mean from TDigest by histogram midpoints weighting."""
-        hist = td.get_histogram_data(num_bins=num_bins)
-        if not hist:
+    def _spearman_from_arrays(self, x: np.ndarray, y: np.ndarray) -> float:
+        """Compute Spearman rho from raw arrays (unweighted)."""
+        if x.size < 2:
             return float('nan')
-        total = sum(c for _, _, c in hist)
-        if total <= 0:
+        # ranks with average method
+        order_x = np.argsort(x, kind='mergesort')
+        ranks_x = np.empty_like(x, dtype=float)
+        i = 0
+        while i < x.size:
+            j = i + 1
+            while j < x.size and x[order_x[j]] == x[order_x[i]]:
+                j += 1
+            avg_rank = (i + j - 1) / 2.0
+            ranks_x[order_x[i:j]] = avg_rank
+            i = j
+        order_y = np.argsort(y, kind='mergesort')
+        ranks_y = np.empty_like(y, dtype=float)
+        i = 0
+        while i < y.size:
+            j = i + 1
+            while j < y.size and y[order_y[j]] == y[order_y[i]]:
+                j += 1
+            avg_rank = (i + j - 1) / 2.0
+            ranks_y[order_y[i:j]] = avg_rank
+            i = j
+        # Pearson on ranks
+        rx = (ranks_x - ranks_x.mean()) / (ranks_x.std() + 1e-12)
+        ry = (ranks_y - ranks_y.mean()) / (ranks_y.std() + 1e-12)
+        return float(np.clip((rx * ry).mean(), -1.0, 1.0))
+
+    def get_spearman_correlation(self, percentile: float = 0.99) -> float:
+        """Unified Spearman interface: use raw samples if mode=='raw', else binned pXX curve."""
+        if self.motiv3_mode == 'raw':
+            if not self.raw_load_latency:
+                return float('nan')
+            arr = np.asarray(self.raw_load_latency, dtype=float)
+            x = arr[:, 0]
+            y = arr[:, 1]
+            return self._spearman_from_arrays(x, y)
+        return self.get_spearman_correlation_binned(percentile=percentile)
+
+    # ---------------- Spearman correlation and plotting (Motiv-Exp-3) ----------------
+    def _weighted_ranks(self, values: np.ndarray, weights: np.ndarray) -> np.ndarray:
+        """Compute weighted ranks in [0,1] for values with weights.
+        Ties share the same average rank.
+        """
+        order = np.argsort(values, kind='mergesort')
+        v_sorted = values[order]
+        w_sorted = weights[order]
+        cum_w = np.cumsum(w_sorted)
+        total_w = cum_w[-1]
+        # group by equal values
+        ranks = np.empty_like(values, dtype=float)
+        i = 0
+        while i < len(v_sorted):
+            j = i + 1
+            while j < len(v_sorted) and v_sorted[j] == v_sorted[i]:
+                j += 1
+            w_group = w_sorted[i:j].sum()
+            w_before = cum_w[i] - w_sorted[i]
+            # average rank position within the group: midpoint of the weight block
+            rank_val = (w_before + 0.5 * w_group) / total_w
+            ranks[order[i:j]] = rank_val
+            i = j
+        return ranks
+
+    def get_spearman_correlation_binned(self, percentile: float = 0.99) -> float:
+        """Compute weighted Spearman correlation on adaptively binned data.
+        y uses the given percentile (e.g., 0.99 for p99) from each bin; x is bin center.
+        Weights are bin sample counts.
+        """
+        if self.adaptive_load_bins is None or len(self.adaptive_load_bins) < 2:
             return float('nan')
-        weighted_sum = sum(((a + b) / 2.0) * c for a, b, c in hist)
-        return weighted_sum / total
+        xs = []
+        ys = []
+        ws = []
+        for i, bin_start in enumerate(self.adaptive_load_bins[:-1]):
+            td = self.latency_dist_per_adaptive_bin[bin_start]
+            cnt = td.total_processed_count
+            if cnt <= 0:
+                continue
+            bin_end = self.adaptive_load_bins[i+1]
+            xs.append((bin_start + bin_end) / 2.0)
+            ys.append(td.percentile(percentile * 100))
+            ws.append(cnt)
+        if len(xs) < 2:
+            return float('nan')
+        x = np.asarray(xs, dtype=float)
+        y = np.asarray(ys, dtype=float)
+        w = np.asarray(ws, dtype=float)
+        rx = self._weighted_ranks(x, w)
+        ry = self._weighted_ranks(y, w)
+        # weighted Pearson on ranks
+        avg_rx = np.average(rx, weights=w)
+        avg_ry = np.average(ry, weights=w)
+        cov = np.average((rx - avg_rx) * (ry - avg_ry), weights=w)
+        std_rx = np.sqrt(np.average((rx - avg_rx) ** 2, weights=w))
+        std_ry = np.sqrt(np.average((ry - avg_ry) ** 2, weights=w))
+        if std_rx == 0 or std_ry == 0:
+            return float('nan')
+        return cov / (std_rx * std_ry)
+
+    def plot_load_latency_binned(self, percentile: float = 0.99, iqr_band: Tuple[float, float] = (0.25, 0.75), fit: str = 'none', save_path: str = None, show: bool = False):
+        """Plot binned load vs. latency percentile with optional IQR band and Spearman rho.
+        - percentile: e.g., 0.99 for p99 curve
+        - iqr_band: tuple of (p_low, p_high) to draw vertical error band, e.g., (0.25, 0.75)
+        - fit: 'none' | 'wls' | 'lowess' — do trend on binned (xs, pXX), weights=bin counts
+        - save_path: if provided, save the figure to this path
+        - show: if True, display via plt.show()
+        """
+        if self.adaptive_load_bins is None or len(self.adaptive_load_bins) < 2:
+            return
+        import matplotlib.pyplot as plt
+        xs = []
+        ys = []
+        ws = []
+        y_low = []
+        y_high = []
+        p_low, p_high = iqr_band
+        for i, bin_start in enumerate(self.adaptive_load_bins[:-1]):
+            td = self.latency_dist_per_adaptive_bin[bin_start]
+            cnt = td.total_processed_count
+            if cnt <= 0:
+                continue
+            bin_end = self.adaptive_load_bins[i+1]
+            xs.append((bin_start + bin_end) / 2.0)
+            ys.append(td.percentile(percentile * 100))
+            ws.append(cnt)
+            y_low.append(td.percentile(p_low * 100))
+            y_high.append(td.percentile(p_high * 100))
+        if len(xs) == 0:
+            return
+        rho = self.get_spearman_correlation_binned(percentile=percentile)
+        fig, ax = plt.subplots(figsize=(7, 4))
+        # plot IQR band
+        ax.fill_between(xs, y_low, y_high, color='C0', alpha=0.15, label=f'IQR p{int(p_low*100)}-p{int(p_high*100)}')
+        # plot percentile points with size ~ weights
+        sizes = np.array(ws, dtype=float)
+        sizes = 50 * (sizes / sizes.max()) ** 0.5
+        ax.scatter(xs, ys, s=sizes, color='C0', alpha=0.8, label=f'p{int(percentile*100)}')
+        # optional trend on binned data
+        if fit in ('wls', 'lowess') and len(xs) >= 3:
+            xs_np = np.asarray(xs, dtype=float)
+            ys_np = np.asarray(ys, dtype=float)
+            ws_np = np.asarray(ws, dtype=float)
+            if fit == 'wls':
+                # weighted linear fit on binned curve
+                coef = np.polyfit(xs_np, ys_np, deg=1, w=np.sqrt(ws_np))
+                xx = np.linspace(min(xs_np), max(xs_np), 200)
+                yy = np.polyval(coef, xx)
+                ax.plot(xx, yy, color='C3', linewidth=2, label='WLS trend (binned)')
+            else:
+                # lowess-like via running median on binned points
+                nb = min(50, max(10, int(np.sqrt(len(xs_np)))))
+                bins = np.linspace(min(xs_np), max(xs_np), nb + 1)
+                xc = 0.5 * (bins[:-1] + bins[1:])
+                med = np.full(nb, np.nan)
+                for i in range(nb):
+                    m = (xs_np >= bins[i]) & (xs_np < bins[i+1] if i < nb - 1 else xs_np <= bins[i+1])
+                    if np.any(m):
+                        med[i] = np.median(ys_np[m])
+                mm = ~np.isnan(med)
+                if mm.sum() >= 3:
+                    ax.plot(xc[mm], med[mm], color='C2', lw=2, label='LOWESS-like (binned)')
+        ax.set_xlabel('Load (bin center)')
+        ax.set_ylabel(f'Latency (p{int(percentile*100)})')
+        ax.set_title(f'Load vs Latency (Spearman rho={rho:.3f})')
+        ax.legend(loc='best')
+        ax.grid(True, linestyle='--', alpha=0.3)
+        fig.tight_layout()
+        if save_path:
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            fig.savefig(save_path, dpi=150)
+        if show:
+            plt.show()
+        plt.close(fig)
+
+    def plot_load_latency_raw(self, fit: str = 'wls', save_path: str = None, show: bool = False):
+        """Plot raw (load, worst_e2e) with scatter and optional trend on raw points.
+        - fit: 'none' | 'wls' | 'lowess' — performed directly on raw samples
+        """
+        if not self.raw_load_latency:
+            return
+        import matplotlib.pyplot as plt
+        arr = np.asarray(self.raw_load_latency, dtype=float)
+        x = arr[:, 0]
+        y = arr[:, 1]
+        rho = self._spearman_from_arrays(x, y)
+        fig, ax = plt.subplots(figsize=(7, 4))
+        ax.scatter(x, y, s=12, alpha=0.5, color='C0', linewidths=0)
+        # optional trend on raw data
+        if fit in ('wls', 'lowess') and x.size >= 3:
+            if fit == 'wls':
+                coef = np.polyfit(x, y, deg=1)  # OLS since raw points等权
+                xx = np.linspace(float(np.min(x)), float(np.max(x)), 200)
+                yy = np.polyval(coef, xx)
+                ax.plot(xx, yy, color='C3', linewidth=2, label='Linear trend (raw)')
+            else:
+                nb = min(100, max(20, int(np.sqrt(x.size))))
+                bins = np.linspace(float(np.min(x)), float(np.max(x)), nb + 1)
+                xc = 0.5 * (bins[:-1] + bins[1:])
+                med = np.full(nb, np.nan)
+                for i in range(nb):
+                    m = (x >= bins[i]) & (x < bins[i+1] if i < nb - 1 else x <= bins[i+1])
+                    if np.any(m):
+                        med[i] = np.median(y[m])
+                mm = ~np.isnan(med)
+                if mm.sum() >= 3:
+                    ax.plot(xc[mm], med[mm], color='C2', lw=2, label='LOWESS-like (raw)')
+        ax.set_xlabel('Load (per period)')
+        ax.set_ylabel('Worst E2E latency (per period)')
+        ax.set_title(f'Load vs Worst E2E (Spearman rho={rho:.3f})')
+        if fit in ('wls', 'lowess'):
+            ax.legend(loc='best')
+        ax.grid(True, linestyle='--', alpha=0.3)
+        fig.tight_layout()
+        if save_path:
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            fig.savefig(save_path, dpi=150)
+        if show:
+            plt.show()
+        plt.close(fig)
 
     def get_full_summary(self, num_bins: int = 20, p_list: List[float] = None) -> Dict:
         """
@@ -634,22 +1544,25 @@ class StatisticsCollector:
 
         # 1. Generate the new comprehensive summary
         full_summary = self.get_full_summary(num_bins, p_list)
-        
+        if self.motiv3_mode == 'raw':
+            self.plot_load_latency_raw(save_path=self.path["motiv3"])
+        else:
+            self.plot_load_latency_binned(percentile=0.99, save_path=self.path["motiv3"])
         # 2. Format the comprehensive summary
         formatted_summary = self._format_summary_for_print(full_summary, p_list)
         
         if verbose:
             print(formatted_summary)
 
-        if self.output_path:
+        if self.path["stat"]:
             try:
                 # Ensure the directory exists
-                os.makedirs(os.path.dirname(self.output_path), exist_ok=True)
-                with open(self.output_path, 'w') as f:
+                os.makedirs(os.path.dirname(self.path['stat']), exist_ok=True)
+                with open(self.path['stat'], 'w') as f:
                     f.write(formatted_summary)
-                print(f"\nFormatted summary successfully saved to: {self.output_path}")
+                print(f"\nFormatted summary successfully saved to: {self.path['stat']}")
             except IOError as e:
-                print(f"Error saving formatted summary to {self.output_path}: {e}")
+                print(f"Error saving formatted summary to {self.path['stat']}: {e}")
 
     def save_state(self, file_path: str):
         """
@@ -684,6 +1597,8 @@ class StatisticsCollector:
             'dist_overall_realloc': self.dist_overall_realloc.to_dict(),
             'dist_overall_idle': self.dist_overall_idle.to_dict(),
             'dist_overall_miss': self.dist_overall_miss.to_dict(),
+            'dist_overall_miss_count': self.dist_overall_miss_count.to_dict(),
+            'dist_overall_total_load': self.dist_overall_total_load.to_dict(),
             
             # new fields
             # for motiv-exp-3 (adaptive)
@@ -759,6 +1674,8 @@ class StatisticsCollector:
         collector.dist_overall_realloc = TDigestStreamingHistogram.from_dict(state.get('dist_overall_realloc', {}))
         collector.dist_overall_idle = TDigestStreamingHistogram.from_dict(state.get('dist_overall_idle', {}))
         collector.dist_overall_miss = TDigestStreamingHistogram.from_dict(state.get('dist_overall_miss', {}))
+        collector.dist_overall_miss_count = TDigestStreamingHistogram.from_dict(state.get('dist_overall_miss_count', {}))
+        collector.dist_overall_total_load = TDigestStreamingHistogram.from_dict(state.get('dist_overall_total_load', {}))
         
         # Load state for Motiv-Exp-(3)
         collector.dist_hp_total_load = TDigestStreamingHistogram.from_dict(state.get('dist_hp_total_load', {}))
@@ -815,9 +1732,12 @@ class StatisticsCollector:
 
         # 比较 TDigestStreamingHistogram 对象
         # Compare TDigestStreamingHistogram objects by their serialized representation
-        if (self.dist_overall_realloc.to_dict() != loaded_collector.dist_overall_realloc.to_dict()):
-            print("--- 测试失败：dist_overall_realloc 不匹配 (Test failed: dist_overall_realloc mismatch) ---")
-            return
+        overall_dists = ['dist_overall_realloc', 'dist_overall_idle', 'dist_overall_miss', 
+                        'dist_overall_miss_count', 'dist_overall_total_load']
+        for dist_name in overall_dists:
+            if (getattr(self, dist_name).to_dict() != getattr(loaded_collector, dist_name).to_dict()):
+                print(f"--- 测试失败：{dist_name} 不匹配 (Test failed: {dist_name} mismatch) ---")
+                return
 
         # 比较 defaultdict 中的 TDigestStreamingHistogram 对象
         # Compare TDigestStreamingHistogram objects in defaultdicts

@@ -20,8 +20,10 @@ from approach_Eq import (
     time_ltq,
 )
 from approach_def import Acc_p, print_if_verbose
+from approach_def import get_drop_disabled
 
-def trigger_cond_dyn(self, new_comp, new_ready_list):
+
+def trigger_cond_dyn(acc_p, new_comp, new_ready_list, curr_t):
     """_summary_
     The reallocation is triggered if and only if some tasks need more resources, and we can also find free tiles.
     Need more:
@@ -52,29 +54,41 @@ def trigger_cond_dyn(self, new_comp, new_ready_list):
     #         max(self.running, key=lambda x:self.G_ptr.nodes[x]['ddl'])
     # cond = cond1 or cond2 or cond3
 
+    # filter the new ready tasks by the filter_cond
+    new_ready_list = list(acc_p.task_filter(curr_t, new_ready_list))
     # get free tiles
-    free_tiles = self.cap - sum(self.res_map.values())
+    free_tiles = acc_p.cap - sum(acc_p.res_map.values())
     # case 1: no free tiles
     cond1 = (free_tiles <= 0) and len(new_ready_list) > 0 \
-        and min(new_ready_list, key=lambda x:self.G_ptr.ddl_map[x]) < \
-            max(self.running, key=lambda x:self.G_ptr.ddl_map[x])
+        and min(new_ready_list, key=lambda x:acc_p.G_ptr.ddl_map[x]) < \
+            max(acc_p.running, key=lambda x:acc_p.G_ptr.ddl_map[x])
     # case 2: free tiles
-    cond2 = (free_tiles > 0) and (len(new_ready_list) > 0 or self.starving) 
+    cond2 = (free_tiles > 0) and (len(new_ready_list) > 0 or acc_p.starving) 
     
     cond = cond1 or cond2      
     if cond:
         realloc = True
-        self.sys_state = "R"
-        self.running["R"] = cal_load(self.swt_lat, 1) 
+        acc_p.sys_state = "R"
+        acc_p.running["R"] = cal_load(acc_p.swt_lat, 1) 
     else:
         realloc = False
         # self.sys_state = "S"
         # the system exits reallocation progress until the "R" is finished
     return realloc
 
+def task_filter(acc_p, curr_t, iter_tasks, reserv_en=False, drop=False, op_miss_en=False):
+    filter_cond = [
+        lambda node: node != "R",
+        lambda node: (acc_p.G_ptr.ddl_map[node] > curr_t or (op_miss_en and node in acc_p.G_ptr.ops)) or not drop,
+        lambda node: acc_p.G_ptr.ert_map[node] <= curr_t if reserv_en else True,
+    ]
+    for node in iter_tasks:
+        if all(cond(node) for cond in filter_cond):
+            yield node
+
 def alloc_fn_pglb(acc_p, curr_t, realloc=True, 
                   # static parameters, which will be removed by lambda or functools.partial
-                  reserv_en=False, drop=False, op_miss_en=False):
+                  reserv_en=False):
     """
     Allocation function for reservation-aware scheduler.
     Only allocates minimum required resources, respects EST.
@@ -89,15 +103,7 @@ def alloc_fn_pglb(acc_p, curr_t, realloc=True,
     # filter ert < curr_t task if reserve
     # filter R task
 
-    filter_cond = [
-        lambda node: node != "R",
-        lambda node: (acc_p.G_ptr.ddl_map[node] > curr_t or (op_miss_en and node in acc_p.G_ptr.ops)) or not drop,
-        lambda node: acc_p.G_ptr.ert_map[node] <= curr_t if reserv_en else True,
-    ]
-    acc_p.slack_map = {
-        node: calculate_slack_time(acc_p.G_ptr.ddl_map[node], curr_t, realloc_slack)
-        for node in iter_tasks if all(cond(node) for cond in filter_cond)
-    }
+    acc_p.slack_map = {node: calculate_slack_time(acc_p.G_ptr.ddl_map[node], curr_t, realloc_slack) for node in acc_p.task_filter(curr_t, iter_tasks)}
     score = acc_p.slack_map.copy()
     alloc_map_curr = {}
     acc_p.starving = False
@@ -113,7 +119,8 @@ def alloc_fn_pglb(acc_p, curr_t, realloc=True,
         else:
             assert not (node in acc_p.ready and node in acc_p.running) 
             task_load = acc_p.running.get(node, 0) + acc_p.ready.get(node, 0)
-            req_rsc_size = estimate_resource_requirement(task_load, slack, acc_p.base_pwr)
+            exp_io_t = acc_p.G_ptr.nodes[node]['exp_io_t']
+            req_rsc_size = estimate_resource_requirement(task_load, slack, acc_p.base_pwr, exp_io_t=exp_io_t)
             
             if req_rsc_size > curr_aval_rsc:
                 print_if_verbose(f"\t[{acc_p.id}] {node} is hungry at {curr_t}: lack {req_rsc_size - curr_aval_rsc} tiles") 
@@ -144,7 +151,7 @@ def alloc_fn_pglb(acc_p, curr_t, realloc=True,
     return alloc_map_curr
 
 # Cyclic specific alloc_fn and trigger_cond
-def trigger_cond_cyclic(acc_p, new_comp, new_ready_list, static_schedule_map=None):
+def no_trigger(acc_p, new_comp, new_ready_list, curr_t=None, static_schedule_map=None):
     """
     Trigger condition for cyclic scheduler: 
         New ready tasks are in current map, or curr_t > next time in static_schedule_map.
@@ -281,23 +288,26 @@ def acc_p_factory(
         
         # create acc_p instance
         acc_p = Acc_p(f"acc_p{i}", cfg.cap_list[i], cfg.base_pwr_list[i], cfg.G, cfg.mapped_node_list[i], stats_collector)
-                
+        drop_flag = not get_drop_disabled() and True
+
         # policy binding
         if policy in ["pglb", "glb"]:
             if policy == "pglb" and cfg.num_parts <= 1:
                 warn("pglb policy is not supported for single partition, use glb instead")
                 policy = "glb"
-            acc_p.alloc_fn = types.MethodType(functools.partial(alloc_fn_pglb, reserv_en=False, drop=True), acc_p)
+            acc_p.alloc_fn = types.MethodType(functools.partial(alloc_fn_pglb, reserv_en=False), acc_p)
+            acc_p.task_filter = types.MethodType(functools.partial(task_filter, reserv_en=False, drop=drop_flag), acc_p)
             acc_p.trigger_cond = types.MethodType(trigger_cond_dyn, acc_p)
         elif policy in ["cyc"]:
             assert cfg.TSmap_list[i] is not None, "TSmap_list is not None"
             # 存储原始静态调度表用于动态更新
             acc_p.static_schedule_map = cfg.TSmap_list[i]
             acc_p.alloc_fn = types.MethodType(functools.partial(alloc_fn_cyclic, T_hp=cfg.T_hp, force=True), acc_p)
-            acc_p.trigger_cond = types.MethodType(functools.partial(trigger_cond_cyclic), acc_p)
+            acc_p.trigger_cond = types.MethodType(functools.partial(no_trigger), acc_p)
 
         elif policy == "reserv":
-            acc_p.alloc_fn = types.MethodType(functools.partial(alloc_fn_pglb, reserv_en=True, drop=True, op_miss_en=True), acc_p)
+            acc_p.alloc_fn = types.MethodType(functools.partial(alloc_fn_pglb, reserv_en=True), acc_p)
+            acc_p.task_filter = types.MethodType(functools.partial(task_filter, reserv_en=True, drop=drop_flag, op_miss_en=True), acc_p)
             acc_p.trigger_cond = types.MethodType(trigger_cond_dyn, acc_p)
         else:
             raise ValueError(f"Unknown strategy: {policy}")

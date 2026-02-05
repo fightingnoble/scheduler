@@ -4,7 +4,7 @@
 """
 
 import numpy as np
-from scipy.stats import truncnorm, poisson
+from scipy.stats import truncnorm as _scipy_truncnorm, poisson
 
 def test_closure_problem():
     """测试闭包变量捕获问题"""
@@ -16,9 +16,9 @@ def test_closure_problem():
     
     # 模拟节点数据
     nodes_data = {
-        'node1': {'exp_comp_t': 0.1, 'var_factor': 1},
-        'node2': {'exp_comp_t': 0.2, 'var_factor': 1},
-        'node3': {'exp_comp_t': 0.3, 'var_factor': 1}
+        'node1': {'exp_comp_t': 0.1, 'var_factor': [0, 1]},
+        'node2': {'exp_comp_t': 0.2, 'var_factor': [0, 1]},
+        'node3': {'exp_comp_t': 0.3, 'var_factor': [0, 1]}
     }
     
     # 有问题的代码：直接使用变量引用
@@ -52,7 +52,7 @@ def test_closure_problem():
     
     for node, data in nodes_data.items():
         exp_comp_t = data['exp_comp_t']
-        k = data['var_factor']
+        k = max(data['var_factor'])
         
         if k == 1:
             var_t_fn = lambda rng, exp_comp_t=exp_comp_t: exp_comp_t
@@ -94,7 +94,7 @@ def test_truncated_normal():
         a, b = -ZScore, ZScore
         
         # 使用默认参数冻结所有变量的值
-        var_t_fn = lambda rng, half_len=half_len, scale=scale, a=a, b=b: truncnorm.rvs(a, b, loc=half_len, scale=scale, random_state=rng)
+        var_t_fn = lambda rng, half_len=half_len, scale=scale, a=a, b=b: _scipy_truncnorm.rvs(a, b, loc=half_len, scale=scale, random_state=rng)
         rng_fn_list_normal[node] = var_t_fn
     
     print("   截断正态分布的lambda函数结果:")

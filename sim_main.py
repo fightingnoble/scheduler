@@ -71,15 +71,65 @@ def compare_paths(old_path, new_path, path_type=""):
         print(f"✅ 路径匹配 ({path_type}): {old_path}")
 
 
- 
-
-
 def ensure_csv(csv_path_and_fn, cfg_para_dict, para_scan_group1):
     import pandas as pd
     if not os.path.exists(csv_path_and_fn):
         cols = list(cfg_para_dict.keys()) + list(para_scan_group1.keys()) + ["num_cores"]
         pd.DataFrame(columns=cols).to_csv(csv_path_and_fn, index=False)
 
+
+def extract_pid2_bin_id(bin_list):
+    pid2_bin_id = {}
+    for _bin in bin_list:
+        for pid in _bin.index_occupy_by_id().keys():
+            if pid in pid2_bin_id:
+                raise AssertionError(f"duplicated pid {pid}")
+            pid2_bin_id[pid] = _bin.id
+        _bin.clear()
+    return pid2_bin_id
+
+
+def override_total_cores(bin_list, target_total_cores):
+    """
+    显式按比例调整 bin 的 num_resources 以匹配目标核数。
+    若只有一个 bin，则直接赋值；多 bin 按现有比例缩放后取整，并在最后补差。
+    """
+    if target_total_cores <= 0:
+        return
+    if len(bin_list) == 1:
+        bin_list[0].num_resources = target_total_cores
+        return
+    current_total = sum(b.num_resources for b in bin_list)
+    if current_total == 0:
+        # fallback: 平分
+        avg = max(1, target_total_cores // len(bin_list))
+        for b in bin_list:
+            b.num_resources = avg
+        # 补差
+        diff = target_total_cores - sum(b.num_resources for b in bin_list)
+        idx = 0
+        while diff > 0:
+            bin_list[idx % len(bin_list)].num_resources += 1
+            idx += 1
+            diff -= 1
+        return
+    scaled = []
+    for b in bin_list:
+        scaled.append(max(1, int(round(b.num_resources / current_total * target_total_cores))))
+    # 调整四舍五入误差
+    diff = target_total_cores - sum(scaled)
+    idx = 0
+    while diff != 0:
+        if diff > 0:
+            scaled[idx % len(scaled)] += 1
+            diff -= 1
+        else:
+            if scaled[idx % len(scaled)] > 1:
+                scaled[idx % len(scaled)] -= 1
+                diff += 1
+        idx += 1
+    for i, b in enumerate(bin_list):
+        b.num_resources = scaled[i]
 
 def apply_forced_num_cores(args, bin_list, estimated_num_cores, cfg_para_dict, para_scan_group1, path_ctx: PathContext):
     """
@@ -251,7 +301,7 @@ def build_workload_and_criticality(args):
     生成 workload 并设置 criticality，对应 main 中的 "workload settings" 段
     返回: (hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list)
     """
-    hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list = gen_workloads(args)
+    hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list, need_repack = gen_workloads(args)
 
     # assert all the process has hard deadline
     if args.lateness_mode == "all_hard":
@@ -265,14 +315,64 @@ def build_workload_and_criticality(args):
     elif args.lateness_mode == "ignore":
         pass
 
-    return hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list
+    return hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list, need_repack
 
 
-def build_scheduler_elements(args, path_params, path_ctx, workload):
+def determine_resource_config(args, path_params, path_ctx, need_repack):
     """
-    构建调度器元素，对应 main 中的 "build simulation" 段
-    返回: (task_spec, rsc_list, msg_dispatcher, a_data_pipe, w_data_pipe, 
-           scheduler_list, monitor_list, trace_path, num_cores, bin_list, sim_step)
+    决定如何获取 num_cores 和 bin_list 的配置
+    
+    Args:
+        args: 命令行参数
+        path_params: 路径参数元组
+        path_ctx: PathContext 实例
+        
+    Returns:
+        tuple: (num_cores, bin_list) 或 None（如果配置失败）
+    """
+    cfg_para_dict, para_scan_group1, para_scan_group2, path_para_dict, \
+    bin_path_format, trace_path_para, plot_path_para, csv_xlxs_root, case_pth = path_params
+    
+    # for static stage: if the stage is marked as repack,
+    # then we need to load the bin_list from the cache file
+    # for dynamic statge: if the scheduler has two stages, 
+    # then we need to read both the num_cores and bin_list from the trace file
+    need_load_bin = need_repack or args.test_case in two_stage_case_coll
+    if need_load_bin:
+        # 从已存在的文件解析核心数并加载bin_list
+        prepared = prepare_induced_env_if_needed(
+            path_para_dict, path_ctx,
+            trace_path_para, plot_path_para,
+        )
+        if prepared is None:
+            raise ValueError("Failed to load bin_list from cache file")
+        matched_num_cores, bin_list = prepared
+    else:
+        bin_list = []
+
+    need_deduce_core_num = args.test_case in two_stage_case_coll
+    if need_deduce_core_num:
+        num_cores = matched_num_cores
+    else:
+        num_cores = args.num_cores
+
+    return num_cores, bin_list
+
+def create_scheduler_elements_with_config(args, path_params, path_ctx, workload, num_cores, bin_list):
+    """
+    使用给定的资源配置创建调度器元素
+    
+    Args:
+        args: 命令行参数
+        path_params: 路径参数元组
+        path_ctx: PathContext 实例
+        workload: 工作负载元组
+        num_cores: 核心数
+        bin_list: bin列表
+        
+    Returns:
+        tuple: (task_spec, rsc_list, msg_dispatcher, a_data_pipe, w_data_pipe, 
+                scheduler_list, monitor_list, trace_path, sim_step)
     """
     cfg_para_dict, para_scan_group1, para_scan_group2, path_para_dict, \
     bin_path_format, trace_path_para, plot_path_para, csv_xlxs_root, case_pth = path_params
@@ -287,38 +387,22 @@ def build_scheduler_elements(args, path_params, path_ctx, workload):
         "allow_realloc": args.allow_realloc,
     }
     
-    # determine the number of cores and bins
+    # 计算仿真步长
     sim_step = elim_nume_error(1e-6 * args.timestepxus)
-    if "core_size" in args.binpack_cfg and args.binpack_cfg["core_size"] == "induced":
-        prepared = prepare_induced_env_if_needed(
-            path_para_dict, path_ctx,
-            trace_path_para, plot_path_para,
-        )
-        if prepared is None:
-            return None
-        num_cores, bin_list = prepared
-        args.num_cores = num_cores
-        task_spec, rsc_list, msg_dispatcher, \
-            a_data_pipe, w_data_pipe, scheduler_list, \
-                monitor_list, trace_path = create_common_scheduler_elements(
-                    args, trace_path_para, case_pth, 
-                    hyper_p, glb_p_list, scheduler_args, 
-                    sim_step, bin_list, path_ctx
-                    )
-    else: 
-        num_cores = args.num_cores
-        bin_list = []
-        task_spec, rsc_list, msg_dispatcher, \
-            a_data_pipe, w_data_pipe, scheduler_list, \
-                monitor_list, trace_path = create_common_scheduler_elements(
-                    args, trace_path_para, case_pth, 
-                    hyper_p, glb_p_list, scheduler_args, 
-                    sim_step, [SchedulingTableInt(num_cores, 1, 0, "bin_glb_dynamic")], path_ctx
-                    )
+    
+    task_spec, rsc_list, msg_dispatcher, \
+        a_data_pipe, w_data_pipe, scheduler_list, \
+            monitor_list, trace_path = create_common_scheduler_elements(
+                args, trace_path_para, case_pth, 
+                hyper_p, glb_p_list, scheduler_args, 
+                sim_step, 
+                bin_list if bin_list else [SchedulingTableInt(num_cores, 1, 0, "bin_glb_dynamic")], 
+                path_ctx
+                )
 
 
     return (task_spec, rsc_list, msg_dispatcher, a_data_pipe, w_data_pipe, 
-            scheduler_list, monitor_list, trace_path, num_cores, bin_list, sim_step)
+            scheduler_list, monitor_list, trace_path, sim_step)
 
 
 def build_simulation_env(args, workload, sim_step):
@@ -342,14 +426,14 @@ def build_simulation_env(args, workload, sim_step):
     return num_periods, warmup, quantumSize, event_range, event_iter_dict
 
 def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
-                        sim_step, path_para_dict, para_scan_group1,
-                        event_iter_dict, quantumSize, num_periods,
-                        cfg_para_dict, physical_graph_nx,
-                        plot_path_para, path_ctx: PathContext, 
-                        scheduler_list, monitor_list,
-                        msg_dispatcher,
-                        a_data_pipe, w_data_pipe
-                        ):
+                       sim_step, path_para_dict, para_scan_group1,
+                       event_iter_dict, quantumSize, num_periods,
+                       cfg_para_dict, physical_graph_nx, need_repack,
+                       plot_path_para, path_ctx: PathContext, 
+                       scheduler_list, monitor_list,
+                       msg_dispatcher,
+                       a_data_pipe, w_data_pipe
+                       ):
     """
     执行 bin-packing 算法，生成调度表并保存
     """
@@ -359,7 +443,7 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
     
     print("sim_step: ", sim_step)
     # 保持同一 list 对象，避免与 scheduler_list 等引用脱节
-    if args.binpack_cfg["algorithm"] == "reside":
+    if args.binpack_cfg["algorithm"] == "scratch":
         bin_list = push_task_into_bins_new(
             bin_list,
             glb_p_list, affinity_cfg, event_iter_dict,
@@ -374,109 +458,110 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
             verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
             warmup=True, drain=True, 
             )
-
-    elif args.binpack_cfg["algorithm"] == "coalescing":
-        max_core_num, pid2_bin_id, bin_size_list = coleasing_alloc_1bin(
-            bin_list,
-            glb_p_list, affinity_cfg, event_iter_dict,
-            num_cores, args.quantum_check_en, quantumSize, 
-            sim_step, hyper_p, args.exec_t_comp_ratioB,
-
-            scheduler_list, monitor_list,
-            msg_dispatcher,
-            a_data_pipe, w_data_pipe,
-
-            num_periods, binpack_cfg=args.binpack_cfg,
-            verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
-            warmup=True, drain=True, 
-            )
-        num_cores = apply_forced_num_cores(args, bin_list, max_core_num, cfg_para_dict, para_scan_group1, path_ctx)
-        # Load the dataframe                        
-        # df = pd.read_csv(filename)
-        # df = update_df(df, {**cfg_para_dict, **para_scan_group1}, 
-        #                {"num_cores": num_cores})
-        # df.to_csv(filename, index=False)
     
-    elif args.binpack_cfg["algorithm"] == "bin_split":
+    elif args.binpack_cfg["algorithm"] == "guided":
         from sched.global_sched import coleasing_alloc_cluster
-        from task.task_cfg import task_graph_srcs, task_graph_sinks
-        max_core_num, pid2_bin_id, bin_size_list = coleasing_alloc_cluster(
-            bin_list,
-            glb_p_list, affinity_cfg, event_iter_dict,
-            num_cores, args.quantum_check_en, quantumSize, 
-            sim_step, hyper_p, args.exec_t_comp_ratioB,
 
-            scheduler_list, monitor_list,
-            msg_dispatcher,
-            a_data_pipe, w_data_pipe,
+        if not need_repack:
+            split_ratio = args.exec_t_comp_ratioA
+            print("="* 20 + "Bin-split mode: Cluster-based allocation" + "="* 20 + "\n")
+            max_core_num, pid2_bin_id, bin_size_list = coleasing_alloc_cluster(
+                bin_list,
+                glb_p_list, affinity_cfg, event_iter_dict,
+                num_cores, args.quantum_check_en, quantumSize, 
+                sim_step, hyper_p, split_ratio,
 
-            num_periods, binpack_cfg=args.binpack_cfg,
-            job_graph=physical_graph_nx, 
-            n_partition = args.num_bins if args.num_bins != -1 else 9999,
-            verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
-            warmup=True, drain=True, 
-            )
-        num_cores = apply_forced_num_cores(args, bin_list, max_core_num, cfg_para_dict, para_scan_group1, path_ctx)
+                scheduler_list, monitor_list,
+                msg_dispatcher,
+                a_data_pipe, w_data_pipe,
 
-        # Load the dataframe                        
-        # df = pd.read_csv(filename)
-        # df = update_df(df, {**cfg_para_dict, **para_scan_group1, "num_bins": args.num_bins}, 
-        #                {"num_cores": num_cores})
-        # df.to_csv(filename, index=False)
+                num_periods, binpack_cfg=args.binpack_cfg,
+                job_graph=physical_graph_nx, 
+                n_partition = args.num_bins if args.num_bins != -1 else 9999,
+                verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
+                warmup=True, drain=True, 
+                )
+            num_cores = apply_forced_num_cores(args, bin_list, max_core_num, cfg_para_dict, para_scan_group1, path_ctx)
+        else:
+            # 获取初始 bin 分配
+            # 普通 bin_split 模式：使用聚类算法
+            # keep the original exec_t_comp_ratioA in slack distribution and resource estimation
+            # to make sure the repacking step use the same Bin configuration as the original one.
+            assert len(bin_list) > 0
+            # 直接复用外部 bin_list 的映射
+            pid2_bin_id = extract_pid2_bin_id(bin_list)
+            max_core_num = sum(b.num_resources for b in bin_list)
 
-    elif args.binpack_cfg["algorithm"] == "repack":
-        # ======================== artifact ======================== 
+            print("="* 20 + "Repack mode: Redistribute slack and rebin" + "="* 20 + "\n")
+            # 构造局部 binpack 配置，避免污染全局 args
+            binpack_cfg_local = dict(args.binpack_cfg)
+            binpack_cfg_local["mapping"] = pid2_bin_id
+            binpack_cfg_local["bin_sel_mod"] = "pre_defined"
+            binpack_cfg_local["affinity_en"] = False
+            binpack_cfg_local["affinity_level"] = 0
+
+            # 使用 push_task_into_bins_new 进行重新装箱（复用当前 workload 与事件流）
+            bin_list = push_task_into_bins_new(
+                bin_list,
+                glb_p_list, affinity_cfg, event_iter_dict,
+                num_cores, args.quantum_check_en, quantumSize, 
+                sim_step, hyper_p, args.exec_t_comp_ratioB,
+
+                scheduler_list, monitor_list,
+                msg_dispatcher,
+                a_data_pipe, w_data_pipe,
+
+                num_periods, binpack_cfg=binpack_cfg_local,
+                verbose=True, DEBUG_FG=False,
+                warmup=True, drain=True, 
+                )
         
-        # assert args.binpack_cfg["algorithm"] == "bin_split"
-        assert args.binpack_cfg["slack_sharing"] == False
-        # 1. cheat the non-sharing model: 
-        #    keep the original exec_t_comp_ratioA in slack distribution and resource estimation
-        #    to make sure the repacking step use the same Bin configuration as the original one.
-        # 2. backup parameters
-        exec_t_comp_ratioA_bk = args.exec_t_comp_ratioA
-        # 3. change the exec_t_comp_ratioA to args.exec_t_comp_ratioB in th repacking step
-        args.exec_t_comp_ratioA = args.exec_t_comp_ratioB 
-        args.binpack_cfg["slack_sharing"] = True
-        # reset the ddl and ert
-        print("="* 20 + "Redistribute slack:" + "="* 20 + "\n")
-        hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list = gen_workloads(args)
+    else:
+        raise NotImplementedError(f"binpack algorithm {args.binpack_cfg['algorithm']} is not implemented")
 
-        # get the size and allocated process id
-        print("="* 20 + "Bin-assignment:" + "="* 20 + "\n")
-        pid2_bin_id = {}
-        for _bin in bin_list:
-            _bin:SchedulingTableInt
-            print(f"{_bin.name}({_bin.id})", list(_bin.index_occupy_by_id().keys()))
-            pid_list = _bin.index_occupy_by_id().keys()
-            for pid in pid_list:
-                assert pid not in pid2_bin_id
-                pid2_bin_id[pid] = _bin.id
-            _bin.clear()
+    # ensure_csv(csv_path_and_fn, cfg_para_dict, para_scan_group1)
 
-        args.binpack_cfg["mapping"] = pid2_bin_id
-        args.binpack_cfg["bin_sel_mod"] = "pre_defined"
-        # clear the placement of each bin
-        args.binpack_cfg["affinity_en"] = False
-        args.binpack_cfg["affinity_level"] = 0
+    if need_repack:
+        extra_suffix = f"_ov_{args.exec_t_comp_ratioB:.2f}_repack(T)"
+    else:
+        extra_suffix = ""
+    bin_list_save_path, routing_table_save_path = generate_bin_paths(
+        path_para_dict, path_ctx, num_cores, "packing save path", 
+        extra_suffix
+    )
+    Bin_list_print(bin_list, glb_p_list, sim_step)
+    if args.plot:
+        render_bin_pack_plots(args, bin_list, glb_p_list, sim_step, hyper_p, num_periods, plot_path_para, path_ctx)
+    
 
-        bin_list = push_task_into_bins_new(
-            bin_list,
-            glb_p_list, affinity_cfg, event_iter_dict,
-            num_cores, args.quantum_check_en, quantumSize, 
-            sim_step, hyper_p, args.exec_t_comp_ratioB,
+    # select a period to save 
+    assert num_periods >= 1
+    bin_list2save = []
+    # for _sched_tab in bin_list:
+    dump_and_check(bin_list_save_path, bin_list)
+    # dump_and_check(routing_table_save_path, scheduler_list[0].detail_alloc_info)
+    return bin_list_save_path, num_cores, glb_p_list, hyper_p
 
-            scheduler_list, monitor_list,
-            msg_dispatcher,
-            a_data_pipe, w_data_pipe,
-
-            num_periods, binpack_cfg=args.binpack_cfg,
-            verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
-            warmup=True, drain=True, 
-            )
-        path_para_dict['i_file_suffix'] += f"_ov_{args.exec_t_comp_ratioB:.2f}_repack(T)"
-        plot_path_para['file_suffix'] += f"_ov_{args.exec_t_comp_ratioB:.2f}_repack(T)"
-        
-    elif args.binpack_cfg["algorithm"] == "mem_plan": 
+def others(args, glb_p_list, num_cores, bin_list, hyper_p,
+                       sim_step, path_para_dict, para_scan_group1,
+                       event_iter_dict, quantumSize, num_periods,
+                       cfg_para_dict, physical_graph_nx, need_repack,
+                       plot_path_para, path_ctx: PathContext, 
+                       scheduler_list, monitor_list,
+                       msg_dispatcher,
+                       a_data_pipe, w_data_pipe
+                       ):
+    """
+    执行 bin-packing 算法，生成调度表并保存
+    """
+    for _p in glb_p_list:
+        _p.task.criticality = "hard"
+        _p.task.chain_criticality = "hard"
+    
+    print("sim_step: ", sim_step)
+    # 保持同一 list 对象，避免与 scheduler_list 等引用脱节
+      
+    if args.binpack_cfg["algorithm"] == "mem_plan": 
         from sched.global_sched import test_mem_planner
         bin_list = test_mem_planner(
             bin_list,
@@ -519,7 +604,7 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
 
     # ensure_csv(csv_path_and_fn, cfg_para_dict, para_scan_group1)
 
-    if args.binpack_cfg["algorithm"] == "repack":
+    if need_repack:
         extra_suffix = f"_ov_{args.exec_t_comp_ratioB:.2f}_repack(T)"
     else:
         extra_suffix = ""
@@ -539,6 +624,7 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
     dump_and_check(bin_list_save_path, bin_list)
     # dump_and_check(routing_table_save_path, scheduler_list[0].detail_alloc_info)
     return bin_list_save_path, num_cores, glb_p_list, hyper_p
+
 
 def preprocess_args(args):
     """
@@ -581,18 +667,20 @@ def main(args: argparse.Namespace):
     check_parents_path(csv_path_and_fn)
 
     # ======================== workload settings ========================
-    workload = build_workload_and_criticality(args)
-    hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list = workload
+    hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list, need_repack = build_workload_and_criticality(args)
+    workload = (hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list)
     export_json_graph_utils(physical_graph_nx, path_ctx.graph_fn)
 
     # ======================== build simulation ================
-    scheduler_result = build_scheduler_elements(args, path_params, path_ctx, workload)
-    if scheduler_result is None:
-        return
-    (task_spec, rsc_list, msg_dispatcher, a_data_pipe, w_data_pipe, 
-     scheduler_list, monitor_list, trace_path, num_cores, bin_list, sim_step) = scheduler_result
 
-    # ======================== simulation env ========================
+    num_cores, bin_list = determine_resource_config(args, path_params, path_ctx, need_repack)
+    # 使用资源配置创建调度器元素
+    scheduler_elements = create_scheduler_elements_with_config(
+        args, path_params, path_ctx, workload, num_cores, bin_list
+    )
+    task_spec, rsc_list, msg_dispatcher, a_data_pipe, w_data_pipe, \
+        scheduler_list, monitor_list, trace_path, sim_step = scheduler_elements
+
     num_periods, warmup, quantumSize, event_range, event_iter_dict = build_simulation_env(
         args, workload, sim_step
     )
@@ -604,7 +692,7 @@ def main(args: argparse.Namespace):
             args, glb_p_list, num_cores, bin_list, hyper_p,
              sim_step, path_para_dict, para_scan_group1,
             event_iter_dict, quantumSize, num_periods,
-            cfg_para_dict, physical_graph_nx,
+            cfg_para_dict, physical_graph_nx, need_repack,
             plot_path_para, path_ctx, 
             scheduler_list, monitor_list,
             msg_dispatcher,

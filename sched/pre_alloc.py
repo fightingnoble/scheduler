@@ -20,7 +20,7 @@ def glb_alloc_new(process_dict, quantum_check_en, quantumSize, timestep, exec_t_
                   rsc_recoder_his, issue_list, preempt_list, iter_next_bin_obj, bin_list:TaskQueue, bin_name_list, n_slot, curr_t, 
                   DEBUG_FG=False, 
                   show_warnings=True, 
-                  binpack_cfg:Dict={"sort":"EAT", "sort_reverse":True, "mode": 'reside'},
+                  binpack_cfg:Dict={"sort":"EAT", "sort_reverse":True, "mode": 'scratch'},
                   ):
     # =================================================
     # push the ready task into the idle slot
@@ -116,7 +116,7 @@ def allocate_rsc_4_process_new(_p:ProcessInt, n_slot:int,
                 quantum_check_en:bool, strategy:str, glb_key:callable[[ProcessInt], int]=None,
                 verbose:bool=False, DEBUG:bool=False,
                 show_warnings=True, 
-                binpack_cfg:Dict={"sort":"EAT", "sort_reverse":True, "mode": 'reside'},
+                binpack_cfg:Dict={"sort":"EAT", "sort_reverse":True, "mode": 'scratch'},
                 ):
 
     # expected rsc_size and slot number
@@ -237,7 +237,7 @@ def bin_select(_p:ProcessInt, time_slot_s, time_slot_e, req_rsc_size,
                 iter_next_bin_obj:Iterator, bin_list:List[SchedulingTableInt], bin_name_list:List[str], 
                 strategy:str,
                 glb_key:Callable[[ProcessInt], float]=None,
-                binpack_cfg:Dict={"sort":"EAT", "sort_reverse":True, "mode": 'reside'},):
+                binpack_cfg:Dict={"sort":"EAT", "sort_reverse":True, "mode": 'scratch'},):
  
     # strategy: 
     # 1. the resource constraint should be respected
@@ -351,7 +351,7 @@ def check_and_preemt_at_queue(_p, bin:SchedulingTableInt, timestep, FLOPS_PER_CO
                              quantum_check_en, quantumSize, rsc_recoder, 
                              time_slot_s, time_slot_e, req_rsc_size, expected_slot_num, 
                              _p_index_by_pid, key, return_all_occupant, 
-                             binpack_cfg:Dict={"sort":"EAT", "sort_reverse":True, "mode": 'reside'},
+                             binpack_cfg:Dict={"sort":"EAT", "sort_reverse":True, "mode": 'scratch'},
                              partial_alloc_en=False, partial_preempt_en=False,
                              verbose=False, DEBUG=False):
     # try to allocate the resource on the bin
@@ -388,7 +388,7 @@ def check_and_preemt_at_queue(_p, bin:SchedulingTableInt, timestep, FLOPS_PER_CO
 def try_to_allocate(_p, bin: SchedulingTableInt, timestep, FLOPS_PER_CORE,
                     time_slot_s, time_slot_e, req_rsc_size, expected_slot_num, 
                     partial_alloc_en:bool = False, 
-                    binpack_cfg:Dict={"sort":"EAT", "sort_reverse":True, "mode": 'reside'},
+                    binpack_cfg:Dict={"sort":"EAT", "sort_reverse":True, "mode": 'scratch'},
                     verbose:bool = False, DEBUG=False):
     state, alloc_slot_s, alloc_size, allo_slot = bin.insert_task_new(_p, req_rsc_size, time_slot_s, time_slot_e, expected_slot_num, 
                                                                      mode=binpack_cfg["mode"],

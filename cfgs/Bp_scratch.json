@@ -7,7 +7,7 @@
     "release_temp_rda":true,
     "reservation_policy": "manual",
     "slack_sharing": true,
-    "algorithm": "reside",
+    "algorithm": "scratch",
     "preempt_en": true,
     "core_size": "specified"
 }

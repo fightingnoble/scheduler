@@ -100,6 +100,13 @@ class TDigestStreamingHistogram:
         Returns the estimated percentile for a given value.
         """
         return self.tdigest.percentile(value)
+    
+    def get_mean(self) -> float:
+        """
+        Returns the estimated mean of the distribution.
+        Returns 0.0 for empty distributions (TDigest.trimmed_mean returns 0 when empty).
+        """
+        return self.tdigest.trimmed_mean(0, 100)
 
     def get_histogram_data(self, num_bins: int = 10) -> List[tuple[float, float, float]]:
         """

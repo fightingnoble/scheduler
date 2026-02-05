@@ -402,12 +402,20 @@ def deduce_cfg2(taskattr_dict, f_gcd, hyper_p,
         quantile: 用于分布分位数计算的分位数
     """
 
+    # 检查是否需要重新装箱（repack 模式）
+    if (lcomp_quantileB is not None and lcomp_quantileA > lcomp_quantileB):
+        need_repack = True
+        quantile = lcomp_quantileB
+    else:
+        need_repack = False
+        quantile = lcomp_quantileA
+
     chains_info = get_chains(logical_graph_nx, task_graph_srcs, task_graph_sinks, taskattr_dict,
-                               quantile=lcomp_quantileA, remove_src_sink=False)
+                               quantile=quantile, remove_src_sink=False)
     rsc_map_w = rsc_slack_estim(logical_graph_nx, taskattr_dict, chains_info, 
                                 slack_threshold, 
                                 algorithm="avg",
-                                quantile=lcomp_quantileA) 
+                                quantile=quantile) 
     if verbose:
         print(rsc_map_w)
     
@@ -437,6 +445,8 @@ def deduce_cfg2(taskattr_dict, f_gcd, hyper_p,
         for node, taskattr in taskattr_dict.items():
             print(node, taskattr)
             print()
+    
+    return need_repack
 
 def get_chains_info(task_graph, start_nodes, end_nodes):
     chains = []
@@ -499,7 +509,7 @@ def test():
                 taskattr.thread_scaling_factor *= args.aux_scale_factor
     logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
     slack_threshold = args.slack_threshold
-    deduce_cfg2(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, task_graph_srcs, 
+    need_repack = deduce_cfg2(taskattr_dict, f_gcd, hyper_p, logical_graph_nx, task_graph_srcs, 
                          task_graph_sinks, slack_threshold, 
                          args.e2e_latency, args.exec_t_comp_ratioA, 
                          lcomp_quantileB=args.exec_t_comp_ratioB,

@@ -21,7 +21,6 @@ from approach_Eq import (
     get_task_load_and_base_size,
     calculate_slack_time,
     update_task_progress,
-    get_var_t_fn,
     cal_load,
     time_eq,
     time_gt,
@@ -29,18 +28,48 @@ from approach_Eq import (
     time_lt,
     time_ltq,
     time_add,
-    time_sub
+    time_sub,
+    # 导入新的工厂函数和分布类
+    dist_from_dict, SenVarDist, IOVarDist, LoadVarDist, AccVarDist, Variation
 )
 import re
 
 
 # 在文件顶部添加全局控制
 VERBOSE_OUTPUT = False
+REALLOC_DISABLED = False  # 禁止切换开销
+MISS_DISABLED = False     # 禁止miss检测
+DROP_DISABLED = False     # 禁止drop
 
 def set_verbose_output(verbose: bool):
     """全局设置是否输出详细信息"""
     global VERBOSE_OUTPUT
     VERBOSE_OUTPUT = verbose
+
+def set_realloc_disabled(realloc_disabled: bool):
+    global REALLOC_DISABLED
+    REALLOC_DISABLED = realloc_disabled
+
+def set_miss_disabled(miss_disabled: bool):
+    global MISS_DISABLED
+    MISS_DISABLED = miss_disabled
+
+def set_drop_disabled(drop_disabled: bool):
+    global DROP_DISABLED
+    DROP_DISABLED = drop_disabled
+
+def get_drop_disabled():
+    global DROP_DISABLED
+    return DROP_DISABLED
+
+def get_miss_disabled():
+    global MISS_DISABLED
+    return MISS_DISABLED
+
+def get_realloc_disabled():
+    global REALLOC_DISABLED
+    return REALLOC_DISABLED
+
 
 def print_if_verbose(*args, **kwargs):
     """全局条件打印函数"""
@@ -72,7 +101,9 @@ class MyGraph(nx.DiGraph):
     def __init__(self, srcs, ops, sinks, task_attr, src_attr, sink_attr=None):
         super(MyGraph, self).__init__()
         self.logical_graph = build_logical_graph(srcs, ops, sinks, task_attr, src_attr, sink_attr)
-        self.rng_fn_list = {}
+        
+        self.var_dist_map = {}
+        self._rebuild_distributions()
 
         # self.n_pred_map trackes the non-ready, intermediate tasks in the graph
         # The value of n_pred_map is updated when tasks in graph are finished
@@ -87,20 +118,24 @@ class MyGraph(nx.DiGraph):
         self.offset_map = {}
         self.ddl_map = {"R": -float('inf')}
         self.ert_map = {"R": -float('inf')}
-        self.init_rng_fn_list()
-        
 
-        # self.n_pred_map =  {node:len(list(self.predecessors(node))) for node in self.nodes() if node not in srcs}
-        
-        # # self.srcs trackes the non-active srcs, 
-        # # which are removed when they are activated by external events
-        # self.srcs = [node for node in self.nodes() if node in srcs]
-
-        # self.sinks = [node for node in self.nodes() if node in sinks]
-        # self.ops = [node for node in self.nodes() if node in ops]
-        # self.ddl_map = {node:task_attr[node]['ddl'] for node in self.ops}
-        # self.ddl_map.update({node:sink_attr[node]['ddl'] for node in self.sinks})
-        # self.ert_map = {node:task_attr[node]['ert'] for node in self.ops}
+    def _rebuild_distributions(self):
+        """
+        遍历图节点，使用工厂函数从 dist_info 属性重建分布对象。
+        """
+        for node, data in self.logical_graph.nodes(data=True):
+            var_dist = None
+            if data['type'] == "sink":
+                continue
+            # 先从 dist_info 重建（若存在且尚未有 var_dist）
+            if 'dist_info' in data and 'var_dist' not in data:
+                var_dist = dist_from_dict(data['dist_info'])
+                self.logical_graph.nodes[node]['var_dist'] = var_dist
+            elif 'var_dist' in data:
+                var_dist: Variation = data['var_dist']
+            
+            if var_dist:
+                self.var_dist_map[node] = var_dist
 
     def mark_finish(self, node):
         for succ in self.successors(node):
@@ -129,12 +164,6 @@ class MyGraph(nx.DiGraph):
     def mark_ready(self, node):
         self.n_pred_map.pop(node)
     
-    def init_rng_fn_list(self):
-        for _node, _type in self.logical_graph.nodes(data="type"):
-            if _type == "sink":
-                continue
-            self.rng_fn_list[_node] = get_var_t_fn(self.logical_graph, _node, _type)
-
     def duplicate_for_hyperperiod(self, hp_idx: int, seed: int, T_hp: float = 0.1, var_en: bool = False):
         """
         按给定的超周期索引 hp_idx 和随机种子 seed，复制当前图中的节点与边：
@@ -172,10 +201,19 @@ class MyGraph(nx.DiGraph):
 
             # 对 src/op 做执行时间随机化；sink 保持不变
             if node_type in ['src', 'op']:
-                if var_en:
-                    new_attr['exp_comp_t'] = elim_nume_error(self.rng_fn_list[node](rng))
+                if var_en and node in self.var_dist_map:
+                    dist = self.var_dist_map[node]
+                    # AccVarDist: 同时采样计算负载与访存时间
+                    if hasattr(dist, 'load_dist') and hasattr(dist, 'exec_dist'):
+                        new_attr['exp_comp_t'] = elim_nume_error(dist.load_dist.get_var_fn()(rng))
+                        new_attr['exp_io_t'] = elim_nume_error(dist.exec_dist.get_var_fn()(rng))
+                    else:
+                        # 单分布：将采样结果作为计算负载，访存置 0（若已存在则保留）
+                        new_attr['exp_comp_t'] = elim_nume_error(dist.get_var_fn()(rng))
+                        new_attr['exp_io_t'] = 0.
                 else:
                     new_attr['exp_comp_t'] = elim_nume_error(new_attr['exp_comp_t']) # if node_type == "op" else 0
+                    new_attr['exp_io_t'] = elim_nume_error(new_attr['exp_io_t'])
 
             # 添加超周期偏移到时间相关属性
             time_offset = hp_idx * T_hp
@@ -545,6 +583,9 @@ class Acc_p(BaseProcessor):
         for node, rem in chain(self.ready.items(), self.running.items()):
             ddl = self.G_ptr.ddl_map.get(node, float("inf"))
             if time_gt(curr_t, ddl):
+                # if MISS_DISABLED, peacefully exit the simulation
+                if MISS_DISABLED:
+                    import sys; sys.exit(1)
                 yield (node, rem)
 
     def update_run(self, pred_t, curr_t) -> bool:
@@ -637,21 +678,25 @@ class Acc_p(BaseProcessor):
                     # illegal check
                     if node in self.running or node in self.ready:
                         assert False, "task should not be in running or ready queue"
-                    self.ready[node] = cal_load(self.G_ptr.nodes[node]["exp_comp_t"], self.G_ptr.nodes[node]["base_size"])
-                    
-                    # info collector, schedule-unrelated
-                    if self.stats_collector:
-                        # record submitted load in this hyperperiod
-                        self.stats_collector.record_period_load_arrival(self.ready[node])
-                    
-                    new_ready_list.append(node)
-                    
-                    # info collector, schedule-unrelated
-                    # 记录任务开始统计（当任务进入ready队列时）
-                    if self.stats_collector:
-                        self.stats_collector.record_task_start(node, curr_t)
-                    
-                    print_if_verbose(f"\t[{self.id}] task {node} ready at {curr_t}")
+                    load = cal_load(self.G_ptr.nodes[node]["exp_comp_t"], self.G_ptr.nodes[node]["base_size"])
+                    if load <= 0:
+                        self.G_ptr.mark_finish(node)
+                        print_if_verbose(f"\t[{self.id}] task {node} is skipped at {curr_t}")
+                    else:
+                        self.ready[node] = load                    
+                        # info collector, schedule-unrelated
+                        if self.stats_collector:
+                            # record submitted load in this hyperperiod
+                            self.stats_collector.record_period_load_arrival(self.ready[node])
+                        
+                        new_ready_list.append(node)
+                        
+                        # info collector, schedule-unrelated
+                        # 记录任务开始统计（当任务进入ready队列时）
+                        if self.stats_collector:
+                            self.stats_collector.record_task_start(node, curr_t)
+                        
+                        print_if_verbose(f"\t[{self.id}] task {node} ready at {curr_t}")
                 self.mapped_node.remove(node)
                 self.G_ptr.mark_ready(node)
         return new_ready_list
@@ -668,8 +713,12 @@ class Acc_p(BaseProcessor):
             Two types of tasks: 
             - "system task" that stalls the accelerator
             - "user task" that can be executed by the accelerator
-        """         
-        realloc = self.trigger_cond(new_comp, new_ready_list)
+        """ 
+        # artificial setting for testing not for modeling
+        if REALLOC_DISABLED:
+            realloc = False
+        else:
+            realloc = self.trigger_cond(new_comp, new_ready_list, curr_t)
 
         # The elegent way to handle the reallocation progress,
         # but will not display which task are going to be allocated in the allocation function.
@@ -745,7 +794,8 @@ class Acc_p(BaseProcessor):
             actual_running = [sim_comp_time(
                         self.running[pid], 
                         self.res_map[pid], 
-                        self.base_pwr
+                        self.base_pwr,
+                        self.G_ptr.nodes[pid].get('exp_io_t', 0.0)
                     ) for pid in self.res_map  if self.res_map[pid] > 0]
             if not actual_running:
                 return float("inf")
