@@ -743,46 +743,69 @@ class StatisticsCollector:
                 })
             collector.plot_motiv_case1(data_points=results)
         """
-        # 提取数据
-        labels = [p.get('label', f'config{i}') for i, p in enumerate(data_points)]
-        idle_ratios = [p['idle_mean_ratio'] for p in data_points]
-        miss_ratios = [p['miss_mean_ratio'] for p in data_points]
-        realloc_ratios = [p['realloc_mean_ratio'] for p in data_points]
-        miss_counts = [p['miss_mean_count'] for p in data_points]
-        
-        # 创建双轴图 - 调整为论文尺寸（约2.6英寸宽，适合三图并排）
+        # ========== 统一颜色方案 ==========
+        # Idle:      C7 (灰色) - 空闲算力
+        # Miss:      C3 (红色) - 未完成算力（警示色）
+        # Realloc:   C1 (橙色) - 重调度开销
+        # Effective: C0 (蓝色) - 有效计算
+        # 折线:      C4 (紫色) - Miss Rate
+        COLOR_IDLE = 'C7'
+        COLOR_MISS = 'C3'
+        COLOR_REALLOC = 'C1'
+        COLOR_EFFECTIVE = 'C0'
+        COLOR_LINE = 'C4'
+
+        # 提取数据并按 percentile 排序（确保 p50 < p60 < ... < p99）
+        def _extract_percentile(label: str) -> float:
+            """从 label 提取 percentile 数值用于排序"""
+            import re
+            match = re.search(r'p(\d+(?:\.\d+)?)', label)
+            return float(match.group(1)) if match else 0
+
+        sorted_points = sorted(data_points, key=lambda p: _extract_percentile(p.get('label', 'p0')))
+
+        labels = [p.get('label', f'config{i}') for i, p in enumerate(sorted_points)]
+        idle_ratios = [p['idle_mean_ratio'] for p in sorted_points]
+        miss_ratios = [p['miss_mean_ratio'] for p in sorted_points]
+        realloc_ratios = [p['realloc_mean_ratio'] for p in sorted_points]
+        miss_counts = [p['miss_mean_count'] for p in sorted_points]
+        # 计算 effective (有效算力 = 1 - idle - miss - realloc)
+        effective_ratios = [max(0, 1 - idle_ratios[i] - miss_ratios[i] - realloc_ratios[i])
+                          for i in range(len(labels))]
+
+        # 创建双轴图 - 调高图片以容纳表格
         fig, ax1 = plt.subplots(figsize=(4, 2.2))
         ax2 = ax1.twinx()  # 创建附轴
-        
+
         x_pos = np.arange(len(labels))
         width = 0.25
-        
-        # 主轴：绘制三个ratio的柱状图（对数轴）
-        bars1 = ax1.bar(x_pos - width, idle_ratios, width, 
-                       label='Idle', color='C3', alpha=0.8)
+
+        # 主轴：绘制三个ratio的柱状图（对数轴）- 使用统一颜色
+        bars1 = ax1.bar(x_pos - width, idle_ratios, width,
+                       label='Idle', color=COLOR_IDLE, alpha=0.8)
         bars2 = ax1.bar(x_pos, miss_ratios, width,
-                       label='Miss', color='C2', alpha=0.8)
+                       label='Miss', color=COLOR_MISS, alpha=0.8)
         bars3 = ax1.bar(x_pos + width, realloc_ratios, width,
-                       label='Realloc', color='C1', alpha=0.8)
-        
+                       label='Realloc', color=COLOR_REALLOC, alpha=0.8)
+
         # 附轴：绘制miss_count的线图
-        line = ax2.plot(x_pos, miss_counts, 'o-', color='C4', linewidth=1.5, 
-                       markersize=4, label='Miss Count', alpha=0.8)
-        
-        # 在柱子上方标注数值（主轴）- 位置下移
-        for bars in [bars1, bars2, bars3]:
-            for bar in bars:
-                height = bar.get_height()
-                if height > 0:  # 只标注非零值
-                    ax1.text(bar.get_x() + bar.get_width()/2., height/5,
-                           f'{height:.2e}' if height < 0.01 else f'{height:.3f}',
-                           ha='center', va='bottom', fontsize=7)
-        
-        # 在线上标注数值（附轴）- 增大字体
+        line = ax2.plot(x_pos, miss_counts, 'o-', color=COLOR_LINE, linewidth=1.5,
+                       markersize=4, label='Miss Rate', alpha=0.8)
+
+        # 移除柱状图标记（对数轴上位置难以控制）
+        # 改为在图下方添加数据表格
+
+        # 在折线图点上方标注数值（提高精度）
         for i, count in enumerate(miss_counts):
-            ax2.text(i, count, f'{count:.1f}', ha='center', va='bottom', 
-                    fontsize=7, color='C4', fontweight='bold')
-        
+            # 动态格式：根据数值大小选择精度
+            if count >= 10:
+                fmt = f'{count:.1f}'
+            elif count >= 1:
+                fmt = f'{count:.2f}'
+            else:
+                fmt = f'{count:.3f}'
+            ax2.text(i, count, fmt, ha='center', va='bottom',
+                    fontsize=6, color=COLOR_LINE, fontweight='bold')
 
         # 设置主轴（对数轴）
         ax1.set_xlabel('Reservation Percentile', fontsize=9)
@@ -792,24 +815,88 @@ class StatisticsCollector:
         ax1.set_xticklabels(labels, fontsize=7)
         ax1.grid(True, alpha=0.3, linestyle='--', axis='y')
         ax1.tick_params(axis='y', labelcolor='black', labelsize=7)
-        
+
+        # 增加对数轴刻度密度
+        from matplotlib.ticker import LogLocator
+        ax1.yaxis.set_major_locator(LogLocator(numticks=10))
+        ax1.yaxis.set_minor_locator(LogLocator(subs='auto', numticks=20))
+
         # 设置附轴（线性轴）
-        ax2.set_ylabel('Timeout Rate', fontsize=9, color='C4')
-        ax2.tick_params(axis='y', labelcolor='C4', labelsize=7)
-        
-        # 添加参考线
-        ax1.axhline(y=0.1, color='r', linestyle='--', linewidth=1, alpha=0.5, label='10%')
-        ax1.axhline(y=0.01, color='orange', linestyle='--', linewidth=1, alpha=0.5, label='1%')
-        
-        # 合并图例
+        ax2.set_ylabel('Miss Rate', fontsize=9, color=COLOR_LINE)
+        ax2.tick_params(axis='y', labelcolor=COLOR_LINE, labelsize=7)
+
+        # 移除参考线
+
+        # 合并图例：柱状图 + 折线图
         lines1, labels1 = ax1.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
-        # 不用副轴的图例
-        ax1.legend(lines1, labels1, loc='upper left', fontsize=6, framealpha=0.7)
-        
+        all_handles = lines1 + lines2
+        all_labels = labels1 + labels2
+        ax1.legend(all_handles, all_labels, loc='upper left', fontsize=6, framealpha=0.7)
+
         ax1.set_title('Cyc.: Utilization-Reliability Tradeoff', fontsize=9, pad=8)
-        
+
+        # 调整布局，为底部表格留出空间
         fig.tight_layout()
+        plt.subplots_adjust(bottom=0.35)  # 为表格留出空间（调小以显示横轴）
+
+        # 添加底部数据表格（分两栏显示，每栏：Percentile | Idle | Miss）
+        # 不包含 Realloc 列（值都是0），不包含中间空列
+        def _fmt_ratio(val):
+            if val < 0.001:
+                return f'{val:.1e}'
+            elif val < 0.01:
+                return f'{val:.3f}'
+            else:
+                return f'{val:.2f}'
+
+        # 将数据分成两栏
+        n = len(labels)
+        half = (n + 1) // 2  # 向上取整
+
+        # 构造两栏数据（不包含 Realloc，不包含空列）
+        table_data = []
+        for i in range(half):
+            row = [
+                labels[i],
+                _fmt_ratio(idle_ratios[i]),
+                _fmt_ratio(miss_ratios[i]),
+            ]
+            # 第二栏数据（如果存在）
+            if i + half < n:
+                row.extend([
+                    labels[i + half],
+                    _fmt_ratio(idle_ratios[i + half]),
+                    _fmt_ratio(miss_ratios[i + half]),
+                ])
+            else:
+                row.extend(['', '', ''])
+            table_data.append(row)
+
+        # 创建表格（两栏，共6列：第一栏3列 + 第二栏3列，无分隔列）
+        # 向下移动表格，增加行高
+        col_labels = ['', 'Idle', 'Miss', '', 'Idle', 'Miss']
+        col_widths = [0.10, 0.12, 0.12, 0.10, 0.12, 0.12]
+        table = plt.table(
+            cellText=table_data,
+            colLabels=col_labels,
+            loc='bottom',
+            cellLoc='center',
+            colWidths=col_widths,
+            bbox=[0.08, -0.65, 0.84, 0.28]  # [left, bottom, width, height] - 向上移动表格
+        )
+        table.auto_set_font_size(False)
+        table.set_fontsize(6)
+        table.scale(1, 1.3)  # 增加行高
+
+        # 设置表头样式
+        for j in range(len(col_labels)):
+            cell = table[(0, j)]
+            if col_labels[j]:  # 非空表头
+                cell.set_facecolor('#e8e8e8')
+                cell.set_text_props(fontweight='bold')
+            else:
+                cell.set_facecolor('white')  # 分隔列为白色
         
         if save_path:
             os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else '.', exist_ok=True)
@@ -910,24 +997,31 @@ class StatisticsCollector:
         
         if plot_type == 'breakdown':
             # 延迟分解堆叠柱状图 + miss num ratio 曲线（附轴）
+            # ========== 统一颜色方案 ==========
+            COLOR_WAITING = 'C2'    # 绿色 - 等待时间
+            COLOR_REALLOC = 'C1'    # 橙色 - 重调度/调度开销
+            COLOR_EXECUTION = 'C0'  # 蓝色 - 执行时间
+            COLOR_LINE = 'C4'       # 紫色 - Miss Rate 折线
+
             # 创建附轴
             ax2 = ax.twinx()
 
             # 使用分簇逻辑
             clusters = StatisticsCollector._cluster_case2_data(data_points, group_order)
-            
+
             # 从排序好的 clusters 中提取 labels 和 chains
             cluster_labels = [f'{t}T-{l:.1f}×' for t, l in clusters.keys()]
             chain_values = list(next(iter(clusters.values())).keys()) if clusters else []
 
             num_clusters = len(clusters)
             bars_per_cluster = max(len(v) for v in clusters.values()) if clusters else 0
-            
+
             x_pos = np.arange(num_clusters)
             total_width = 0.8
             width = total_width / bars_per_cluster
-            
+
             # 绘制堆叠柱状图（按 chain 分组）
+            # 堆叠顺序：Waiting (底部) → Realloc (中间) → Execution (顶部)
             hatch_patterns = ['', '///', 'xxx', '\\\\\\']
             for i_cluster, (cluster_key, cluster_data) in enumerate(clusters.items()):
 
@@ -937,7 +1031,6 @@ class StatisticsCollector:
                 for i_bar, chains in enumerate(cluster_data.keys()):
                     p = cluster_data[chains]
                     x_offset = x_pos[i_cluster] + (i_bar - (bars_per_cluster - 1) / 2) * width
-                    # util = p['utilization']
                     breakdown = p.get('latency_breakdown', {}).get('overall', {})
                     miss_num = p.get('miss_mean_count', 0)
                     temp = {
@@ -948,17 +1041,20 @@ class StatisticsCollector:
                         'hatch': hatch_patterns[i_bar % len(hatch_patterns)]
                     }
                     bot = 0
-                    # Execution
+                    # Execution (底部)
                     ax.bar(x_offset, temp['exec'], width=width, bottom=bot,
-                        label='Execution' if i_cluster == 0 and i_bar == 0 else '', color='C0', alpha=0.8, hatch=temp['hatch'])
+                        label='Execution' if i_cluster == 0 and i_bar == 0 else '',
+                        color=COLOR_EXECUTION, alpha=0.8, hatch=temp['hatch'])
                     bot += temp['exec']
-                    # Realloc
+                    # Realloc (中间)
                     ax.bar(x_offset, temp['realloc'], width=width, bottom=bot,
-                        label='Scheduling (Realloc)' if i_cluster == 0 and i_bar == 0 else '', color='C1', alpha=0.8, hatch=temp['hatch'])
+                        label='Scheduling' if i_cluster == 0 and i_bar == 0 else '',
+                        color=COLOR_REALLOC, alpha=0.85, hatch=temp['hatch'])
                     bot += temp['realloc']
-                    # Wait
+                    # Waiting (顶部)
                     ax.bar(x_offset, temp['wait'], width=width, bottom=bot,
-                        label='Waiting' if i_cluster == 0 and i_bar == 0 else '', color='C2', alpha=0.8, hatch=temp['hatch'])
+                        label='Waiting' if i_cluster == 0 and i_bar == 0 else '',
+                        color=COLOR_WAITING, alpha=0.8, hatch=temp['hatch'])
                     bot += temp['wait']
 
                     if not np.isnan(temp['miss_num']):
@@ -966,49 +1062,67 @@ class StatisticsCollector:
                         y_cluster.append(temp['miss_num'])
                 # 绘制 miss num ratio 曲线（簇内连接）
                 if len(x_cluster) >= 2:
-                    ax2.plot(x_cluster, y_cluster, 'o-', color='C4', linewidth=2,
+                    ax2.plot(x_cluster, y_cluster, 'o-', color=COLOR_LINE, linewidth=2,
                             markersize=7, alpha=0.8)
                 elif len(x_cluster) == 1:
-                    ax2.plot(x_cluster, y_cluster, 'o', color='C4', 
+                    ax2.plot(x_cluster, y_cluster, 'o', color=COLOR_LINE,
                             markersize=7, alpha=0.8)
-            
-            ax2.plot([], [], 'o-', color='C4', linewidth=1.5, markersize=4, 
+
+            ax2.plot([], [], 'o-', color=COLOR_LINE, linewidth=1.5, markersize=4,
                     label='Miss Rate', alpha=0.8)
-            
+
             # 主轴设置
             ax.set_ylabel(r'Lat. Ratio w.r.t. $\mathcal{D}_{\mathrm{e2e}}$', fontsize=9, color='black')
-            ax.set_title('Tp-driven.: Latency Breakdown vs Scale', fontsize=9, pad=8)
+            ax.set_title('Tp-driven: Latency Breakdown vs Scale', fontsize=9, pad=8)
             ax.set_xticks(x_pos)
-            ax.set_xticklabels(cluster_labels, rotation=0, fontsize=7)  # ha='right',
-            ax.axhline(y=1.0, color='r', linestyle='--', linewidth=1, alpha=0.5, label='Constraint')
+            ax.set_xticklabels(cluster_labels, rotation=0, fontsize=7)
+            ax.axhline(y=1.0, color='r', linestyle='--', linewidth=1, alpha=0.5)
             ax.tick_params(axis='y', labelcolor='black', labelsize=7)
-            
+
             # 附轴设置
-            ax2.set_ylabel('Miss Rate', fontsize=9, color='C4')
-            ax2.tick_params(axis='y', labelcolor='C4', labelsize=7)
+            ax2.set_ylabel('Miss Rate', fontsize=9, color=COLOR_LINE)
+            ax2.tick_params(axis='y', labelcolor=COLOR_LINE, labelsize=7)
             ax.set_xlabel('Scale Configurations', fontsize=9)
-            
-            # 合并图例：堆叠组件 + chains + miss 曲线
-            handles1, labels1 = ax.get_legend_handles_labels()
-            handles2, labels2 = ax2.get_legend_handles_labels()
-            
-            # 添加 chains 的图例（简化标签）
+
+            # 图例：两列布局
+            # 第一列：Waiting, Scheduling, Execution（与堆叠顺序一致）
+            # 第二列：1 chains, 4 chains, 9 chains
             from matplotlib.patches import Rectangle
+
+            handles_col1 = []
+            labels_col1 = ['Waiting', 'Scheduling', 'Execution']
+            colors_col1 = [COLOR_WAITING, COLOR_REALLOC, COLOR_EXECUTION]
+            for lbl, clr in zip(labels_col1, colors_col1):
+                handles_col1.append(Rectangle((0, 0), 1, 1, facecolor=clr, edgecolor='black', alpha=0.8))
+
+            handles_col2 = []
+            labels_col2 = [f'{ch} chains' for ch in chain_values]
             for i, ch in enumerate(chain_values):
                 hatch_pattern = hatch_patterns[i % len(hatch_patterns)]
-                handles1.append(Rectangle((0, 0), 1, 1, facecolor='grey', 
-                                         edgecolor='black', hatch=hatch_pattern, alpha=0.8))
-                labels1.append(f'{ch} chains')
-            
-            # 不用副轴的图例
-            ax.legend(handles1, labels1, 
+                handles_col2.append(Rectangle((0, 0), 1, 1, facecolor='lightgray',
+                                             edgecolor='black', hatch=hatch_pattern, alpha=0.8))
+
+            # 合并两列图例
+            all_handles = handles_col1 + handles_col2
+            all_labels = labels_col1 + labels_col2
+            ax.legend(all_handles, all_labels,
                      loc='upper left', fontsize=6, framealpha=0.7, ncol=2)
             
         elif plot_type == 'utilization':
             # 分簇柱状图 + miss ops ratio 曲线（附轴）
             # 簇：(tiles, load_factor)；簇内：chains
-            
-            # 图表尺寸已在开头设置为 (2.6, 2.2)
+
+            # ========== 统一颜色方案（与 Case 1 一致）==========
+            # Idle:      C7 (灰色) - 空闲算力
+            # Miss:      C3 (红色) - 未完成算力（警示色）
+            # Realloc:   C1 (橙色) - 重调度开销
+            # Effective: C0 (蓝色) - 有效计算
+            # 折线:      C3 (红色) - Ops Ratio (Miss)
+            COLOR_IDLE = 'C7'
+            COLOR_MISS = 'C3'
+            COLOR_REALLOC = 'C1'
+            COLOR_EFFECTIVE = 'C0'
+            COLOR_LINE = 'C3'
 
             # 1. 使用分簇逻辑
             clusters = StatisticsCollector._cluster_case2_data(data_points, group_order)
@@ -1020,46 +1134,49 @@ class StatisticsCollector:
             # 2. 计算位置
             num_clusters = len(clusters)
             bars_per_cluster = max(len(v) for v in clusters.values()) if clusters else 0
-            
+
             x_pos = np.arange(num_clusters)
             total_width = 0.8
             width = total_width / bars_per_cluster
-            
+
             # 3. 创建附轴用于 miss op ratio
             ax2 = ax.twinx()
-            
+
             # 为附轴腾出空间
             fig.subplots_adjust(right=0.88)
-            
-            # 4. 绘制堆叠柱状图
+
+            # 4. 绘制堆叠柱状图（使用统一颜色）
             hatch_patterns = ['', '///', 'xxx', '\\\\\\']
             for i_cluster, (cluster_key, cluster_data) in enumerate(clusters.items()):
-                
+
                 x_cluster_line = []
                 y_cluster_line = []
 
                 for i_bar, chains in enumerate(cluster_data.keys()):
                     p = cluster_data[chains]
                     x_offset = x_pos[i_cluster] + (i_bar - (bars_per_cluster - 1) / 2) * width
-                    
+
                     util = p.get('utilization', {})
                     idle = util.get('idle_mean_ratio', 0.0)
                     realloc = util.get('realloc_mean_ratio', 0.0)
                     miss_ops = util.get('miss_mean_ratio', 0.0)
                     effective = max(0.0, 1.0 - idle - realloc)
                     hatch = hatch_patterns[i_bar % len(hatch_patterns)]
-                    
-                    # 绘制柱状图
+
+                    # 绘制柱状图（使用统一颜色）
                     bot = 0
                     ax.bar(x_offset, realloc, width=width, bottom=bot,
-                           label='Realloc' if i_cluster == 0 and i_bar == 0 else '', color='C3', alpha=0.85, hatch=hatch)
+                           label='Realloc' if i_cluster == 0 and i_bar == 0 else '',
+                           color=COLOR_REALLOC, alpha=0.85, hatch=hatch)
                     bot += realloc
                     ax.bar(x_offset, effective, width=width, bottom=bot,
-                           label='Effective' if i_cluster == 0 and i_bar == 0 else '', color='C0', alpha=0.8, hatch=hatch)
+                           label='Effective' if i_cluster == 0 and i_bar == 0 else '',
+                           color=COLOR_EFFECTIVE, alpha=0.8, hatch=hatch)
                     bot += effective
                     ax.bar(x_offset, idle, width=width, bottom=bot,
-                           label='Idle' if i_cluster == 0 and i_bar == 0 else '', color='C4', alpha=0.7, hatch=hatch)
-                    
+                           label='Idle' if i_cluster == 0 and i_bar == 0 else '',
+                           color=COLOR_IDLE, alpha=0.7, hatch=hatch)
+
                     # 收集曲线数据
                     if not np.isnan(miss_ops):
                         x_cluster_line.append(x_offset)
@@ -1067,14 +1184,14 @@ class StatisticsCollector:
 
                 # 5. 绘制 miss ops ratio 曲线在附轴上（簇内连接）
                 if len(x_cluster_line) >= 2:
-                    ax2.plot(x_cluster_line, y_cluster_line, 'o-', color='C2', linewidth=2,
+                    ax2.plot(x_cluster_line, y_cluster_line, 'o-', color=COLOR_LINE, linewidth=2,
                              markersize=7, alpha=0.8)
                 elif len(x_cluster_line) == 1:
-                    ax2.plot(x_cluster_line, y_cluster_line, 'o', color='C2', 
+                    ax2.plot(x_cluster_line, y_cluster_line, 'o', color=COLOR_LINE,
                              markersize=7, alpha=0.8)
-            
-            ax2.plot([], [], 'o-', color='C2', linewidth=2, markersize=7, 
-                     label='Miss Ops Ratio', alpha=0.8)
+
+            ax2.plot([], [], 'o-', color=COLOR_LINE, linewidth=2, markersize=7,
+                     label='Ops Ratio (Miss)', alpha=0.8)
 
             # 6. 主轴设置
             ax.set_xlabel('Scale Configurations', fontsize=9)
@@ -1084,25 +1201,34 @@ class StatisticsCollector:
             ax.set_xticks(x_pos)
             ax.set_xticklabels(cluster_labels, rotation=0, fontsize=7) #  ha='right',
             ax.tick_params(axis='y', labelcolor='black', labelsize=7)
-            
-            # 7. 附轴 ax2 设置
-            ax2.set_ylabel('Miss Ops ratio (%)', fontsize=9, color='C2')
-            ax2.tick_params(axis='y', labelcolor='C2', labelsize=7)
-            
-            # 8. 合并图例（简化）
-            handles1, labels1 = ax.get_legend_handles_labels()
-            handles2, labels2 = ax2.get_legend_handles_labels()
-            
+
+            # 7. 附轴 ax2 设置（使用统一颜色）
+            ax2.set_ylabel('Ops Ratio (Miss)', fontsize=9, color=COLOR_LINE)
+            ax2.tick_params(axis='y', labelcolor=COLOR_LINE, labelsize=7)
+
+            # 8. 图例：两列布局
+            # 第一列：Realloc, Idle, Effective
+            # 第二列：1 chains, 4 chains, 9 chains
             from matplotlib.patches import Rectangle
+
+            handles_col1 = []
+            labels_col1 = ['Realloc', 'Idle', 'Effective']
+            colors_col1 = [COLOR_REALLOC, COLOR_IDLE, COLOR_EFFECTIVE]
+            for lbl, clr in zip(labels_col1, colors_col1):
+                handles_col1.append(Rectangle((0, 0), 1, 1, facecolor=clr, edgecolor='black', alpha=0.8))
+
+            handles_col2 = []
+            labels_col2 = [f'{ch} chains' for ch in chain_values]
             for i, ch in enumerate(chain_values):
                 hatch_pattern = hatch_patterns[i % len(hatch_patterns)]
-                handles1.append(Rectangle((0, 0), 1, 1, facecolor='grey', 
-                                         edgecolor='black', hatch=hatch_pattern, alpha=0.8))
-                labels1.append(f'{ch} chains')
-            
-            # 不用副轴的图例
-            ax.legend(handles1, labels1, 
-                     loc='upper left', fontsize=6, framealpha=0.7, ncol=3)
+                handles_col2.append(Rectangle((0, 0), 1, 1, facecolor='lightgray',
+                                             edgecolor='black', hatch=hatch_pattern, alpha=0.8))
+
+            # 合并两列图例
+            all_handles = handles_col1 + handles_col2
+            all_labels = labels_col1 + labels_col2
+            ax.legend(all_handles, all_labels,
+                     loc='upper left', fontsize=6, framealpha=0.7, ncol=2)
         
         else:
             raise NotImplementedError(f"plot_type '{plot_type}' is not supported for case 2.")
@@ -1122,8 +1248,120 @@ class StatisticsCollector:
             plt.show()
         
         plt.close(fig)
-    
-    
+
+    @staticmethod
+    def plot_motiv_legend(save_path: str = None, show: bool = False):
+        """生成 Fig 6 的统一图例图片（三列布局）
+
+        三列显示：
+        - Workload: 1 chain, 4 chains, 9 chains (hatch patterns)
+        - 计算量 (Ops Ratio): Idle, Miss, Realloc, Effective
+        - 延迟 (Latency): Execution, Scheduling, Waiting, Miss Rate (line)
+
+        Args:
+            save_path: 保存路径
+            show: 是否显示图形
+        """
+        # ========== 统一颜色方案 ==========
+        COLOR_IDLE = 'C7'
+        COLOR_MISS = 'C3'
+        COLOR_REALLOC = 'C1'
+        COLOR_EFFECTIVE = 'C0'
+        COLOR_EXECUTION = 'C0'
+        COLOR_WAITING = 'C5'
+        COLOR_LINE = 'C4'
+
+        # Hatch patterns for chains
+        hatch_patterns = ['', '///', 'xxx']
+
+        # 创建竖向图例（适合放在三图左侧）
+        fig, ax = plt.subplots(figsize=(1.8, 2.8))
+        ax.set_xlim(0, 10)
+        ax.set_ylim(0, 10)
+        ax.axis('off')
+
+        from matplotlib.patches import Rectangle, Patch
+        from matplotlib.lines import Line2D
+
+        # ========== 列1: Workload (chains hatch patterns) ==========
+        col1_x = 0.5
+        y_start = 9.0
+        y_step = 1.2
+
+        # 列标题
+        ax.text(col1_x + 0.3, y_start + 0.3, 'Workload', fontsize=8, va='bottom', fontweight='bold')
+
+        # 1 chain, 4 chains, 9 chains
+        chain_labels = ['1 chain', '4 chains', '9 chains']
+        for i, (label, hatch) in enumerate(zip(chain_labels, hatch_patterns)):
+            y = y_start - (i + 1) * y_step
+            rect = Rectangle((col1_x, y - 0.3), 0.8, 0.6,
+                            facecolor='lightgray', edgecolor='black',
+                            hatch=hatch, alpha=0.8)
+            ax.add_patch(rect)
+            ax.text(col1_x + 1.0, y, label, fontsize=7, va='center')
+
+        # ========== 列2: 计算量 (Ops Ratio) ==========
+        col2_x = 3.5
+        y_start = 9.0
+
+        # 列标题
+        ax.text(col2_x + 0.3, y_start + 0.3, 'Ops Ratio', fontsize=8, va='bottom', fontweight='bold')
+
+        ops_items = [
+            ('Idle', COLOR_IDLE),
+            ('Miss', COLOR_MISS),
+            ('Realloc', COLOR_REALLOC),
+            ('Effective', COLOR_EFFECTIVE),
+        ]
+        for i, (label, color) in enumerate(ops_items):
+            y = y_start - (i + 1) * y_step
+            rect = Rectangle((col2_x, y - 0.3), 0.8, 0.6,
+                            facecolor=color, edgecolor='black', alpha=0.8)
+            ax.add_patch(rect)
+            ax.text(col2_x + 1.0, y, label, fontsize=7, va='center')
+
+        # ========== 列3: 延迟 (Latency) ==========
+        col3_x = 6.5
+        y_start = 9.0
+
+        # 列标题
+        ax.text(col3_x + 0.3, y_start + 0.3, 'Latency', fontsize=8, va='bottom', fontweight='bold')
+
+        lat_items = [
+            ('Execution', COLOR_EXECUTION, 'rect'),
+            ('Scheduling', COLOR_REALLOC, 'rect'),
+            ('Waiting', COLOR_WAITING, 'rect'),
+            ('Miss Rate', COLOR_LINE, 'line'),
+        ]
+        for i, (label, color, style) in enumerate(lat_items):
+            y = y_start - (i + 1) * y_step
+            if style == 'rect':
+                rect = Rectangle((col3_x, y - 0.3), 0.8, 0.6,
+                                facecolor=color, edgecolor='black', alpha=0.8)
+                ax.add_patch(rect)
+            else:  # line
+                line = Line2D([col3_x, col3_x + 0.8], [y, y],
+                             color=color, linewidth=2, marker='o', markersize=5)
+                ax.add_line(line)
+            ax.text(col3_x + 1.0, y, label, fontsize=7, va='center')
+
+        # 调整布局
+        plt.tight_layout(pad=0.5)
+
+        if save_path:
+            os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else '.', exist_ok=True)
+            fig.savefig(save_path, dpi=150, bbox_inches='tight', transparent=True)
+            print(f"图例图片已保存到: {save_path}")
+
+        if show:
+            plt.show()
+
+        plt.close(fig)
+
+        return fig
+
+
     # ============ Case-Specific Formatted Output ============
     
     def format_motiv_case1_output(self, stats: Dict = None) -> str:

@@ -239,5 +239,5 @@ T_compute = load / processing power
     - 修正等待时间计算口径：`wait_ratio = mean(e2e)/cons - mean(exec)/cons - mean(realloc)/cons`，避免"比值均值"产生负等待
     - 移除旧的累加逻辑（`task_own_*_time`, `task_path_*_time`），统一到新结构
     - 更新 `save_state/load_state` 以支持新数据结构的序列化
-  - **文件涉及**：`approach_collector.py`、`scripts/collector.md`（新增算法文档）
+  - **文件涉及**：`approach_collector.py`、`doc/spec/stat/collector.md`（新增算法文档）
   - **优势**：正确处理并行任务图的延迟分解，确保 `exec + realloc + wait = e2e_lat`，符合物理约束

@@ -104,8 +104,8 @@ def build_score_dict_ref_flops(task_dict:Dict[str, TaskBase], nodes:Any, score_d
         _task = task_dict[node_n]
         score_dict[node_n] = _task.flops
 
-def DistributeSlack(task_graph: DiGraph, task_dict:Dict[str, TaskBase], chains_info:List[Dict[str, Any]], 
-                    quantile: float, threshold: float = None, algorithm: str = "gurobi") -> Dict[str, Tuple[int, float, str]]:
+def DistributeSlack(task_graph: DiGraph, task_dict:Dict[str, TaskBase], chains_info:List[Dict[str, Any]],
+                    quantile: float, threshold: float = None, algorithm: str = "gurobi", total_cores: int = 300) -> Dict[str, Tuple[int, float, str]]:
     """
     统一的松弛时间分配函数，支持多种求解算法。
     
@@ -171,7 +171,7 @@ def DistributeSlack(task_graph: DiGraph, task_dict:Dict[str, TaskBase], chains_i
                 )
             constr_core.append(constraints)
         
-        tot_cores = 300 # TODO: Make this a configurable parameter
+        tot_cores = total_cores  # 使用函数参数，可配置
         
         # 4. 根据算法选择求解器
         if algorithm == "gurobi":
@@ -195,12 +195,13 @@ def DistributeSlack(task_graph: DiGraph, task_dict:Dict[str, TaskBase], chains_i
         print("Alloted slack: {} {} sum: {:.3e}".format(lt, chain, sum(lt)))
     return rsc_map_w
 
-def rsc_slack_estim(task_graph: DiGraph, 
-             taskJobs:Union[Dict[str, Union[TaskBase,ProcessBase]], List[Union[TaskBase,ProcessBase]]], 
+def rsc_slack_estim(task_graph: DiGraph,
+             taskJobs:Union[Dict[str, Union[TaskBase,ProcessBase]], List[Union[TaskBase,ProcessBase]]],
              chains_info:List[Dict[str, Any]],
              threshold,
              algorithm="avg",
-             quantile:float=0.95):
+             quantile:float=0.95,
+             total_cores:int=300):
     """
     资源和松弛时间估计的顶层函数。
     input:
@@ -231,7 +232,7 @@ def rsc_slack_estim(task_graph: DiGraph,
         raise TypeError("taskJobs should be a list or dict")
     
     assert algorithm in ["avg", 'gurobi']
-    return DistributeSlack(task_graph, task_dict, chains_info, quantile, threshold, algorithm)
+    return DistributeSlack(task_graph, task_dict, chains_info, quantile, threshold, algorithm, total_cores)
 
 def get_chains(task_graph:DiGraph, start_nodes, end_nodes, 
                 task_dict:Dict[str, 'TaskBase'], quantile:float=0.95,

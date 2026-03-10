@@ -70,6 +70,9 @@ def push_task_into_bins_new(
     # --- 入口参数检查与读取 ---
     bin_sel_mod = binpack_cfg.get("bin_sel_mod", "search")
     reservation_policy = binpack_cfg.get("reservation_policy", "manual")
+    # 注入 total_cores 到 binpack_cfg，供下层函数使用
+    # 注意：这里直接修改字典，因为 binpack_cfg 通常是每次调用时新创建的
+    binpack_cfg["total_cores"] = total_cores
     # -----------------------
 
     glb_name_p_dict = {p.task.name:p for p in glb_p_list}

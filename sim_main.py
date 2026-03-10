@@ -43,7 +43,6 @@ def generate_bin_paths(path_para_dict, path_ctx: PathContext, num_cores, check_h
     old_routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
     
     # 使用新方法生成路径：直接改 PathContext
-    path_ctx.num_cores = num_cores
     if extra_suffix:
         path_ctx.file_suffix = f"{path_ctx.file_suffix}{extra_suffix}"
         path_ctx.i_file_suffix = f"{path_ctx.i_file_suffix}{extra_suffix}"
@@ -251,16 +250,29 @@ def build_workload_and_criticality(args):
 def determine_resource_config(args, path_params, path_ctx, need_repack, bin_list):
     """
     决定如何获取 num_cores 和 bin_list 的配置
-    
+
+    .. deprecated::
+        此函数已废弃（2026-02）。
+        资源配置逻辑已简化并移到 setup_benchmark 外层。
+        保留此函数仅为向后兼容，不应再调用。
+
     Args:
         args: 命令行参数
         path_params: 路径参数元组
         path_ctx: PathContext 实例
         need_repack: 是否需要重新装箱
-        
+        bin_list: Bin 列表
+
     Returns:
         tuple: (num_cores, bin_list) 或 None（如果配置失败）
     """
+    import warnings
+    warnings.warn(
+        "determine_resource_config() is deprecated and will be removed in a future version. "
+        "Resource configuration logic has been moved to setup_benchmark().",
+        DeprecationWarning,
+        stacklevel=2
+    )
     cfg_para_dict, para_scan_group1, para_scan_group2, path_para_dict, \
     bin_path_format, trace_path_para, plot_path_para, csv_xlxs_root, case_pth = path_params
     
@@ -386,13 +398,20 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
                        sim_step, path_para_dict, para_scan_group1,
                        event_iter_dict, quantumSize, num_periods,
                        cfg_para_dict, physical_graph_nx, need_repack,
-                       plot_path_para, path_ctx: PathContext, 
+                       plot_path_para, path_ctx: PathContext,
                        scheduler_list, monitor_list,
                        msg_dispatcher,
                        a_data_pipe, w_data_pipe
                        ):
     """
-    执行 bin-packing 算法，生成调度表并保存
+    执行 bin-packing 算法，返回装箱结果
+
+    Returns:
+        tuple: (bin_list, max_core_num, glb_p_list, hyper_p)
+            - bin_list: 装箱后的 bin 列表
+            - max_core_num: 装箱计算的资源需求（未应用约束）
+            - glb_p_list: 进程列表
+            - hyper_p: 超参数
     """
     # --- 入口参数检查 ---
     if not hasattr(args, "binpack_cfg") or args.binpack_cfg is None:
@@ -420,7 +439,7 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
         bin_list = push_task_into_bins_new(
             bin_list,
             glb_p_list, affinity_cfg, event_iter_dict,
-            num_cores, args.quantum_check_en, quantumSize, 
+            num_cores, args.quantum_check_en, quantumSize,
             sim_step, hyper_p, args.exec_t_comp_ratioB,
 
             scheduler_list, monitor_list,
@@ -429,8 +448,9 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
 
             num_periods, binpack_cfg=binpack_cfg_scratch,
             verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
-            warmup=True, drain=True, 
+            warmup=True, drain=True,
             )
+        max_core_num = sum(b.num_resources for b in bin_list)
     
     elif args.binpack_cfg["algorithm"] == "guided":
         from sched.global_sched import coleasing_alloc_cluster
@@ -442,7 +462,7 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
             max_core_num, pid2_bin_id, bin_size_list = coleasing_alloc_cluster(
                 bin_list,
                 glb_p_list, affinity_cfg, event_iter_dict,
-                None, args.quantum_check_en, quantumSize, 
+                None, args.quantum_check_en, quantumSize,
                 sim_step, hyper_p, split_ratio,
 
                 scheduler_list, monitor_list,
@@ -450,15 +470,11 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
                 a_data_pipe, w_data_pipe,
 
                 num_periods, binpack_cfg=binpack_cfg_guided,
-                job_graph=physical_graph_nx, 
+                job_graph=physical_graph_nx,
                 n_partition = args.num_bins if args.num_bins != -1 else 9999,
                 verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
-                warmup=True, drain=True, 
+                warmup=True, drain=True,
                 )
-            if args.num_cores is not None:
-                num_cores = apply_forced_num_cores(bin_list, max_core_num, args.num_cores)
-            else:
-                num_cores = max_core_num
         else:
             # 获取初始 bin 分配
             # 普通 bin_split 模式：使用聚类算法
@@ -466,6 +482,7 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
             # to make sure the repacking step use the same Bin configuration as the original one.
             assert len(bin_list) > 0
             # 直接复用外部 bin_list 的映射
+            # repack 不会修改bin_list 中资源的分配以及，任务到资源的映射。只会修改每个任务的slack。
             pid2_bin_id = extract_pid2_bin_id(bin_list)
             max_core_num = sum(b.num_resources for b in bin_list)
 
@@ -481,7 +498,7 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
             bin_list = push_task_into_bins_new(
                 bin_list,
                 glb_p_list, affinity_cfg, event_iter_dict,
-                num_cores, args.quantum_check_en, quantumSize, 
+                num_cores, args.quantum_check_en, quantumSize,
                 sim_step, hyper_p, args.exec_t_comp_ratioB,
 
                 scheduler_list, monitor_list,
@@ -490,34 +507,14 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
 
                 num_periods, binpack_cfg=binpack_cfg_local,
                 verbose=True, DEBUG_FG=False,
-                warmup=True, drain=True, 
+                warmup=True, drain=True,
                 )
-        
+
     else:
         raise NotImplementedError(f"binpack algorithm {args.binpack_cfg['algorithm']} is not implemented")
 
-    # ensure_csv(csv_path_and_fn, cfg_para_dict, para_scan_group1)
-
-    if need_repack:
-        extra_suffix = f"_ov_{args.exec_t_comp_ratioB:.2f}_repack(T)"
-    else:
-        extra_suffix = ""
-    bin_list_save_path, routing_table_save_path = generate_bin_paths(
-        path_para_dict, path_ctx, num_cores, "packing save path", 
-        extra_suffix
-    )
-    Bin_list_print(bin_list, glb_p_list, sim_step)
-    if args.plot:
-        render_bin_pack_plots(args, bin_list, glb_p_list, sim_step, hyper_p, num_periods, plot_path_para, path_ctx)
-    
-
-    # select a period to save 
-    assert num_periods >= 1
-    bin_list2save = []
-    # for _sched_tab in bin_list:
-    dump_and_check(bin_list_save_path, bin_list)
-    # dump_and_check(routing_table_save_path, scheduler_list[0].detail_alloc_info)
-    return bin_list_save_path, num_cores, glb_p_list, hyper_p
+    # 返回装箱结果（不包含资源约束和 dump）
+    return bin_list, max_core_num, glb_p_list, hyper_p
 
 def others(args, glb_p_list, num_cores, bin_list, hyper_p,
                        sim_step, path_para_dict, para_scan_group1,
@@ -589,6 +586,8 @@ def others(args, glb_p_list, num_cores, bin_list, hyper_p,
         path_para_dict, path_ctx, num_cores, "packing save path", 
         extra_suffix
     )
+    # 同步更新 trace_path_para 中的 num_cores，确保路径一致性
+    trace_path_para['num_cores'] = num_cores
     Bin_list_print(bin_list, glb_p_list, sim_step)
     if args.plot:
         render_bin_pack_plots(args, bin_list, glb_p_list, sim_step, hyper_p, num_periods, plot_path_para, path_ctx)

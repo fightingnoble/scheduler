@@ -569,9 +569,11 @@ class ProcessInt(ProcessBase):
         q = binpack_cfg.get('quantile', None)
         node_name = _p.task.name
         dist = var_dist_map[node_name]
+        got_constr = "none"
         if isinstance(dist, SenVarDist):
             # Sensor-like task: fixed latency quantile, core=1
             req_rsc_size = 1
+            got_latency = elim_nume_error(float(dist.quantile(q) + time1n_error_tol_abs))
         else:
             # Acc task: load_q/(cores*FLOPS_PER_CORE) + io_q <= window_time
             try:
@@ -584,11 +586,13 @@ class ProcessInt(ProcessBase):
             compute_budget = slack - io_q
             if compute_budget <= 0:
                 # No time for compute; request the max allowed cores
-                req_rsc_size = max(1, getattr(_p, 'core_max', 1))
+                req_rsc_size, got_constr = find_legal(
+                    constr, max_size, max(1, getattr(_p, 'core_max', 1))
+                )
             else:
                 ideal_cores = int(math.ceil(load_q / (compute_budget * FLOPS_PER_CORE)))
                 req_rsc_size, got_constr = find_legal(constr, max_size, ideal_cores)
-                got_latency = elim_nume_error(_p.task.flops / req_rsc_size / FLOPS_PER_CORE)
+            got_latency = elim_nume_error(float(load_q / req_rsc_size / FLOPS_PER_CORE + io_q + time1n_error_tol_abs))
         return req_rsc_size, got_latency, got_constr
 
     def quant_release_deadline(_p, n_slot, timestep):

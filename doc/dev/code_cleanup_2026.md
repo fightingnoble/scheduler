@@ -1,4 +1,156 @@
-# 代码清理记录 - 2025
+# 代码清理记录 - 2026
+
+## 清理日期：2026-02-08
+
+---
+
+## 清理5：资源约束与 Dump 逻辑解耦
+
+### 问题描述
+
+`perform_bin_packing` 函数职责混乱，包含了三个不相关的逻辑：
+1. 装箱算法执行
+2. 资源约束应用（`apply_forced_num_cores`）
+3. Dump 操作（路径生成、序列化）
+
+这导致：
+- 职责不清晰，违反单一职责原则
+- 资源约束逻辑分散在多个位置
+- Repack 和 non-repack 阶段的资源约束判断交织
+- `determine_resource_config` 函数包含复杂的条件判断
+
+### 影响文件
+
+1. **sim_main.py**
+   - `perform_bin_packing` 函数（398-518行）
+   - 移除内部资源约束逻辑（guided non-repack 分支的 471-474 行）
+   - 移除内部 dump 逻辑（514-537 行）
+   - 修改返回值：从 `(bin_list_save_path, num_cores, ...)` 改为 `(bin_list, max_core_num, ...)`
+   - 为 scratch 算法添加 `max_core_num` 计算
+   - `determine_resource_config` 函数标记为 deprecated（251-276行）
+
+2. **approach_setup.py**
+   - `run_benchmark_setup_pipeline` 函数（11-83行）
+   - 接收 `perform_bin_packing` 的新返回值
+   - 在外层应用资源约束（60-64行）
+   - 在外层执行 dump 逻辑（66-82行）
+
+### 清理前代码
+
+#### sim_main.py - perform_bin_packing (471-474行)
+```python
+# Guided non-repack 分支：包含资源约束
+max_core_num, pid2_bin_id, bin_size_list = coleasing_alloc_cluster(...)
+if args.num_cores is not None:
+    num_cores = apply_forced_num_cores(bin_list, max_core_num, args.num_cores)
+else:
+    num_cores = max_core_num
+```
+
+#### sim_main.py - perform_bin_packing (514-537行)
+```python
+# Dump 逻辑在装箱函数内部
+if need_repack:
+    extra_suffix = f"_ov_{args.exec_t_comp_ratioB:.2f}_repack(T)"
+else:
+    extra_suffix = ""
+bin_list_save_path, routing_table_save_path = generate_bin_paths(...)
+Bin_list_print(bin_list, glb_p_list, sim_step)
+if args.plot:
+    render_bin_pack_plots(...)
+dump_and_check(bin_list_save_path, bin_list)
+return bin_list_save_path, num_cores, glb_p_list, hyper_p
+```
+
+#### approach_setup.py - run_benchmark_setup_pipeline (48-59行)
+```python
+# 旧版本：接收 dump 路径
+bin_list_save_path, num_cores, glb_p_list, hyper_p = perform_bin_packing(...)
+assert bin_list_save_path is not None, "Error: Failed to perform bin packing"
+```
+
+### 清理后代码
+
+#### sim_main.py - perform_bin_packing (返回值)
+```python
+# 只返回装箱结果
+return bin_list, max_core_num, glb_p_list, hyper_p
+```
+
+#### approach_setup.py - run_benchmark_setup_pipeline (47-84行)
+```python
+# 6. 执行装箱算法（返回装箱结果，不包含资源约束和 dump）
+bin_list, max_core_num, glb_p_list, hyper_p = perform_bin_packing(...)
+
+# 7. 应用资源约束（仅 non-repack 时应用，repack 不改变资源数量）
+if not need_repack:
+    if args.num_cores is not None:
+        num_cores = apply_forced_num_cores(bin_list, max_core_num, args.num_cores)
+    else:
+        num_cores = max_core_num
+
+# 8. 生成 dump 路径
+if need_repack:
+    extra_suffix = f"_ov_{args.exec_t_comp_ratioB:.2f}_repack(T)"
+else:
+    extra_suffix = ""
+bin_list_save_path, routing_table_save_path = generate_bin_paths(...)
+
+# 9. 打印和绘制
+Bin_list_print(bin_list, glb_p_list, sim_step)
+if args.plot:
+    render_bin_pack_plots(...)
+
+# 10. Dump
+dump_and_check(bin_list_save_path, bin_list)
+```
+
+### 清理原因
+
+1. **单一职责原则**：`perform_bin_packing` 应该只专注于装箱算法
+2. **逻辑清晰**：资源约束和 dump 是装箱后的独立操作
+3. **减少耦合**：dump 依赖约束后的 `num_cores`，应在同一层级处理
+4. **简化条件判断**：repack 相关的逻辑移到外层统一控制
+5. **易于测试**：装箱算法可以独立测试，不依赖约束和 dump
+
+### 重构效果
+
+**职责分离**：
+```
+perform_bin_packing (sim_main.py)
+└── 装箱算法
+    ├── Scratch: push_task_into_bins_new
+    ├── Guided non-repack: coleasing_alloc_cluster
+    └── Guided repack: push_task_into_bins_new with pre-defined bins
+
+run_benchmark_setup_pipeline (approach_setup.py)
+├── 资源约束（统一位置，仅 non-repack）
+└── Dump（路径生成、打印、绘制、序列化）
+```
+
+**数据流**：
+```
+Non-Repack:
+  装箱 → max_core_num=20
+    ↓
+  约束 → num_cores=16
+    ↓
+  dump(num_cores=16)
+
+Repack:
+  装箱 → max_core_num=16（bin_list 已被约束修改）
+    ↓
+  不应用约束
+    ↓
+  dump(num_cores=16)
+```
+
+### 相关文档
+
+- `doc/spec/resource_constraint_dump_coupling.md` - 耦合分析文档
+- `doc/spec/e2e_sched_sim_flow.md` - 更新后的执行流程
+
+---
 
 ## 清理日期：2026-02-03
 

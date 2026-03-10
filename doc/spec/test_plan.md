@@ -26,7 +26,7 @@
     - repack（push_task_into_bins_new）则是，在固定分区的前提下，在组内为每个任务分配一个时间区间。如果执行落在该区间内，则可以隐藏启动开销，如果不在，则需要动态的分配资源。相对于纯动态，时间区间的分配会更加激进：使用更加宽松的分位数exec_t_comp_ratioB进行预留，因此，ERT和ddl会比静态的方法更早。
     - 分配阶段，采用guided 算法，包含三个阶段：
       - (1) 计算资源和时间片的初始分派；(2) Spatial Partitioning (Task-to-Bin Clustering)；(3) Temporal Scheduling (Intra-Bin Time Window Assignment)
-      - 第一个流程在deduce_cfg2中实现，文档在doc/chain_slack_assignment_algorithm.md 中。后两个流程由 perform_bin_packing 中的guided 算法，分两轮（coalesce_alloc_cluster/push_task_into_bins_new）实现。文档在doc/guided_hybrid_allocation_algorithm.md 中。
+      - 第一个流程在deduce_cfg2中实现，文档在doc/spec/algorithm/chain_slack_assignment_algorithm.md 中。后两个流程由 perform_bin_packing 中的guided 算法，分两轮（coalesce_alloc_cluster/push_task_into_bins_new）实现。文档在doc/spec/algorithm/guided_hybrid_allocation_algorithm.md 中。
 
 ## 简称
 纯静态的周期调度，纯动态的调度方法和 混合静态和动态的调度方法，分别对应简写：cyc，dyn，reserv。
@@ -72,26 +72,46 @@
 
 ## 脚本步骤
 
-**Step 1**：
-- 对应纯静态方法cyc，以及resev 方法三步中的第一步
-- 计算资源和时间片的初始分派。
-- 参数：使用num_bin = -1, exec_t_comp_ratioA \in [0.5, 0.99], exec_t_comp_ratioB == None，进行bin_split。
+**Step 0** (generate_workload_and_criticality)：
+- 生成workload，物理graph
+- **所有调度方法都需要**
 
-**step 2-1**：
-- 对应分箱 cyc(S)，enable time sharing within each bin。
-- 将纯静态方法cyc作为初始分配（加载step1的结果进入repack），使用 \(exec_t_comp_ratioB < exec_t_comp_ratioA) 进行repack。
+**Step 1** (deduce_cfg2)：
+- 计算时间片初始分派（per-task 的 deadline）
+- 计算资源需求
+- 由 `exec_t_comp_ratioA` 参数控制初始预留分位数
+- **所有调度方法都需要**
+- 实现文档：doc/spec/algorithm/chain_slack_assignment_algorithm.md
 
-**Step 2-2**：
-- 对应分箱的动态方法 pglb，以及对应resev 方法三步中的第二步：合并分箱，实现Spatial Partitioning (Task-to-Bin Clustering)。
-- 基于step1 结果（按照step1 配置 from scratch），设置\( num_bin \in [1, num_bin_max] \)，进行bin_split。
+**Step 2** (bin_split，可选)：
+- Spatial Partitioning (Task-to-Bin Clustering)
+- 参数：`num_bins`
+  - `num_bins = -1`: 最多分区/自动搜索 (最多9999，保证任务声明周期不重叠) (cyc, cyc-S)
+  - `num_bins = 1`: 单分区 (glb)
+  - `num_bins > 1`: 多分区 (pglb, reserv)
+- 实现：`coleasing_alloc_cluster`
 
-**step 3**：
-- 对应resev 三步方法中的第三步，enable constrained sharing among and along chains within each bin by adjusting the expected time intervals and corresponding tile amount within each bin。
-- 加载step2-2的结果，使用 \(exec_t_comp_ratioB < exec_t_comp_ratioA) 进行repack。
+**Step 3** (repack，可选)：
+- Temporal Scheduling (Intra-Bin Time Window Assignment)
+- 使用 `exec_t_comp_ratioB < exec_t_comp_ratioA` 进行软预留
+- 参数：`exec_t_comp_ratioB`
+  - `exec_t_comp_ratioB = -1`: 不进行 repack
+  - `exec_t_comp_ratioB < exec_t_comp_ratioA`: 进行 repack (cyc-S, reserv)
+- 实现：`push_task_into_bins_new` with `bin_sel_mod="pre_defined"`
 
-**step 4**：
-- 随机测试，模拟运行时的调度，以及负载变化。
-- run_simulation, 包含"cyc, glb, pglb, reserv"四种方法。开始之前，需要加载step1，step2-1，step2-2，step3的结果。
+**Step 4**：
+- 随机测试，模拟运行时的调度，以及负载变化
+- run_simulation, 包含 "cyc, glb, pglb, reserv" 四种方法
+
+### 执行路径对照
+
+| 策略 | 执行路径 | 配置 |
+|------|----------|------|
+| cyc | step0-1-2 | `num_bins=-1` (最多分区), 无 repack |
+| glb | step0-1 | `num_bins=1` (单分区), 无 repack |
+| pglb | step0-1-2 | `num_bins>1` (多分区), 无 repack |
+| reserv | step0-1-2 + step3 | `num_bins >= 2` (>=1分区), 有 repack（理论扫描可含 `-1`；脚本默认扫描 `num_bins ∈ [1,2,4,8]`）|
+| cyc-S | step0-1-2 + step3 | `num_bins=-1` (最多分区), 有 repack (软预留) |
 
 ## 重要声明：固定吞吐量
 
@@ -255,7 +275,7 @@
   - Binned：p99 曲线 + IQR 带 +（可选）趋势线（`fit='wls'|'lowess'`），接口：`plot_load_latency_binned(...)`，标题给出 Spearman ρ。
 
 
-## 提出的方法的优势：消融试验和 端到端性能 
+## 提出的方法的优势：消融试验和 端到端性能
 
 本章节定义了下面两个实验：
 - 消融比较
@@ -265,64 +285,88 @@
 
 ### 消融比较
 
-
 消融试验基于我们提出的guided 分配算法。
 
-消融试验将依次应用上面的三个阶段：
-依次应用step1, step2-1, step2-2, step3，得到cyc，cyc(S)，pglb，reserv 的调度信息。
+**执行路径对照**（所有方法都需要 step0-1）：
+| 策略 | 执行路径 | 配置 |
+|------|----------|------|
+| cyc | step0-1-2 | `num_bins=-1` (最多分区), 无 repack |
+| glb | step0-1 | `num_bins=1` (单分区), 无 repack |
+| pglb | step0-1-2 | `num_bins>1` (多分区), 无 repack |
+| reserv | step0-1-2 + step3 | `num_bins >= 2` (多分区), 有 repack（理论扫描可含 `-1`；脚本默认扫描 `num_bins ∈ [1,2,4,8]`）|
+| cyc-S | step0-1-2 + step3 | `num_bins=-1` (最多分区), 有 repack (软预留) |
 
-消融比较1-(cyc(S) vs cyc)：
-证明引入时间维度的共享，能够平衡利用率和出错概率。
-【试验】
-- 变量控制：exec_t_comp_ratioA = 0.7
-- 脚本：
-  - 基于 **step 1** 得到的调度方案，使用cyc进行随机测试
-  - 基于 **step 2-1** 得到的调度方案，使用cyc-S进行随机测试
-- 扫描：exec_t_comp_ratioB \in [0.5, 0.9]
-- 绘图：`StatisticsCollector.plot_motiv_case1`（同Motiv1）
-  - 主轴：miss op ratio，idle op ratio（同Motiv1）
-  - 副轴：miss rate（同Motiv1）
-  - 横轴: exec_t_comp_ratioB
-  - 标记：exec_t_comp_ratioA = 0.5,0.7,0.99对应的miss rate和idle op ratio
-- 期望看到：
-  存在一个最优的exec_t_comp_ratioB，能最大的提升利用率的同时，降低miss rate。
+---
 
+#### 消融比较1 (cyc-S vs cyc) - 预留在串行执行下的影响
 
-消融比较2-(pglb vs glb)：
-证明引入Spatial Partitioning (Task-to-Bin Clustering) 能平衡利用率和切换开销。
-【试验】
-- 变量控制：exec_t_comp_ratioA = 0.7
-- 脚本：
-  - 基于 **step 1** 得到的调度方案，使用glb进行随机测试
-  - 基于 **Step 2-2** 得到的调度方案，使用pglb进行随机测试
-- 扫描：分箱的数量，i.e., \( num_bin \in [1, num_bin_max] \)
+证明引入时间维度的共享（软预留），能够平衡利用率和出错概率。
 
-- 绘图：
-  - 主轴：切换次数
-  - 副轴：切换开销
-  - 横轴: num_bin
-  - 获取方式：
-    - 切换次数：`collector.get_realloc_info()['realloc_mean_count']`
-    - 切换开销：`collector.get_realloc_info()['realloc_mean_ratio']`
-  - 期望看到：
-    - （pglb）随着num_bin增加，切换次数不变，但是切换开销降低
-    - （reserv）随着num_bin增加，切换次数和切换开销都降低
+【试验设置】
+- **固定参数**：`exec_t_comp_ratioA = 0.7`, `num_bins = -1` (最多分区)
+- **资源控制**：固定 `num_cores`（总资源不变）
+- **脚本**：
+  - cyc: 执行 step0-1-2
+  - cyc-S: 执行 step0-1-2 + step3（repack）
+- **扫描**：`exec_t_comp_ratioB ∈ [0.5, 0.99]`（软预留分位数）
+- **横轴**：`exec_t_comp_ratioB`
+- **参考线**：标记 `exec_t_comp_ratioA = 0.5, 0.7, 0.99` 的 cyc 结果
 
-消融比较3-(reserv vs pglb)：
-证明调整和分箱和repack，能够保证，即使随着硬件和任务规模的增长，资源利用率和切换开销维持在一个较优的范围内。
-- 脚本：
-  - 基于 **Step 2-2** 得到的调度方案，使用pglb进行随机测试
-  - 基于 **step 1** 得到的调度方案，使用reserv进行随机测试
-- 扫描：调整硬件和任务规模（同Motiv2）
-  - 硬件tile数：\([300, 500]\)
-  - 任务链数量：\([1, 4]\)
-  - 任务负载倍数：\([0.5, 1]\)（相对于基线workload）
-- 绘图（同Motiv2）：
-  - 主轴：切换次数
-  - 副轴：切换开销
-  - 横轴: 硬件tile数，任务链数量，任务负载倍数
-  - 期望看到：
-    - 随着硬件和任务规模的变化，切换次数和切换开销都维持在一个较优的范围内
+【绘图】
+- 使用 `StatisticsCollector.plot_motiv_case1`（同Motiv1）
+- 主轴：miss op ratio，idle op ratio
+- 副轴：miss rate
+- 横轴：`exec_t_comp_ratioB`
+- **参考线**：将硬隔离 cyc（不同 `exec_t_comp_ratioA` 值如 0.5, 0.7, 0.99）的结果作为参考点投影在图上，体现软预留的可靠性提升
+- 期望：随着 `exec_t_comp_ratioB` 变激进，可靠性单调变好；存在一个最优值能平衡利用率和 miss rate
+
+---
+
+#### 消融比较2 (pglb vs glb) - 隔离的作用
+
+证明引入 Spatial Partitioning (Task-to-Bin Clustering) 能平衡利用率和切换开销。
+
+【试验设置】
+- **固定参数**：`exec_t_comp_ratioA = 0.7`, `exec_t_comp_ratioB = -1`
+- **资源控制**：与 Motiv2 保持相同的负载强度（负载规模/硬件规模组合），不使用 `exec_t_comp_ratioA` 进行资源控制
+  - 内部会触发 `force_num_cores` 逻辑来匹配 glb 的资源需求
+- **脚本**：
+  - glb: 执行 step0-1
+  - pglb: 执行 step0-1-2，`num_bins ∈ [1, num_bin_max]`
+- **扫描**：
+  - 横轴：`num_bins`（分区数量）\in [1] + range(2, -1 对应的最大分区数量, 2)
+  - 负载强度组合（同 Motiv2）：tiles ∈ [200, 400], chains ∈ [1, 4], load_factor ∈ [0.5, 1.0]
+
+【绘图】
+- 主轴：切换次数
+- 副轴：切换开销
+- 获取方式：
+  - 切换次数：`collector.get_realloc_info()['realloc_mean_count']`
+  - 切换开销：`collector.get_realloc_info()['realloc_mean_ratio']`
+- 期望：
+  - pglb：随着 `num_bins` 增加，切换次数不变，但切换开销降低
+
+---
+
+#### 消融比较3 (reserv vs pglb) - 预留在并行下的影响
+
+证明调整分箱和 repack，能够保证即使随着硬件和任务规模的增长，资源利用率和切换开销维持在一个较优的范围内。
+
+【试验设置】
+- **固定参数**：`exec_t_comp_ratioA = 0.7`
+- **基础配置**：reserv 基于 pglb（step0-1-2）加入 repack（step3），同时具备两种可调节机制
+- **脚本**：
+  - pglb: 执行 step0-1-2，`num_bins > 1`，无 repack
+  - reserv: 执行 step0-1-2 + step3（repack），`num_bins > 1`
+- **扫描**（reserv 同时扫描两个机制参数）：
+  - `exec_t_comp_ratioB ∈ [0.5, 0.99]`（时间预留激进程度）
+  - 理论参数：`num_bins ∈ [1, 2, 4, 8, -1]`；脚本默认扫描：`num_bins ∈ [1, 2, 4, 8]`
+  - 负载强度组合：脚本默认多组扫描 `tiles ∈ [200, 400], chains ∈ [1, 4], load_factor ∈ [0.5, 1.0]`；并支持固定单一负载强度模式
+
+【绘图】
+- 主轴：切换次数、切换开销
+- 横轴：`exec_t_comp_ratioB` 和 `num_bins`
+- 期望：随着 `exec_t_comp_ratioB` 激进，切换开销和切换次数先下降后上升；延迟满足率先上升后下降（和第一个消融实验截然不同）。随着 `num_bins` 增加，切换开销进一步降低
 
 ### 端到端的比较
 

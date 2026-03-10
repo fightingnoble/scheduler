@@ -10,12 +10,17 @@ from global_var import *
 from task.task_agent import ProcessInt
 from task.task_agent import TaskInt
 from model.lru import LRUCache
-from model.task_queue_agent import TaskQueue 
+from model.task_queue_agent import TaskQueue
 from sched.scheduling_table import SchedulingTableInt
 from sched.sort_function import get_process_sort
 from sched.bin_ops import sort_bin_list_EAT, sort_bin_list_by_barycenter
 from sched.monitor_agent import get_rsc_2b_released, get_target_bin_id
 from sched.ref_alloc_search import TaskConstraints
+
+
+class ResourceInsufficientError(Exception):
+    """当 Bin 资源不足以容纳任务时抛出的异常"""
+    pass
 
 
 def glb_alloc_new2(process_dict, quantumSize, timestep, 
@@ -149,6 +154,8 @@ def allocate_rsc_4_process_new2(
     bin_sel_mod = binpack_cfg.get("bin_sel_mod", "search")
     affinity_en = binpack_cfg.get("affinity_en", True)
     affinity_level = binpack_cfg.get("affinity_level", 2)
+    # 从 binpack_cfg 读取 total_cores，用于资源估算的上限
+    tot_cores = binpack_cfg.get("total_cores", 300)
     
     if bin_sel_mod == "pre_defined":
         if 'mapping' not in binpack_cfg or binpack_cfg['mapping'] is None:
@@ -170,10 +177,8 @@ def allocate_rsc_4_process_new2(
         core_max=_p.task.core_max_compile,
         core_list=_p.task.core_list_compile
     )
-    tot_cores = 300 # TODO: Make this a configurable parameter
     req_rsc_size, got_latency, got_constr = _p.rsc_req_estm_quantile(
-        _p, slack, FLOPS_PER_CORE, binpack_cfg, constr,
-        time_slot_s=None, time_slot_e=None, max_size=tot_cores
+        slack, FLOPS_PER_CORE, binpack_cfg, constr, max_size=tot_cores
         )
     time_slot_e = time_slot_s + math.ceil(got_latency/timestep)
 
@@ -190,11 +195,15 @@ def allocate_rsc_4_process_new2(
         bin_id = pid2bin_id[_p.pid]
         affinity_tgt_bin_id_list = [bin_id,]
         affinity_search_bin_id_list = []
-        if bin_list[bin_id].num_resources < req_rsc_size: 
-            # Note: legacy comparison path; estim_size now equals req_rsc_size under quantile model
-            print("Exit: The bin({bin_id}) has not enough resources to fit the task({_p.task.name})")
-            import sys; sys.exit(1)
-            
+        if bin_list[bin_id].num_resources < req_rsc_size:
+            # 抛出异常而非硬退出，允许上层捕获并处理
+            raise ResourceInsufficientError(
+                f"Bin {bin_id} (resources={bin_list[bin_id].num_resources}) "
+                f"cannot fit task {_p.task.name} (requires={req_rsc_size}). "
+                f"This may indicate a mismatch between bin allocation (ratioA) "
+                f"and task estimation."
+            )
+
     else:
         affinity_tgt_bin_id_list, affinity_search_bin_id_list = bin_sel(_p, time_slot_s, time_slot_e, req_rsc_size, rsc_recoder_his, 
                                                                     bin_list, bin_name_list, timestep, binpack_cfg, process_dict)

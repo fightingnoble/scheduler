@@ -153,7 +153,7 @@ def input_parser():
     parser.add_argument("--gen_benchmark", default=False, action="store_true", help="generate benchmark")
     parser.add_argument("--root_dir", default=".", type=str, help="root directory")
 
-    parser.add_argument("--bin_pack_cfg", default="BP_guided.json", type=str, help="bin pack config file")
+    parser.add_argument("--bin_pack_cfg", default="Bp_guided.json", type=str, help="bin pack config file")
     parser.add_argument("--bin_pack_para", default=dict(), type=dict_type, help="bin pack algorithm parameters")
 
     parser.add_argument("--max_core_stat", default=False, type=bool, help="max core stat")

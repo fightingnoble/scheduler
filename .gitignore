@@ -172,3 +172,4 @@ sim/type.py
 task/load_cfg/load_chain.py
 
 *results/*
+scheduler_paper

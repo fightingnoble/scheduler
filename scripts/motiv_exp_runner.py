@@ -16,182 +16,28 @@ Usage:
 """
 
 import argparse
-import os
 import sys
 import json
-import copy
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-# 并行与物理核心数
 from concurrent.futures import ProcessPoolExecutor, as_completed
-try:
-    import psutil
-    _PHYSICAL_CORES = psutil.cpu_count(logical=False) or os.cpu_count()
-except Exception:
-    _PHYSICAL_CORES = os.cpu_count()
 
 # 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# 从公共模块导入共享组件
+from scripts.exp_common import (
+    _PHYSICAL_CORES,
+    mapping_args,
+    specific_args,
+    runtime_args,
+    ParamTemplate,
+    run_main_approach_inproc,
+)
 from approach_collector import StatisticsCollector
 
-mapping_args = {
-    'G_decomp_mode': "full",
-    'exec_t_comp_ratioA': 0.99,
-    'exec_t_comp_ratioB': -1,
-    'e2e_latency': 0.1,
-    'aux_scale_factor': 1,
-    'test_case': 'bin_pack_new',
-    'num_bins': -1,
-    'bin_pack_cfg': 'Bp_guided.json',
-    'n_p': 3,
-}
-
-# to be specified by the user
-specific_args = {
-    'root_dir': None,
-    'verbose': None,
-    'stat_param': None,
-}
-
-runtime_args = {
-    'n_p': None,
-    'policy': None,
-}
-
-class ParamTemplate:
-    """参数模板，封装三类参数并提供克隆、增量更新与合并导出能力。"""
-
-    def __init__(self, mapping: Dict[str, Any], runtime: Dict[str, Any], specific: Dict[str, Any]):
-        self.mapping = copy.deepcopy(mapping)
-        self.runtime = copy.deepcopy(runtime)
-        self.specific = copy.deepcopy(specific)
-
-    def clone(self) -> 'ParamTemplate':
-        return ParamTemplate(self.mapping, self.runtime, self.specific)
-
-    def with_updates(
-        self,
-        mapping: Optional[Dict[str, Any]] = None,
-        runtime: Optional[Dict[str, Any]] = None,
-        specific: Optional[Dict[str, Any]] = None,
-    ) -> 'ParamTemplate':
-        new_mapping = copy.deepcopy(self.mapping)
-        new_runtime = copy.deepcopy(self.runtime)
-        new_specific = copy.deepcopy(self.specific)
-        if mapping:
-            new_mapping.update(mapping)
-        if runtime:
-            new_runtime.update(runtime)
-        if specific:
-            new_specific.update(specific)
-        return ParamTemplate(new_mapping, new_runtime, new_specific)
-
-    def to_run_args(self) -> Dict[str, Any]:
-        # 合并并过滤 None
-        merged: Dict[str, Any] = {}
-        for group in (self.mapping, self.runtime, self.specific):
-            for k, v in group.items():
-                if v is not None:
-                    merged[k] = v
-        return merged
-
-def parse_args():
-    """解析命令行参数"""
-    parser = argparse.ArgumentParser(description='Motivation Experiments Runner')
-    
-    # 实验选择
-    parser.add_argument('--case', type=int, required=True, choices=[1, 2, 3],
-                       help='实验编号: 1=静态利用率问题, 2=动态可扩展性问题, 3=切换不确定性')
-    
-    # 输出配置
-    parser.add_argument('--output_dir', type=str, default='./motiv_exp_results',
-                       help='输出目录（默认: ./motiv_exp_results）')
-    parser.add_argument('--cache_collectors', action='store_true', default=True,
-                       help='缓存StatisticsCollector对象（默认: True）')
-    
-    # Case 1 特定参数
-    parser.add_argument('--case1_ratios', type=str, default='0.5,0.6,0.7,0.8,0.9,0.99',
-                       help='Case 1: exec_t_comp_ratioA扫描值（逗号分隔）')
-    
-    # Case 2 特定参数
-    parser.add_argument('--case2_tiles', type=str, default='400,400,200,200',
-                       help='Case 2: 硬件tile数扫描值（逗号分隔，与--case2_loads等长且一一对应）')
-    parser.add_argument('--case2_loads', type=str, default='0.5,1.0,0.5,1.0',
-                       help='Case 2: 负载倍数扫描值（逗号分隔，与--case2_tiles等长且一一对应）')
-    parser.add_argument('--case2_chains', type=str, default='1,4,9',
-                       help='Case 2: 任务链数量扫描值（逗号分隔）')
-    
-    # Case 3 特定参数
-    parser.add_argument('--case3_mode', type=str, default='raw', choices=['raw', 'binned'],
-                       help='Case 3: 数据收集模式（raw或binned）')
-    parser.add_argument('--case3_baseline', action='store_true',
-                       help='Case 3: 运行基线组（禁用切换开销）')
-    parser.add_argument('--case3_experiment', action='store_true',
-                       help='Case 3: 运行实验组（启用切换开销）')
-    parser.add_argument('--case3_num_periods', type=int, default=1000,
-                       help='Case 3: 仿真周期数')
-    
-    # 通用仿真参数
-    parser.add_argument('--num_hp', type=int, default=100,
-                       help='仿真超周期数（默认: 100）')
-    parser.add_argument('--verbose', action='store_true',
-                       help='详细输出')
-    parser.add_argument('--dry_run', action='store_true',
-                       help='只打印命令，不执行')
-                       
-    parser.add_argument('--use_plot_cache', action='store_true',
-                          help='跳过仿真，直接从缓存的JSON结果生成图表')
-
-    parser.add_argument('--base_ratioA', type=float, default=0.99,
-                       help='Case 2/3: 基准 exec_t_comp_ratioA（默认: 0.9）')
-    parser.add_argument('--base_ratioB', type=float, default=-1,
-                       help='Case 2/3: 基准 exec_t_comp_ratioB（默认: -1）')
-        
-    # 传递给main_approach.py的额外参数
-    parser.add_argument('--extra_args', type=str, default='',
-                       help='传递给main_approach.py的额外参数（空格分隔）')
-    
-    return parser.parse_args()
-
-
-def run_main_approach_inproc(args_dict: Dict[str, Any], dry_run: bool = False):
-    """以函数方式调用 main_approach.main()，避免子进程与磁盘往返。
-
-    构造 sys.argv 供 utils.input_parser() 使用，返回 main_approach.main() 的 StatisticsCollector。
-    """
-    # 固定附加参数（与sum.md一致）
-    argv = [
-        'main_approach.py',
-        '--profiling_filename', 'profiling/profiling_light.csv',
-        '--gen_benchmark',
-    ]
-    for key, value in args_dict.items():
-        if value is None:
-            raise ValueError(f"Argument {key} is None")
-        if isinstance(value, bool):
-            if value:
-                argv.append(f'--{key}')
-        else:
-            argv.extend([f'--{key}', str(value)])
-
-    print(f"\n{'[DRY RUN] ' if dry_run else ''}Args: {' '.join(argv[1:])}")
-    if dry_run:
-        return None
-
-    # 临时替换 sys.argv 调用 main_approach.main()
-    import sys as _sys
-    from main_approach import main as _main
-    old_argv = list(_sys.argv)
-    try:
-        _sys.argv = argv
-        collector = _main()
-    finally:
-        _sys.argv = old_argv
-    return collector
-
-
-# -------------- Parallel workers --------------
+# -------------- Parallel workers -------------
 
 def _case1_worker(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Worker for Case 1. Returns a result dict; returns None in dry_run."""
@@ -732,6 +578,64 @@ class MotivExp3Runner:
                 )
         
         print(f"\n✓ Case 3 完成！结果保存在: {self.output_dir}")
+
+def parse_args():
+    """解析命令行参数"""
+    parser = argparse.ArgumentParser(description='Motivation Experiments Runner')
+    
+    # 实验选择
+    parser.add_argument('--case', type=int, required=True, choices=[1, 2, 3],
+                       help='实验编号: 1=静态利用率问题, 2=动态可扩展性问题, 3=切换不确定性')
+    
+    # 输出配置
+    parser.add_argument('--output_dir', type=str, default='./motiv_exp_results',
+                       help='输出目录（默认: ./motiv_exp_results）')
+    parser.add_argument('--cache_collectors', action='store_true', default=True,
+                       help='缓存StatisticsCollector对象（默认: True）')
+    
+    # Case 1 特定参数
+    parser.add_argument('--case1_ratios', type=str, default='0.5,0.6,0.7,0.8,0.9,0.99',
+                       help='Case 1: exec_t_comp_ratioA扫描值（逗号分隔）')
+    
+    # Case 2 特定参数
+    parser.add_argument('--case2_tiles', type=str, default='400,400,200,200',
+                       help='Case 2: 硬件tile数扫描值（逗号分隔，与--case2_loads等长且一一对应）')
+    parser.add_argument('--case2_loads', type=str, default='0.5,1.0,0.5,1.0',
+                       help='Case 2: 负载倍数扫描值（逗号分隔，与--case2_tiles等长且一一对应）')
+    parser.add_argument('--case2_chains', type=str, default='1,4,9',
+                       help='Case 2: 任务链数量扫描值（逗号分隔）')
+    
+    # Case 3 特定参数
+    parser.add_argument('--case3_mode', type=str, default='raw', choices=['raw', 'binned'],
+                       help='Case 3: 数据收集模式（raw或binned）')
+    parser.add_argument('--case3_baseline', action='store_true',
+                       help='Case 3: 运行基线组（禁用切换开销）')
+    parser.add_argument('--case3_experiment', action='store_true',
+                       help='Case 3: 运行实验组（启用切换开销）')
+    parser.add_argument('--case3_num_periods', type=int, default=1000,
+                       help='Case 3: 仿真周期数')
+    
+    # 通用仿真参数
+    parser.add_argument('--num_hp', type=int, default=100,
+                       help='仿真超周期数（默认: 100）')
+    parser.add_argument('--verbose', action='store_true',
+                       help='详细输出')
+    parser.add_argument('--dry_run', action='store_true',
+                       help='只打印命令，不执行')
+                       
+    parser.add_argument('--use_plot_cache', action='store_true',
+                          help='跳过仿真，直接从缓存的JSON结果生成图表')
+
+    parser.add_argument('--base_ratioA', type=float, default=0.99,
+                       help='Case 2/3: 基准 exec_t_comp_ratioA（默认: 0.9）')
+    parser.add_argument('--base_ratioB', type=float, default=-1,
+                       help='Case 2/3: 基准 exec_t_comp_ratioB（默认: -1）')
+        
+    # 传递给main_approach.py的额外参数
+    parser.add_argument('--extra_args', type=str, default='',
+                       help='传递给main_approach.py的额外参数（空格分隔）')
+    
+    return parser.parse_args()
 
 
 def main():
