@@ -38,10 +38,14 @@ def generate_bin_paths(path_para_dict, path_ctx: PathContext, num_cores, check_h
     Returns:
         tuple: (bin_list_save_path, routing_table_save_path)
     """
-    # 使用旧方法生成路径
-    old_bin_list_save_path = bin_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
-    old_routing_table_save_path = routing_table_save_fmt.format(**path_para_dict, **{"num_cores": num_cores})
-    
+    # 使用旧方法生成路径（需要将 extra_suffix 也加入旧格式参数）
+    old_fmt_params = {**path_para_dict, "num_cores": num_cores}
+    if extra_suffix:
+        old_fmt_params["i_file_suffix"] = f"{old_fmt_params.get('i_file_suffix', '')}{extra_suffix}"
+        old_fmt_params["file_suffix"] = f"{old_fmt_params.get('file_suffix', '')}{extra_suffix}"
+    old_bin_list_save_path = bin_save_fmt.format(**old_fmt_params)
+    old_routing_table_save_path = routing_table_save_fmt.format(**old_fmt_params)
+
     # 使用新方法生成路径：直接改 PathContext
     if extra_suffix:
         path_ctx.file_suffix = f"{path_ctx.file_suffix}{extra_suffix}"

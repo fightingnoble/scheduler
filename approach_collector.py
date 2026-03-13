@@ -792,6 +792,15 @@ class StatisticsCollector:
         line = ax2.plot(x_pos, miss_counts, 'o-', color=COLOR_LINE, linewidth=1.5,
                        markersize=4, label='Miss Rate', alpha=0.8)
 
+        # 检查是否传入了 cyc 参考数据
+        if data_points and 'cyc_ref' in data_points[0]:
+            cyc_ref_data = data_points[0]['cyc_ref']
+            for cyc_p in cyc_ref_data:
+                y_val = cyc_p['miss_mean_count']
+                ax2.axhline(y=y_val, color='gray', linestyle=':', alpha=0.6, linewidth=1)
+                ax2.text(1.05, y_val, f"cyc p{int(cyc_p['ratio']*100)}", transform=ax2.get_yaxis_transform(),
+                       ha='left', va='center', fontsize=7, color='gray')
+
         # 移除柱状图标记（对数轴上位置难以控制）
         # 改为在图下方添加数据表格
 
@@ -909,22 +918,56 @@ class StatisticsCollector:
         plt.close(fig)
     
     @staticmethod
-    def _cluster_case2_data(data_points: List[Dict], group_order: List = None):
-        """辅助函数：将 Case 2 数据按 (tiles, load_factor) 分簇，簇内按 chains 分组
-        
-        按 group_order 指定的顺序组织数据。
-        
+    def _cluster_case2_data(data_points: List[Dict], group_order: List = None, group_by_bins: bool = False):
+        """辅助函数：将 Case 2/3 数据按 (tiles, load_factor) 或 num_bins 分簇，簇内按 chains 等分组
+
+        如果 group_by_bins=True，则按 num_bins 分簇（适用于消融实验2和3）。
+
         Args:
-            data_points: 包含 tiles, load_factor, chains 等字段的数据点列表
-            group_order: [cluster_keys_list, chains_list]，指定簇和簇内的顺序
-                        例如：[[(400, 0.5), (400, 1.0), (200, 0.5)], [1, 4, 9]]
-        
+            data_points: 包含 tiles, load_factor, chains, num_bins 等字段的数据点列表
+            group_order: [cluster_keys_list, inner_keys_list]
+            group_by_bins: 是否使用 num_bins 作为簇的主键
+
         Returns:
-            clusters: OrderedDict {(tiles, load): OrderedDict{chains: data_point}}
+            clusters: OrderedDict
         """
         from collections import OrderedDict
-        
-        # 先将数据点按 (tiles, load, chains) 索引化
+
+        # 如果是按 bins 分簇
+        if group_by_bins:
+            data_index = {}
+            for p in data_points:
+                num_bins = p.get('num_bins', 1)
+                tiles = p.get('tiles', 0)
+                load_factor = p.get('load_factor', 0)
+                chains = p.get('chains', 0)
+                # 簇键: num_bins, 簇内键: (tiles, load_factor, chains)
+                # 为了简化图表，我们如果存在多种负载，簇内只展示按不同负载区分
+                # 这里假设 group_order 传入的是 [bins_list, load_configs_list]
+                # 其中 load_configs_list 是 [(tiles, load, chains), ...] 的列表
+
+                # 如果没有传入，默认从数据中提取
+                inner_key = f"{tiles}T-{chains}C-{load_factor}x"
+                data_index[(num_bins, inner_key)] = p
+
+            if group_order:
+                cluster_keys_order = group_order[0]
+                inner_keys_order = group_order[1]
+            else:
+                cluster_keys_order = sorted(list(set(k[0] for k in data_index.keys())))
+                inner_keys_order = sorted(list(set(k[1] for k in data_index.keys())))
+
+            clusters = OrderedDict()
+            for cluster_key in cluster_keys_order:
+                clusters[cluster_key] = OrderedDict()
+                for inner_key in inner_keys_order:
+                    full_key = (cluster_key, inner_key)
+                    if full_key in data_index:
+                        clusters[cluster_key][inner_key] = data_index[full_key]
+
+            return clusters
+
+        # 原始按 (tiles, load_factor) 分簇逻辑
         data_index = {}
         for p in data_points:
             tiles = p.get('tiles', 0)
@@ -932,10 +975,10 @@ class StatisticsCollector:
             chains = p.get('chains', 0)
             key = (tiles, load_factor, chains)
             data_index[key] = p
-            
-        cluster_keys_order = group_order[0]
-        chains_order = group_order[1]
-        
+
+        cluster_keys_order = group_order[0] if group_order else sorted(list(set((k[0], k[1]) for k in data_index.keys())))
+        chains_order = group_order[1] if group_order else sorted(list(set(k[2] for k in data_index.keys())))
+
         # 按指定顺序重建 clusters
         clusters = OrderedDict()
         for cluster_key in cluster_keys_order:
@@ -944,12 +987,12 @@ class StatisticsCollector:
                 full_key = (cluster_key[0], cluster_key[1], chains)
                 if full_key in data_index:
                     clusters[cluster_key][chains] = data_index[full_key]
-        
+
         return clusters
-    
+
     @staticmethod
-    def plot_motiv_case2(data_points: List[Dict], plot_type: str, 
-                        save_path: str, show: bool = False, group_order: List = None):
+    def plot_motiv_case2(data_points: List[Dict], plot_type: str,
+                        save_path: str, show: bool = False, group_order: List = None, group_by_bins: bool = False):
         """[Motiv-Exp-2] 绘制可扩展性分析图
         
         支持两种图表类型：
@@ -1007,10 +1050,13 @@ class StatisticsCollector:
             ax2 = ax.twinx()
 
             # 使用分簇逻辑
-            clusters = StatisticsCollector._cluster_case2_data(data_points, group_order)
+            clusters = StatisticsCollector._cluster_case2_data(data_points, group_order, group_by_bins)
 
-            # 从排序好的 clusters 中提取 labels 和 chains
-            cluster_labels = [f'{t}T-{l:.1f}×' for t, l in clusters.keys()]
+            # 从排序好的 clusters 中提取 labels
+            if group_by_bins:
+                cluster_labels = [f'Bins={b}' for b in clusters.keys()]
+            else:
+                cluster_labels = [f'{t}T-{l:.1f}×' for t, l in clusters.keys()]
             chain_values = list(next(iter(clusters.values())).keys()) if clusters else []
 
             num_clusters = len(clusters)
@@ -1073,7 +1119,7 @@ class StatisticsCollector:
 
             # 主轴设置
             ax.set_ylabel(r'Lat. Ratio w.r.t. $\mathcal{D}_{\mathrm{e2e}}$', fontsize=9, color='black')
-            ax.set_title('Tp-driven: Latency Breakdown vs Scale', fontsize=9, pad=8)
+            ax.set_title('Ablation: Latency Breakdown vs Scale/Bins', fontsize=9, pad=8)
             ax.set_xticks(x_pos)
             ax.set_xticklabels(cluster_labels, rotation=0, fontsize=7)
             ax.axhline(y=1.0, color='r', linestyle='--', linewidth=1, alpha=0.5)
@@ -1082,7 +1128,10 @@ class StatisticsCollector:
             # 附轴设置
             ax2.set_ylabel('Miss Rate', fontsize=9, color=COLOR_LINE)
             ax2.tick_params(axis='y', labelcolor=COLOR_LINE, labelsize=7)
-            ax.set_xlabel('Scale Configurations', fontsize=9)
+            if group_by_bins:
+                ax.set_xlabel('Number of Partitions (num_bins)', fontsize=9)
+            else:
+                ax.set_xlabel('Scale Configurations', fontsize=9)
 
             # 图例：两列布局
             # 第一列：Waiting, Scheduling, Execution（与堆叠顺序一致）
@@ -1125,10 +1174,13 @@ class StatisticsCollector:
             COLOR_LINE = 'C3'
 
             # 1. 使用分簇逻辑
-            clusters = StatisticsCollector._cluster_case2_data(data_points, group_order)
+            clusters = StatisticsCollector._cluster_case2_data(data_points, group_order, group_by_bins)
 
-            # 从排序好的 clusters 中提取 labels 和 chains
-            cluster_labels = [f'{t}T-{l:.1f}×' for t, l in clusters.keys()]
+            # 从排序好的 clusters 中提取 labels
+            if group_by_bins:
+                cluster_labels = [f'Bins={b}' for b in clusters.keys()]
+            else:
+                cluster_labels = [f'{t}T-{l:.1f}×' for t, l in clusters.keys()]
             chain_values = list(next(iter(clusters.values())).keys()) if clusters else []
 
             # 2. 计算位置
@@ -1194,9 +1246,12 @@ class StatisticsCollector:
                      label='Ops Ratio (Miss)', alpha=0.8)
 
             # 6. 主轴设置
-            ax.set_xlabel('Scale Configurations', fontsize=9)
+            if group_by_bins:
+                ax.set_xlabel('Number of Partitions (num_bins)', fontsize=9)
+            else:
+                ax.set_xlabel('Scale Configurations', fontsize=9)
             ax.set_ylabel('Tile Util.', fontsize=9, color='black')
-            ax.set_title('Tp.-driven: Resource Utilization vs Scale', fontsize=9, pad=8)
+            ax.set_title('Ablation: Resource Utilization vs Scale/Bins', fontsize=9, pad=8)
             ax.set_ylim([0, 1.1])
             ax.set_xticks(x_pos)
             ax.set_xticklabels(cluster_labels, rotation=0, fontsize=7) #  ha='right',
@@ -1218,7 +1273,12 @@ class StatisticsCollector:
                 handles_col1.append(Rectangle((0, 0), 1, 1, facecolor=clr, edgecolor='black', alpha=0.8))
 
             handles_col2 = []
-            labels_col2 = [f'{ch} chains' for ch in chain_values]
+            # 对于按 bin 分组的情况，内层键是负载配置
+            if group_by_bins:
+                labels_col2 = [f'{inner}' for inner in chain_values]
+            else:
+                labels_col2 = [f'{ch} chains' for ch in chain_values]
+
             for i, ch in enumerate(chain_values):
                 hatch_pattern = hatch_patterns[i % len(hatch_patterns)]
                 handles_col2.append(Rectangle((0, 0), 1, 1, facecolor='lightgray',

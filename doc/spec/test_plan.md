@@ -79,8 +79,8 @@
 **Step 1** (deduce_cfg2)：
 - 计算时间片初始分派（per-task 的 deadline）
 - 计算资源需求
-- 由 `exec_t_comp_ratioA` 参数控制初始预留分位数
-- **所有调度方法都需要**
+- 由 `args.quantile` 参数控制分位数：Phase 1 设为 `exec_t_comp_ratioA`，repack 设为 `exec_t_comp_ratioB`
+- **所有调度方法都需要**；repack 时用 ratioB 重跑以重算任务 deadline
 - 实现文档：doc/spec/algorithm/chain_slack_assignment_algorithm.md
 
 **Step 2** (bin_split，可选)：
@@ -318,7 +318,8 @@
 - 副轴：miss rate
 - 横轴：`exec_t_comp_ratioB`
 - **参考线**：将硬隔离 cyc（不同 `exec_t_comp_ratioA` 值如 0.5, 0.7, 0.99）的结果作为参考点投影在图上，体现软预留的可靠性提升
-- 期望：随着 `exec_t_comp_ratioB` 变激进，可靠性单调变好；存在一个最优值能平衡利用率和 miss rate
+- 期望：随着 `exec_t_comp_ratioB` 变激进，可靠性单调变好；
+<!-- - 存在一个最优值能平衡利用率和 miss rate -->
 
 ---
 

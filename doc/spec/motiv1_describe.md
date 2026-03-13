@@ -1,53 +1,51 @@
-Case 1的柱状图：添加对数轴、三个柱子（idle/miss/realloc）和附轴显示miss_count。
+# Motivation Experiment 1: Static Scheduling Utilization-Reliability Tradeoff
 
-**双轴设计**:
-- **主轴（左Y轴）**: 对数轴显示三个ratio的百分比
-- **附轴（右Y轴）**: 线性轴显示miss_count数量
+## Figure Description
 
-**三个柱子**:
-- 🟠 **橙色柱**: Idle Ratio（闲置算力占比）
-- 🟢 **绿色柱**: Miss Ratio（miss负载占比）  
-- 🔴 **红色柱**: Realloc Ratio（切换开销占比）
+**Utilization-Reliability Tradeoff (Fig. 1)**: Grouped bar chart with logarithmic primary axis illustrates the fundamental tradeoff inherent in static cyclic scheduling. Each percentile point displays three side-by-side bars representing capacity breakdown: idle ratio, miss ratio, and realloc ratio. The auxiliary linear axis overlays miss rate as a connected line, with cyc reference points projected as horizontal dashed lines when used in ablation context.
 
-**附轴线图**:
-- 🔵 **蓝色线**: Miss Count（miss任务数量）
+## Visual Specification
 
-### 📊 视觉改进
+| Property | Value |
+|----------|-------|
+| Figure size | (4, 2.2) inches |
+| DPI | 150 |
+| Implementation | `StatisticsCollector.plot_motiv_case1()` |
+| Output | `case1_motiv1_style.pdf` |
 
-1. **对数轴优势**:
-   - 能同时显示大值（如0.1）和小值（如0.001）
-   - 更好地展示ratio的变化趋势
-   - 添加了1%和10%参考线
+### Axes
 
-2. **数值标注**:
-   - 柱子顶部：科学计数法（<0.01）或小数（≥0.01）
-   - 线上标注：miss_count的精确数值
+- **X-axis**: Reservation percentile labels (e.g., p50, p60, ..., p99)
+- **Y-left (primary)**: Ops Ratio, **logarithmic** scale — displays three grouped bars
+- **Y-right (secondary)**: Miss Rate, linear scale — line plot
 
-3. **颜色编码**:
-   - 主轴：黑色标签和网格
-   - 附轴：蓝色标签
-   - 图例：合并显示所有元素
+### Visual Elements
 
-### 🔧 技术实现
+**Three grouped bars** (side-by-side, width=0.25 each, on log-scale primary axis):
 
-```python
-# 主轴：对数轴柱状图
-ax1.set_yscale('log')
-bars1 = ax1.bar(x_pos - width, idle_ratios, ...)    # 橙色
-bars2 = ax1.bar(x_pos, miss_ratios, ...)           # 绿色  
-bars3 = ax1.bar(x_pos + width, realloc_ratios, ...) # 红色
+| Bar | Metric | Color | Matplotlib |
+|-----|--------|-------|------------|
+| Idle | `idle_mean_ratio` | Gray | `C7` |
+| Miss | `miss_mean_ratio` | Red | `C3` |
+| Realloc | `realloc_mean_ratio` | Orange | `C1` |
 
-# 附轴：线性轴线图
-ax2 = ax1.twinx()
-line = ax2.plot(x_pos, miss_counts, 'o-', ...)     # 蓝色线
-```
+**Miss Rate line** (linear secondary axis):
 
-### 📈 期望效果
+| Element | Metric | Color | Style |
+|---------|--------|-------|-------|
+| Miss Rate | `miss_mean_count` | Purple | `C4`, `o-`, lw=1.5 |
 
-对于纯静态调度（Case 1）：
-- **Idle柱**: 随预留分位数增加而升高（p50→p99）
-- **Miss柱**: 随预留分位数增加而降低
-- **Realloc柱**: 应接近0（纯静态无切换开销）
-- **Miss Count线**: 随预留分位数增加而下降
+**Reference lines** (ablation mode, when `cyc_ref` data present):
+- Gray horizontal dashed lines on Y-right, labeled `cyc p{N}` at right margin
 
-这种设计能清晰展示静态方法的"利用率-可靠性权衡"关系！🎯
+### Data Sources
+
+- `collector.get_motiv_case1_stats()` returns `idle_mean_ratio`, `miss_mean_ratio`, `miss_mean_count`, `realloc_mean_ratio`
+- Bottom data table: two-column layout showing exact Idle/Miss values per percentile
+
+## Expected Trends (Static Scheduling)
+
+- Idle ratio increases with percentile (p50 → p99): more conservative reservation wastes more resources
+- Miss ratio decreases with percentile: higher reservation guarantees fewer deadline violations
+- Realloc ratio near zero: static scheduling has no runtime switching overhead
+- Miss Rate line trends downward monotonically

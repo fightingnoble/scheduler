@@ -92,7 +92,8 @@
 │  │ preprocess_args(args)                                                        │ │
 │  │ ├── 强制后缀处理: force_suffix                                                │ │
 │  │ ├── enforce_wc 设置                                                          │ │
-│  │ └── test_case 特殊检查                                                       │ │
+│  │ ├── test_case 特殊检查                                                       │ │
+│  │ └── core_size 配置处理 (induced vs specified)                                │ │
 │  └──────────────────────────────────────────────────────────────────────────────┘ │
 │                                      │                                             │
 │                                      ▼                                             │
@@ -179,7 +180,8 @@
 │  │ │  返回: num_periods, warmup, quantumSize, event_range, event_iter_dict     │ │
 │  │ │                                                                            │ │
 │  │ │  事件生成: TaskInt.get_event_generator(glb_p_list, ...)                   │ │
-│  │ │  └── 生成到达时间、截止时间、负载的迭代器                                   │ │
+│  │ │  ├── 生成到达时间、截止时间、负载的迭代器                                   │ │
+│  │ │  └── 设置随机种子                                                         │ │
 │  └──────────────────────────────────────────────────────────────────────────────┘ │
 │                                      │                                             │
 │                                      ▼                                             │
@@ -279,6 +281,16 @@
 │                                                                                    │
 └────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### 5.1 统计收集点
+
+| 事件 | 调用方法 | 收集内容 |
+|------|----------|----------|
+| 任务完成 | `record_task_finish()` | 任务级分布 |
+| 链完成 | `record_e2e_finish()` | 链级分布 |
+| 重分配 | `record_realloc()` | 重分配开销 |
+| 闲置 | `record_idle_capacity()` | 闲置容量 |
+| 周期边界 | `forward_hyperperiod()` | 系统级分布 |
 
 ## 6. 关键函数调用链
 
@@ -422,63 +434,63 @@ approach_setup.py:setup_benchmark()
 | `policy` | CLI | 运行时 | `acc_p_factory()`, `initialize_events()` |
 | `lateness_mode` | CLI | 运行时 | 任务 criticality 设置 |
 
-## 8. 各阶段职责说明
+### 7.3 参数传递路径详解
 
-### 8.1 预处理阶段 (preprocess_args)
+#### exec_t_comp_ratioA
 
-**职责**: 参数验证和初始化
+```
+args.exec_t_comp_ratioA
+    → args.quantile
+    → coleasing_alloc_cluster(quantile=split_ratio)
+    → rsc_req_estm_quantile(quantile=split_ratio)
+```
 
-- 设置 `force_suffix` (强制核心数标识)
-- 配置 `enforce_wc` (worst-case 执行时间强制)
-- 检查 test_case 兼容性
-- 处理 `core_size` 配置 (induced vs specified)
+**作用**: Phase 1 资源估计用的保守分位数（如 0.99 = 99th percentile）
 
-### 8.2 工作负载生成阶段 (build_workload_and_criticality)
+#### exec_t_comp_ratioB
 
-**职责**: 生成任务图和进程实例
+```
+args.exec_t_comp_ratioB
+    → binpack_cfg['exec_t_comp_ratioB']
+    → push_task_into_bins_new(quantile=ratioB)
+```
 
-- 从 profiling 数据生成 DAG 任务图
-- 创建 ProcessInt 实例 (包含执行时间分布)
-- 设置任务 criticality (hard/soft)
-- 计算 hyper_p (超周期)
+**作用**: Phase 2 时间窗分配用的激进分位数（如 0.80）
+- `-1` 表示不执行 repack
+- `ratioA > ratioB` 时启用软预留
 
-### 8.3 调度器创建阶段 (create_scheduler_elements_with_config)
+#### num_cores
 
-**职责**: 初始化调度和监控组件
+```
+args.num_cores
+    → apply_forced_num_cores(bin_list, max_core_num, target)
+    → 修改 bin_list[i].num_resources
+```
 
-- 创建 Resource_model_int (资源模型)
-- 创建 Scheduler (调度器)
-- 创建 Monitor (运行时监控)
-- 创建 MsgDispatcher, DataPipe (通信管道)
+**约束**: 仅在 `need_repack=False` 时应用
 
-### 8.4 仿真环境构建阶段 (build_simulation_env)
+### 7.4 执行路径对照表
 
-**职责**: 设置仿真参数
+| 策略 | Steps | need_repack | num_bins | ratioB |
+|------|-------|:-----------:|:--------:|:------:|
+| cyc | 0-1-2 | False | -1 | -1 |
+| glb | 0-1 | False | 1 | -1 |
+| pglb | 0-1-2 | False | >1 | -1 |
+| reserv | 0-1-2 + repack | True | >=2 | 0.5-0.99 |
+| cyc-S | 0-1-2 + repack | True | -1 | 0.5-0.99 |
 
-- 计算 num_periods, warmup
-- 生成事件迭代器 (到达时间, 截止时间, 负载)
-- 设置随机种子
+### 7.5 关键约束
 
-### 8.5 装箱算法阶段 (perform_bin_packing)
+1. **资源约束仅适用于非 repack 阶段**
+   - repack 修改 slack 分配，不修改资源分配
 
-**职责**: 核心调度决策
+2. **`num_cores` 恒等于 `sum(b.num_resources for b in bin_list)`**
+   - 由 `vectorized_core_allocation()` 维护
 
-**算法分支**:
+3. **Dump 路径使用约束后的 `num_cores`**
+   - PathContext 与 bin_list 状态一致
 
-1. **scratch**: 从零开始完全动态装箱
-2. **guided**: 两阶段引导式混合分配
-   - Phase 1: `coleasing_alloc_cluster()` - 空间划分
-   - Phase 2: `push_task_into_bins_new()` - 时间窗口
-
-### 8.6 事件驱动仿真阶段 (run_simulation)
-
-**职责**: 运行时调度执行
-
-- 处理器更新循环: update_run → update_ready → sched
-- 超周期边界处理: 复制图、更新映射、添加事件
-- 统计收集: record_miss, forward_hyperperiod
-
-## 9. 模块依赖关系
+## 8. 模块依赖关系
 
 ```
 main_approach.py
@@ -509,7 +521,7 @@ main_approach.py
     └── global_var.py (全局常量) ◄─────────────────────────────────────┘
 ```
 
-## 10. 关键数据结构
+## 9. 关键数据结构
 
 | 数据结构 | 定义位置 | 用途 |
 |----------|----------|------|

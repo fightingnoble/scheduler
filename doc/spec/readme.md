@@ -77,7 +77,7 @@ stat/collector.md                  (E2E 延迟分解、关键路径分析、扩�
 | 文档 | 内容摘要 |
 |------|----------|
 | [e2e_flow_refactor.md](./e2e_flow_refactor.md) | 历史重构记录（benchmark 生成与测试串联） |
-| [paper.tex](./paper.tex) | 论文 LaTeX 源文件 |
+| [paper.tex](./scheduler_paper/main.tex) | 论文 LaTeX 源文件 |
 
 ## 3. 实验设计速查
 

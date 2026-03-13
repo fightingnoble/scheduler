@@ -39,6 +39,234 @@ from scripts.exp_common import (
 from approach_collector import StatisticsCollector
 
 
+# -------------- Ablation plot settings --------
+
+# Unified color scheme (consistent with motiv experiments in approach_collector.py)
+ABLA_COLORS = {
+    'exec':      'C0',   # blue — latency: computation
+    'effective':  'C0',   # blue — capacity: useful work
+    'realloc':   'C1',   # orange — scheduling overhead
+    'wait':      'C2',   # green — latency: queuing
+    'miss_bar':  'C3',   # red — capacity: overdue load
+    'miss_line': 'C4',   # purple — miss rate line (secondary axis)
+    'idle':      'C7',   # gray — capacity: unused
+}
+
+# 3 representative load configurations (all chains averaged)
+ABLA_LOAD_CONFIGS = [
+    {'tiles': 400, 'load_factor': 0.5, 'label': 'Low (400T-0.5×)'},
+    {'tiles': 400, 'load_factor': 1.0, 'label': 'Mid (400T-1.0×)'},
+    {'tiles': 200, 'load_factor': 1.0, 'label': 'High (200T-1.0×)'},
+]
+ABLA_LOAD_COLORS = ['#1f77b4', '#ff7f0e', '#d62728']  # blue, orange, red
+
+
+def _filter_and_avg_by_load(data_points, group_key, group_val, load_cfg):
+    """Filter data by (group_key==group_val, tiles, load_factor), average over chains."""
+    pts = [d for d in data_points
+           if d[group_key] == group_val
+           and d['tiles'] == load_cfg['tiles']
+           and d['load_factor'] == load_cfg['load_factor']]
+    if not pts:
+        return None
+    # Access patterns differ: Case2 nests realloc_mean_ratio in 'utilization', Case3 flattens it
+    def _get_realloc_ratio(d):
+        if 'realloc_mean_ratio' in d and not isinstance(d['realloc_mean_ratio'], dict):
+            return d['realloc_mean_ratio']
+        return d['utilization']['realloc_mean_ratio']
+
+    def _get_miss_ratio(d):
+        if 'miss_mean_ratio' in d and not isinstance(d.get('miss_mean_ratio'), dict):
+            return d['miss_mean_ratio']
+        return d['utilization']['miss_mean_ratio']
+
+    n = len(pts)
+    return {
+        'realloc_mean_count': sum(d['realloc_mean_count'] for d in pts) / n,
+        'realloc_mean_ratio': sum(_get_realloc_ratio(d) for d in pts) / n,
+        'miss_mean_ratio':    sum(_get_miss_ratio(d) for d in pts) / n,
+        'miss_mean_count':    sum(d.get('miss_mean_count', 0) for d in pts) / n,
+        'latency_breakdown':  _avg_latency_breakdown(pts),
+    }
+
+
+def _avg_latency_breakdown(pts):
+    """Average latency breakdown across data points."""
+    bds = [d.get('latency_breakdown', {}).get('overall', {}) for d in pts]
+    bds = [b for b in bds if b]
+    if not bds:
+        return {'exec_ratio': 0, 'realloc_ratio': 0, 'wait_ratio': 0}
+    n = len(bds)
+    return {
+        'exec_ratio':    sum(b.get('exec_ratio', 0) for b in bds) / n,
+        'realloc_ratio': sum(b.get('realloc_ratio', 0) for b in bds) / n,
+        'wait_ratio':    sum(b.get('wait_ratio', 0) for b in bds) / n,
+    }
+
+
+def _plot_abla_overhead(data_points, x_key, x_values, x_labels, title, save_path,
+                        load_configs=None, load_colors=None, pglb_baseline=None):
+    """
+    Universal ablation overhead plot: clustered bars (realloc_count) + lines (realloc_ratio).
+    Clusters = load configs, within-cluster X = x_values (bins or ratioB).
+    """
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    if load_configs is None:
+        load_configs = ABLA_LOAD_CONFIGS
+    if load_colors is None:
+        load_colors = ABLA_LOAD_COLORS
+
+    n_clusters = len(load_configs)
+    n_bars = len(x_values)
+    bar_width = 0.7 / n_bars
+    cluster_width = n_bars * bar_width + 0.3
+
+    fig, ax1 = plt.subplots(figsize=(7.0, 3.2))
+    ax2 = ax1.twinx()
+
+    for ci, (lcfg, color) in enumerate(zip(load_configs, load_colors)):
+        cluster_center = ci * cluster_width
+        for bi, xv in enumerate(x_values):
+            avg = _filter_and_avg_by_load(data_points, x_key, xv, lcfg)
+            if avg is None:
+                continue
+            x_pos = cluster_center + (bi - (n_bars - 1) / 2) * bar_width
+            ax1.bar(x_pos, avg['realloc_mean_count'], bar_width * 0.85,
+                    color=color, alpha=0.25 + 0.15 * bi, edgecolor=color, linewidth=0.5)
+            ax1.text(x_pos, avg['realloc_mean_count'], f"{avg['realloc_mean_count']:.1f}",
+                     ha='center', va='bottom', fontsize=5.5, color=color)
+
+        # Line: realloc_ratio
+        line_xs, line_ys = [], []
+        for bi, xv in enumerate(x_values):
+            avg = _filter_and_avg_by_load(data_points, x_key, xv, lcfg)
+            if avg is None:
+                continue
+            x_pos = cluster_center + (bi - (n_bars - 1) / 2) * bar_width
+            line_xs.append(x_pos)
+            line_ys.append(avg['realloc_mean_ratio'])
+        if line_xs:
+            ax2.plot(line_xs, line_ys, 'o-', color=color, linewidth=1.5, markersize=4,
+                     label=lcfg['label'])
+
+    # pglb baseline horizontal lines (Case 3 only)
+    if pglb_baseline is not None:
+        for ci, (lcfg, color) in enumerate(zip(load_configs, load_colors)):
+            if lcfg['label'] in pglb_baseline:
+                bv = pglb_baseline[lcfg['label']]
+                ax2.axhline(y=bv, color=color, linestyle=':', alpha=0.5, linewidth=1)
+
+    # X-tick labels at cluster centers
+    cluster_centers = [ci * cluster_width for ci in range(n_clusters)]
+    ax1.set_xticks(cluster_centers)
+    ax1.set_xticklabels([lc['label'] for lc in load_configs], fontsize=8)
+
+    # Inner x labels (bins or ratioB) — add minor ticks
+    for ci in range(n_clusters):
+        cc = ci * cluster_width
+        for bi, xl in enumerate(x_labels):
+            x_pos = cc + (bi - (n_bars - 1) / 2) * bar_width
+            ax1.text(x_pos, -0.02, xl, ha='center', va='top', fontsize=5.5,
+                     transform=ax1.get_xaxis_transform(), color='gray')
+
+    ax1.set_ylabel('Realloc Count (bars)', fontsize=9)
+    ax2.set_ylabel('Realloc Ratio (lines)', fontsize=9)
+    ax1.tick_params(axis='y', labelsize=8)
+    ax2.tick_params(axis='y', labelsize=8)
+    ax1.grid(True, alpha=0.2, linestyle='--', axis='y')
+    ax1.set_title(title, fontsize=10, pad=8)
+    ax2.legend(loc='upper right', fontsize=7, framealpha=0.7)
+
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=300, bbox_inches='tight')
+    print(f"  Overhead 图已保存: {save_path}")
+    plt.close(fig)
+
+
+def _plot_abla_tradeoff(data_points, x_key, x_values, x_labels, title, save_path,
+                        load_configs=None, load_colors=None):
+    """
+    Universal ablation tradeoff plot: stacked bars (latency breakdown) + line (miss rate).
+    Clusters = load configs, within-cluster X = x_values.
+    """
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    if load_configs is None:
+        load_configs = ABLA_LOAD_CONFIGS
+    if load_colors is None:
+        load_colors = ABLA_LOAD_COLORS
+
+    n_clusters = len(load_configs)
+    n_bars = len(x_values)
+    bar_width = 0.7 / n_bars
+    cluster_width = n_bars * bar_width + 0.3
+
+    fig, ax1 = plt.subplots(figsize=(7.0, 3.2))
+    ax2 = ax1.twinx()
+
+    comp_colors = {'exec': ABLA_COLORS['exec'], 'realloc': ABLA_COLORS['realloc'], 'wait': ABLA_COLORS['wait']}
+
+    for ci, (lcfg, color) in enumerate(zip(load_configs, load_colors)):
+        cluster_center = ci * cluster_width
+        miss_xs, miss_ys = [], []
+
+        for bi, xv in enumerate(x_values):
+            avg = _filter_and_avg_by_load(data_points, x_key, xv, lcfg)
+            if avg is None:
+                continue
+            x_pos = cluster_center + (bi - (n_bars - 1) / 2) * bar_width
+            bd = avg['latency_breakdown']
+
+            # Stacked bars: exec (bottom) → realloc → wait
+            bottom = 0
+            for comp, ckey in [('exec', 'exec_ratio'), ('realloc', 'realloc_ratio'), ('wait', 'wait_ratio')]:
+                val = bd.get(ckey, 0)
+                ax1.bar(x_pos, val, bar_width * 0.85, bottom=bottom,
+                        color=comp_colors[comp], alpha=0.3 + 0.12 * ci, edgecolor='gray', linewidth=0.3)
+                bottom += val
+
+            miss_xs.append(x_pos)
+            miss_ys.append(avg['miss_mean_count'])
+
+        if miss_xs:
+            ax2.plot(miss_xs, miss_ys, 's-', color=color, linewidth=1.5, markersize=4,
+                     label=lcfg['label'])
+
+    # X-tick labels
+    cluster_centers = [ci * cluster_width for ci in range(n_clusters)]
+    ax1.set_xticks(cluster_centers)
+    ax1.set_xticklabels([lc['label'] for lc in load_configs], fontsize=8)
+
+    for ci in range(n_clusters):
+        cc = ci * cluster_width
+        for bi, xl in enumerate(x_labels):
+            x_pos = cc + (bi - (n_bars - 1) / 2) * bar_width
+            ax1.text(x_pos, -0.02, xl, ha='center', va='top', fontsize=5.5,
+                     transform=ax1.get_xaxis_transform(), color='gray')
+
+    # Legend for stacked components
+    from matplotlib.patches import Patch
+    legend_patches = [Patch(facecolor=comp_colors[c], alpha=0.5, label=c.capitalize())
+                      for c in ['exec', 'realloc', 'wait']]
+    ax1.legend(handles=legend_patches, loc='upper left', fontsize=6.5, framealpha=0.7, title='Latency', title_fontsize=7)
+
+    ax1.set_ylabel('Latency / Constraint', fontsize=9)
+    ax2.set_ylabel('Miss Rate', fontsize=9)
+    ax1.tick_params(axis='y', labelsize=8)
+    ax2.tick_params(axis='y', labelsize=8)
+    ax1.grid(True, alpha=0.2, linestyle='--', axis='y')
+    ax1.set_title(title, fontsize=10, pad=8)
+    ax2.legend(loc='upper right', fontsize=7, framealpha=0.7)
+
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=300, bbox_inches='tight')
+    print(f"  Tradeoff 图已保存: {save_path}")
+    plt.close(fig)
+
+
 # -------------- Parallel workers -------------
 
 def _case1_worker(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -110,10 +338,14 @@ def _case3_worker(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     exp_type = payload.get('exp_type', 'reserv')
     dry_run = payload.get('dry_run', False)
     
-    collector = run_main_approach_inproc(run_args, dry_run=dry_run)
+    try:
+        collector = run_main_approach_inproc(run_args, dry_run=dry_run)
+    except (KeyError, AssertionError) as e:
+        print(f"  跳过: {label} — 仿真失败 ({type(e).__name__}: {e})")
+        return None
     if dry_run or collector is None:
         return None
-    
+
     stats = collector.get_motiv_case2_stats()
     util = stats['utilization']
     realloc_info = collector.get_realloc_info()
@@ -128,7 +360,7 @@ def _case3_worker(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         'exp_type': exp_type,
         'idle_mean_ratio': util['idle_mean_ratio'],
         'miss_mean_ratio': util['miss_mean_ratio'],
-        'miss_mean_count': util['miss_mean_count'],
+        'miss_mean_count': stats['miss_mean_count'],
         'realloc_mean_ratio': realloc_info['realloc_mean_ratio'],
         'realloc_mean_count': realloc_info['realloc_mean_count'],
     }
@@ -266,17 +498,22 @@ class AblaExp1Runner:
             print(f"摘要已保存到: {json_path}")
 
         if plot_data:
+            cyc_ref = [{'ratio': d['ratio'], 'miss_mean_count': d['miss_mean_count']}
+                       for d in plot_data if d.get('exp_type') == 'cyc']
+
             # 使用 Motiv-Exp-1 的绘图方法
             cycS_points = [{
+                'ratio': d['ratio'],
                 'label': f"p{int(d['ratio']*100)}",
                 'idle_mean_ratio': d['idle_mean_ratio'],
                 'miss_mean_ratio': d['miss_mean_ratio'],
                 'realloc_mean_ratio': d['realloc_mean_ratio'],
                 'miss_mean_count': d['miss_mean_count'],
+                'cyc_ref': cyc_ref  # 将参考数据传递给绘图函数
             } for d in plot_data if d.get('exp_type') == 'cyc-S']
-            
+
             if cycS_points:
-                cycS_points = sorted(cycS_points, key=lambda x: x['ratio'] if 'ratio' in x else 0)
+                cycS_points = sorted(cycS_points, key=lambda x: x['ratio'])
                 for p in cycS_points:
                     p.pop('ratio', None)
                 plot_path = self.output_dir / 'case1_motiv1_style.pdf'
@@ -291,35 +528,35 @@ class AblaExp1Runner:
         """绘制延迟满足率投影图"""
         import numpy as np
         import matplotlib.pyplot as plt
-        
+
         cyc_data = [d for d in data_points if d['exp_type'] == 'cyc']
         cycS_data = sorted([d for d in data_points if d['exp_type'] == 'cyc-S'], key=lambda d: d['ratio'])
-        
-        fig, ax = plt.subplots(figsize=(5, 3))
-        
+
+        fig, ax = plt.subplots(figsize=(7.0, 3.2))
+
         if cycS_data:
             xs = [d['ratio'] for d in cycS_data]
             ys = [max(0.0, min(1.0, 1.0 - d['miss_mean_count'])) for d in cycS_data]
-            ax.plot(xs, ys, 'o-', color='C0', linewidth=1.5, markersize=4, label='cyc-S')
-        
+            ax.plot(xs, ys, 'o-', color=ABLA_COLORS['miss_line'], linewidth=1.5, markersize=4, label='cyc-S')
+
         for d in cyc_data:
             y = max(0.0, min(1.0, 1.0 - d['miss_mean_count']))
             ax.axhline(y=y, color='gray', linestyle=':', alpha=0.6, linewidth=1)
             ax.text(0.905, y, f"cyc p{int(d['ratio']*100)}", transform=ax.get_yaxis_transform(),
                    ha='left', va='center', fontsize=7, color='gray')
-        
+
         ax.set_xlabel('Soft Reservation Percentile (exec_t_comp_ratioB)', fontsize=9)
         ax.set_ylabel('Latency Satisfaction Rate', fontsize=9)
         ax.set_ylim(0.0, 1.02)
-        ax.grid(True, alpha=0.3, linestyle='--', axis='y')
+        ax.grid(True, alpha=0.2, linestyle='--', axis='y')
         ax.tick_params(axis='both', labelsize=8)
         ax.legend(loc='lower right', fontsize=7, framealpha=0.7)
-        ax.set_title('Ablation-1: Satisfaction Projection (cyc-S vs cyc)', fontsize=9, pad=8)
-        
+        ax.set_title('Ablation-1: Satisfaction Projection (cyc-S vs cyc)', fontsize=10, pad=8)
+
         fig.tight_layout()
         save_path = str(self.output_dir / 'case1_satisfy_projection.pdf')
-        fig.savefig(save_path, dpi=150, bbox_inches='tight')
-        print(f"Case 1 延迟满足率投影图已保存到: {save_path}")
+        fig.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"  Satisfy projection 图已保存: {save_path}")
         plt.close(fig)
 
 
@@ -422,12 +659,8 @@ class AblaExp2Runner:
         """生成报告和图表"""
         print("\n" + "="*30 + " Case 2: Generating Report " + "="*30)
         json_path = self.output_dir / 'case2_summary.json'
-        
+
         plot_data = None
-        group_order = [
-            [(t, l) for t in self.tiles for l in self.loads],
-            self.chains
-        ]
 
         if self.args.use_plot_cache:
             assert json_path.exists(), f"Cache file not found at {json_path}"
@@ -435,18 +668,13 @@ class AblaExp2Runner:
             with open(json_path, 'r') as f:
                 summary = json.load(f)
             plot_data = summary.get('results', [])
-            # 检查缓存数据点数量是否与预期一致
-            expected_count = len(self.num_bins_list) * len(self.tiles) * len(self.chains) * len(self.loads)
-            if len(plot_data) != expected_count:
-                print(f"Error: Cache file is invalid. Expected {expected_count} results, found {len(plot_data)}.")
-                return
         else:
             if not self.results:
                 print("Warning: No simulation results found to generate a report.")
                 return
-            
+
             plot_data = self.results
-            
+
             summary = {
                 'experiment': 'Ablation-2: pglb vs glb',
                 'timestamp': datetime.now().isoformat(),
@@ -463,85 +691,24 @@ class AblaExp2Runner:
             print(f"摘要已保存到: {json_path}")
 
         if plot_data:
-            # 生成消融特有图
-            self._plot_switching_overhead(data_points=plot_data)
-            
-            # 复用 Motiv-Exp-2 的绘图函数
-            StatisticsCollector.plot_motiv_case2(
+            x_values = sorted(set(d['num_bins'] for d in plot_data))
+            x_labels = [str(b) for b in x_values]
+
+            _plot_abla_overhead(
                 data_points=plot_data,
-                plot_type='breakdown',
-                group_order=group_order,
-                save_path=str(self.output_dir / 'case2_breakdown.pdf')
+                x_key='num_bins', x_values=x_values, x_labels=x_labels,
+                title='Ablation-2: Effect of Spatial Partitioning',
+                save_path=str(self.output_dir / 'case2_overhead.pdf'),
             )
-            StatisticsCollector.plot_motiv_case2(
+            _plot_abla_tradeoff(
                 data_points=plot_data,
-                plot_type='utilization',
-                group_order=group_order,
-                save_path=str(self.output_dir / 'case2_utilization.pdf')
+                x_key='num_bins', x_values=x_values, x_labels=x_labels,
+                title='Ablation-2: Latency Breakdown vs num_bins',
+                save_path=str(self.output_dir / 'case2_tradeoff.pdf'),
             )
-        
+
         print(f"\n✓ Case 2 完成！结果保存在: {self.output_dir}")
     
-    def _plot_switching_overhead(self, data_points: List[Dict]):
-        """绘制切换次数/开销对比图"""
-        import numpy as np
-        import matplotlib.pyplot as plt
-        from collections import defaultdict
-        
-        by_bins = defaultdict(list)
-        for d in data_points:
-            by_bins[d['num_bins']].append(d)
-        
-        bins = sorted(by_bins.keys())
-        avg_counts = []
-        avg_ratios = []
-        labels = []
-        
-        for b in bins:
-            datas = by_bins[b]
-            avg_counts.append(sum(d['realloc_mean_count'] for d in datas) / len(datas))
-            avg_ratios.append(sum(d['utilization']['realloc_mean_ratio'] for d in datas) / len(datas))
-            labels.append(f"{datas[0]['exp_type']} bins={b}")
-        
-        fig, ax1 = plt.subplots(figsize=(5, 3))
-        ax2 = ax1.twinx()
-        
-        x_pos = np.arange(len(labels))
-        width = 0.35
-        
-        bars1 = ax1.bar(x_pos - width/2, avg_counts, width, label='Realloc Count', color='C1', alpha=0.8)
-        bars2 = ax2.bar(x_pos + width/2, avg_ratios, width, label='Realloc Ratio', color='C2', alpha=0.8)
-        
-        ax1.set_xlabel('Configuration', fontsize=9)
-        ax1.set_ylabel('Realloc Count', fontsize=9, color='C1')
-        ax1.set_xticks(x_pos)
-        ax1.set_xticklabels(labels, fontsize=7, rotation=15, ha='right')
-        ax1.tick_params(axis='y', labelcolor='C1', labelsize=8)
-        ax1.grid(True, alpha=0.3, linestyle='--', axis='y')
-        
-        ax2.set_ylabel('Realloc Ratio', fontsize=9, color='C2')
-        ax2.tick_params(axis='y', labelcolor='C2', labelsize=8)
-        
-        for bars in [bars1, bars2]:
-            for bar in bars:
-                height = bar.get_height()
-                ax = bar.axes
-                ax.text(bar.get_x() + bar.get_width()/2., height,
-                       f'{height:.3f}' if height < 10 else f'{height:.1f}',
-                       ha='center', va='bottom', fontsize=6)
-        
-        lines1, labels1 = ax1.get_legend_handles_labels()
-        lines2, labels2 = ax2.get_legend_handles_labels()
-        ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper right', fontsize=7, framealpha=0.7)
-        ax1.set_title('Ablation-2: Effect of Spatial Partitioning on Switching Overhead', fontsize=9, pad=8)
-        
-        fig.tight_layout()
-        save_path = str(self.output_dir / 'case2_switching_overhead.pdf')
-        fig.savefig(save_path, dpi=150, bbox_inches='tight')
-        print(f"切换开销对比图已保存到: {save_path}")
-        plt.close(fig)
-
-
 class AblaExp3Runner:
     """Ablation-3: reserv vs pglb - 预留在并行下的影响"""
 
@@ -679,36 +846,27 @@ class AblaExp3Runner:
         """生成报告和图表"""
         print("\n" + "="*30 + " Case 3: Generating Report " + "="*30)
         json_path = self.output_dir / 'case3_summary.json'
-        
+
         plot_data = None
-        group_order = [
-            [(t, l) for t in self.tiles for l in self.loads],
-            self.chains
-        ]
         strength_count = len(self._strength_points())
-        
+
         if self.args.use_plot_cache:
             assert json_path.exists(), f"Cache file not found at {json_path}"
             print(f"Loading cached results from {json_path}...")
             with open(json_path, 'r') as f:
                 summary = json.load(f)
             plot_data = summary.get('results', [])
-            # 检查缓存数据点数量是否与预期一致
-            # pglb 基线: len(bins) * len(tiles) * len(chains) * len(loads)
-            # reserv 扫描: len(ratioBs) * len(bins) * len(tiles) * len(chains) * len(loads)
-            pglb_count = len([b for b in self.bins if b >= 1]) * strength_count
-            reserv_count = len(self.ratioBs) * len(self.bins) * strength_count
-            expected_count = pglb_count + reserv_count
-            if len(plot_data) != expected_count:
-                print(f"Error: Cache file is invalid. Expected {expected_count} results, found {len(plot_data)}.")
+            if not plot_data:
+                print("Warning: Cache file has no results.")
                 return
+
         else:
             if not self.results:
                 print("Warning: No simulation results found to generate a report.")
                 return
-            
+
             plot_data = self.results
-            
+
             summary = {
                 'experiment': 'Ablation-3: reserv vs pglb',
                 'timestamp': datetime.now().isoformat(),
@@ -730,88 +888,44 @@ class AblaExp3Runner:
             print(f"摘要已保存到: {json_path}")
 
         if plot_data:
-            self._plot_switching_metrics(data_points=plot_data)
-            StatisticsCollector.plot_motiv_case2(
-                data_points=plot_data,
-                plot_type='breakdown',
-                group_order=group_order,
-                save_path=str(self.output_dir / 'case3_breakdown.pdf')
+            # Filter reserv data only, fix bins=8 for the main plot
+            reserv_data = [d for d in plot_data if d.get('exp_type') == 'reserv']
+            # Pick the largest available num_bins as default focus
+            available_bins = sorted(set(d['num_bins'] for d in reserv_data))
+            focus_bins = max(available_bins) if available_bins else 8
+            reserv_focus = [d for d in reserv_data if d['num_bins'] == focus_bins]
+
+            x_values = sorted(set(d['exec_t_comp_ratioB'] for d in reserv_focus))
+            x_labels = [f"p{int(x*100)}" for x in x_values]
+
+            # Compute pglb baseline per load config for reference lines
+            pglb_data = [d for d in plot_data if d.get('exp_type') == 'pglb'
+                         and d['num_bins'] == focus_bins]
+            pglb_baseline = {}
+            for lcfg in ABLA_LOAD_CONFIGS:
+                pts = [d for d in pglb_data
+                       if d['tiles'] == lcfg['tiles']
+                       and d['load_factor'] == lcfg['load_factor']]
+                if pts:
+                    pglb_baseline[lcfg['label']] = (
+                        sum(d['realloc_mean_ratio'] for d in pts) / len(pts)
+                    )
+
+            _plot_abla_overhead(
+                data_points=reserv_focus,
+                x_key='exec_t_comp_ratioB', x_values=x_values, x_labels=x_labels,
+                title=f'Ablation-3: Effect of Reservation (bins={focus_bins})',
+                save_path=str(self.output_dir / 'case3_overhead.pdf'),
+                pglb_baseline=pglb_baseline,
             )
-            StatisticsCollector.plot_motiv_case2(
-                data_points=plot_data,
-                plot_type='utilization',
-                group_order=group_order,
-                save_path=str(self.output_dir / 'case3_utilization.pdf')
+            _plot_abla_tradeoff(
+                data_points=reserv_focus,
+                x_key='exec_t_comp_ratioB', x_values=x_values, x_labels=x_labels,
+                title=f'Ablation-3: Latency Breakdown vs ratioB (bins={focus_bins})',
+                save_path=str(self.output_dir / 'case3_tradeoff.pdf'),
             )
-        
+
         print(f"\n✓ Case 3 完成！结果保存在: {self.output_dir}")
-    
-    def _plot_switching_metrics(self, data_points: List[Dict]):
-        """绘制切换指标图"""
-        import numpy as np
-        import matplotlib.pyplot as plt
-        from collections import defaultdict
-        
-        by_bins = defaultdict(list)
-        for d in data_points:
-            if d.get('exp_type') == 'reserv':
-                by_bins[d['num_bins']].append(d)
-        
-        pglb_by_bins = defaultdict(list)
-        for d in data_points:
-            if d.get('exp_type') == 'pglb':
-                pglb_by_bins[d['num_bins']].append(d)
-        
-        pglb_baseline = {}
-        for b, group in pglb_by_bins.items():
-            pglb_baseline[b] = {
-                'realloc_mean_ratio': sum(g['realloc_mean_ratio'] for g in group) / len(group),
-                'realloc_mean_count': sum(g['realloc_mean_count'] for g in group) / len(group),
-            }
-        
-        for num_bins in sorted(by_bins.keys(), key=lambda x: (x == -1, x)):
-            pts = by_bins[num_bins]
-            by_ratio = defaultdict(list)
-            for d in pts:
-                by_ratio[d['exec_t_comp_ratioB']].append(d)
-            
-            xs = sorted(by_ratio.keys())
-            avg_ratio = [sum(g['realloc_mean_ratio'] for g in by_ratio[x]) / len(by_ratio[x]) for x in xs]
-            avg_count = [sum(g['realloc_mean_count'] for g in by_ratio[x]) / len(by_ratio[x]) for x in xs]
-            
-            fig, ax1 = plt.subplots(figsize=(5.4, 3.0))
-            ax2 = ax1.twinx()
-            
-            x_pos = np.arange(len(xs))
-            ax1.plot(x_pos, avg_count, 'o-', color='C1', linewidth=1.5, markersize=4, label='Realloc Count')
-            ax2.plot(x_pos, avg_ratio, 's--', color='C2', linewidth=1.5, markersize=4, label='Realloc Ratio')
-            
-            ax1.set_xticks(x_pos)
-            ax1.set_xticklabels([f"p{int(x*100)}" for x in xs], fontsize=8)
-            ax1.set_xlabel('exec_t_comp_ratioB', fontsize=9)
-            ax1.set_ylabel('Realloc Count', fontsize=9, color='C1')
-            ax2.set_ylabel('Realloc Ratio', fontsize=9, color='C2')
-            ax1.tick_params(axis='y', labelcolor='C1', labelsize=8)
-            ax2.tick_params(axis='y', labelcolor='C2', labelsize=8)
-            ax1.grid(True, alpha=0.3, linestyle='--', axis='y')
-            
-            bins_label = 'single' if num_bins == -1 else str(num_bins)
-            ax1.set_title(f'Ablation-3: reserv switching (bins={bins_label})', fontsize=9, pad=8)
-            
-            baseline = pglb_baseline.get(num_bins)
-            if baseline is not None:
-                ax1.axhline(y=baseline['realloc_mean_count'], color='gray', linestyle=':', alpha=0.6, linewidth=1)
-                ax2.axhline(y=baseline['realloc_mean_ratio'], color='gray', linestyle=':', alpha=0.6, linewidth=1)
-            
-            lines1, labels1 = ax1.get_legend_handles_labels()
-            lines2, labels2 = ax2.get_legend_handles_labels()
-            ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper right', fontsize=7, framealpha=0.7)
-            
-            fig.tight_layout()
-            save_path = str(self.output_dir / f'case3_switching_bins{bins_label}.pdf')
-            fig.savefig(save_path, dpi=150, bbox_inches='tight')
-            print(f"Case 3 切换指标图已保存到: {save_path}")
-            plt.close(fig)
 
 
 def parse_args():

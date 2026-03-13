@@ -178,7 +178,7 @@ def allocate_rsc_4_process_new2(
         core_list=_p.task.core_list_compile
     )
     req_rsc_size, got_latency, got_constr = _p.rsc_req_estm_quantile(
-        slack, FLOPS_PER_CORE, binpack_cfg, constr, max_size=tot_cores
+        slack, FLOPS_PER_CORE, binpack_cfg, constr, max_size=effective_max_size
         )
     time_slot_e = time_slot_s + math.ceil(got_latency/timestep)
 

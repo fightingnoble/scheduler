@@ -54,6 +54,35 @@ StatisticsCollector
     └── export_summary(num_bins, p_list, verbose)
 ```
 
+### 1.1 三级分布存储架构
+
+```
+任务级 (dist_per_task_*)
+    │ - 原始值（不归一化）
+    │ - Key: base_task_name
+    │
+分区级 (dist_per_part_*)
+    │ - 归一化到 T_hp
+    │ - Key: partition_id
+    │
+系统级 (dist_overall_*)
+      - 归一化到 total_pwr * T_hp
+      - 单一分布
+```
+
+### 1.2 运行时调用时机
+
+| 方法 | 调用时机 | 收集内容 |
+|------|----------|----------|
+| `record_task_start(pid, start_t)` | update_ready | 任务到达时间 |
+| `record_task_finish(G, pid, finish_t)` | update_run | 任务完成 + 关键路径传播 |
+| `record_e2e_finish(G, sink, finish_t)` | update_ready | 链完成 |
+| `record_realloc(part_id, delta_ld, tasks)` | update_run (state="R") | 重分配开销 |
+| `record_compute_progress(task, dt, dload)` | update_run | 计算时间累积 |
+| `record_idle_capacity(idle_ld, state)` | update_run (state="S") | 闲置容量 |
+| `record_miss(timeout_iter)` | run_simulation | 超时任务负载 |
+| `forward_hyperperiod(T_hp)` | 周期边界 | 归一化 + 累积 |
+
 ## 2. 核心数据结构
 
 ### 2.1 T-Digest 流式直方图
@@ -144,12 +173,8 @@ wait_ratio = max(0, e2e_mean/constraint - exec_ratio - realloc_ratio)
 
 ```python
 def get_motiv_case1_stats(self) -> Dict:
-    return {
-        'idle_mean_ratio': float,     # 闲置算力
-        'miss_mean_ratio': float,     # miss负载
-        'miss_mean_count': float,     # miss数量
-        'realloc_mean_ratio': float,  # 重调度开销(验证为0)
-    }
+    # 返回字段: idle_mean_ratio, miss_mean_ratio, miss_mean_count, realloc_mean_ratio
+    # 字段定义见 Section 3.1
 ```
 
 **绘图**: `plot_motiv_case1()` - 三柱状图+附轴折线
@@ -300,7 +325,50 @@ approach_collector.py
 └── numpy, matplotlib
 ```
 
-## 9. 相关文档
+## 9. 缓存机制
+
+### 9.1 缓存文件
+
+```
+{output_dir}/
+├── case1_summary.json
+├── case2_summary.json
+└── case3_summary.json
+```
+
+### 9.2 使用方式
+
+```bash
+# 正常运行（保存缓存）
+python -m scripts.motiv_exp_runner --case 1 --output_dir ./results
+
+# 从缓存重绘（跳过仿真）
+python -m scripts.motiv_exp_runner --case 1 --use_plot_cache
+```
+
+### 9.3 缓存验证
+
+```python
+if len(results) != len(self.ratios):
+    print(f"Error: Cache invalid. Expected {len(self.ratios)}, found {len(results)}")
+    return
+```
+
+## 10. 序列化
+
+### 10.1 save_state()
+
+```python
+stats_collector.save_state('./stats_collector.json')
+```
+
+### 10.2 load_state()
+
+```python
+stats_collector = StatisticsCollector.load_state('./stats_collector.json')
+```
+
+## 11. 相关文档
 
 - [../spec/stat/collector.md](../spec/stat/collector.md) - E2E延迟分解规范
 - [../spec/stat/tdigest_system_spec.md](../spec/stat/tdigest_system_spec.md) - T-Digest算法细节

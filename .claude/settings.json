@@ -5,6 +5,7 @@
   "teammateMode": "Split-pane",
   "permissions": {
     "allow": [
+      "Zread",
       "Bash(cat:*)",
       "Bash(less:*)",
       "Bash(head:*)",

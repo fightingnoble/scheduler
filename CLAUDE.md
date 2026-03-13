@@ -61,15 +61,18 @@ main_approach.py::main()
     │
     └── approach_setup.py::setup_benchmark()
             │
-            ├── [non-repack] run_benchmark_setup_pipeline(need_repack=False)
+            ├── [Phase 1] run_benchmark_setup_pipeline(need_repack=False)
+            │       ├── args.quantile = ratioA
             │       ├── Step 0: build_workload_and_criticality()  → DAG, ProcessInt list
-            │       ├── Step 1: deduce_cfg2()                     → per-task deadline, resource sizing
+            │       ├── Step 1: deduce_cfg2(quantile=ratioA)      → per-task deadline, resource sizing
             │       ├── Step 2: coleasing_alloc_cluster()         → bin_list (spatial partition)
             │       └── apply_forced_num_cores()                  → enforce num_cores
             │
-            ├── [repack, if ratioB != -1 and ratioA > ratioB]
+            ├── [repack, if ratioB != -1 and ratioA != ratioB]
+            │       args.quantile = ratioB
             │       run_benchmark_setup_pipeline(need_repack=True)
-            │       └── Step 3: push_task_into_bins_new()         → time windows within bins
+            │       ├── Step 0-1 re-run: deduce_cfg2(quantile=ratioB)  → recalc deadlines
+            │       └── Step 2/3: bypassed — bin_list retains Phase 1 layout
             │
             └── approach_sim.py::run_simulation()                 → Step 4: event-driven sim
 ```
@@ -79,29 +82,33 @@ main_approach.py::main()
 | Step | Function | Controlled by | All strategies need? |
 |------|----------|---------------|----------------------|
 | 0 | `build_workload_and_criticality` | profiling CSV + args | **Yes** |
-| 1 | `deduce_cfg2` | `exec_t_comp_ratioA` | **Yes** (incl. glb) |
-| 2 | `coleasing_alloc_cluster` | `num_bins` | No (skipped if `num_bins=1`) |
-| 3 | `push_task_into_bins_new` | `exec_t_comp_ratioB` | No (repack only) |
+| 1 | `deduce_cfg2` | `args.quantile` (= ratioA or ratioB) | **Yes** (incl. glb); re-run with ratioB during repack |
+| 2 | `coleasing_alloc_cluster` | `num_bins` | No (skipped if `num_bins=1`); **bypassed during repack** |
+| 3 | `push_task_into_bins_new` | `exec_t_comp_ratioB` | **Currently bypassed** (TODO: enable for reserv) |
 | 4 | `run_simulation` | `policy` | **Yes** |
 
 ### Key Parameters
 
 | Parameter | Meaning | Typical values |
 |-----------|---------|----------------|
-| `exec_t_comp_ratioA` | Conservative quantile — resource sizing (Step 1) | 0.99, 0.7 |
-| `exec_t_comp_ratioB` | Aggressive quantile — time windows (Step 3) | 0.5–0.99; `-1` = no repack |
+| `exec_t_comp_ratioA` | Conservative quantile — resource sizing (Phase 1 Step 1) | 0.99, 0.7 |
+| `exec_t_comp_ratioB` | Repack quantile — recalculates task deadlines via Step 1 re-run; bin layout unchanged | 0.5–0.99; `-1` = no repack |
 | `num_bins` | Spatial partitions | -1 (auto/max), 1 (glb), >1 (pglb/reserv) |
 | `num_cores` | Forced core count (optional) | None or integer |
 | `policy` | Simulation scheduling policy | `cyc`, `glb`, `pglb`, `reserv` |
 | `e2e_latency` | End-to-end latency constraint | 0.1 s |
+| `args.quantile` | Active quantile for `deduce_cfg2` — set to ratioA in Phase 1, ratioB in repack | Derived from ratioA/B |
 
 ### Key Constraints
 
 1. **All strategies need Step 1** — `glb` still needs `deduce_cfg2` for per-task deadlines
-2. **Resource constraint only in non-repack** — repack changes time windows only, not resource count
-3. **`num_cores` = `sum(b.num_resources for b in bin_list)`** after constraint applied
-4. **Dump paths use constrained `num_cores`** — coupling between `apply_forced_num_cores` and dump
-5. **`test_case` is fixed to `'bin_pack_new'`** in `main_approach.py` — scheduling behavior is controlled by `policy` parameter, NOT `test_case`
+2. **Repack re-runs Step 0-1 with `args.quantile = ratioB`** — recalculates task deadlines/FLOPS with the aggressive quantile; bin `num_resources` is loaded from existing `bin_list` and remains unchanged
+3. **Repack bypasses bin packing (Step 2/3)** — bin_list retains Phase 1 spatial layout; TODO: enable `push_task_into_bins_new` for reserv to fine-tune ERT/deadline
+4. **Repack trigger condition: `ratioB != -1 and ratioA != ratioB`** — triggers whenever ratioB differs from ratioA (not just when ratioA > ratioB)
+5. **Resource constraint only in non-repack** — repack does not change resource count
+6. **`num_cores` = `sum(b.num_resources for b in bin_list)`** after constraint applied
+7. **Dump paths use constrained `num_cores`** — coupling between `apply_forced_num_cores` and dump
+8. **`test_case` is fixed to `'bin_pack_new'`** in `main_approach.py` — scheduling behavior is controlled by `policy` parameter, NOT `test_case`
 
 > **Common pitfalls**: see `doc/spec/readme.md §4` — covers: glb needs Step 1, reserv dual mechanism, Exp 2/3 resource control via load intensity NOT ratioA, cyc-S requires repack.
 
@@ -194,7 +201,7 @@ python -m scripts.motiv_exp_runner --case 3 --output_dir motiv_exp_results --cas
 bash scripts/run_motiv_exps.sh [output_dir]
 ```
 
-### Ablation Experiments (scripts implemented, pending validation)
+### Ablation Experiments (validated)
 
 ```bash
 python -m scripts.abla_exp_runner --case 1 --output_dir ./abla_results --num_hp 100
@@ -276,7 +283,8 @@ Speed-reference (full per-experiment details below):
 |-----------|--------|
 | Motivation experiments (3 cases) | ✅ Validated, reproducible via `run_motiv_exps.sh` |
 | Ablation experiment scripts | ✅ Implemented (`abla_exp_runner.py`) |
-| Ablation experiment validation | ⏳ Pending — run with `--dry_run` first to verify args |
+| Ablation experiment validation | ✅ All 3 cases validated (Case1: 12/12, Case2: 32/32, Case3: 198/224) |
+| Ablation experiment plotting | ✅ Unified style — `case{N}_overhead.pdf` + `case{N}_tradeoff.pdf` |
 | End-to-end comparison experiments | 📋 Designed in `test_plan.md` §端到端的比较 |
 
 ---
@@ -288,6 +296,20 @@ Speed-reference (full per-experiment details below):
 3. Use `ProcessPoolExecutor` with `max_workers=min(_PHYSICAL_CORES, len(tasks))`
 4. Save results to JSON for `--use_plot_cache` support
 5. Use `StatisticsCollector.plot_motiv_case1/2()` for standard plots
+6. **Do not modify** `plot_motiv_case1/2()` in `approach_collector.py` — shared with motiv experiments
+7. For ablation-specific plots, use `ABLA_COLORS` dict in `abla_exp_runner.py` (unified with motiv color scheme: exec=C0, realloc=C1, wait=C2, miss_bar=C3, miss_line=C4, idle=C7)
+
+## Troubleshooting
+
+| Problem | Likely cause | Where to look |
+|---------|-------------|---------------|
+| Resource insufficient exception | `num_cores` constraint too tight | `apply_forced_num_cores()` |
+| All results identical | repack not triggered or cache stale | Check `exec_t_comp_ratioB` value (must != -1) |
+| Parameter not passed through | `binpack_cfg` update missed | `utils.py:build_path_old()` |
+| Statistics data missing | `forward_hyperperiod()` not called | Simulation main loop — hyperperiod boundary |
+| `KeyError: 'acc_pN'` in simulation | `num_bins` exceeds actual task groups | `coleasing_alloc_cluster()` produces fewer bins; worker has try/except guard |
+| `KeyError: 'miss_mean_count'` | Case 2 nests it in `stats['utilization']`, Case 3 flattens to top-level | `_case2_worker` vs `_case3_worker` data structure difference |
+| Repack assertion / sink node error | `perform_bin_packing` destroys Phase 1 layout | Repack must bypass bin packing (`approach_setup.py:62-72`) |
 
 ## Change Logging
 
@@ -300,3 +322,7 @@ Record all code changes in `doc/dev/change_log_{YYYY}.md`:
 - Design philosophy > code design > specific code
 - Keep concise; use relative links for cross-references (e.g., `./algorithm/chain_slack_assignment_algorithm.md`)
 - Conflicts: upper-level doc wins; update lower-level to align
+
+## MCP Tools Notes
+
+- **zai-mcp image tools** (`analyze_image`, `analyze_data_visualization`, etc.) only support `.jpg`, `.jpeg`, `.png` — **not PDF**. Convert PDF plots to PNG first if image analysis is needed.

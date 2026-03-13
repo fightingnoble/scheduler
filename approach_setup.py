@@ -46,17 +46,30 @@ def run_benchmark_setup_pipeline(
             cfg_para_dict, para_scan_group1, para_scan_group2, path_para_dict, \
             bin_path_format, trace_path_para, plot_path_para, csv_xlxs_root, case_pth = path_params
 
-            # 6. 执行装箱算法（返回装箱结果，不包含资源约束和 dump）
-            bin_list, max_core_num, glb_p_list, hyper_p = perform_bin_packing(
-                args, glb_p_list, num_cores, bin_list, hyper_p,
-                sim_step, path_para_dict, para_scan_group1,
-                event_iter_dict, quantumSize, num_periods,
-                cfg_para_dict, physical_graph_nx, need_repack,
-                plot_path_para, path_ctx,
-                scheduler_list, monitor_list,
-                msg_dispatcher,
-                a_data_pipe, w_data_pipe,
-                )
+            # 6. 执行装箱算法
+            if not need_repack:
+                # Phase 1: full bin packing (spatial partition + resource sizing)
+                bin_list, max_core_num, glb_p_list, hyper_p = perform_bin_packing(
+                    args, glb_p_list, num_cores, bin_list, hyper_p,
+                    sim_step, path_para_dict, para_scan_group1,
+                    event_iter_dict, quantumSize, num_periods,
+                    cfg_para_dict, physical_graph_nx, need_repack,
+                    plot_path_para, path_ctx,
+                    scheduler_list, monitor_list,
+                    msg_dispatcher,
+                    a_data_pipe, w_data_pipe,
+                    )
+            else:
+                # Repack: bypass bin packing entirely.
+                # Step 1 (deduce_cfg2) already recalculated task deadlines
+                # with ratioB via build_workload_and_criticality above.
+                # bin_list retains Phase 1 layout — no spatial re-arrangement.
+                # TODO: future work — enable perform_bin_packing for reserv
+                #       to fine-tune ERT/deadline via spatial re-placement.
+                max_core_num = sum(b.num_resources for b in bin_list)
+                print("=" * 20 + " Repack: bypass bin packing, "
+                      f"reused Phase 1 layout (ratioB={args.exec_t_comp_ratioB})"
+                      + "=" * 20)
 
             # 7. 应用资源约束（仅 non-repack 时应用，repack 不改变资源数量）
             if not need_repack:
@@ -108,7 +121,7 @@ def setup_benchmark(args, time_norm_factor):
 
     # 检查是否需要重新装箱（repack 模式）
     need_repack = False  # 默认不repack
-    if (args.exec_t_comp_ratioB != -1 and args.exec_t_comp_ratioA > args.exec_t_comp_ratioB):
+    if (args.exec_t_comp_ratioB != -1 and args.exec_t_comp_ratioA != args.exec_t_comp_ratioB):
         need_repack = True
     
     # step 0-1-2
@@ -120,7 +133,10 @@ def setup_benchmark(args, time_norm_factor):
         args, path_ctx, path_params, False, None, bin_list, num_cores
     )
     if need_repack:
-        # step 0-3
+        # Repack: recalculate per-task time slices (Step 1) with ratioB.
+        # Bin packing (Step 2/3) is bypassed — bin_list retains Phase 1 layout.
+        # ratioB changes task deadlines via deduce_cfg2; bin sizes are
+        # loaded from the existing bin_list and remain unchanged.
         args.quantile = args.exec_t_comp_ratioB
         hyper_p, bin_list, num_cores= run_benchmark_setup_pipeline(
             args, path_ctx, path_params, True, hyper_p, bin_list, num_cores,

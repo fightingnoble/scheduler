@@ -460,11 +460,87 @@ with ProcessPoolExecutor(max_workers=max_workers) as executor:
         self.results.append(res)
 ```
 
+### 6.4 错误处理
+
+```python
+# 捕获子进程异常，避免主进程卡死
+try:
+    result = future.result()
+except ResourceInsufficientError:
+    print(f"Resource insufficient for ratio={ratio}")
+except Exception as e:
+    print(f"Unexpected error: {e}")
+```
+
 ---
 
-## 7. 扩展指南
+## 7. 结果输出
 
-### 7.1 添加新实验
+### 7.1 目录结构
+
+```
+output_dir/
+├── case1/
+│   ├── case1_summary.json     # 结果汇总
+│   ├── case1_utilization.pdf  # Case 1 图
+│   └── cache/
+│       └── *.pkl              # 仿真缓存
+├── case2/
+│   ├── case2_summary.json
+│   ├── case2_breakdown.pdf
+│   └── case2_utilization.pdf
+└── case3/
+    ├── case3_summary.json
+    └── case3_correlation.pdf
+```
+
+### 7.2 JSON 格式
+
+```json
+{
+    "experiment": "Case 1: Utilization-Reliability Tradeoff",
+    "timestamp": "2026-03-11T10:00:00",
+    "parameters": {
+        "ratios": [0.5, 0.6, 0.7, 0.8, 0.9, 0.99]
+    },
+    "results": [
+        {
+            "ratio": 0.5,
+            "idle_mean_ratio": 0.45,
+            "miss_mean_ratio": 0.15,
+            "realloc_mean_ratio": 0.0,
+            "miss_mean_count": 12.5
+        },
+        ...
+    ]
+}
+```
+
+---
+
+## 8. 实验状态
+
+### 8.1 Motivation 实验
+
+| Case | 状态 | 结果目录 |
+|------|------|----------|
+| Case 1 | 完成 | `motiv_exp_results/case1/` |
+| Case 2 | 完成 | `motiv_exp_results/case2/` |
+| Case 3 | 完成 | `motiv_exp_results/case3/` |
+
+### 8.2 消融实验
+
+| Case | 状态 | 问题 |
+|------|------|------|
+| Exp 1 | 部分完成 | cyc-S 结果可能有问题（p70-p99 相同） |
+| Exp 2 | 未开始 | 目录为空 |
+| Exp 3 | 未开始 | 无 case3 目录 |
+
+---
+
+## 9. 扩展指南
+
+### 9.1 添加新实验
 
 1. 在 `exp_common.py` 中添加新的基础参数（如需要）
 2. 创建新的 Runner 类，继承相同模式：
@@ -476,7 +552,7 @@ with ProcessPoolExecutor(max_workers=max_workers) as executor:
 4. 在 `parse_args()` 中添加命令行参数
 5. 在 `main()` 中添加分支选择
 
-### 7.2 复用绘图功能
+### 9.2 复用绘图功能
 
 ```python
 # 使用 StatisticsCollector 静态方法
@@ -488,7 +564,7 @@ StatisticsCollector.plot_load_latency_binned(binned_summary, spearman_rho, save_
 
 ---
 
-## 8. 注意事项
+## 10. 注意事项
 
 1. **环境依赖**: 运行前需激活 `conda activate gurobi`
 2. **并行限制**: 并行度受物理核心数 `_PHYSICAL_CORES` 限制

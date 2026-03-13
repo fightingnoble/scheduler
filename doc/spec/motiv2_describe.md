@@ -2,28 +2,76 @@
 
 ## Figure Description
 
-**Latency Breakdown (Fig. 2a)**: Stacked bar chart illustrates the decomposition of end-to-end latency relative to timing constraint $\mathcal{D}_{\mathrm{e2e}}$ across different hardware-workload configurations. Each bar comprises three components: execution ratio (computation time), realloc ratio (scheduling overhead), and waiting ratio (queueing delay). The auxiliary axis plots miss rate per task type, revealing deadline violation trends as system scale increases.
+**Latency Breakdown (Fig. 2a)**: Stacked bar chart illustrates the decomposition of end-to-end latency relative to timing constraint $\mathcal{D}_{\mathrm{e2e}}$ across different hardware-workload configurations. Each bar comprises three components stacked bottom-to-top: execution ratio (computation time), realloc ratio (scheduling overhead), and waiting ratio (queueing delay). The auxiliary axis plots miss rate, revealing deadline violation trends as system scale increases.
 
-**Resource Utilization (Fig. 2b)**: Clustered stacked bar chart demonstrates processing power allocation under varying configurations. Clusters represent hardware scale (tile count) and load intensity combinations, with bars within each cluster differentiated by task chain count using hatch patterns. Each bar stacks three components: realloc overhead (bottom, red), effective utilization (middle, blue), and idle capacity (top, yellow). The auxiliary axis depicts miss ops ratio—the fraction of uncompleted workload due to timeout—connected within clusters to highlight intra-configuration trends while maintaining inter-cluster separation.
+**Resource Utilization (Fig. 2b)**: Clustered stacked bar chart demonstrates processing power allocation under varying configurations. Clusters represent hardware scale (tile count) and load intensity combinations, with bars within each cluster differentiated by task chain count using hatch patterns. Each bar stacks three components bottom-to-top: effective utilization, realloc overhead, and idle capacity. The auxiliary axis depicts miss ops ratio connected within clusters to highlight intra-configuration trends while maintaining inter-cluster separation.
+
+## Visual Specification
+
+| Property | Value |
+|----------|-------|
+| Figure size | (4, 2.2) inches |
+| Implementation | `StatisticsCollector.plot_motiv_case2()` |
+| Output | `case2_breakdown.pdf`, `case2_utilization.pdf` |
+
+### Latency Breakdown (plot_type='breakdown')
+
+**Axes:**
+- X-axis: Clusters by (tiles, load_factor), inner grouping by chains
+- Y-left: Latency / $\mathcal{D}_{\mathrm{e2e}}$, linear scale (ratios >1 indicate constraint violations)
+- Y-right: Miss Rate (line)
+
+**Stacked bars** (bottom to top):
+
+| Layer | Metric | Color | Matplotlib |
+|-------|--------|-------|------------|
+| Bottom | `exec_ratio` (execution) | Blue | `C0` |
+| Middle | `realloc_ratio` (scheduling) | Orange | `C1` |
+| Top | `wait_ratio` (waiting) | Green | `C2` |
+
+**Miss Rate line:**
+
+| Element | Metric | Color | Style |
+|---------|--------|-------|-------|
+| Miss Rate | `miss_mean_count` | Purple | `C4`, `o-` |
+
+### Resource Utilization (plot_type='utilization')
+
+**Axes:**
+- X-axis: Same cluster/inner layout as breakdown
+- Y-left: Resource utilization ratio, linear scale (identity: effective + realloc + idle = 1)
+- Y-right: Miss Ops Ratio (line, connected within clusters)
+
+**Stacked bars** (bottom to top):
+
+| Layer | Metric | Color | Matplotlib |
+|-------|--------|-------|------------|
+| Bottom | effective (1 - idle - miss - realloc) | Blue | `C0` |
+| Middle | `realloc_mean_ratio` | Orange | `C1` |
+| Top | `idle_mean_ratio` | Gray | `C7` |
+
+**Miss Ops Ratio line:**
+
+| Element | Metric | Color | Style |
+|---------|--------|-------|-------|
+| Miss Ops | `miss_mean_ratio` | Red | `C3`, connected within clusters |
+
+### Data Sources
+
+- `collector.get_motiv_case2_stats()` returns `utilization` dict and `latency_breakdown` dict
+- `collector.get_utilization_avg_ratio()` for idle/miss/realloc means
 
 ## Statistical Methodology
 
-Metrics are computed as hyperperiod averages using TDigest streaming histograms. Latency components are normalized by $\mathcal{D}_{\mathrm{e2e}}$ to enable cross-configuration comparison; ratios exceeding unity indicate constraint violations. Resource utilization excludes missed operations (as they consume no power), with the identity $\text{realloc} + \text{effective} + \text{idle} = 1$ enforced. Miss rate is task-type-normalized to reflect per-task-class timeout probability.
+Metrics are computed as hyperperiod averages using TDigest streaming histograms. Latency components are normalized by $\mathcal{D}_{\mathrm{e2e}}$ to enable cross-configuration comparison. Resource utilization excludes missed operations (as they consume no power), with the identity $\text{realloc} + \text{effective} + \text{idle} = 1$ enforced. Miss rate is task-type-normalized to reflect per-task-class timeout probability.
 
-### **图表描述**：
+## Unified Color Scheme (Cross-Figure Reference)
 
-1. **Latency Breakdown (Fig. 2a)**：
-   - 堆叠柱状图展示延迟分解（exec/realloc/wait）相对于时间约束的占比
-   - 附轴显示 miss rate（超时任务比例）
-
-2. **Resource Utilization (Fig. 2b)**：
-   - 分簇堆叠柱状图，簇按硬件规模和负载分组
-   - 簇内用 hatch 图案区分不同 chain 数量
-   - 堆叠展示资源分配（realloc/effective/idle）
-   - 附轴显示 miss ops ratio（未完成负载占比），簇内连接
-
-### **统计方法**：
-- 使用 TDigest 流式直方图计算超周期平均值
-- 延迟归一化到 $\mathcal{D}_{\mathrm{e2e}}$，便于跨配置比较
-- 利用率满足恒等式 realloc + effective + idle = 1
-- Miss rate 按任务类型归一化
+| Category | Color | Matplotlib | Used in |
+|----------|-------|------------|---------|
+| Execution / Effective | Blue | `C0` | Latency breakdown, Utilization |
+| Scheduling / Realloc | Orange | `C1` | All figures |
+| Waiting | Green | `C2` | Latency breakdown |
+| Miss (capacity) | Red | `C3` | Utilization (bar + line) |
+| Miss Rate (line) | Purple | `C4` | Motiv-1, Breakdown |
+| Idle | Gray | `C7` | Motiv-1, Utilization |

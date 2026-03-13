@@ -52,23 +52,34 @@ sim_main.py 和 approach_sim.py相关的两个大块。
 ```
 setup_benchmark (approach_setup.py)
     │
-    └── run_benchmark_setup_pipeline (approach_setup.py)
-            │
-            ├── Step 2: build_workload_and_criticality
-            ├── Step 4: create_scheduler_elements_with_config
-            ├── Step 5: build_simulation_env
-            ├── Step 6: perform_bin_packing (sim_main.py)
-            │           └── 返回: (bin_list, max_core_num, glb_p_list, hyper_p)
-            ├── Step 7: apply_forced_num_cores (仅 non-repack)
-            └── Step 8-10: generate_bin_paths, Bin_list_print, render_bin_pack_plots, dump_and_check
+    ├── [Phase 1] run_benchmark_setup_pipeline(need_repack=False)
+    │       │   args.quantile = ratioA
+    │       ├── Step 0-1: build_workload_and_criticality
+    │       │       └── deduce_cfg2(quantile=ratioA)
+    │       ├── Step 4: create_scheduler_elements_with_config
+    │       ├── Step 5: build_simulation_env
+    │       ├── Step 6: perform_bin_packing (sim_main.py)
+    │       │           └── 返回: (bin_list, max_core_num, glb_p_list, hyper_p)
+    │       ├── Step 7: apply_forced_num_cores (仅 non-repack)
+    │       └── Step 8-10: generate_bin_paths, Bin_list_print, dump_and_check
+    │
+    └── [Repack, if ratioB != -1 and ratioA != ratioB]
+            run_benchmark_setup_pipeline(need_repack=True)
+            │   args.quantile = ratioB
+            ├── Step 0-1 re-run: build_workload_and_criticality
+            │       └── deduce_cfg2(quantile=ratioB) → 重算 per-task deadline
+            ├── Step 6: bypassed — bin_list 保留 Phase 1 布局
+            │       └── max_core_num = sum(b.num_resources for b in bin_list)
+            └── Step 8-10: generate_bin_paths, Bin_list_print, dump_and_check
 ```
 
 ## 3. 参数定义
 
 | 参数 | 含义 | 典型值 |
 |------|------|--------|
-| `exec_t_comp_ratioA` | Step 1 时间片初始分派比例 | 0.99 |
-| `exec_t_comp_ratioB` | Repack 阶段时间片分派比例 | 0.80 (repack时) |
+| `exec_t_comp_ratioA` | Phase 1 时间片初始分派比例（保守分位数） | 0.99, 0.7 |
+| `exec_t_comp_ratioB` | Repack 分位数 — 触发 Step 1 重算任务 deadline；bin 布局不变 | 0.50–0.99 (repack时); -1 = 不 repack |
+| `args.quantile` | `deduce_cfg2` 使用的活跃分位数 — Phase 1 设为 ratioA，repack 设为 ratioB | 由 ratioA/B 派生 |
 | `num_bins` | 分箱数量 | -1 (cyc), 1 (glb), >1 (pglb) |
 | `num_cores` | 强制指定的核心数（可选） | None 或具体数值 |
 | `binpack_cfg['algorithm']` | 装箱算法 | "guided" 或 "scratch" |
@@ -78,11 +89,13 @@ setup_benchmark (approach_setup.py)
 ### 4.1 是否需要 Repack 判断
 
 ```python
-if args.exec_t_comp_ratioB != -1 and args.exec_t_comp_ratioA > args.exec_t_comp_ratioB:
+if args.exec_t_comp_ratioB != -1 and args.exec_t_comp_ratioA != args.exec_t_comp_ratioB:
     need_repack = True
 else:
     need_repack = False
 ```
+
+> **注意**：触发条件是 `ratioA != ratioB`（非 `ratioA > ratioB`）。只要 ratioB 与 ratioA 不同且 ratioB != -1，即触发 repack。
 
 ### 4.2 Non-Repack 阶段 (need_repack=False)
 
@@ -110,15 +123,19 @@ run_benchmark_setup_pipeline(need_repack=False)
 
 ### 4.3 Repack 阶段 (need_repack=True)
 
-**目标**: 在已有分箱基础上，调整时间片分配（不改变资源数量）
+**目标**: 用 ratioB 重算任务 deadline（Step 1），使仿真中任务的 ERT 和 deadline 更激进。bin 空间布局保持 Phase 1 不变。
 
 ```
+args.quantile = ratioB                          ← 切换 quantile 为激进分位数
 run_benchmark_setup_pipeline(need_repack=True)
     │
-    ├── perform_bin_packing(..., need_repack=True)
-    │       ├── 输入: non-repack 阶段的 bin_list (已应用约束)
-    │       ├── max_core_num = sum(b.num_resources for b in bin_list)
-    │       └── 返回 (bin_list, max_core_num, ...)
+    ├── Step 0-1 re-run: build_workload_and_criticality(args)
+    │       └── deduce_cfg2(quantile=ratioB)    ← 重算 per-task deadline
+    │           注：bin num_resources 从已有 bin_list 加载，不受 quantile 影响
+    │
+    ├── Step 2/3: bypassed — bin packing 被跳过
+    │       └── max_core_num = sum(b.num_resources for b in bin_list)
+    │           bin_list 保留 Phase 1 的空间布局
     │
     ├── 不应用资源约束 (repack 不改变资源数量)
     │
@@ -126,8 +143,10 @@ run_benchmark_setup_pipeline(need_repack=True)
 ```
 
 **说明**:
-- Repack 只修改每个任务的 slack 分配，不修改资源分配
-- `max_core_num` 等于 non-repack 阶段约束后的 `num_cores`
+- `args.quantile = ratioB` 是正确行为：repack 的核心目的是用更激进的分位数重算 `deduce_cfg2`，改变任务的时间片分配（deadline 更早、ERT 更早）
+- bin 的 `num_resources` 在 repack 阶段从已有 `bin_list` 读取，不随 quantile 变化 — 因此不会出现资源不匹配
+- 装箱算法（`perform_bin_packing`）被完全跳过，bin_list 的 scheduling_table 保留 Phase 1 结果
+- TODO: 未来可为 reserv 策略启用 `push_task_into_bins_new`，在固定空间布局下微调 ERT/deadline
 
 ## 5. 调度策略配置
 
@@ -146,10 +165,39 @@ run_benchmark_setup_pipeline(need_repack=True)
 ```
 cyc:     step0-1-2 (guided non-repack)
 glb:     step0-1 (scratch)
-reserv:  step0-1-2 + repack (guided non-repack + guided repack)
+reserv:  step0-1-2 + repack(step0-1 re-run with ratioB, bin packing bypassed)
 pglb:    step0-1-2 (guided non-repack, num_bins>1)
-cyc-S:   step0-1-2 + repack (guided non-repack + guided repack, 软预留)
+cyc-S:   step0-1-2 + repack(step0-1 re-run with ratioB, bin packing bypassed)
 ```
+
+> **repack 说明**：repack 阶段用 `args.quantile = ratioB` 重跑 Step 0-1（`deduce_cfg2`），重算任务 deadline。装箱算法被跳过，bin_list 保留 Phase 1 空间布局。bin 的 `num_resources` 从已有 bin_list 加载，不随 quantile 变化。
+
+### 5.3 策略间的特例/退化关系
+
+reserv 是统一框架，其余策略均可视为 reserv 在特定参数配置下的特例（参见 paper.tex §Scheduling Space）：
+
+```
+reserv (隔离 + 预留 + 动态时间/空间共享)
+  │
+  ├─ 去掉 repack (exec_t_comp_ratioB = -1)
+  │    └─→ pglb (隔离 + 动态共享, 无预留)
+  │          │
+  │          └─ num_bins = 1 (去掉隔离)
+  │               └─→ glb (纯动态调度)
+  │
+  └─ num_bins = -1 (最多分区, 去掉动态空间共享)
+       └─→ cyc-S (最多分区 + 软预留)
+             │
+             └─ 去掉 repack (exec_t_comp_ratioB = -1)
+                  └─→ cyc (纯静态调度)
+```
+
+**参数退化**（key_COT.md）：
+- 预留参数中所有任务 `t_start = 0` 时，调度时机退化为 as soon as possible → glb 行为
+- 预留参数中所有任务 `t_start` 极晚时，调度器退化为串行执行 → cyc 行为
+
+**实验中的退化**（ABLA_EXP_FIX_PLAN.md）：
+- 消融实验3中 `num_bins = 1` 时，pglb 退化为 glb，需使用 `policy='glb'`
 
 ## 6. 函数职责
 
@@ -191,23 +239,32 @@ def apply_forced_num_cores(bin_list, estimated_num_cores, target):
 **职责**: 编排 benchmark 设置流程
 
 **流程**:
-1. 生成 workload 并设置 criticality
+1. 生成 workload 并设置 criticality（Step 0-1，使用 `args.quantile`）
 2. 创建调度器元素
 3. 构建仿真环境参数
-4. 执行装箱算法 (`perform_bin_packing`)
+4. 执行装箱算法（`perform_bin_packing`）— **仅 non-repack 时执行；repack 时跳过**
 5. 应用资源约束（仅 non-repack）
 6. 生成 dump 路径
 7. 打印和绘制
 8. Dump
+
+**repack 时的行为差异**:
+- `args.quantile` 已由调用方设为 `ratioB`
+- Step 0-1 用 ratioB 重算 `deduce_cfg2` → 任务 deadline 更激进
+- `perform_bin_packing` 被跳过 → `bin_list` 保留 Phase 1 布局
+- `max_core_num = sum(b.num_resources for b in bin_list)`（从已有 bin_list 读取）
+- 不应用 `apply_forced_num_cores`
 
 **返回**: `(hyper_p, bin_list, num_cores)`
 
 ## 7. 关键约束
 
 1. **资源约束只在 non-repack 时应用一次**
-2. **Repack 不改变资源数量，只修改 slack 分配**
-3. **Dump 路径使用约束后的 `num_cores`**
-4. **`num_cores` 始终等于 `sum(b.num_resources for b in bin_list)`**
+2. **Repack 用 `args.quantile = ratioB` 重跑 Step 0-1** — 重算任务 deadline/FLOPS；bin `num_resources` 从已有 bin_list 加载，不受 quantile 影响
+3. **Repack 跳过装箱算法 (Step 2/3)** — bin_list 保留 Phase 1 空间布局；TODO: 未来为 reserv 启用 `push_task_into_bins_new`
+4. **Repack 触发条件: `ratioB != -1 and ratioA != ratioB`** — 只要 ratioB 与 ratioA 不同即触发
+5. **Dump 路径使用约束后的 `num_cores`**
+6. **`num_cores` 始终等于 `sum(b.num_resources for b in bin_list)`**
 
 
 ## 8. 实现
