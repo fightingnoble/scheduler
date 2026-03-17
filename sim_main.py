@@ -408,14 +408,21 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
                        a_data_pipe, w_data_pipe
                        ):
     """
-    执行 bin-packing 算法，返回装箱结果
+    执行 bin-packing 算法，返回装箱结果。
+
+    内部处理两种情况：
+    1. Phase 1 (need_repack=False): 使用 coleasing_alloc_cluster 进行空间分区+装箱
+    2. Repack (need_repack=True): 使用 push_task_into_bins_new + pre_defined 模式
+       - 内部创建备份，失败时自动 fallback 到 Phase 1 布局
+       - 适用于 cyc-S (num_bins=-1) 和 reserv (num_bins>=2)
 
     Returns:
-        tuple: (bin_list, max_core_num, glb_p_list, hyper_p)
-            - bin_list: 装箱后的 bin 列表
-            - max_core_num: 装箱计算的资源需求（未应用约束）
+        tuple: (bin_list, max_core_num, glb_p_list, hyper_p, repack_success)
+            - bin_list: 装箱后的 bin 列表（可能是 fallback）
+            - max_core_num: 装箱计算的资源需求
             - glb_p_list: 进程列表
             - hyper_p: 超参数
+            - repack_success: repack 是否成功（Phase 1 为 True）
     """
     # --- 入口参数检查 ---
     if not hasattr(args, "binpack_cfg") or args.binpack_cfg is None:
@@ -455,11 +462,14 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
             warmup=True, drain=True,
             )
         max_core_num = sum(b.num_resources for b in bin_list)
+        repack_success = True  # scratch algorithm always succeeds (no repack mode)
     
     elif args.binpack_cfg["algorithm"] == "guided":
         from sched.global_sched import coleasing_alloc_cluster
+        from sched.pre_alloc_new import ResourceInsufficientError
 
         if not need_repack:
+            # ========== Phase 1: full bin packing ==========
             split_ratio = args.exec_t_comp_ratioA
             binpack_cfg_guided = prepare_binpack_cfg(args.binpack_cfg, split_ratio, glb_p_list, physical_graph_nx)
             print("="* 20 + "Bin-split mode: Cluster-based allocation" + "="* 20 + "\n")
@@ -479,46 +489,79 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
                 verbose=True, DEBUG_FG=False, # args.verbose, args.DEBUG,
                 warmup=True, drain=True,
                 )
+            repack_success = True  # Phase 1 always succeeds
+
         else:
-            # 获取初始 bin 分配
-            # 普通 bin_split 模式：使用聚类算法
-            # keep the original exec_t_comp_ratioA in slack distribution and resource estimation
-            # to make sure the repacking step use the same Bin configuration as the original one.
-            assert len(bin_list) > 0
-            # 直接复用外部 bin_list 的映射
-            # repack 不会修改bin_list 中资源的分配以及，任务到资源的映射。只会修改每个任务的slack。
-            pid2_bin_id = extract_pid2_bin_id(bin_list)
-            max_core_num = sum(b.num_resources for b in bin_list)
+            # ========== Repack: unified for cyc-S and reserv ==========
+            # 使用 pre_defined 模式继承 Phase 1 空间分配，只调整时间片
+            assert len(bin_list) > 0, "bin_list must not be empty for repack"
 
-            print("="* 20 + "Repack mode: Redistribute slack and rebin" + "="* 20 + "\n")
-            # 构造局部 binpack 配置，避免污染全局 args
-            binpack_cfg_local = prepare_binpack_cfg(args.binpack_cfg, args.exec_t_comp_ratioB, glb_p_list, physical_graph_nx)
-            binpack_cfg_local["mapping"] = pid2_bin_id
-            binpack_cfg_local["bin_sel_mod"] = "pre_defined"
-            binpack_cfg_local["affinity_en"] = False
-            binpack_cfg_local["affinity_level"] = 0
+            # 内部创建备份
+            import copy
+            bin_list_backup = copy.deepcopy(bin_list)
+            phase1_pids = set()
+            for _b in bin_list_backup:
+                phase1_pids.update(_b.index_occupy_by_id().keys())
 
-            # 使用 push_task_into_bins_new 进行重新装箱（复用当前 workload 与事件流）
-            bin_list = push_task_into_bins_new(
-                bin_list,
-                glb_p_list, affinity_cfg, event_iter_dict,
-                num_cores, args.quantum_check_en, quantumSize,
-                sim_step, hyper_p, args.exec_t_comp_ratioB,
+            strategy_name = "cyc-S" if args.num_bins == -1 else "reserv"
 
-                scheduler_list, monitor_list,
-                msg_dispatcher,
-                a_data_pipe, w_data_pipe,
+            try:
+                # 获取 Phase 1 的 bin 分配
+                pid2_bin_id = extract_pid2_bin_id(bin_list)
+                max_core_num = sum(b.num_resources for b in bin_list)
 
-                num_periods, binpack_cfg=binpack_cfg_local,
-                verbose=True, DEBUG_FG=False,
-                warmup=True, drain=True,
-                )
+                print("=" * 20 + f" Repack mode ({strategy_name}): Redistribute slack (ratioB={args.exec_t_comp_ratioB})" + "=" * 20 + "\n")
+
+                # 构造局部 binpack 配置，使用 pre_defined 模式
+                binpack_cfg_local = prepare_binpack_cfg(args.binpack_cfg, args.exec_t_comp_ratioB, glb_p_list, physical_graph_nx)
+                binpack_cfg_local["mapping"] = pid2_bin_id
+                binpack_cfg_local["bin_sel_mod"] = "pre_defined"
+                binpack_cfg_local["affinity_en"] = False
+                binpack_cfg_local["affinity_level"] = 0
+
+                # 尝试 repack
+                bin_list = push_task_into_bins_new(
+                    bin_list,
+                    glb_p_list, affinity_cfg, event_iter_dict,
+                    num_cores, args.quantum_check_en, quantumSize,
+                    sim_step, hyper_p, args.exec_t_comp_ratioB,
+
+                    scheduler_list, monitor_list,
+                    msg_dispatcher,
+                    a_data_pipe, w_data_pipe,
+
+                    num_periods, binpack_cfg=binpack_cfg_local,
+                    verbose=True, DEBUG_FG=False,
+                    warmup=True, drain=True,
+                    )
+
+                # 完整性检查：验证所有 Phase 1 任务仍然被放置
+                repack_pids = set()
+                for _b in bin_list:
+                    repack_pids.update(_b.index_occupy_by_id().keys())
+                missing = phase1_pids - repack_pids
+                if missing:
+                    raise RuntimeError(
+                        f"Repack incomplete: {len(missing)} tasks not placed "
+                        f"(missing PIDs: {sorted(list(missing))[:5]}...)")
+
+                print("=" * 20 + f" Repack succeeded ({strategy_name}, ratioB={args.exec_t_comp_ratioB})"
+                      + "=" * 20)
+                repack_success = True
+
+            except (ResourceInsufficientError, RuntimeError) as e:
+                # Fallback: 恢复 Phase 1 布局
+                bin_list = bin_list_backup
+                max_core_num = sum(b.num_resources for b in bin_list)
+                print("=" * 20 + f" Repack failed ({strategy_name}): {e}" + "=" * 20)
+                print("Restored Phase 1 layout as fallback.")
+                repack_success = False
 
     else:
         raise NotImplementedError(f"binpack algorithm {args.binpack_cfg['algorithm']} is not implemented")
 
     # 返回装箱结果（不包含资源约束和 dump）
-    return bin_list, max_core_num, glb_p_list, hyper_p
+    return bin_list, max_core_num, glb_p_list, hyper_p, repack_success
 
 def others(args, glb_p_list, num_cores, bin_list, hyper_p,
                        sim_step, path_para_dict, para_scan_group1,
@@ -671,14 +714,14 @@ def main(args: argparse.Namespace):
     )
 
     # ======================== select test case ========================
-    # compile time reservation 
+    # compile time reservation
     if args.test_case in [case_name_bp_input,] :
-        bin_list_save_path, num_cores, glb_p_list, hyper_p = perform_bin_packing(
+        bin_list_save_path, num_cores, glb_p_list, hyper_p, _ = perform_bin_packing(
             args, glb_p_list, num_cores, bin_list, hyper_p,
              sim_step, path_para_dict, para_scan_group1,
             event_iter_dict, quantumSize, num_periods,
             cfg_para_dict, physical_graph_nx, need_repack,
-            plot_path_para, path_ctx, 
+            plot_path_para, path_ctx,
             scheduler_list, monitor_list,
             msg_dispatcher,
             a_data_pipe, w_data_pipe,

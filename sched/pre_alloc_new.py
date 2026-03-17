@@ -163,6 +163,12 @@ def allocate_rsc_4_process_new2(
         pid2bin_id:Dict[int, int] = binpack_cfg['mapping']
     # -----------------------
 
+    # Determine effective_max_size: cap resource estimation to the target bin's capacity
+    if bin_sel_mod == "pre_defined":
+        effective_max_size = bin_list[pid2bin_id[_p.pid]].num_resources
+    else:
+        effective_max_size = tot_cores
+
     # Step1: initialize the resource request parameters
     # expected rsc_size and slot number
     time_slot_s, time_slot_e = _p.quant_release_deadline(n_slot, timestep)

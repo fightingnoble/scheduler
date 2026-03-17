@@ -75,14 +75,16 @@ setup_benchmark (approach_setup.py)
 
 ## 3. 参数定义
 
-| 参数 | 含义 | 典型值 |
-|------|------|--------|
-| `exec_t_comp_ratioA` | Phase 1 时间片初始分派比例（保守分位数） | 0.99, 0.7 |
-| `exec_t_comp_ratioB` | Repack 分位数 — 触发 Step 1 重算任务 deadline；bin 布局不变 | 0.50–0.99 (repack时); -1 = 不 repack |
-| `args.quantile` | `deduce_cfg2` 使用的活跃分位数 — Phase 1 设为 ratioA，repack 设为 ratioB | 由 ratioA/B 派生 |
-| `num_bins` | 分箱数量 | -1 (cyc), 1 (glb), >1 (pglb) |
-| `num_cores` | 强制指定的核心数（可选） | None 或具体数值 |
-| `binpack_cfg['algorithm']` | 装箱算法 | "guided" 或 "scratch" |
+| 参数 | 含义 | 作用阶段 | 典型值 |
+|------|------|----------|--------|
+| `exec_t_comp_ratioA` | 保守分位数 — 决定**资源 sizing**（分多少资源）。用于 Step 1 `deduce_cfg2` 计算 per-task deadline 和 tile 需求。所有 case 都使用。 | Phase 1 (Step 1) | 0.99, 0.7 |
+| `exec_t_comp_ratioB` | 激进分位数 — 决定**时间窗口松紧**（用多紧）。Repack 阶段用 `ratioB` 重跑 `deduce_cfg2` 重算任务 deadline（更早的 ERT/deadline），但不改变 bin 空间布局。`-1` 表示不 repack。仅 reserv 和 cyc-S 使用。 | Repack (Step 0-1 re-run) | 0.50–0.99; -1 = 不 repack |
+| `args.quantile` | `deduce_cfg2` 使用的活跃分位数 — Phase 1 设为 ratioA，repack 设为 ratioB | 由 ratioA/B 派生 | — |
+| `num_bins` | 分箱数量 — 控制空间隔离粒度 | Phase 1 (Step 2) | -1 (cyc/cyc-S), 1 (glb), >1 (pglb/reserv) |
+| `num_cores` | 强制指定的核心数（可选） | Phase 1 (Step 7) | None 或具体数值 |
+| `binpack_cfg['algorithm']` | 装箱算法 | Phase 1 (Step 6) | "guided" 或 "scratch" |
+
+> **简记**：ratioA 管"给多少资源"（空间），ratioB 管"时间窗口多紧"（时间）。repack 触发条件：`ratioB != -1 and ratioA != ratioB`。
 
 ## 4. 执行流程
 

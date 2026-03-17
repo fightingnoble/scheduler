@@ -47,11 +47,11 @@
   开启agent team
   /ralph-loop 直到成功
 
+
+
+[repack 开发需求]
 装箱算法被 bypass — bin_list 保留 Phase 1 的空间布局；TODO 未来为 reserv 启用
 完成所有步骤后，调试装箱算法
-
-后续repack算法:
-完成了无装箱流程之后，可以调试装箱算法
 1. 如果真是因为ratioB 变得保守导致资源分配不过来，repack失败是正常的，但是，我感觉，如果ratioB <= ratio A
 那么失败是不正常的，特别，是cyc-S的repack，因为所有的item都变小了，不应该会失败。一定是某种参数传递错误，导致repack阶段，箱子变小或者item变大了
 
