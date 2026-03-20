@@ -121,6 +121,11 @@ class StatisticsCollector:
             lambda: TDigestStreamingHistogram(delta=delta, K=K)
         )
 
+        # Algorithm 2 scheduling overhead (alloc_fn on critical path)
+        self.dist_sched_overhead_time = TDigestStreamingHistogram(delta=delta, K=K)  # µs
+        self.dist_sched_overhead_ratio = TDigestStreamingHistogram(delta=delta, K=K)  # software/hardware ratio
+        self.sched_overhead_max_s = 0.0  # exact max (TDigest cannot provide)
+
         # For Motiv-Exp-(3): Adaptive binning for load vs. worst E2E latency relationship
         self.binning_warmup_period = 100  # Number of samples to learn the distribution from
         self.num_r2_bins = int(self.binning_warmup_period ** 0.5) # Number of bins for the histograms in the summary.
@@ -279,6 +284,20 @@ class StatisticsCollector:
         # Update per-part realloc overhead
         self.part_realloc_num[partition_id] += 1
 
+    def record_sched_overhead(self, partition_id: str, elapsed_s: float, swt_lat_s: float):
+        """Record Algorithm 2 (alloc_fn) software overhead on critical path.
+        Only called when realloc=True (1:1 with record_realloc_num).
+        Args:
+            partition_id: partition identifier
+            elapsed_s: wall-clock time of alloc_fn in seconds (Python perf_counter)
+            swt_lat_s: hardware switching latency in seconds (physical time)
+        """
+        self.dist_sched_overhead_time.add(elapsed_s)  # store in seconds
+        self.sched_overhead_max_s = max(self.sched_overhead_max_s, elapsed_s)
+        # Record ratio: software overhead / hardware switching latency
+        if swt_lat_s > 0:
+            ratio = elapsed_s / swt_lat_s
+            self.dist_sched_overhead_ratio.add(ratio)
 
     # ---------------- New minimal APIs for experiments ----------------
     def record_compute_progress(self, task_name: str, delta_compute_t: float, delta_load: float=None):
@@ -603,7 +622,47 @@ class StatisticsCollector:
             'realloc_mean_ratio': float(self.dist_overall_realloc.get_mean()),
             'realloc_mean_count': sum(dist.get_mean() for dist in self.dist_per_part_realloc_count.values())
         }
-    
+
+    def get_sched_overhead_info(self) -> Dict:
+        """Return Algorithm 2 runtime overhead statistics.
+        Used to answer reviewer question: is alloc_fn on the critical path?
+        Returns both absolute time (µs) and ratio (software/hardware) distributions.
+        """
+        count = self.dist_sched_overhead_time.total_processed_count
+        if count > 0:
+            # Absolute time statistics (convert to µs for output)
+            mean_us = float(self.dist_sched_overhead_time.get_mean()) * 1e6
+            p50_us = float(self.dist_sched_overhead_time.percentile(50)) * 1e6
+            p90_us = float(self.dist_sched_overhead_time.percentile(90)) * 1e6
+            p99_us = float(self.dist_sched_overhead_time.percentile(99)) * 1e6
+            max_us = self.sched_overhead_max_s * 1e6
+            # Ratio statistics (software/hardware)
+            ratio_count = self.dist_sched_overhead_ratio.total_processed_count
+            if ratio_count > 0:
+                ratio_mean = float(self.dist_sched_overhead_ratio.get_mean())
+                ratio_p50 = float(self.dist_sched_overhead_ratio.percentile(50))
+                ratio_p90 = float(self.dist_sched_overhead_ratio.percentile(90))
+                ratio_p99 = float(self.dist_sched_overhead_ratio.percentile(99))
+            else:
+                ratio_mean = ratio_p50 = ratio_p90 = ratio_p99 = 0.0
+        else:
+            mean_us = p50_us = p90_us = p99_us = max_us = 0.0
+            ratio_mean = ratio_p50 = ratio_p90 = ratio_p99 = 0.0
+        return {
+            'sched_overhead_count': count,
+            # Absolute time (µs)
+            'time_mean_us': mean_us,
+            'time_p50_us': p50_us,
+            'time_p90_us': p90_us,
+            'time_p99_us': p99_us,
+            'time_max_us': max_us,
+            # Ratio (software/hardware)
+            'ratio_mean': ratio_mean,
+            'ratio_p50': ratio_p50,
+            'ratio_p90': ratio_p90,
+            'ratio_p99': ratio_p99,
+        }
+
     # ============ Case-Specific Interfaces ============
     
     def get_motiv_case1_stats(self) -> Dict:
@@ -2128,7 +2187,8 @@ class StatisticsCollector:
 
         full_summary = {
             'distribution_summary': self.get_summary(num_bins, p_list),
-            'adaptive_binning_summary': self.get_adaptive_load_latency_summary(p_list)
+            'adaptive_binning_summary': self.get_adaptive_load_latency_summary(p_list),
+            'sched_overhead': self.get_sched_overhead_info()
         }
         return full_summary
 
@@ -2172,6 +2232,27 @@ class StatisticsCollector:
                                 formatted_output.append(f"      {p_key}: {p_val:.4f}")
                         formatted_output.append("")
             formatted_output.append("\n")
+
+        # --- Section 1.5: Algorithm 2 Scheduling Overhead ---
+        sched_oh = summary_data.get('sched_overhead', {})
+        if sched_oh and sched_oh.get('sched_overhead_count', 0) > 0:
+            formatted_output.append("--- Algorithm 2 Scheduling Overhead (alloc_fn) ---")
+            formatted_output.append(f"  Trigger count:     {sched_oh['sched_overhead_count']}")
+            formatted_output.append("")
+            formatted_output.append("  Absolute time (µs):")
+            formatted_output.append(f"    mean:  {sched_oh['time_mean_us']:.2f}")
+            formatted_output.append(f"    P50:   {sched_oh['time_p50_us']:.2f}")
+            formatted_output.append(f"    P90:   {sched_oh['time_p90_us']:.2f}")
+            formatted_output.append(f"    P99:   {sched_oh['time_p99_us']:.2f}")
+            formatted_output.append(f"    max:   {sched_oh['time_max_us']:.2f}")
+            formatted_output.append("")
+            formatted_output.append("  Ratio (software/hardware):")
+            formatted_output.append(f"    mean:  {sched_oh['ratio_mean']:.4f}")
+            formatted_output.append(f"    P50:   {sched_oh['ratio_p50']:.4f}")
+            formatted_output.append(f"    P90:   {sched_oh['ratio_p90']:.4f}")
+            formatted_output.append(f"    P99:   {sched_oh['ratio_p99']:.4f}")
+            formatted_output.append("")
+            formatted_output.append("")
 
         # --- Section 2: Periodic Summary (Motiv-Exp-1) ---
         periodic_summary = summary_data.get('periodic_summary', [])
@@ -2290,7 +2371,12 @@ class StatisticsCollector:
             'dist_overall_miss': self.dist_overall_miss.to_dict(),
             'dist_overall_miss_count': self.dist_overall_miss_count.to_dict(),
             'dist_overall_total_load': self.dist_overall_total_load.to_dict(),
-            
+
+            # Algorithm 2 scheduling overhead (for reviewer question)
+            'dist_sched_overhead_time': self.dist_sched_overhead_time.to_dict(),
+            'dist_sched_overhead_ratio': self.dist_sched_overhead_ratio.to_dict(),
+            'sched_overhead_max_s': self.sched_overhead_max_s,
+
             # new fields
             # for motiv-exp-3 (adaptive)
             'dist_hp_total_load': self.dist_hp_total_load.to_dict(),
@@ -2390,6 +2476,13 @@ class StatisticsCollector:
         collector.latency_dist_per_adaptive_bin = {
             float(k): TDigestStreamingHistogram.from_dict(v) for k, v in binned_data_from_json.items()
         }
+
+        # Restore sched_overhead fields (Algorithm 2 overhead)
+        if 'dist_sched_overhead_time' in state:
+            collector.dist_sched_overhead_time = TDigestStreamingHistogram.from_dict(state['dist_sched_overhead_time'])
+        if 'dist_sched_overhead_ratio' in state:
+            collector.dist_sched_overhead_ratio = TDigestStreamingHistogram.from_dict(state['dist_sched_overhead_ratio'])
+        collector.sched_overhead_max_s = state.get('sched_overhead_max_s', 0.0)
 
         # summary and p_list are transient and can be re-generated
         collector.summary = None 

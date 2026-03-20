@@ -13,6 +13,7 @@ from utils import elim_nume_error
 
 from warnings import warn
 import numpy as np
+import time
 from approach_Eq import (
     sim_comp_time, 
     estimate_resource_requirement, 
@@ -782,10 +783,14 @@ class Acc_p(BaseProcessor):
         # However, in order to maintain the running/ready queues, 
         # these two lines of logic are deliberately placed outside the conditional statement, which is not elegant.
         # TODO: double check
+        if realloc:
+            _t0 = time.perf_counter()
         alloc_map_curr = self.alloc_fn(curr_t, realloc)
         # info collector, schedule-unrelated
         # 记录任务开始统计（当任务进入ready队列时）
         if self.stats_collector and realloc:
+            _elapsed = time.perf_counter() - _t0
+            self.stats_collector.record_sched_overhead(self.id, _elapsed, self.swt_lat)
             # all running and incomming tasks undergo reallocation
             self.stats_collector.record_realloc_num(self.id, list(set(self.res_map.keys()) | set(alloc_map_curr.keys())))
         self.res_map.clear()

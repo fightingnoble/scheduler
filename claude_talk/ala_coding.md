@@ -33,7 +33,7 @@ Ultrathink, feature-dev, superpower:
 [敲定方案]
 
 负载选定三种配置：9 chains
-  低 400T-0.5× 
+  低 400T-0.5×
   中 400T-1.0×
   高 200T-1.0×
 
@@ -43,7 +43,7 @@ Ultrathink, feature-dev, superpower:
   图一:
   - Y1: realloc count 柱子 Y2：realloc ratio 折现
   - 簇：负载，簇内X：bin
-  
+
   图二：
   - Y1: latency breakdown Y2：miss rate
   - 簇：负载，簇内X：bin
@@ -54,7 +54,7 @@ Ultrathink, feature-dev, superpower:
   图一:
   - Y1: realloc count 柱子 Y2：realloc ratio 折现
   - 簇：负载，簇内X：ratioB
-  
+
   图二：
   - Y1: latency breakdown Y2：miss rate
   - 簇：负载，簇内X：ratioB
@@ -65,3 +65,9 @@ Ultrathink, feature-dev, superpower:
 - 不要产生没用的图
 
 
+Ultrathink:
+- 使用superpower 规划修改和测试
+- 添加测试用的代码，保证输出辅助信息帮助确认repack的执行情况和成功失败情况统计。
+- 启动一个subagent 测试，可以使用python-debug 技能
+- 确定repack 真有有开始在执行，而不是一直卡着
+- 现在的cyc-S 和 reserv 都能触发repack了 确认现在repack的执行情况。

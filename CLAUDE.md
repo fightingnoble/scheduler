@@ -14,6 +14,8 @@ conda activate gurobi   # MUST run before any code execution or testing
 |---------------|---------------|
 | Main entry point | `main_approach.py:main()` |
 | Benchmark setup pipeline | `approach_setup.py:setup_benchmark()` |
+| Bin-packing core (both phases) | `sim_main.py:perform_bin_packing()` — handles Phase 1, repack, backup/fallback |
+| Slack allocation formula | `sched/packing_solver/chain_slack_assign.py:287` — `ideal_cores = ceil(flops_rem/(slack_rem*FLOPS_PER_CORE))` |
 | Bin-packing (Phase 1 split) | `sched/global_sched.py:coleasing_alloc_cluster()` |
 | Bin-packing (Phase 2 repack) | `sched/global_sched.py:push_task_into_bins_new()` |
 | Per-task deadline calculation (Step 1) | `sched/slack_estim.py:deduce_cfg2()` |
@@ -23,6 +25,9 @@ conda activate gurobi   # MUST run before any code execution or testing
 | Bin-packing config | `sched/binpack_config.py:BinPackConfig` |
 | Run experiment (motiv) | `scripts/motiv_exp_runner.py` |
 | Run experiment (ablation) | `scripts/abla_exp_runner.py` |
+| Repack debug diagnostics | `sim_main.py:508-583`, `approach_setup.py:127-133` (stderr output) |
+| Repack debug history | `doc/dev/ablation_dev.md` §五 Repack 执行验证 |
+| Debug test script | `test_repack_diagnostic.py` (standalone repack verification) |
 | Shared experiment utilities | `scripts/exp_common.py` (ParamTemplate, run_main_approach_inproc) |
 | Resource allocation (runtime) | `allocator_agent.py` (glb_sched, cyclic_sched) |
 | Path resolution | `paths.py` |
@@ -72,7 +77,9 @@ main_approach.py::main()
             │       args.quantile = ratioB
             │       run_benchmark_setup_pipeline(need_repack=True)
             │       ├── Step 0-1 re-run: deduce_cfg2(quantile=ratioB)  → recalc deadlines
-            │       └── Step 2/3: bypassed — bin_list retains Phase 1 layout
+            │       └── Step 2/3: attempt perform_bin_packing with deepcopy fallback
+            │               - cyc-S (num_bins=-1): bypass — spatial rearrangement meaningless
+            │               - reserv (num_bins>=2): try repack; on failure, restore Phase 1 layout
             │
             └── approach_sim.py::run_simulation()                 → Step 4: event-driven sim
 ```
@@ -84,7 +91,7 @@ main_approach.py::main()
 | 0 | `build_workload_and_criticality` | profiling CSV + args | **Yes** |
 | 1 | `deduce_cfg2` | `args.quantile` (= ratioA or ratioB) | **Yes** (incl. glb); re-run with ratioB during repack |
 | 2 | `coleasing_alloc_cluster` | `num_bins` | No (skipped if `num_bins=1`); **bypassed during repack** |
-| 3 | `push_task_into_bins_new` | `exec_t_comp_ratioB` | **Currently bypassed** (TODO: enable for reserv) |
+| 3 | `push_task_into_bins_new` | `exec_t_comp_ratioB` | reserv only; fallback to Phase 1 on incomplete placement |
 | 4 | `run_simulation` | `policy` | **Yes** |
 
 ### Key Parameters
@@ -103,12 +110,14 @@ main_approach.py::main()
 
 1. **All strategies need Step 1** — `glb` still needs `deduce_cfg2` for per-task deadlines
 2. **Repack re-runs Step 0-1 with `args.quantile = ratioB`** — recalculates task deadlines/FLOPS with the aggressive quantile; bin `num_resources` is loaded from existing `bin_list` and remains unchanged
-3. **Repack bypasses bin packing (Step 2/3)** — bin_list retains Phase 1 spatial layout; TODO: enable `push_task_into_bins_new` for reserv to fine-tune ERT/deadline
-4. **Repack trigger condition: `ratioB != -1 and ratioA != ratioB`** — triggers whenever ratioB differs from ratioA (not just when ratioA > ratioB)
-5. **Resource constraint only in non-repack** — repack does not change resource count
-6. **`num_cores` = `sum(b.num_resources for b in bin_list)`** after constraint applied
-7. **Dump paths use constrained `num_cores`** — coupling between `apply_forced_num_cores` and dump
-8. **`test_case` is fixed to `'bin_pack_new'`** in `main_approach.py` — scheduling behavior is controlled by `policy` parameter, NOT `test_case`
+3. **Repack uses `pre_defined` mode** — `push_task_into_bins_new` with `bin_sel_mod="pre_defined"` preserves Phase 1 spatial layout; both cyc-S and reserv use this path (unified since 2026-03)
+4. **Repack failure is algorithm incompatibility** — `extract_pid2_bin_id()` clears scheduling_table; greedy cannot reproduce ILP's temporal allocation → fallback to Phase 1 layout
+5. **Quantile changes don't affect window positions** — same `var_factor` pattern means `flops_dict[node]/flops_rem` stays constant; see `chain_slack_assign.py:287`
+6. **Repack trigger condition: `ratioB != -1 and ratioA != ratioB`** — triggers whenever ratioB differs from ratioA (not just when ratioA > ratioB)
+7. **Resource constraint only in non-repack** — repack does not change resource count
+8. **`num_cores` = `sum(b.num_resources for b in bin_list)`** after constraint applied
+9. **Dump paths use constrained `num_cores`** — coupling between `apply_forced_num_cores` and dump
+10. **`test_case` is fixed to `'bin_pack_new'`** in `main_approach.py` — scheduling behavior is controlled by `policy` parameter, NOT `test_case`
 
 > **Common pitfalls**: see `doc/spec/readme.md §4` — covers: glb needs Step 1, reserv dual mechanism, Exp 2/3 resource control via load intensity NOT ratioA, cyc-S requires repack.
 
@@ -283,7 +292,7 @@ Speed-reference (full per-experiment details below):
 |-----------|--------|
 | Motivation experiments (3 cases) | ✅ Validated, reproducible via `run_motiv_exps.sh` |
 | Ablation experiment scripts | ✅ Implemented (`abla_exp_runner.py`) |
-| Ablation experiment validation | ✅ All 3 cases validated (Case1: 12/12, Case2: 32/32, Case3: 198/224) |
+| Ablation experiment validation | ✅ All 3 cases validated (Case1: 12/12, Case2: 32/32, Case3: 196/224) |
 | Ablation experiment plotting | ✅ Unified style — `case{N}_overhead.pdf` + `case{N}_tradeoff.pdf` |
 | End-to-end comparison experiments | 📋 Designed in `test_plan.md` §端到端的比较 |
 
@@ -307,9 +316,12 @@ Speed-reference (full per-experiment details below):
 | All results identical | repack not triggered or cache stale | Check `exec_t_comp_ratioB` value (must != -1) |
 | Parameter not passed through | `binpack_cfg` update missed | `utils.py:build_path_old()` |
 | Statistics data missing | `forward_hyperperiod()` not called | Simulation main loop — hyperperiod boundary |
+| Repack incomplete (tasks not placed) | Greedy algorithm cannot reproduce ILP solution | `push_task_into_bins_new` — algorithm incompatibility; fallback handles this |
+| Repack falls back to Phase 1 | Expected behavior — `extract_pid2_bin_id` clears scheduling_table | Check log for "Repack failed" message; fallback is intentional |
+| `TypeError: cannot pickle 'PyCapsule'` | Gurobi license expired | Check `gurobi` env license; renew if needed |
 | `KeyError: 'acc_pN'` in simulation | `num_bins` exceeds actual task groups | `coleasing_alloc_cluster()` produces fewer bins; worker has try/except guard |
 | `KeyError: 'miss_mean_count'` | Case 2 nests it in `stats['utilization']`, Case 3 flattens to top-level | `_case2_worker` vs `_case3_worker` data structure difference |
-| Repack assertion / sink node error | `perform_bin_packing` destroys Phase 1 layout | Repack must bypass bin packing (`approach_setup.py:62-72`) |
+| Diagnostic `print()` invisible | `run_benchmark_setup_pipeline` uses `redirect_stdout` to log file | Use `sys.stderr.write()` for terminal-visible diagnostics |
 
 ## Change Logging
 
