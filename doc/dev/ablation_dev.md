@@ -305,13 +305,67 @@ python main_approach.py \
 
 ## 六、遗留问题
 
-1. **Repack 贪心算法放置不完整**：需在 Gurobi 框架内重解时间片分配，而非使用贪心在线模拟
-2. **Case 1 ratioB=0.99 跳升**：需验证真正的 repack 成功时是否恢复
+1. ~~**Repack 贪心算法放置不完整**~~：已通过 Fixcore Repack 解决
+2. **Case 1 ratioB=0.99 跳升**：需验证 fixcore repack 是否恢复正常趋势
 3. **num_bins 超出分组数**：需在参数扫描前自动过滤无效配置
 
 ---
 
-## 六、运行命令
+## 七、Fixcore Repack 实现（2026-03-20）
+
+### 问题根因
+
+通过深入分析旧版 (3676eb8) 和当前版本的 ratioA/ratioB 处理机制，发现：
+
+1. **旧版 `slack_comp` / `cal_lat` 是精确互逆的**：
+   ```python
+   slack_comp(slack, abs, r) = (slack - abs) * (1 - r)  # deflate
+   cal_lat(lat, abs, r) = lat / (1 - r) + abs           # inflate
+   ```
+   这导致 ERT/DDL 不随 ratio 变化，只有 core 数变化。
+
+2. **当前版本的 quantile 方式也有类似问题**：
+   - `flops_dict[node] / flops_rem` 比例在相同 var_factor 模式下不变
+   - 导致窗口相对位置不变
+
+### 解决方案：Fixcore Repack
+
+**核心思想**：保持 Phase 1 核心数不变，用 `scale_factor = ratioB / ratioA` 直接缩放 latency。
+
+**实现位置**：
+| 文件 | 修改内容 |
+|------|---------|
+| `sim_main.py:33` | 新增 `USE_FIXCORE_REPACK = True` 全局开关 |
+| `sched/slack_estim.py:393-427` | 新增 `_fixcore_slack_estim` 函数 |
+| `sched/slack_estim.py:432-448` | `deduce_cfg2` 增加 `fix_core_map` 和 `scale_factor` 参数 |
+| `task/task_cfg.py:1011-1079` | `gen_workloads` 透传参数，返回 5 个值 |
+| `approach_setup.py:137-149` | 提取 `fix_core_map`，计算 `scale_factor` |
+
+**数据流**：
+```
+Phase 1: deduce_cfg2(quantile=ratioA) → rsc_map_w → cores_A, latency_A
+Repack:  deduce_cfg2(quantile=ratioB, fix_core_map=cores_A, scale_factor=ratioB/ratioA)
+         → cores_A (不变), latency_B = latency_A * scale_factor
+```
+
+**验证结果**：
+```
+Phase1 total latency: 0.4023 ms
+Repack total latency: 0.2688 ms
+Reduction: 33.2% (scale_factor = 0.5/0.7 = 0.714)
+```
+
+### 全局开关
+
+```python
+# sim_main.py
+USE_FIXCORE_REPACK = True   # True: bypass greedy bin-packing
+                            # False: use original push_task_into_bins_new
+```
+
+---
+
+## 八、运行命令
 
 ```bash
 # 单个 Case
