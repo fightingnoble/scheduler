@@ -505,6 +505,17 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
 
             strategy_name = "cyc-S" if args.num_bins == -1 else "reserv"
 
+            # === DIAGNOSTIC: Repack execution tracking ===
+            import sys
+            sys.stderr.write(f"\n{'='*60}\n")
+            sys.stderr.write(f"[REPACK DIAGNOSTIC] Starting repack for {strategy_name}\n")
+            sys.stderr.write(f"  - ratioA={args.exec_t_comp_ratioA}, ratioB={args.exec_t_comp_ratioB}\n")
+            sys.stderr.write(f"  - num_bins={args.num_bins}, num_cores={num_cores}\n")
+            sys.stderr.write(f"  - Phase 1 tasks: {len(phase1_pids)}\n")
+            sys.stderr.write(f"  - glb_p_list size: {len(glb_p_list)}\n")
+            sys.stderr.write(f"{'='*60}\n\n")
+            sys.stderr.flush()
+
             try:
                 # 获取 Phase 1 的 bin 分配
                 pid2_bin_id = extract_pid2_bin_id(bin_list)
@@ -541,20 +552,36 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
                     repack_pids.update(_b.index_occupy_by_id().keys())
                 missing = phase1_pids - repack_pids
                 if missing:
+                    # === DIAGNOSTIC: Detailed missing task info ===
+                    print(f"\n[REPACK DIAGNOSTIC] Incomplete placement detected:")
+                    print(f"  - Phase 1 tasks: {len(phase1_pids)}")
+                    print(f"  - Repack placed: {len(repack_pids)}")
+                    print(f"  - Missing tasks: {len(missing)}")
+                    print(f"  - Missing PIDs (first 10): {sorted(list(missing))[:10]}")
                     raise RuntimeError(
                         f"Repack incomplete: {len(missing)} tasks not placed "
                         f"(missing PIDs: {sorted(list(missing))[:5]}...)")
 
-                print("=" * 20 + f" Repack succeeded ({strategy_name}, ratioB={args.exec_t_comp_ratioB})"
-                      + "=" * 20)
+                # === DIAGNOSTIC: Success summary ===
+                print(f"\n{'='*60}")
+                print(f"[REPACK DIAGNOSTIC] SUCCESS")
+                print(f"  - Strategy: {strategy_name}")
+                print(f"  - ratioB: {args.exec_t_comp_ratioB}")
+                print(f"  - Tasks placed: {len(repack_pids)}")
+                print(f"{'='*60}\n")
                 repack_success = True
 
             except (ResourceInsufficientError, RuntimeError) as e:
                 # Fallback: 恢复 Phase 1 布局
                 bin_list = bin_list_backup
                 max_core_num = sum(b.num_resources for b in bin_list)
-                print("=" * 20 + f" Repack failed ({strategy_name}): {e}" + "=" * 20)
-                print("Restored Phase 1 layout as fallback.")
+                # === DIAGNOSTIC: Failure summary ===
+                print(f"\n{'='*60}")
+                print(f"[REPACK DIAGNOSTIC] FAILED - FALLBACK TO PHASE 1")
+                print(f"  - Strategy: {strategy_name}")
+                print(f"  - Error: {e}")
+                print(f"  - Restored Phase 1 layout with {len(phase1_pids)} tasks")
+                print(f"{'='*60}\n")
                 repack_success = False
 
     else:

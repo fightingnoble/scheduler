@@ -124,6 +124,13 @@ def setup_benchmark(args, time_norm_factor):
         # For cyc-S (num_bins=-1): bypass bin packing, only recalculate deadlines.
         # For reserv (num_bins>=2): run perform_bin_packing with pre_defined mapping;
         #   if ResourceInsufficientError (ratioB > ratioA), fallback to Phase 1 layout.
+        import sys
+        sys.stderr.write(f"\n{'='*60}\n")
+        sys.stderr.write(f"[SETUP_BENCHMARK] Repack triggered!\n")
+        sys.stderr.write(f"  ratioA={args.exec_t_comp_ratioA}, ratioB={args.exec_t_comp_ratioB}\n")
+        sys.stderr.write(f"  num_bins={args.num_bins}\n")
+        sys.stderr.write(f"{'='*60}\n\n")
+        sys.stderr.flush()
         args.quantile = args.exec_t_comp_ratioB
         hyper_p, bin_list, num_cores= run_benchmark_setup_pipeline(
             args, path_ctx, path_params, True, hyper_p, bin_list, num_cores,
