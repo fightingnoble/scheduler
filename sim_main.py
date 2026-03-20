@@ -1,4 +1,5 @@
 import os, re
+from typing import Dict
 import warnings
 from task.task_cfg import gen_workloads, export_json_graph_utils
 from task.task_cfg import affinity_cfg
@@ -20,8 +21,16 @@ from utils import dump_and_check, load_pickle, update_df, check_parents_path, bu
 from global_var import *
 from utils import core_distr, time_cnt, vectorized_core_allocation
 from paths import PathContext
-import numpy as np 
+import numpy as np
 import argparse
+
+# ============================================================================
+# Global switch for Fixcore Repack mode
+# When True: bypass greedy bin-packing in repack, keep Phase 1 layout,
+#            ERT/DDL are already updated by deduce_cfg2 with fix_core_map
+# When False: use original greedy bin-packing (push_task_into_bins_new)
+# ============================================================================
+USE_FIXCORE_REPACK = True
 
 
 def generate_bin_paths(path_para_dict, path_ctx: PathContext, num_cores, check_hints, extra_suffix=""):
@@ -229,12 +238,12 @@ def build_paths_and_ctx(args):
     return path_params, path_ctx
 
 
-def build_workload_and_criticality(args):
+def build_workload_and_criticality(args, fix_core_map: Dict[str, int] = None, scale_factor: float = None):
     """
     生成 workload 并设置 criticality，对应 main 中的 "workload settings" 段
-    返回: (hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list)
+    返回: (hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list, rsc_map_w)
     """
-    hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list = gen_workloads(args)
+    hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list, rsc_map_w = gen_workloads(args, fix_core_map=fix_core_map, scale_factor=scale_factor)
 
     # assert all the process has hard deadline
     if args.lateness_mode == "all_hard":
@@ -248,7 +257,7 @@ def build_workload_and_criticality(args):
     elif args.lateness_mode == "ignore":
         pass
 
-    return hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list
+    return hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list, rsc_map_w
 
 
 def determine_resource_config(args, path_params, path_ctx, need_repack, bin_list):
@@ -350,7 +359,7 @@ def create_scheduler_elements_with_config(args, path_params, path_ctx, workload,
     cfg_para_dict, para_scan_group1, para_scan_group2, path_para_dict, \
     bin_path_format, trace_path_para, plot_path_para, csv_xlxs_root, case_pth = path_params
     
-    hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list = workload
+    hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list, _ = workload
 
     scheduler_args = {
         "exec_t_comp_ratioB": args.exec_t_comp_ratioB,
@@ -383,7 +392,7 @@ def build_simulation_env(args, workload, sim_step):
     构建仿真环境参数，对应 main 中仿真参数设置部分
     返回: (num_periods, warmup, quantumSize, event_range, event_iter_dict)
     """
-    hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list = workload
+    hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list, _ = workload
     
     num_periods = args.n_p
     warmup = not args.warmup_dis
@@ -492,97 +501,101 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
             repack_success = True  # Phase 1 always succeeds
 
         else:
-            # ========== Repack: unified for cyc-S and reserv ==========
-            # 使用 pre_defined 模式继承 Phase 1 空间分配，只调整时间片
-            assert len(bin_list) > 0, "bin_list must not be empty for repack"
-
-            # 内部创建备份
-            import copy
-            bin_list_backup = copy.deepcopy(bin_list)
-            phase1_pids = set()
-            for _b in bin_list_backup:
-                phase1_pids.update(_b.index_occupy_by_id().keys())
-
-            strategy_name = "cyc-S" if args.num_bins == -1 else "reserv"
-
-            # === DIAGNOSTIC: Repack execution tracking ===
-            import sys
-            sys.stderr.write(f"\n{'='*60}\n")
-            sys.stderr.write(f"[REPACK DIAGNOSTIC] Starting repack for {strategy_name}\n")
-            sys.stderr.write(f"  - ratioA={args.exec_t_comp_ratioA}, ratioB={args.exec_t_comp_ratioB}\n")
-            sys.stderr.write(f"  - num_bins={args.num_bins}, num_cores={num_cores}\n")
-            sys.stderr.write(f"  - Phase 1 tasks: {len(phase1_pids)}\n")
-            sys.stderr.write(f"  - glb_p_list size: {len(glb_p_list)}\n")
-            sys.stderr.write(f"{'='*60}\n\n")
-            sys.stderr.flush()
-
-            try:
-                # 获取 Phase 1 的 bin 分配
-                pid2_bin_id = extract_pid2_bin_id(bin_list)
+            # ========== Repack: Fixcore mode (bypass greedy bin-packing) ==========
+            if USE_FIXCORE_REPACK:
+                # Fixcore 模式：ERT/DDL 已在 deduce_cfg2 中更新
+                # bin_list 保持 Phase 1 布局不变，不调用贪心装箱
                 max_core_num = sum(b.num_resources for b in bin_list)
-
-                print("=" * 20 + f" Repack mode ({strategy_name}): Redistribute slack (ratioB={args.exec_t_comp_ratioB})" + "=" * 20 + "\n")
-
-                # 构造局部 binpack 配置，使用 pre_defined 模式
-                binpack_cfg_local = prepare_binpack_cfg(args.binpack_cfg, args.exec_t_comp_ratioB, glb_p_list, physical_graph_nx)
-                binpack_cfg_local["mapping"] = pid2_bin_id
-                binpack_cfg_local["bin_sel_mod"] = "pre_defined"
-                binpack_cfg_local["affinity_en"] = False
-                binpack_cfg_local["affinity_level"] = 0
-
-                # 尝试 repack
-                bin_list = push_task_into_bins_new(
-                    bin_list,
-                    glb_p_list, affinity_cfg, event_iter_dict,
-                    num_cores, args.quantum_check_en, quantumSize,
-                    sim_step, hyper_p, args.exec_t_comp_ratioB,
-
-                    scheduler_list, monitor_list,
-                    msg_dispatcher,
-                    a_data_pipe, w_data_pipe,
-
-                    num_periods, binpack_cfg=binpack_cfg_local,
-                    verbose=True, DEBUG_FG=False,
-                    warmup=True, drain=True,
-                    )
-
-                # 完整性检查：验证所有 Phase 1 任务仍然被放置
-                repack_pids = set()
-                for _b in bin_list:
-                    repack_pids.update(_b.index_occupy_by_id().keys())
-                missing = phase1_pids - repack_pids
-                if missing:
-                    # === DIAGNOSTIC: Detailed missing task info ===
-                    print(f"\n[REPACK DIAGNOSTIC] Incomplete placement detected:")
-                    print(f"  - Phase 1 tasks: {len(phase1_pids)}")
-                    print(f"  - Repack placed: {len(repack_pids)}")
-                    print(f"  - Missing tasks: {len(missing)}")
-                    print(f"  - Missing PIDs (first 10): {sorted(list(missing))[:10]}")
-                    raise RuntimeError(
-                        f"Repack incomplete: {len(missing)} tasks not placed "
-                        f"(missing PIDs: {sorted(list(missing))[:5]}...)")
-
-                # === DIAGNOSTIC: Success summary ===
-                print(f"\n{'='*60}")
-                print(f"[REPACK DIAGNOSTIC] SUCCESS")
-                print(f"  - Strategy: {strategy_name}")
-                print(f"  - ratioB: {args.exec_t_comp_ratioB}")
-                print(f"  - Tasks placed: {len(repack_pids)}")
-                print(f"{'='*60}\n")
                 repack_success = True
+            else:
+                # 原始模式：使用贪心装箱
+                # 内部创建备份
+                import copy
+                bin_list_backup = copy.deepcopy(bin_list)
+                phase1_pids = set()
+                for _b in bin_list_backup:
+                    phase1_pids.update(_b.index_occupy_by_id().keys())
 
-            except (ResourceInsufficientError, RuntimeError) as e:
-                # Fallback: 恢复 Phase 1 布局
-                bin_list = bin_list_backup
-                max_core_num = sum(b.num_resources for b in bin_list)
-                # === DIAGNOSTIC: Failure summary ===
-                print(f"\n{'='*60}")
-                print(f"[REPACK DIAGNOSTIC] FAILED - FALLBACK TO PHASE 1")
-                print(f"  - Strategy: {strategy_name}")
-                print(f"  - Error: {e}")
-                print(f"  - Restored Phase 1 layout with {len(phase1_pids)} tasks")
-                print(f"{'='*60}\n")
-                repack_success = False
+                strategy_name = "cyc-S" if args.num_bins == -1 else "reserv"
+
+                # === DIAGNOSTIC: Repack execution tracking ===
+                import sys
+                sys.stderr.write(f"\n{'='*60}\n")
+                sys.stderr.write(f"[REPACK DIAGNOSTIC] Starting repack for {strategy_name}\n")
+                sys.stderr.write(f"  - ratioA={args.exec_t_comp_ratioA}, ratioB={args.exec_t_comp_ratioB}\n")
+                sys.stderr.write(f"  - num_bins={args.num_bins}, num_cores={num_cores}\n")
+                sys.stderr.write(f"  - Phase 1 tasks: {len(phase1_pids)}\n")
+                sys.stderr.write(f"  - glb_p_list size: {len(glb_p_list)}\n")
+                sys.stderr.write(f"{'='*60}\n\n")
+                sys.stderr.flush()
+
+                try:
+                    # 获取 Phase 1 的 bin 分配
+                    pid2_bin_id = extract_pid2_bin_id(bin_list)
+                    max_core_num = sum(b.num_resources for b in bin_list)
+
+                    print("=" * 20 + f" Repack mode ({strategy_name}): Redistribute slack (ratioB={args.exec_t_comp_ratioB})" + "=" * 20 + "\n")
+
+                    # 构造局部 binpack 配置，使用 pre_defined 模式
+                    binpack_cfg_local = prepare_binpack_cfg(args.binpack_cfg, args.exec_t_comp_ratioB, glb_p_list, physical_graph_nx)
+                    binpack_cfg_local["mapping"] = pid2_bin_id
+                    binpack_cfg_local["bin_sel_mod"] = "pre_defined"
+                    binpack_cfg_local["affinity_en"] = False
+                    binpack_cfg_local["affinity_level"] = 0
+
+                    # 尝试 repack
+                    bin_list = push_task_into_bins_new(
+                        bin_list,
+                        glb_p_list, affinity_cfg, event_iter_dict,
+                        num_cores, args.quantum_check_en, quantumSize,
+                        sim_step, hyper_p, args.exec_t_comp_ratioB,
+
+                        scheduler_list, monitor_list,
+                        msg_dispatcher,
+                        a_data_pipe, w_data_pipe,
+
+                        num_periods, binpack_cfg=binpack_cfg_local,
+                        verbose=True, DEBUG_FG=False,
+                        warmup=True, drain=True,
+                        )
+
+                    # 完整性检查：验证所有 Phase 1 任务仍然被放置
+                    repack_pids = set()
+                    for _b in bin_list:
+                        repack_pids.update(_b.index_occupy_by_id().keys())
+                    missing = phase1_pids - repack_pids
+                    if missing:
+                        # === DIAGNOSTIC: Detailed missing task info ===
+                        print(f"\n[REPACK DIAGNOSTIC] Incomplete placement detected:")
+                        print(f"  - Phase 1 tasks: {len(phase1_pids)}")
+                        print(f"  - Repack placed: {len(repack_pids)}")
+                        print(f"  - Missing tasks: {len(missing)}")
+                        print(f"  - Missing PIDs (first 10): {sorted(list(missing))[:10]}")
+                        raise RuntimeError(
+                            f"Repack incomplete: {len(missing)} tasks not placed "
+                            f"(missing PIDs: {sorted(list(missing))[:5]}...)")
+
+                    # === DIAGNOSTIC: Success summary ===
+                    print(f"\n{'='*60}")
+                    print(f"[REPACK DIAGNOSTIC] SUCCESS")
+                    print(f"  - Strategy: {strategy_name}")
+                    print(f"  - ratioB: {args.exec_t_comp_ratioB}")
+                    print(f"  - Tasks placed: {len(repack_pids)}")
+                    print(f"{'='*60}\n")
+                    repack_success = True
+
+                except (ResourceInsufficientError, RuntimeError) as e:
+                    # Fallback: 恢复 Phase 1 布局
+                    bin_list = bin_list_backup
+                    max_core_num = sum(b.num_resources for b in bin_list)
+                    # === DIAGNOSTIC: Failure summary ===
+                    print(f"\n{'='*60}")
+                    print(f"[REPACK DIAGNOSTIC] FAILED - FALLBACK TO PHASE 1")
+                    print(f"  - Strategy: {strategy_name}")
+                    print(f"  - Error: {e}")
+                    print(f"  - Restored Phase 1 layout with {len(phase1_pids)} tasks")
+                    print(f"{'='*60}\n")
+                    repack_success = False
 
     else:
         raise NotImplementedError(f"binpack algorithm {args.binpack_cfg['algorithm']} is not implemented")

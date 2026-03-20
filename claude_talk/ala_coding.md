@@ -71,3 +71,14 @@ Ultrathink:
 - 启动一个subagent 测试，可以使用python-debug 技能
 - 确定repack 真有有开始在执行，而不是一直卡着
 - 现在的cyc-S 和 reserv 都能触发repack了 确认现在repack的执行情况。
+
+ultrathink： feature-dev 探索，superpower理解控制探索走向，以及深度理解代码
+实现一个简单的repack，这个repack 可以直接内置在step 1 中：
+  现在的初始时间片计算之后，每条链条上的任务的获得的时间片之和近似等于端到端延迟。
+  repack 的目的是在不减少总资源数量的前提下，重新调整ert 和ddl的分配，让他们提前一点；
+  
+  那么简单一点，默认每个任务的资源不变，他们的任务量按照rationB的分位数区，然后按照图的依赖关系向后传递，得出ert和ddl。
+
+但是我还是想知道，在把按比例预留改成按分位数预留之前，是怎么处理ratio A ratioB的（相关的逻辑以及被清理了）
+- 需要你切换回 3676eb8 分支，看看当时的 gen_workloads 下面的怎么处理 两种模式的，特别关注 deduce_cfg2 中exec_t_comp_abs exec_t_comp_rel的设置，init_graph_time_attr，以及deduce_eq_wsc 逻辑。
+- 在切换分支之前，需要你现在doc 文件夹下搜寻相关的更改历史和refactor历史，如果没找到，再切换分支了解

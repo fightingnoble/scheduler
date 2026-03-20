@@ -1,5 +1,62 @@
 # Change Log 2026
 
+## [2026-03-20] Algorithm 2 运行时开销测量（回复审稿人3）
+
+### 问题描述
+审稿人3提出："What is the runtime overhead of Algorithm 1 and Algorithm 2? Will the algorithms be on the critical path?"
+
+需要测量 Algorithm 2（`alloc_fn`）的软件决策延迟，判断其是否在关键路径上。
+
+### 修改内容
+
+1. **`approach_def.py`**
+   - 添加 `import time`（第 15 行）
+   - 在 `Acc_p.sched()` 中添加计时逻辑（第 786-793 行）
+   - 当 `realloc=True` 时，使用 `time.perf_counter()` 测量 `alloc_fn` 执行时间
+   - 调用 `stats_collector.record_sched_overhead()` 记录
+
+2. **`approach_collector.py`**
+   - `__init__` 中新增 3 个变量（第 124-127 行）：
+     - `dist_sched_overhead_time`: TDigest，记录绝对时间（秒）
+     - `dist_sched_overhead_ratio`: TDigest，记录 ratio（软件/硬件）
+     - `sched_overhead_max_s`: 精确最大值（TDigest 无法提供）
+   - 新增 `record_sched_overhead()` 方法（第 287-302 行）
+   - 新增 `get_sched_overhead_info()` 方法（第 627-660 行）
+   - 更新 `save_state()` 和 `load_state()` 支持 JSON 序列化
+   - 更新 `export_summary()` 格式化输出
+
+### 技术要点
+
+1. **关键路径分析**：
+   - `trigger_cond`: metadata 收集不在关键路径
+   - `alloc_fn`: 仅当 `realloc=True` 时在关键路径
+   - `update_queue`: 可与硬件切换并行，不在关键路径
+
+2. **时间单位**：
+   - `swt_lat` 从 `trasfer_realloc_as_task()` 返回的是**秒**，不是 sim units
+   - 存储用秒，输出时转换为 µs
+
+3. **TDigest API**：
+   - `percentile(p)` 参数是 **0-100**，不是 0-1
+   - 无法提供精确 max，需单独记录
+
+### 测量结果（10 hyperperiods）
+
+| 指标 | 绝对时间 (µs) | Ratio (%) |
+|------|---------------|-----------|
+| mean | 30.6 | 4.44% |
+| P99 | 84.1 | 13.46% |
+| max | 151.9 | ~24% |
+
+### 结论
+- **Algorithm 1**: 离线执行，不在关键路径
+- **Algorithm 2**: P99 ratio = 13.5% < 50%，软件开销被硬件切换（625 µs）吸收，**不在关键路径**
+
+### 相关文档
+- 新增：`doc/spec/stat/runtime_overhead_spec.md`
+
+---
+
 ## [2026-02-14] 配置化硬编码的 tot_cores = 300
 
 ### 问题描述

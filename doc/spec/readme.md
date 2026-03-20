@@ -40,7 +40,7 @@
 
 ### 2.3 统计收集规范
 
-层次关系：底层算法 → 业务集成 → 扩展指南
+层次关系：底层算法 → 业务集成 → 扩展指南 → 运行时测量
 
 ```
 stat/tdigest_system_spec.md        (T-Digest 流式直方图算法)
@@ -50,6 +50,9 @@ stat/statistics_collection_spec.md (StatisticsCollector 架构、分布存储、
         │ 提供 API
         v
 stat/collector.md                  (E2E 延迟分解、关键路径分析、扩展指南)
+        │
+        v
+stat/runtime_overhead_spec.md      (Algorithm 2 运行时开销测量、审稿回复)
 ```
 
 | 文档 | 内容摘要 |
@@ -57,6 +60,7 @@ stat/collector.md                  (E2E 延迟分解、关键路径分析、扩�
 | [stat/tdigest_system_spec.md](./stat/tdigest_system_spec.md) | T-Digest 算法原理、TDigestStreamingHistogram 接口、参数配置 |
 | [stat/statistics_collection_spec.md](./stat/statistics_collection_spec.md) | StatisticsCollector 架构、分布存储结构、记录/摘要/绘图 API |
 | [stat/collector.md](./stat/collector.md) | **权威文档**：E2E 延迟分解（关键路径分析）、扩展指南 |
+| [stat/runtime_overhead_spec.md](./stat/runtime_overhead_spec.md) | **新增**：Algorithm 2 运行时开销测量、关键路径判断、审稿回复要点 |
 
 ### 2.4 仿真规范
 

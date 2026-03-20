@@ -1,0 +1,83 @@
+{
+  "experiment": "Ablation-1: cyc(S) vs cyc",
+  "timestamp": "2026-03-11T16:57:22.670282",
+  "parameters": {
+    "ratioBs": [
+      0.99
+    ],
+    "cyc_ratios": [
+      0.5,
+      0.6,
+      0.7,
+      0.8,
+      0.9,
+      0.99
+    ],
+    "ratioA": 0.7
+  },
+  "results": [
+    {
+      "ratio": 0.99,
+      "label": "cyc p99",
+      "exp_type": "cyc",
+      "idle_mean_ratio": 0.6361251418691201,
+      "miss_mean_ratio": 1.32967868e-05,
+      "miss_mean_count": 0.01641509433962264,
+      "realloc_mean_ratio": 0.0
+    },
+    {
+      "ratio": 0.9,
+      "label": "cyc p90",
+      "exp_type": "cyc",
+      "idle_mean_ratio": 0.6121845203983601,
+      "miss_mean_ratio": 0.00027212052015,
+      "miss_mean_count": 0.020943396226415095,
+      "realloc_mean_ratio": 0.0
+    },
+    {
+      "ratio": 0.5,
+      "label": "cyc p50",
+      "exp_type": "cyc",
+      "idle_mean_ratio": 0.3263838681452701,
+      "miss_mean_ratio": 0.14894210509566,
+      "miss_mean_count": 0.08679245283018867,
+      "realloc_mean_ratio": 0.0
+    },
+    {
+      "ratio": 0.6,
+      "label": "cyc p60",
+      "exp_type": "cyc",
+      "idle_mean_ratio": 0.32616371025228014,
+      "miss_mean_ratio": 0.14962413868339997,
+      "miss_mean_count": 0.08433962264150943,
+      "realloc_mean_ratio": 0.0
+    },
+    {
+      "ratio": 0.7,
+      "label": "cyc p70",
+      "exp_type": "cyc",
+      "idle_mean_ratio": 0.32642303113999005,
+      "miss_mean_ratio": 0.15023092455615003,
+      "miss_mean_count": 0.08415094339622642,
+      "realloc_mean_ratio": 0.0
+    },
+    {
+      "ratio": 0.8,
+      "label": "cyc p80",
+      "exp_type": "cyc",
+      "idle_mean_ratio": 0.33688460604511,
+      "miss_mean_ratio": 0.14503301964732998,
+      "miss_mean_count": 0.08132075471698112,
+      "realloc_mean_ratio": 0.0
+    },
+    {
+      "ratio": 0.99,
+      "label": "cyc(S) p99",
+      "exp_type": "cyc-S",
+      "idle_mean_ratio": 0.26147132357948005,
+      "miss_mean_ratio": 0.13148661161614,
+      "miss_mean_count": 0.07018867924528302,
+      "realloc_mean_ratio": 0.0021810818541800007
+    }
+  ]
+}

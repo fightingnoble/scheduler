@@ -1,0 +1,145 @@
+{
+    "delta": 0.01,
+    "K": 25,
+    "total_pwr": 203.0,
+    "partition_realloc_stats": {
+        "sen_p": {
+            "cap": 3,
+            "base_pwr": 1
+        },
+        "acc_p0": {
+            "cap": 400,
+            "base_pwr": 0.5
+        }
+    },
+    "task_at": {
+        "Traffic_light_detection_0_0_0": 0.005065240727,
+        "ImageBB_0_0_0": 0.005065240727,
+        "Stereo_feature_enc_0_0_0": 0.00759786059,
+        "ImageBB_0_1_0": 0.03839857406,
+        "Traffic_light_detection_0_1_0": 0.03839857406,
+        "Stereo_feature_enc_0_1_0": 0.05759786059,
+        "ImageBB_0_2_0": 0.071731907394,
+        "Traffic_light_detection_0_2_0": 0.071731907394
+    },
+    "task_realloc_curr": {},
+    "task_realloc_num": {
+        "ImageBB_0_0_0": 3,
+        "Traffic_light_detection_0_0_0": 4,
+        "Stereo_feature_enc_0_0_0": 2,
+        "ImageBB_0_1_0": 2,
+        "Traffic_light_detection_0_1_0": 2,
+        "ImageBB_0_2_0": 1,
+        "Traffic_light_detection_0_2_0": 1,
+        "Stereo_feature_enc_0_1_0": 1
+    },
+    "task_compute_curr": {},
+    "part_realloc_curr": {},
+    "part_realloc_num": {
+        "acc_p0": 4
+    },
+    "hp_total_load_curr": 0.0,
+    "hp_worst_e2e_curr": -Infinity,
+    "hp_idle_curr": 0.0,
+    "system_realloc_cost": 0.0,
+    "dist_per_task_exe": {},
+    "dist_per_task_ft": {},
+    "dist_per_task_realloc": {},
+    "dist_per_part_realloc": {},
+    "dist_overall_realloc": {
+        "delta": 0.01,
+        "K": 25,
+        "tdigest_state": {
+            "n": 1,
+            "delta": 0.01,
+            "K": 25,
+            "centroids": [
+                {
+                    "m": 0.0,
+                    "c": 1.0
+                }
+            ]
+        },
+        "total_processed_count": 1
+    },
+    "dist_overall_idle": {
+        "delta": 0.01,
+        "K": 25,
+        "tdigest_state": {
+            "n": 1,
+            "delta": 0.01,
+            "K": 25,
+            "centroids": [
+                {
+                    "m": Infinity,
+                    "c": 1.0
+                }
+            ]
+        },
+        "total_processed_count": 1
+    },
+    "dist_overall_miss": {
+        "delta": 0.01,
+        "K": 25,
+        "tdigest_state": {
+            "n": 1,
+            "delta": 0.01,
+            "K": 25,
+            "centroids": [
+                {
+                    "m": 0.255945123153,
+                    "c": 1.0
+                }
+            ]
+        },
+        "total_processed_count": 1
+    },
+    "dist_overall_miss_count": {
+        "delta": 0.01,
+        "K": 25,
+        "tdigest_state": {
+            "n": 1,
+            "delta": 0.01,
+            "K": 25,
+            "centroids": [
+                {
+                    "m": 4.0,
+                    "c": 1.0
+                }
+            ]
+        },
+        "total_processed_count": 1
+    },
+    "dist_overall_total_load": {
+        "delta": 0.01,
+        "K": 25,
+        "tdigest_state": {
+            "n": 1,
+            "delta": 0.01,
+            "K": 25,
+            "centroids": [
+                {
+                    "m": 8.232726000000001,
+                    "c": 1.0
+                }
+            ]
+        },
+        "total_processed_count": 1
+    },
+    "dist_hp_total_load": {
+        "delta": 0.01,
+        "K": 25,
+        "tdigest_state": {
+            "n": 0,
+            "delta": 0.01,
+            "K": 25,
+            "centroids": []
+        },
+        "total_processed_count": 0
+    },
+    "hp_temp_records_for_binning": [],
+    "adaptive_load_bins": null,
+    "latency_dist_per_adaptive_bin": {},
+    "summary": null,
+    "p_list": null
+}

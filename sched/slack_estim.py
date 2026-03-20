@@ -390,23 +390,67 @@ def deduce_task_attrib(taskattr: TaskIntAttr,
     taskattr.max_tot_rsc = deduce_max_tot_rsc(rda_size, req_rsc_size, taskattr.thread_scaling_factor, taskattr.freq_division_factor, max(taskattr.var_factor))
     taskattr.util = deduce_util(equiv_core, min_tot_rsc)
 
-def deduce_cfg2(taskattr_dict, 
-               logical_graph_nx, task_graph_srcs, task_graph_sinks, 
-               quantile, slack_threshold, 
-               verbose=False, plot=False):
+def _fixcore_slack_estim(
+    logical_graph_nx,
+    fix_core_map: Dict[str, int],
+    quantile: float,
+    scale_factor: float = None,
+) -> Dict[str, Tuple[int, float, Union[str, None]]]:
+    """
+    Repack mode: recompute task latency using ratioB quantile while keeping
+    Phase 1 core counts fixed. Returns rsc_map_w compatible with init_topo_time_attr.
+
+    Args:
+        scale_factor: If provided, scale latency by this factor instead of using quantile.
+                      This creates the "tail margin" effect when scale_factor < 1.
+    """
+    rsc_map_w: Dict[str, Tuple[int, float, Union[str, None]]] = {}
+    for node, data in logical_graph_nx.nodes(data=True):
+        if data.get('type') == 'sink':
+            continue
+        var_dist = data.get('var_dist')
+        if var_dist is None:
+            continue
+        if isinstance(var_dist, SenVarDist):
+            latency = float(var_dist.quantile(quantile))
+            cores = 1
+        else:
+            cores = fix_core_map.get(node, 1)
+            load_q = float(var_dist.load_dist.quantile(quantile))
+            io_q   = float(var_dist.exec_dist.quantile(quantile))
+            latency = load_q / max(cores, 1) / FLOPS_PER_CORE + io_q
+            # Apply scaling factor if provided
+            if scale_factor is not None:
+                latency = latency * scale_factor
+        rsc_map_w[node] = (cores, elim_nume_error(latency), None)
+    return rsc_map_w
+
+def deduce_cfg2(taskattr_dict,
+               logical_graph_nx, task_graph_srcs, task_graph_sinks,
+               quantile, slack_threshold,
+               verbose=False, plot=False,
+               fix_core_map: Dict[str, int] = None,
+               scale_factor: float = None):
     """
     配置推导函数
-    
+
     Args:
         quantile: 用于分布分位数计算的分位数
+        fix_core_map: Phase 1 的核心分配，用于 repack
+        scale_factor: repack 时的 latency 缩放因子，用于创建尾部余量
     """
 
-    chains_info = get_chains(logical_graph_nx, task_graph_srcs, task_graph_sinks, taskattr_dict,
-                               quantile=quantile, remove_src_sink=False)
-    rsc_map_w = rsc_slack_estim(logical_graph_nx, taskattr_dict, chains_info, 
-                                slack_threshold, 
-                                algorithm="avg",
-                                quantile=quantile) 
+    if fix_core_map is not None:
+        # Repack mode: fixed cores, recompute latency at quantile (ratioB)
+        rsc_map_w = _fixcore_slack_estim(logical_graph_nx, fix_core_map, quantile, scale_factor)
+    else:
+        # Normal Phase 1: solve for optimal core count
+        chains_info = get_chains(logical_graph_nx, task_graph_srcs, task_graph_sinks, taskattr_dict,
+                                   quantile=quantile, remove_src_sink=False)
+        rsc_map_w = rsc_slack_estim(logical_graph_nx, taskattr_dict, chains_info,
+                                    slack_threshold,
+                                    algorithm="avg",
+                                    quantile=quantile)
     if verbose:
         print(rsc_map_w)
     

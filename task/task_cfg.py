@@ -1008,7 +1008,7 @@ def gen_taskint_from_cfg(taskattr_dict:Dict[str, TaskIntAttr], f_gcd: int,
 
     return task_dict
 
-def gen_workloads(args):
+def gen_workloads(args, fix_core_map: Dict[str, int] = None, scale_factor: float = None):
     # 1. load task attributes
     unfold_mode = args.G_decomp_mode
     taskattr_dict, f_gcd = load_taskattrib(args.profiling_filename, unfold_mode, verbose=args.verbose) 
@@ -1071,10 +1071,12 @@ def gen_workloads(args):
         print(f"Gurobi 模块未安装或未正确配置：{e}")
         algorithm = 'avg'
     ert, ddl, rsc_map_w = deduce_cfg2(
-        taskattr_dict, 
+        taskattr_dict,
         logical_graph_nx, srcs, sinks,
-        args.quantile, args.slack_threshold, 
-        verbose=args.verbose, plot=args.plot)
+        args.quantile, args.slack_threshold,
+        verbose=args.verbose, plot=args.plot,
+        fix_core_map=fix_core_map,
+        scale_factor=scale_factor)
     physical_graph_nx = creat_physical_graph(logical_graph_nx, int(f_gcd), taskattr_dict=taskattr_dict, mode=unfold_mode)
 
     update_taskattr_dict(ert, ddl, rsc_map_w, taskattr_dict, f_gcd, hyper_p, logical_graph_nx, verbose=args.verbose)
@@ -1106,7 +1108,7 @@ def gen_workloads(args):
         verbose=args.verbose,
     )
     
-    return hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list
+    return hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list, rsc_map_w
 
 
 def extract_parallel_cfg(task_attr, mode="runtime"):

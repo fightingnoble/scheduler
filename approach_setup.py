@@ -10,7 +10,9 @@ from approach_initiator import instantiate_mygraph_from_json
 
 def run_benchmark_setup_pipeline(
     args, path_ctx, path_params, need_repack, hyper_p,
-    bin_list, num_cores
+    bin_list, num_cores,
+    fix_core_map=None,
+    scale_factor=None,
     ):
     """
     Executes the main setup steps for the benchmark: workload generation,
@@ -18,14 +20,14 @@ def run_benchmark_setup_pipeline(
     simulation environment setup, and bin packing.
 
     Returns:
-        Updated (hyper_p, bin_list, num_cores)
+        Updated (hyper_p, bin_list, num_cores, rsc_map_w)
     """
     from contextlib import redirect_stdout
     with open(path_ctx.get_log_path(), 'w') as f:
         with redirect_stdout(f):
             # 2. 生成 workload 并设置 criticality
-            workload = build_workload_and_criticality(args)
-            hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list = workload
+            workload = build_workload_and_criticality(args, fix_core_map=fix_core_map, scale_factor=scale_factor)
+            hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list, rsc_map_w = workload
             export_json_graph_utils(physical_graph_nx, path_ctx.graph_fn)
 
             # 3. 根据case类型以及是否强制指定核心数，更新num_cores和bin_list
@@ -85,7 +87,7 @@ def run_benchmark_setup_pipeline(
 
             # 10. Dump
             dump_and_check(bin_list_save_path, bin_list)
-    return hyper_p, bin_list, num_cores
+    return hyper_p, bin_list, num_cores, rsc_map_w
 
 def setup_benchmark(args, time_norm_factor):
     """
@@ -116,7 +118,7 @@ def setup_benchmark(args, time_norm_factor):
     args.quantile = args.exec_t_comp_ratioA
     num_cores = args.num_cores
     bin_list = []
-    hyper_p, bin_list, num_cores= run_benchmark_setup_pipeline(
+    hyper_p, bin_list, num_cores, phase1_rsc_map = run_benchmark_setup_pipeline(
         args, path_ctx, path_params, False, None, bin_list, num_cores
     )
     if need_repack:
@@ -124,16 +126,19 @@ def setup_benchmark(args, time_norm_factor):
         # For cyc-S (num_bins=-1): bypass bin packing, only recalculate deadlines.
         # For reserv (num_bins>=2): run perform_bin_packing with pre_defined mapping;
         #   if ResourceInsufficientError (ratioB > ratioA), fallback to Phase 1 layout.
-        import sys
-        sys.stderr.write(f"\n{'='*60}\n")
-        sys.stderr.write(f"[SETUP_BENCHMARK] Repack triggered!\n")
-        sys.stderr.write(f"  ratioA={args.exec_t_comp_ratioA}, ratioB={args.exec_t_comp_ratioB}\n")
-        sys.stderr.write(f"  num_bins={args.num_bins}\n")
-        sys.stderr.write(f"{'='*60}\n\n")
-        sys.stderr.flush()
+        # Extract fix_core_map from Phase 1 rsc_map_w
+        # rsc_map_w[node] = (cores, latency, constr)
+        fix_core_map = {node: cores for node, (cores, _, _) in phase1_rsc_map.items()}
+
+        # Compute scale_factor: ratioB/ratioA creates tail margin when ratioB < ratioA
+        # This scales down the latency, making windows shorter
+        scale_factor = args.exec_t_comp_ratioB / args.exec_t_comp_ratioA
+
         args.quantile = args.exec_t_comp_ratioB
-        hyper_p, bin_list, num_cores= run_benchmark_setup_pipeline(
+        hyper_p, bin_list, num_cores, repack_rsc_map = run_benchmark_setup_pipeline(
             args, path_ctx, path_params, True, hyper_p, bin_list, num_cores,
+            fix_core_map=fix_core_map,
+            scale_factor=scale_factor,
         )
 
     # 5. generate schedule parameters

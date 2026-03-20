@@ -21,6 +21,7 @@ conda activate gurobi   # MUST run before any code execution or testing
 | Per-task deadline calculation (Step 1) | `sched/slack_estim.py:deduce_cfg2()` |
 | Event-driven simulation | `approach_sim.py:run_simulation()` |
 | Statistics collection | `approach_collector.py:StatisticsCollector` |
+| **Algorithm 2 runtime overhead** | `approach_def.py:Acc_p.sched()` + `approach_collector.py:record_sched_overhead()` |
 | Task representation | `task/task_agent.py:ProcessInt` |
 | Bin-packing config | `sched/binpack_config.py:BinPackConfig` |
 | Run experiment (motiv) | `scripts/motiv_exp_runner.py` |
@@ -162,7 +163,8 @@ CLAUDE.md                           ← you are here (entry point for Claude)
     │       ├── doc/spec/stat/
     │       │       ├── tdigest_system_spec.md           ← T-Digest algo
     │       │       ├── statistics_collection_spec.md    ← StatisticsCollector arch
-    │       │       └── collector.md                     ← E2E latency decomposition (authoritative)
+    │       │       ├── collector.md                     ← E2E latency decomposition (authoritative)
+    │       │       └── runtime_overhead_spec.md         ← Algorithm 2 runtime overhead (reviewer Q3)
     │       │
     │       ├── doc/spec/sim/
     │       │       ├── approach_sim_spec.md             ← event-driven sim spec
