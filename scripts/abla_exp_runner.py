@@ -52,6 +52,17 @@ ABLA_COLORS = {
     'idle':      'C7',   # gray — capacity: unused
 }
 
+# Unified font/marker settings (aligned with motiv experiments in approach_collector.py)
+ABLA_PLOT_STYLE = {
+    'fontsize_label': 9,      # xlabel, ylabel
+    'fontsize_tick': 7,       # xticklabels, yticklabels
+    'fontsize_title': 9,      # title
+    'fontsize_legend': 6,     # legend
+    'fontsize_annot': 6,      # annotations (bar labels, etc.)
+    'markersize': 4,          # line markers
+    'linewidth': 1.5,         # line width
+}
+
 # 3 representative load configurations (all chains averaged)
 ABLA_LOAD_CONFIGS = [
     {'tiles': 400, 'load_factor': 0.5, 'label': 'Low (400T-0.5×)'},
@@ -136,7 +147,7 @@ def _plot_abla_overhead(data_points, x_key, x_values, x_labels, title, save_path
             ax1.bar(x_pos, avg['realloc_mean_count'], bar_width * 0.85,
                     color=color, alpha=0.25 + 0.15 * bi, edgecolor=color, linewidth=0.5)
             ax1.text(x_pos, avg['realloc_mean_count'], f"{avg['realloc_mean_count']:.1f}",
-                     ha='center', va='bottom', fontsize=5.5, color=color)
+                     ha='center', va='bottom', fontsize=ABLA_PLOT_STYLE['fontsize_annot'], color=color)
 
         # Line: realloc_ratio
         line_xs, line_ys = [], []
@@ -148,7 +159,8 @@ def _plot_abla_overhead(data_points, x_key, x_values, x_labels, title, save_path
             line_xs.append(x_pos)
             line_ys.append(avg['realloc_mean_ratio'])
         if line_xs:
-            ax2.plot(line_xs, line_ys, 'o-', color=color, linewidth=1.5, markersize=4,
+            ax2.plot(line_xs, line_ys, 'o-', color=color,
+                     linewidth=ABLA_PLOT_STYLE['linewidth'], markersize=ABLA_PLOT_STYLE['markersize'],
                      label=lcfg['label'])
 
     # pglb baseline horizontal lines (Case 3 only)
@@ -161,23 +173,23 @@ def _plot_abla_overhead(data_points, x_key, x_values, x_labels, title, save_path
     # X-tick labels at cluster centers
     cluster_centers = [ci * cluster_width for ci in range(n_clusters)]
     ax1.set_xticks(cluster_centers)
-    ax1.set_xticklabels([lc['label'] for lc in load_configs], fontsize=8)
+    ax1.set_xticklabels([lc['label'] for lc in load_configs], fontsize=ABLA_PLOT_STYLE['fontsize_tick'])
 
     # Inner x labels (bins or ratioB) — add minor ticks
     for ci in range(n_clusters):
         cc = ci * cluster_width
         for bi, xl in enumerate(x_labels):
             x_pos = cc + (bi - (n_bars - 1) / 2) * bar_width
-            ax1.text(x_pos, -0.02, xl, ha='center', va='top', fontsize=5.5,
+            ax1.text(x_pos, -0.02, xl, ha='center', va='top', fontsize=ABLA_PLOT_STYLE['fontsize_annot'],
                      transform=ax1.get_xaxis_transform(), color='gray')
 
-    ax1.set_ylabel('Realloc Count (bars)', fontsize=9)
-    ax2.set_ylabel('Realloc Ratio (lines)', fontsize=9)
-    ax1.tick_params(axis='y', labelsize=8)
-    ax2.tick_params(axis='y', labelsize=8)
+    ax1.set_ylabel('Realloc Count (bars)', fontsize=ABLA_PLOT_STYLE['fontsize_label'])
+    ax2.set_ylabel('Realloc Ratio (lines)', fontsize=ABLA_PLOT_STYLE['fontsize_label'])
+    ax1.tick_params(axis='y', labelsize=ABLA_PLOT_STYLE['fontsize_tick'])
+    ax2.tick_params(axis='y', labelsize=ABLA_PLOT_STYLE['fontsize_tick'])
     ax1.grid(True, alpha=0.2, linestyle='--', axis='y')
-    ax1.set_title(title, fontsize=10, pad=8)
-    ax2.legend(loc='upper right', fontsize=7, framealpha=0.7)
+    ax1.set_title(title, fontsize=ABLA_PLOT_STYLE['fontsize_title'], pad=8)
+    ax2.legend(loc='upper right', fontsize=ABLA_PLOT_STYLE['fontsize_legend'], framealpha=0.7)
 
     fig.tight_layout()
     fig.savefig(save_path, dpi=300, bbox_inches='tight')
@@ -232,34 +244,35 @@ def _plot_abla_tradeoff(data_points, x_key, x_values, x_labels, title, save_path
             miss_ys.append(avg['miss_mean_count'])
 
         if miss_xs:
-            ax2.plot(miss_xs, miss_ys, 's-', color=color, linewidth=1.5, markersize=4,
-                     label=lcfg['label'])
+            ax2.plot(miss_xs, miss_ys, 's-', color=color, linewidth=ABLA_PLOT_STYLE['linewidth'],
+                     markersize=ABLA_PLOT_STYLE['markersize'], label=lcfg['label'])
 
     # X-tick labels
     cluster_centers = [ci * cluster_width for ci in range(n_clusters)]
     ax1.set_xticks(cluster_centers)
-    ax1.set_xticklabels([lc['label'] for lc in load_configs], fontsize=8)
+    ax1.set_xticklabels([lc['label'] for lc in load_configs], fontsize=ABLA_PLOT_STYLE['fontsize_tick'])
 
     for ci in range(n_clusters):
         cc = ci * cluster_width
         for bi, xl in enumerate(x_labels):
             x_pos = cc + (bi - (n_bars - 1) / 2) * bar_width
-            ax1.text(x_pos, -0.02, xl, ha='center', va='top', fontsize=5.5,
+            ax1.text(x_pos, -0.02, xl, ha='center', va='top', fontsize=ABLA_PLOT_STYLE['fontsize_annot'],
                      transform=ax1.get_xaxis_transform(), color='gray')
 
     # Legend for stacked components
     from matplotlib.patches import Patch
     legend_patches = [Patch(facecolor=comp_colors[c], alpha=0.5, label=c.capitalize())
                       for c in ['exec', 'realloc', 'wait']]
-    ax1.legend(handles=legend_patches, loc='upper left', fontsize=6.5, framealpha=0.7, title='Latency', title_fontsize=7)
+    ax1.legend(handles=legend_patches, loc='upper left', fontsize=ABLA_PLOT_STYLE['fontsize_legend'],
+               framealpha=0.7, title='Latency', title_fontsize=ABLA_PLOT_STYLE['fontsize_legend']+1)
 
-    ax1.set_ylabel('Latency / Constraint', fontsize=9)
-    ax2.set_ylabel('Miss Rate', fontsize=9)
-    ax1.tick_params(axis='y', labelsize=8)
-    ax2.tick_params(axis='y', labelsize=8)
+    ax1.set_ylabel('Latency / Constraint', fontsize=ABLA_PLOT_STYLE['fontsize_label'])
+    ax2.set_ylabel('Miss Rate', fontsize=ABLA_PLOT_STYLE['fontsize_label'])
+    ax1.tick_params(axis='y', labelsize=ABLA_PLOT_STYLE['fontsize_tick'])
+    ax2.tick_params(axis='y', labelsize=ABLA_PLOT_STYLE['fontsize_tick'])
     ax1.grid(True, alpha=0.2, linestyle='--', axis='y')
-    ax1.set_title(title, fontsize=10, pad=8)
-    ax2.legend(loc='upper right', fontsize=7, framealpha=0.7)
+    ax1.set_title(title, fontsize=ABLA_PLOT_STYLE['fontsize_title'], pad=8)
+    ax2.legend(loc='upper right', fontsize=ABLA_PLOT_STYLE['fontsize_legend'], framealpha=0.7)
 
     fig.tight_layout()
     fig.savefig(save_path, dpi=300, bbox_inches='tight')
@@ -537,21 +550,22 @@ class AblaExp1Runner:
         if cycS_data:
             xs = [d['ratio'] for d in cycS_data]
             ys = [max(0.0, min(1.0, 1.0 - d['miss_mean_count'])) for d in cycS_data]
-            ax.plot(xs, ys, 'o-', color=ABLA_COLORS['miss_line'], linewidth=1.5, markersize=4, label='cyc-S')
+            ax.plot(xs, ys, 'o-', color=ABLA_COLORS['miss_line'],
+                    linewidth=ABLA_PLOT_STYLE['linewidth'], markersize=ABLA_PLOT_STYLE['markersize'], label='cyc-S')
 
         for d in cyc_data:
             y = max(0.0, min(1.0, 1.0 - d['miss_mean_count']))
             ax.axhline(y=y, color='gray', linestyle=':', alpha=0.6, linewidth=1)
             ax.text(0.905, y, f"cyc p{int(d['ratio']*100)}", transform=ax.get_yaxis_transform(),
-                   ha='left', va='center', fontsize=7, color='gray')
+                   ha='left', va='center', fontsize=ABLA_PLOT_STYLE['fontsize_annot'], color='gray')
 
-        ax.set_xlabel('Soft Reservation Percentile (exec_t_comp_ratioB)', fontsize=9)
-        ax.set_ylabel('Latency Satisfaction Rate', fontsize=9)
+        ax.set_xlabel('Soft Reservation Percentile (exec_t_comp_ratioB)', fontsize=ABLA_PLOT_STYLE['fontsize_label'])
+        ax.set_ylabel('Latency Satisfaction Rate', fontsize=ABLA_PLOT_STYLE['fontsize_label'])
         ax.set_ylim(0.0, 1.02)
         ax.grid(True, alpha=0.2, linestyle='--', axis='y')
-        ax.tick_params(axis='both', labelsize=8)
-        ax.legend(loc='lower right', fontsize=7, framealpha=0.7)
-        ax.set_title('Ablation-1: Satisfaction Projection (cyc-S vs cyc)', fontsize=10, pad=8)
+        ax.tick_params(axis='both', labelsize=ABLA_PLOT_STYLE['fontsize_tick'])
+        ax.legend(loc='lower right', fontsize=ABLA_PLOT_STYLE['fontsize_legend'], framealpha=0.7)
+        ax.set_title('Ablation-1: Satisfaction Projection (cyc-S vs cyc)', fontsize=ABLA_PLOT_STYLE['fontsize_title'], pad=8)
 
         fig.tight_layout()
         save_path = str(self.output_dir / 'case1_satisfy_projection.pdf')
