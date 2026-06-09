@@ -76,9 +76,80 @@ ultrathink： feature-dev 探索，superpower理解控制探索走向，以及�
 实现一个简单的repack，这个repack 可以直接内置在step 1 中：
   现在的初始时间片计算之后，每条链条上的任务的获得的时间片之和近似等于端到端延迟。
   repack 的目的是在不减少总资源数量的前提下，重新调整ert 和ddl的分配，让他们提前一点；
-  
+
   那么简单一点，默认每个任务的资源不变，他们的任务量按照rationB的分位数区，然后按照图的依赖关系向后传递，得出ert和ddl。
 
 但是我还是想知道，在把按比例预留改成按分位数预留之前，是怎么处理ratio A ratioB的（相关的逻辑以及被清理了）
 - 需要你切换回 3676eb8 分支，看看当时的 gen_workloads 下面的怎么处理 两种模式的，特别关注 deduce_cfg2 中exec_t_comp_abs exec_t_comp_rel的设置，init_graph_time_attr，以及deduce_eq_wsc 逻辑。
 - 在切换分支之前，需要你现在doc 文件夹下搜寻相关的更改历史和refactor历史，如果没找到，再切换分支了解
+
+ultrathink
+现在需要你帮我添加 消融实验的图片到论文中，替代现有的消融试验图片
+图片路径 figures/exp_data/TC/abla
+
+scheduler_paper/tex/6_eval.tex
+
+描述，三者的现象和图例。思路参考 ref/key_COT.md
+图例描述，参考 /home/zhangchg/git_repo/scheduler/doc/spec/abla1_describe.md
+/home/zhangchg/git_repo/scheduler/doc/spec/abla2-3_describe.md
+
+注意事项：
+1. 为了保证文章的严谨性，需要严格遵守术语的一致性。
+2. 避免新造词，以及使用口语夸张词汇。
+3. 当出现新的概念时，需要更新术语表。但是应该保证不要新建含义相同但是表述不同的概念。
+
+/ralph-loop:ralph-loop 逐点逐段落 （修改-> 检查）-> 修改，每轮修改可以按照以下步骤执行，可以用superpower 管理这一流程：
+   1. 逐段添加，使用 /writing-clearly-and-concisely /scientific-writing  /bingzhe-writing。
+   2. 检查逻辑的连贯性和表述的连续性
+
+
+现在的切换次数变成是每100ms 内的切换次数
+
+
+将第三组对比 换成 case3
+
+删除cover letter 以及 response letter内空
+
+
+第一组消融实验，轴上投影中的的是 cyc 在 p50，60,70 80,90 99 资源下的miss rate 即图6a 中的点）
+对应 cyc exec_t_comp_ratioA = 0.7 使用的资源
+调整的是，动态预留的激进程度
+
+将“硬隔离”的cyc下，不同硬预留系数下的延迟满足率投影在Y轴上。
+猜测：
+1. 可以观察到，延迟满足率的提升，即，在硬预留系数为0.7的情况下，调整动态预留的 q值，可以达到更p 80 硬预留系数才能达到的延迟满足率。
+2. 并且随着随着软系数预留越激进，可靠性单调的变好。利用率与软预留参数关系不大，主要与总资源有关。
+
+数据：/home/zhangchg/git_repo/scheduler/abla_fixcore_test/case1/case1_summary.json
+
+
+
+消融实验修改
+
+首先理解下面的需求
+
+[target 文件]
+scheduler_paper/tex/6_eval.tex
+
+[需求]
+描述，三者的现象和图例。
+
+[参考]
+思路： ref/key_COT.md
+图例描述：
+  - /home/zhangchg/git_repo/scheduler/doc/spec/abla1_describe.md
+  - /home/zhangchg/git_repo/scheduler/doc/spec/abla2-3_describe.md
+
+数据
+  - /home/zhangchg/git_repo/scheduler/abla_fixcore_test
+
+注意事项：
+1. 为了保证文章的严谨性，需要严格遵守术语的一致性。
+2. 避免新造词，以及使用口语夸张词汇。
+3. 当出现新的概念时，需要更新术语表。但是应该保证不要新建含义相同但是表述不同的概念。
+
+/ralph-loop:ralph-loop 逐点逐段落 （修改-> 检查）-> 修改，每轮修改可以按照以下步骤执行，可以用superpower 管理这一流程：
+   1. 逐段添加，使用 /writing-clearly-and-concisely /scientific-writing  /bingzhe-writing。
+   2. 检查逻辑的连贯性和表述的连续性
+
+首先替换第一组，原来的版本注释不删除

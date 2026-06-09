@@ -24,6 +24,8 @@ conda activate gurobi   # MUST run before any code execution or testing
 | **Algorithm 2 runtime overhead** | `approach_def.py:Acc_p.sched()` + `approach_collector.py:record_sched_overhead()` |
 | Task representation | `task/task_agent.py:ProcessInt` |
 | Bin-packing config | `sched/binpack_config.py:BinPackConfig` |
+| Fixcore repack switch | `sim_main.py:33` — `USE_FIXCORE_REPACK = True` |
+| Fixcore latency calc | `sched/slack_estim.py:393` — `_fixcore_slack_estim()` |
 | Run experiment (motiv) | `scripts/motiv_exp_runner.py` |
 | Run experiment (ablation) | `scripts/abla_exp_runner.py` |
 | Repack debug diagnostics | `sim_main.py:508-583`, `approach_setup.py:127-133` (stderr output) |
@@ -119,8 +121,14 @@ main_approach.py::main()
 8. **`num_cores` = `sum(b.num_resources for b in bin_list)`** after constraint applied
 9. **Dump paths use constrained `num_cores`** — coupling between `apply_forced_num_cores` and dump
 10. **`test_case` is fixed to `'bin_pack_new'`** in `main_approach.py` — scheduling behavior is controlled by `policy` parameter, NOT `test_case`
+11. **Fixcore Repack bypass** — `USE_FIXCORE_REPACK=True` in `sim_main.py` skips greedy bin-packing; ERT/DDL updated by `deduce_cfg2` with `fix_core_map` and `scale_factor=ratioB/ratioA`
+12. **`gen_workloads` returns 5 values** — `(hyper_p, glb_n_task_dict, physical_graph_nx, glb_p_list, rsc_map_w)`; `rsc_map_w[node]=(cores, latency, constr)` used to extract Phase 1 cores for fixcore repack
+13. **Old ratio mechanism** — `slack_comp(slack, abs, r) = (slack-abs)*(1-r)` and `cal_lat(lat, abs, r) = lat/(1-r)+abs` are exact inverses → ERT/DDL invariant to ratio changes (only cores change)
+14. **ratioB ≤ ratioA required** — when `ratioB > ratioA`, `scale_factor = ratioB/ratioA > 1` makes deadlines looser, violating `ddl[pred] ≤ sink_ert` constraint in `init_topo_time_attr()` (slack_estim.py:355)
 
 > **Common pitfalls**: see `doc/spec/readme.md §4` — covers: glb needs Step 1, reserv dual mechanism, Exp 2/3 resource control via load intensity NOT ratioA, cyc-S requires repack.
+>
+> **Python pitfall**: `policy in ["cyc" or "cyc-S"]` evaluates to `["cyc"]` (truthy short-circuit). Correct: `policy in ["cyc", "cyc-S"]` — see `approach_sched.py:303`.
 
 ### BinPackConfig Key Fields
 
@@ -218,6 +226,7 @@ bash scripts/run_motiv_exps.sh [output_dir]
 python -m scripts.abla_exp_runner --case 1 --output_dir ./abla_results --num_hp 100
 python -m scripts.abla_exp_runner --case 2 --output_dir ./abla_results --num_hp 100
 python -m scripts.abla_exp_runner --case 3 --output_dir ./abla_results --num_hp 100
+# Optional: --case1_cycS_policy reserv|cyc|pglb (default: reserv)
 # Or run all:
 bash scripts/run_abla_exps.sh [output_dir] [num_hp]
 ```
@@ -246,9 +255,10 @@ Speed-reference (full per-experiment details below):
 | Fixed `ratioA` | `0.7` |
 | Fixed `num_bins` | `-1` (max partitions) |
 | Resource | **forced `num_cores`** to match cyc budget (same for both) |
-| Scan (cyc-S) | `exec_t_comp_ratioB ∈ [0.5,0.6,0.7,0.8,0.9,0.99]`, `policy='reserv'` |
+| Scan (cyc-S) | `exec_t_comp_ratioB ∈ [0.5,0.6,0.7]`, `policy='reserv'` (ratioB ≤ ratioA required) |
 | Reference (cyc) | `exec_t_comp_ratioA ∈ [0.5,0.7,0.99]`, `policy='cyc'`, no repack |
 | Plot | `plot_motiv_case1()` + `_plot_satisfy_projection()` (cyc projected as horizontal lines) |
+| Plot customization | `show_realloc=False` to hide orange bars; `cyc_ref` passed via `data_points[0]['cyc_ref']` contains `{ratio, miss_mean_count, idle_mean_ratio}` |
 | Metrics | `idle_mean_ratio`, `miss_mean_ratio`, `miss_mean_count` |
 | Expected | miss rate monotonically ↓ as `ratioB` more aggressive; utilization mostly unchanged |
 

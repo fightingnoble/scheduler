@@ -300,7 +300,7 @@ def acc_p_factory(
             acc_p.alloc_fn = types.MethodType(functools.partial(alloc_fn_pglb, reserv_en=False), acc_p)
             acc_p.task_filter = types.MethodType(functools.partial(task_filter, reserv_en=False), acc_p)
             acc_p.trigger_cond = types.MethodType(trigger_cond_dyn, acc_p)
-        elif policy in ["cyc" or "cyc-S"]:
+        elif policy in ["cyc", "cyc-S"]:
             assert cfg.TSmap_list[i] is not None, "TSmap_list is not None"
             # 存储原始静态调度表用于动态更新
             acc_p.static_schedule_map = cfg.TSmap_list[i]

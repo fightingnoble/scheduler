@@ -173,3 +173,8 @@ task/load_cfg/load_chain.py
 
 *results/*
 scheduler_paper
+abla_chains9
+abla_fixcore_*
+
+AuRORA
+kit/**

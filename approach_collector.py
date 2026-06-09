@@ -2,7 +2,7 @@ from __future__ import annotations
 import typing 
 if typing.TYPE_CHECKING:
     from approach_def import MyGraph
-from typing import Dict, List, Iterable, Tuple
+from typing import Any, Dict, List, Iterable, Tuple
 from collections import defaultdict
 import re
 import json
@@ -770,13 +770,15 @@ class StatisticsCollector:
         return result
     
     @staticmethod
-    def plot_motiv_case1(data_points: List[Dict], save_path: str, show: bool = False):
+    def plot_motiv_case1(data_points: List[Dict], save_path: str, show: bool = False,
+                         show_realloc: bool = True, labels: Dict[str, str] = None,
+                         fontsize: Dict[str, int] = None, table_cfg: Dict[str, Any] = None):
         """[Motiv-Exp-1] 绘制利用率-可靠性权衡图（三柱状图+附轴）
-        
+
         绘制不同预留分位数下的idle_ratio、miss_ratio、realloc_ratio对比柱状图。
         主轴：百分比对数轴显示三个ratio
         附轴：线性轴显示miss_count
-        
+
         Args:
             data_points: 数据点列表，每个点为一个dict，包含:
                 - 'idle_mean_ratio': float
@@ -814,6 +816,21 @@ class StatisticsCollector:
         COLOR_EFFECTIVE = 'C0'
         COLOR_LINE = 'C4'
 
+        # 默认英文标签，labels 字典可覆盖为中文
+        _L = {
+            'idle': 'Idle', 'miss': 'Miss', 'realloc': 'Realloc',
+            'miss_rate': 'Miss Rate', 'xlabel': 'Reservation Percentile',
+            'ylabel1': 'Ops Ratio (Log)', 'ylabel2': 'Miss Rate',
+            'title': 'Cyc.: Utilization-Reliability Tradeoff', 'cyc_ref': 'cyc',
+        }
+        if labels:
+            _L.update(labels)
+
+        # 字号配置（可通过 fontsize 参数覆盖）
+        _FS = {'label': 11, 'tick': 10, 'title': 11, 'legend': 8, 'annot': 8, 'annot_bold': 8, 'table': 11, 'cyc_ref': 11}
+        if fontsize:
+            _FS.update(fontsize)
+
         # 提取数据并按 percentile 排序（确保 p50 < p60 < ... < p99）
         def _extract_percentile(label: str) -> float:
             """从 label 提取 percentile 数值用于排序"""
@@ -832,33 +849,49 @@ class StatisticsCollector:
         effective_ratios = [max(0, 1 - idle_ratios[i] - miss_ratios[i] - realloc_ratios[i])
                           for i in range(len(labels))]
 
-        # 创建双轴图 - 调高图片以容纳表格
-        fig, ax1 = plt.subplots(figsize=(4, 2.2))
+        # 创建双轴图 - 可通过 table_cfg['figsize'] 为特定表格布局加高图片
+        _figsize = tuple(table_cfg.get('figsize', (4, 2.2))) if table_cfg else (4, 2.2)
+        fig, ax1 = plt.subplots(figsize=_figsize)
         ax2 = ax1.twinx()  # 创建附轴
 
         x_pos = np.arange(len(labels))
         width = 0.25
 
-        # 主轴：绘制三个ratio的柱状图（对数轴）- 使用统一颜色
-        bars1 = ax1.bar(x_pos - width, idle_ratios, width,
-                       label='Idle', color=COLOR_IDLE, alpha=0.8)
-        bars2 = ax1.bar(x_pos, miss_ratios, width,
-                       label='Miss', color=COLOR_MISS, alpha=0.8)
-        bars3 = ax1.bar(x_pos + width, realloc_ratios, width,
-                       label='Realloc', color=COLOR_REALLOC, alpha=0.8)
+        # 主轴：绘制柱状图（对数轴）- 使用统一颜色
+        if show_realloc:
+            bars1 = ax1.bar(x_pos - width, idle_ratios, width,
+                           label=_L['idle'], color=COLOR_IDLE, alpha=0.8)
+            bars2 = ax1.bar(x_pos, miss_ratios, width,
+                           label=_L['miss'], color=COLOR_MISS, alpha=0.8)
+            bars3 = ax1.bar(x_pos + width, realloc_ratios, width,
+                           label=_L['realloc'], color=COLOR_REALLOC, alpha=0.8)
+        else:
+            # 不显示 Realloc 时，只绘制 Idle 和 Miss
+            bars1 = ax1.bar(x_pos - width/2, idle_ratios, width,
+                           label=_L['idle'], color=COLOR_IDLE, alpha=0.8)
+            bars2 = ax1.bar(x_pos + width/2, miss_ratios, width,
+                           label=_L['miss'], color=COLOR_MISS, alpha=0.8)
 
         # 附轴：绘制miss_count的线图
         line = ax2.plot(x_pos, miss_counts, 'o-', color=COLOR_LINE, linewidth=1.5,
-                       markersize=4, label='Miss Rate', alpha=0.8)
+                       markersize=4, label=_L['miss_rate'], alpha=0.8)
 
         # 检查是否传入了 cyc 参考数据
+        # 绘制 cyc baseline 投影线
         if data_points and 'cyc_ref' in data_points[0]:
             cyc_ref_data = data_points[0]['cyc_ref']
             for cyc_p in cyc_ref_data:
-                y_val = cyc_p['miss_mean_count']
-                ax2.axhline(y=y_val, color='gray', linestyle=':', alpha=0.6, linewidth=1)
-                ax2.text(1.05, y_val, f"cyc p{int(cyc_p['ratio']*100)}", transform=ax2.get_yaxis_transform(),
-                       ha='left', va='center', fontsize=7, color='gray')
+                ratio_label = f"p{int(cyc_p['ratio']*100)}"
+                # Miss rate 投影：紫色虚线（右轴 ax2），标签在右侧、线上方
+                miss_val = cyc_p['miss_mean_count']
+                ax2.axhline(y=miss_val, color=COLOR_LINE, linestyle='--', alpha=0.6, linewidth=1)
+                ax2.text(x_pos[-1] + 0.15, miss_val, f"{_L['cyc_ref']} {ratio_label}",
+                        ha='left', va='bottom', fontsize=_FS['cyc_ref'], color=COLOR_LINE)
+                # Idle ratio 投影：灰色虚线（左轴 ax1，对数轴），标签在左侧、线上方
+                idle_val = cyc_p['idle_mean_ratio']
+                ax1.axhline(y=idle_val, color=COLOR_IDLE, linestyle='--', alpha=0.6, linewidth=1)
+                ax1.text(x_pos[0] - 0.15, idle_val, f"{_L['cyc_ref']} {ratio_label}",
+                        ha='right', va='bottom', fontsize=_FS['cyc_ref'], color=COLOR_IDLE)
 
         # 移除柱状图标记（对数轴上位置难以控制）
         # 改为在图下方添加数据表格
@@ -873,16 +906,16 @@ class StatisticsCollector:
             else:
                 fmt = f'{count:.3f}'
             ax2.text(i, count, fmt, ha='center', va='bottom',
-                    fontsize=6, color=COLOR_LINE, fontweight='bold')
+                    fontsize=_FS['annot_bold'], color=COLOR_LINE, fontweight='bold')
 
         # 设置主轴（对数轴）
-        ax1.set_xlabel('Reservation Percentile', fontsize=9)
-        ax1.set_ylabel('Ops Ratio (Log)', fontsize=9, color='black')
+        ax1.set_xlabel(_L['xlabel'], fontsize=_FS['label'])
+        ax1.set_ylabel(_L['ylabel1'], fontsize=_FS['label'], color='black')
         ax1.set_yscale('log')
         ax1.set_xticks(x_pos)
-        ax1.set_xticklabels(labels, fontsize=7)
+        ax1.set_xticklabels(labels, fontsize=_FS['tick'])
         ax1.grid(True, alpha=0.3, linestyle='--', axis='y')
-        ax1.tick_params(axis='y', labelcolor='black', labelsize=7)
+        ax1.tick_params(axis='y', labelcolor='black', labelsize=_FS['tick'])
 
         # 增加对数轴刻度密度
         from matplotlib.ticker import LogLocator
@@ -890,26 +923,52 @@ class StatisticsCollector:
         ax1.yaxis.set_minor_locator(LogLocator(subs='auto', numticks=20))
 
         # 设置附轴（线性轴）
-        ax2.set_ylabel('Miss Rate', fontsize=9, color=COLOR_LINE)
-        ax2.tick_params(axis='y', labelcolor=COLOR_LINE, labelsize=7)
+        ax2.set_ylabel(_L['ylabel2'], fontsize=_FS['label'], color=COLOR_LINE)
+        ax2.tick_params(axis='y', labelcolor=COLOR_LINE, labelsize=_FS['tick'])
+        ax2.set_ylim(0.01, 0.10)  # 固定范围，使投影线位置更清晰
 
         # 移除参考线
 
-        # 合并图例：柱状图 + 折线图
+        # 合并图例：只包含柱状图（不包含 Miss Rate 折线）
         lines1, labels1 = ax1.get_legend_handles_labels()
-        lines2, labels2 = ax2.get_legend_handles_labels()
-        all_handles = lines1 + lines2
-        all_labels = labels1 + labels2
-        ax1.legend(all_handles, all_labels, loc='upper left', fontsize=6, framealpha=0.7)
+        ax1.legend(lines1, labels1, loc='lower left', fontsize=_FS['legend'], framealpha=0.7)
 
-        ax1.set_title('Cyc.: Utilization-Reliability Tradeoff', fontsize=9, pad=8)
+        ax1.set_title(_L['title'], fontsize=_FS['title'], pad=8)
 
         # 调整布局，为底部表格留出空间
-        fig.tight_layout()
-        plt.subplots_adjust(bottom=0.35)  # 为表格留出空间（调小以显示横轴）
+        if not table_cfg or table_cfg.get('tight_layout', True):
+            fig.tight_layout()
 
-        # 添加底部数据表格（分两栏显示，每栏：Percentile | Idle | Miss）
-        # 不包含 Realloc 列（值都是0），不包含中间空列
+        # 表格配置：调用侧可指定每行几组结果、bbox、字号和边距。
+        # table_cfg keys:
+        #   'groups_per_row': 每行显示几组 [Percentile, Idle, Miss]
+        #   'bbox': [left, bottom, width, height]，优先级高于 left/width/table_top/row_height
+        #   'col_unit': 每组列的相对宽度 [label_col, val_col, val_col]
+        #   'col_widths': 显式列宽，优先级高于 col_unit
+        #   'subplots_adjust': 传给 fig.subplots_adjust 的 dict
+        #   'row_scale': table.scale 的 y 参数
+        #   'bottom_margin': subplots_adjust(bottom=...)
+        #   'font_size': 表格字体大小（覆盖 _FS['table']）
+        _TC = {
+            'groups_per_row': 3,
+            'bbox': None,
+            'left': -0.12,
+            'width': 1.24,
+            'table_top': -0.62,
+            'row_height': 0.14,
+            'col_unit': [0.08, 0.10, 0.12],
+            'col_widths': None,
+            'row_scale': 1.0,
+            'bottom_margin': 0.30,
+            'subplots_adjust': None,
+            'font_size': None,
+            'cell_pad': None,
+            'savefig': {'bbox_inches': 'tight'},
+        }
+        if table_cfg:
+            _TC.update(table_cfg)
+
+        # 添加底部数据表格
         def _fmt_ratio(val):
             if val < 0.001:
                 return f'{val:.1e}'
@@ -918,57 +977,66 @@ class StatisticsCollector:
             else:
                 return f'{val:.2f}'
 
-        # 将数据分成两栏
         n = len(labels)
-        half = (n + 1) // 2  # 向上取整
+        groups_per_row = int(_TC['groups_per_row'])
+        num_rows = (n + groups_per_row - 1) // groups_per_row
+        col_labels = []
+        for _ in range(groups_per_row):
+            col_labels.extend(['', _L['idle'], _L['miss']])
 
-        # 构造两栏数据（不包含 Realloc，不包含空列）
         table_data = []
-        for i in range(half):
-            row = [
-                labels[i],
-                _fmt_ratio(idle_ratios[i]),
-                _fmt_ratio(miss_ratios[i]),
-            ]
-            # 第二栏数据（如果存在）
-            if i + half < n:
-                row.extend([
-                    labels[i + half],
-                    _fmt_ratio(idle_ratios[i + half]),
-                    _fmt_ratio(miss_ratios[i + half]),
-                ])
-            else:
-                row.extend(['', '', ''])
+        for row_idx in range(num_rows):
+            row = []
+            for group_idx in range(groups_per_row):
+                i = row_idx * groups_per_row + group_idx
+                if i < n:
+                    row.extend([labels[i], _fmt_ratio(idle_ratios[i]), _fmt_ratio(miss_ratios[i])])
+                else:
+                    row.extend(['', '', ''])
             table_data.append(row)
 
-        # 创建表格（两栏，共6列：第一栏3列 + 第二栏3列，无分隔列）
-        # 向下移动表格，增加行高
-        col_labels = ['', 'Idle', 'Miss', '', 'Idle', 'Miss']
-        col_widths = [0.10, 0.12, 0.12, 0.10, 0.12, 0.12]
+        col_widths = _TC['col_widths'] or (_TC['col_unit'] * groups_per_row)
+        if _TC['bbox'] is None:
+            table_height = _TC['row_height'] * (num_rows + 1)  # +1 for header
+            _TC['bbox'] = [
+                _TC['left'],
+                _TC['table_top'] - table_height,
+                _TC['width'],
+                table_height,
+            ]
+
+        adjust_cfg = _TC['subplots_adjust'] or {'bottom': _TC['bottom_margin']}
+        fig.subplots_adjust(**adjust_cfg)
+
         table = plt.table(
             cellText=table_data,
             colLabels=col_labels,
             loc='bottom',
             cellLoc='center',
             colWidths=col_widths,
-            bbox=[0.08, -0.65, 0.84, 0.28]  # [left, bottom, width, height] - 向上移动表格
+            bbox=_TC['bbox'],
         )
+        _tbl_fs = _TC['font_size'] or _FS['table']
         table.auto_set_font_size(False)
-        table.set_fontsize(6)
-        table.scale(1, 1.3)  # 增加行高
+        table.set_fontsize(_tbl_fs)
+        for cell in table.get_celld().values():
+            if _TC['cell_pad'] is not None:
+                cell.PAD = _TC['cell_pad']
+            cell.set_text_props(fontsize=_tbl_fs)
+        table.scale(1, _TC['row_scale'])
 
         # 设置表头样式
         for j in range(len(col_labels)):
             cell = table[(0, j)]
             if col_labels[j]:  # 非空表头
                 cell.set_facecolor('#e8e8e8')
-                cell.set_text_props(fontweight='bold')
+                cell.set_text_props(fontweight='bold', fontsize=_tbl_fs)
             else:
                 cell.set_facecolor('white')  # 分隔列为白色
         
         if save_path:
             os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else '.', exist_ok=True)
-            fig.savefig(save_path, dpi=150, bbox_inches='tight')
+            fig.savefig(save_path, dpi=150, **_TC['savefig'])
             print(f"Case 1 权衡图已保存到: {save_path}")
         
         if show:
@@ -1051,7 +1119,9 @@ class StatisticsCollector:
 
     @staticmethod
     def plot_motiv_case2(data_points: List[Dict], plot_type: str,
-                        save_path: str, show: bool = False, group_order: List = None, group_by_bins: bool = False):
+                        save_path: str, show: bool = False, group_order: List = None,
+                        group_by_bins: bool = False, labels: Dict[str, str] = None,
+                        fontsize: Dict[str, int] = None, layout_cfg: Dict[str, Any] = None):
         """[Motiv-Exp-2] 绘制可扩展性分析图
         
         支持两种图表类型：
@@ -1090,12 +1160,60 @@ class StatisticsCollector:
             StatisticsCollector.plot_motiv_case2(data_points=results, plot_type='breakdown')
         """
         import matplotlib.pyplot as plt
-        
+
+        # 默认标签（可被 labels 字典覆盖）
+        _LB = {
+            'execution': 'Execution', 'scheduling': 'Scheduling', 'waiting': 'Waiting',
+            'miss_rate': 'Miss Rate',
+            'ylabel1': r'Normalized Latency',
+            'ylabel2': 'Miss Rate',
+            'title_breakdown': 'Tp-driven: Latency Breakdown vs Scale/Bins',
+            'xlabel_scale': 'Scale Configurations',
+            'xlabel_bins': 'Number of Partitions (num_bins)',
+            'chains_suffix': 'chains',
+        }
+        _LU = {
+            'realloc': 'Realloc', 'effective': 'Effective', 'idle': 'Idle',
+            'ops_miss': 'Ops Ratio (Miss)',
+            'xlabel_scale': 'Scale Configurations',
+            'xlabel_bins': 'Number of Partitions (num_bins)',
+            'ylabel1': 'Tile Util.', 'ylabel2': 'Ops Ratio (Miss)',
+            'title_util': 'Tp-driven: Resource Utilization vs Scale/Bins',
+            'chains_suffix': 'chains',
+        }
+        if labels:
+            _LB.update({k: v for k, v in labels.items() if k in _LB})
+            _LU.update({k: v for k, v in labels.items() if k in _LU})
+
+        # 字号配置
+        _FS = {'label': 11, 'tick': 10, 'title': 11, 'legend': 8, 'annot': 8}
+        if fontsize:
+            _FS.update(fontsize)
+
+        # 布局配置由调用侧覆盖，避免不同图各自硬编码尺寸和边距。
+        _LC = {
+            'figsize': (4, 2.45),
+            'figsize_by_type': {'breakdown': (4, 2.45), 'utilization': (4, 1.85)},
+            'subplots_adjust': None,
+            'subplots_adjust_by_type': {},
+            'xtick_rotation': 20,
+            'xtick_ha': 'right',
+            'xtick_rotation_mode': 'anchor',
+            'marker_size': 7,
+            'line_width': 2,
+            'legend_ncol': 2,
+            'tight_layout': True,
+            'savefig': {'bbox_inches': 'tight'},
+        }
+        if layout_cfg:
+            _LC.update(layout_cfg)
+
         # 根据图表类型设置尺寸
+        figsize = _LC.get('figsize_by_type', {}).get(plot_type, _LC['figsize'])
         if plot_type == 'breakdown':
-            fig, ax = plt.subplots(figsize=(4, 2.2))
+            fig, ax = plt.subplots(figsize=figsize)
         else:  # utilization
-            fig, ax = plt.subplots(figsize=(4, 2.2))
+            fig, ax = plt.subplots(figsize=figsize)
         
         if plot_type == 'breakdown':
             # 延迟分解堆叠柱状图 + miss num ratio 曲线（附轴）
@@ -1148,17 +1266,17 @@ class StatisticsCollector:
                     bot = 0
                     # Execution (底部)
                     ax.bar(x_offset, temp['exec'], width=width, bottom=bot,
-                        label='Execution' if i_cluster == 0 and i_bar == 0 else '',
+                        label=_LB['execution'] if i_cluster == 0 and i_bar == 0 else '',
                         color=COLOR_EXECUTION, alpha=0.8, hatch=temp['hatch'])
                     bot += temp['exec']
                     # Realloc (中间)
                     ax.bar(x_offset, temp['realloc'], width=width, bottom=bot,
-                        label='Scheduling' if i_cluster == 0 and i_bar == 0 else '',
+                        label=_LB['scheduling'] if i_cluster == 0 and i_bar == 0 else '',
                         color=COLOR_REALLOC, alpha=0.85, hatch=temp['hatch'])
                     bot += temp['realloc']
                     # Waiting (顶部)
                     ax.bar(x_offset, temp['wait'], width=width, bottom=bot,
-                        label='Waiting' if i_cluster == 0 and i_bar == 0 else '',
+                        label=_LB['waiting'] if i_cluster == 0 and i_bar == 0 else '',
                         color=COLOR_WAITING, alpha=0.8, hatch=temp['hatch'])
                     bot += temp['wait']
 
@@ -1167,30 +1285,34 @@ class StatisticsCollector:
                         y_cluster.append(temp['miss_num'])
                 # 绘制 miss num ratio 曲线（簇内连接）
                 if len(x_cluster) >= 2:
-                    ax2.plot(x_cluster, y_cluster, 'o-', color=COLOR_LINE, linewidth=2,
-                            markersize=7, alpha=0.8)
+                    ax2.plot(x_cluster, y_cluster, 'o-', color=COLOR_LINE,
+                            linewidth=_LC['line_width'],
+                            markersize=_LC['marker_size'], alpha=0.8)
                 elif len(x_cluster) == 1:
                     ax2.plot(x_cluster, y_cluster, 'o', color=COLOR_LINE,
-                            markersize=7, alpha=0.8)
+                            markersize=_LC['marker_size'], alpha=0.8)
 
             ax2.plot([], [], 'o-', color=COLOR_LINE, linewidth=1.5, markersize=4,
-                    label='Miss Rate', alpha=0.8)
+                    label=_LB['miss_rate'], alpha=0.8)
 
             # 主轴设置
-            ax.set_ylabel(r'Lat. Ratio w.r.t. $\mathcal{D}_{\mathrm{e2e}}$', fontsize=9, color='black')
-            ax.set_title('Ablation: Latency Breakdown vs Scale/Bins', fontsize=9, pad=8)
+            ax.set_ylabel(_LB['ylabel1'], fontsize=_FS["label"], color='black')
+            ax.set_title(_LB['title_breakdown'], fontsize=_FS["title"], pad=8)
             ax.set_xticks(x_pos)
-            ax.set_xticklabels(cluster_labels, rotation=0, fontsize=7)
+            ax.set_xticklabels(cluster_labels, rotation=_LC['xtick_rotation'],
+                               ha=_LC['xtick_ha'],
+                               rotation_mode=_LC['xtick_rotation_mode'],
+                               fontsize=_FS['tick'])
             ax.axhline(y=1.0, color='r', linestyle='--', linewidth=1, alpha=0.5)
-            ax.tick_params(axis='y', labelcolor='black', labelsize=7)
+            ax.tick_params(axis='y', labelcolor='black', labelsize=_FS['tick'])
 
             # 附轴设置
-            ax2.set_ylabel('Miss Rate', fontsize=9, color=COLOR_LINE)
-            ax2.tick_params(axis='y', labelcolor=COLOR_LINE, labelsize=7)
+            ax2.set_ylabel(_LB['ylabel2'], fontsize=_FS["label"], color=COLOR_LINE)
+            ax2.tick_params(axis='y', labelcolor=COLOR_LINE, labelsize=_FS['tick'])
             if group_by_bins:
-                ax.set_xlabel('Number of Partitions (num_bins)', fontsize=9)
+                ax.set_xlabel(_LB['xlabel_bins'], fontsize=_FS['label'])
             else:
-                ax.set_xlabel('Scale Configurations', fontsize=9)
+                ax.set_xlabel(_LB['xlabel_scale'], fontsize=_FS['label'])
 
             # 图例：两列布局
             # 第一列：Waiting, Scheduling, Execution（与堆叠顺序一致）
@@ -1198,7 +1320,7 @@ class StatisticsCollector:
             from matplotlib.patches import Rectangle
 
             handles_col1 = []
-            labels_col1 = ['Waiting', 'Scheduling', 'Execution']
+            labels_col1 = [_LB['waiting'], _LB['scheduling'], _LB['execution']]
             colors_col1 = [COLOR_WAITING, COLOR_REALLOC, COLOR_EXECUTION]
             for lbl, clr in zip(labels_col1, colors_col1):
                 handles_col1.append(Rectangle((0, 0), 1, 1, facecolor=clr, edgecolor='black', alpha=0.8))
@@ -1214,7 +1336,8 @@ class StatisticsCollector:
             all_handles = handles_col1 + handles_col2
             all_labels = labels_col1 + labels_col2
             ax.legend(all_handles, all_labels,
-                     loc='upper left', fontsize=6, framealpha=0.7, ncol=2)
+                     loc='upper left', fontsize=_FS['legend'], framealpha=0.7,
+                     ncol=_LC['legend_ncol'])
             
         elif plot_type == 'utilization':
             # 分簇柱状图 + miss ops ratio 曲线（附轴）
@@ -1253,9 +1376,6 @@ class StatisticsCollector:
             # 3. 创建附轴用于 miss op ratio
             ax2 = ax.twinx()
 
-            # 为附轴腾出空间
-            fig.subplots_adjust(right=0.88)
-
             # 4. 绘制堆叠柱状图（使用统一颜色）
             hatch_patterns = ['', '///', 'xxx', '\\\\\\']
             for i_cluster, (cluster_key, cluster_data) in enumerate(clusters.items()):
@@ -1277,15 +1397,15 @@ class StatisticsCollector:
                     # 绘制柱状图（使用统一颜色）
                     bot = 0
                     ax.bar(x_offset, realloc, width=width, bottom=bot,
-                           label='Realloc' if i_cluster == 0 and i_bar == 0 else '',
+                           label=_LU['realloc'] if i_cluster == 0 and i_bar == 0 else '',
                            color=COLOR_REALLOC, alpha=0.85, hatch=hatch)
                     bot += realloc
                     ax.bar(x_offset, effective, width=width, bottom=bot,
-                           label='Effective' if i_cluster == 0 and i_bar == 0 else '',
+                           label=_LU['effective'] if i_cluster == 0 and i_bar == 0 else '',
                            color=COLOR_EFFECTIVE, alpha=0.8, hatch=hatch)
                     bot += effective
                     ax.bar(x_offset, idle, width=width, bottom=bot,
-                           label='Idle' if i_cluster == 0 and i_bar == 0 else '',
+                           label=_LU['idle'] if i_cluster == 0 and i_bar == 0 else '',
                            color=COLOR_IDLE, alpha=0.7, hatch=hatch)
 
                     # 收集曲线数据
@@ -1295,30 +1415,35 @@ class StatisticsCollector:
 
                 # 5. 绘制 miss ops ratio 曲线在附轴上（簇内连接）
                 if len(x_cluster_line) >= 2:
-                    ax2.plot(x_cluster_line, y_cluster_line, 'o-', color=COLOR_LINE, linewidth=2,
-                             markersize=7, alpha=0.8)
+                    ax2.plot(x_cluster_line, y_cluster_line, 'o-', color=COLOR_LINE,
+                             linewidth=_LC['line_width'],
+                             markersize=_LC['marker_size'], alpha=0.8)
                 elif len(x_cluster_line) == 1:
                     ax2.plot(x_cluster_line, y_cluster_line, 'o', color=COLOR_LINE,
-                             markersize=7, alpha=0.8)
+                             markersize=_LC['marker_size'], alpha=0.8)
 
-            ax2.plot([], [], 'o-', color=COLOR_LINE, linewidth=2, markersize=7,
-                     label='Ops Ratio (Miss)', alpha=0.8)
+            ax2.plot([], [], 'o-', color=COLOR_LINE, linewidth=_LC['line_width'],
+                     markersize=_LC['marker_size'],
+                     label=_LU['ops_miss'], alpha=0.8)
 
             # 6. 主轴设置
             if group_by_bins:
-                ax.set_xlabel('Number of Partitions (num_bins)', fontsize=9)
+                ax.set_xlabel(_LU['xlabel_bins'], fontsize=_FS['label'])
             else:
-                ax.set_xlabel('Scale Configurations', fontsize=9)
-            ax.set_ylabel('Tile Util.', fontsize=9, color='black')
-            ax.set_title('Ablation: Resource Utilization vs Scale/Bins', fontsize=9, pad=8)
+                ax.set_xlabel(_LU['xlabel_scale'], fontsize=_FS['label'])
+            ax.set_ylabel(_LU['ylabel1'], fontsize=_FS["label"], color='black')
+            ax.set_title(_LU['title_util'], fontsize=_FS["title"], pad=8)
             ax.set_ylim([0, 1.1])
             ax.set_xticks(x_pos)
-            ax.set_xticklabels(cluster_labels, rotation=0, fontsize=7) #  ha='right',
-            ax.tick_params(axis='y', labelcolor='black', labelsize=7)
+            ax.set_xticklabels(cluster_labels, rotation=_LC['xtick_rotation'],
+                               ha=_LC['xtick_ha'],
+                               rotation_mode=_LC['xtick_rotation_mode'],
+                               fontsize=_FS['tick'])
+            ax.tick_params(axis='y', labelcolor='black', labelsize=_FS['tick'])
 
             # 7. 附轴 ax2 设置（使用统一颜色）
-            ax2.set_ylabel('Ops Ratio (Miss)', fontsize=9, color=COLOR_LINE)
-            ax2.tick_params(axis='y', labelcolor=COLOR_LINE, labelsize=7)
+            ax2.set_ylabel(_LU['ylabel2'], fontsize=_FS["label"], color=COLOR_LINE)
+            ax2.tick_params(axis='y', labelcolor=COLOR_LINE, labelsize=_FS['tick'])
 
             # 8. 图例：两列布局
             # 第一列：Realloc, Idle, Effective
@@ -1326,7 +1451,7 @@ class StatisticsCollector:
             from matplotlib.patches import Rectangle
 
             handles_col1 = []
-            labels_col1 = ['Realloc', 'Idle', 'Effective']
+            labels_col1 = [_LU['realloc'], _LU['idle'], _LU['effective']]
             colors_col1 = [COLOR_REALLOC, COLOR_IDLE, COLOR_EFFECTIVE]
             for lbl, clr in zip(labels_col1, colors_col1):
                 handles_col1.append(Rectangle((0, 0), 1, 1, facecolor=clr, edgecolor='black', alpha=0.8))
@@ -1336,7 +1461,7 @@ class StatisticsCollector:
             if group_by_bins:
                 labels_col2 = [f'{inner}' for inner in chain_values]
             else:
-                labels_col2 = [f'{ch} chains' for ch in chain_values]
+                labels_col2 = [f'{ch} {_LU["chains_suffix"]}' for ch in chain_values]
 
             for i, ch in enumerate(chain_values):
                 hatch_pattern = hatch_patterns[i % len(hatch_patterns)]
@@ -1347,7 +1472,8 @@ class StatisticsCollector:
             all_handles = handles_col1 + handles_col2
             all_labels = labels_col1 + labels_col2
             ax.legend(all_handles, all_labels,
-                     loc='upper left', fontsize=6, framealpha=0.7, ncol=2)
+                     loc='upper left', fontsize=_FS['legend'], framealpha=0.7,
+                     ncol=_LC['legend_ncol'])
         
         else:
             raise NotImplementedError(f"plot_type '{plot_type}' is not supported for case 2.")
@@ -1355,12 +1481,16 @@ class StatisticsCollector:
         # xlabel、xticks、图例都已在各分支内设置
         ax.grid(True, alpha=0.3, linestyle='--', axis='y')
         
-        if plot_type != 'utilization':
+        adjust_cfg = _LC.get('subplots_adjust_by_type', {}).get(plot_type, _LC.get('subplots_adjust'))
+        if adjust_cfg:
+            fig.subplots_adjust(**adjust_cfg)
+
+        if _LC['tight_layout']:
             fig.tight_layout()
         
         if save_path:
             os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else '.', exist_ok=True)
-            fig.savefig(save_path, dpi=150, bbox_inches='tight')
+            fig.savefig(save_path, dpi=150, **_LC['savefig'])
             print(f"Case 2 {plot_type}图已保存到: {save_path}")
         
         if show:

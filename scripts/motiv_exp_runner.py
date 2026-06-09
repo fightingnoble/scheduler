@@ -34,6 +34,13 @@ from scripts.exp_common import (
     runtime_args,
     ParamTemplate,
     run_main_approach_inproc,
+    configure_zh_fonts,
+    MOTIV_CASE1_LABELS_ZH,
+    MOTIV_CASE2_BREAKDOWN_LABELS_ZH,
+    MOTIV_CASE2_UTIL_LABELS_ZH,
+    MOTIV_FONTSIZE_EN,
+    MOTIV_CASE1_TABLE_CFG,
+    MOTIV_CASE2_LAYOUT_CFG,
 )
 from approach_collector import StatisticsCollector
 
@@ -226,8 +233,12 @@ class MotivExp1Runner:
 
         if plot_data:
             # 使用静态方法绘图
+            is_zh = self.args.lang == 'zh'
             plot_path = self.output_dir / 'case1_tradeoff.pdf'
-            StatisticsCollector.plot_motiv_case1(data_points=plot_data, save_path=str(plot_path))
+            StatisticsCollector.plot_motiv_case1(data_points=plot_data, save_path=str(plot_path),
+                                                 labels=MOTIV_CASE1_LABELS_ZH if is_zh else None,
+                                                 fontsize=None if is_zh else MOTIV_FONTSIZE_EN,
+                                                 table_cfg=MOTIV_CASE1_TABLE_CFG)
         
         print(f"\n✓ Case 1 完成！结果保存在: {self.output_dir}")
 
@@ -356,20 +367,27 @@ class MotivExp2Runner:
 
         if plot_data:
             # 使用静态方法绘图
+            is_zh = self.args.lang == 'zh'
             plot_path_breakdown = self.output_dir / 'case2_breakdown.pdf'
             StatisticsCollector.plot_motiv_case2(
                 data_points=plot_data,
                 plot_type='breakdown',
                 group_order=group_order,
-                save_path=str(plot_path_breakdown)
+                save_path=str(plot_path_breakdown),
+                labels=MOTIV_CASE2_BREAKDOWN_LABELS_ZH if is_zh else None,
+                fontsize=None if is_zh else MOTIV_FONTSIZE_EN,
+                layout_cfg=MOTIV_CASE2_LAYOUT_CFG,
             )
-            
+
             plot_path_util = self.output_dir / 'case2_utilization.pdf'
             StatisticsCollector.plot_motiv_case2(
                 data_points=plot_data,
                 plot_type='utilization',
                 group_order=group_order,
-                save_path=str(plot_path_util)
+                save_path=str(plot_path_util),
+                labels=MOTIV_CASE2_UTIL_LABELS_ZH if is_zh else None,
+                fontsize=None if is_zh else MOTIV_FONTSIZE_EN,
+                layout_cfg=MOTIV_CASE2_LAYOUT_CFG,
             )
                 
         print(f"\n✓ Case 2 完成！结果保存在: {self.output_dir}")
@@ -625,6 +643,8 @@ def parse_args():
                        
     parser.add_argument('--use_plot_cache', action='store_true',
                           help='跳过仿真，直接从缓存的JSON结果生成图表')
+    parser.add_argument('--lang', type=str, default='en', choices=['en', 'zh'],
+                       help='绘图语言: en=英文（默认）, zh=中文')
 
     parser.add_argument('--base_ratioA', type=float, default=0.99,
                        help='Case 2/3: 基准 exec_t_comp_ratioA（默认: 0.9）')
@@ -641,6 +661,12 @@ def parse_args():
 def main():
     """主函数"""
     args = parse_args()
+
+    # 配置中文标签
+    if args.lang == 'zh':
+        configure_zh_fonts()
+        print("[中文模式] 已配置中文字体")
+
     # 构造基础参数模板
     base_mapping = {**mapping_args}
     base_mapping.update({
@@ -694,4 +720,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

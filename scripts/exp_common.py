@@ -193,3 +193,147 @@ def add_value_labels(ax, bars, fmt: str = '{:.3f}'):
         ax.text(bar.get_x() + bar.get_width()/2., height,
                fmt.format(height) if height < 10 else f'{height:.1f}',
                ha='center', va='bottom', fontsize=6)
+
+
+# ==================== 中文标签支持 ====================
+
+PLOT_MAIN_FONTSIZE = 11
+
+# 动机图统一字号。表格、轴标题、图标题使用同一字号。
+MOTIV_FONTSIZE_EN = {
+    'label': PLOT_MAIN_FONTSIZE,
+    'tick': 10,
+    'title': PLOT_MAIN_FONTSIZE,
+    'legend': 8,
+    'annot': 8,
+    'annot_bold': 8,
+    'table': PLOT_MAIN_FONTSIZE,
+    'cyc_ref': PLOT_MAIN_FONTSIZE,
+}
+
+MOTIV_FIG_WIDTH = 4.2
+
+MOTIV_CASE1_TABLE_CFG = {
+    'groups_per_row': 3,
+    'figsize': (4.6, 2.80),
+    'left': -0.20,
+    'width': 1.43,
+    'table_top': -0.62,
+    'row_height': 0.17,
+    'col_unit': [0.10, 0.13, 0.25],
+    'row_scale': 1.0,
+    'subplots_adjust': {'left': 0.16, 'right': 0.78, 'bottom': 0.48, 'top': 0.82},
+    'font_size': PLOT_MAIN_FONTSIZE,
+    'tight_layout': False,
+    'savefig': {'bbox_inches': None},
+}
+
+MOTIV_CASE2_LAYOUT_CFG = {
+    'figsize_by_type': {
+        'breakdown': (MOTIV_FIG_WIDTH, 2.65),
+        'utilization': (MOTIV_FIG_WIDTH, 2.35),
+    },
+    'subplots_adjust_by_type': {
+        'breakdown': {'left': 0.16, 'right': 0.78, 'bottom': 0.32, 'top': 0.82},
+        'utilization': {'left': 0.16, 'right': 0.78, 'bottom': 0.34, 'top': 0.80},
+    },
+    'xtick_rotation': 20,
+    'xtick_ha': 'right',
+    'xtick_rotation_mode': 'anchor',
+    'marker_size': 6,
+    'line_width': 1.8,
+    'legend_ncol': 2,
+    'tight_layout': False,
+    'savefig': {'bbox_inches': None},
+}
+
+def configure_zh_fonts():
+    """配置 matplotlib 使用中文字体（微软雅黑）。"""
+    import matplotlib.font_manager as fm
+    # 直接添加 Windows 字体路径
+    _zh_fonts = [
+        '/mnt/c/Windows/Fonts/msyh.ttc',      # Microsoft YaHei
+        '/mnt/c/Windows/Fonts/msyhbd.ttc',    # Microsoft YaHei Bold
+        '/mnt/c/Windows/Fonts/simhei.ttf',     # SimHei
+    ]
+    for fp in _zh_fonts:
+        if os.path.exists(fp):
+            fm.fontManager.addfont(fp)
+    plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei',
+                                        'Droid Sans Fallback']
+    plt.rcParams['axes.unicode_minus'] = False
+
+
+# --- plot_motiv_case1 标签 ---
+MOTIV_CASE1_LABELS_ZH = {
+    'idle': '空闲',
+    'miss': '违例',
+    'realloc': '重分配',
+    'miss_rate': '违例率',
+    'xlabel': '预留分位数',
+    'ylabel1': '算力占比（对数）',
+    'ylabel2': '违例率',
+    'title': 'Cyc.：利用率-可靠性权衡',
+    'cyc_ref': 'cyc',
+}
+
+# --- plot_motiv_case2 (breakdown) 标签 ---
+MOTIV_CASE2_BREAKDOWN_LABELS_ZH = {
+    'execution': '执行',
+    'scheduling': '调度',
+    'waiting': '等待',
+    'miss_rate': '违例率',
+    'ylabel1': r'延迟 / $\mathcal{D}_{e2e}$',
+    'ylabel2': '违例率',
+    'title_breakdown': 'Tp-driven：延迟分解与规模',
+    'xlabel_scale': '规模配置',
+    'xlabel_bins': '分区数',
+    'chains_suffix': 'chains',
+}
+
+# --- plot_motiv_case2 (utilization) 标签 ---
+MOTIV_CASE2_UTIL_LABELS_ZH = {
+    'realloc': '重分配',
+    'effective': '有效',
+    'idle': '空闲',
+    'ops_miss': '违例算力占比',
+    'xlabel_scale': '规模配置',
+    'xlabel_bins': '分区数',
+    'ylabel1': '瓦片利用率',
+    'ylabel2': '违例算力占比',
+    'title_util': 'Tp-driven：资源利用率与规模',
+    'chains_suffix': 'chains',
+}
+
+# --- _plot_abla_overhead 标签 ---
+ABLA_OVERHEAD_LABELS_ZH = {
+    'ylabel1': '重分配次数（柱）',
+    'ylabel2': '重分配比率（线）',
+}
+
+# --- _plot_abla_tradeoff 标签 ---
+ABLA_TRADEOFF_LABELS_ZH = {
+    'exec': '执行',
+    'realloc': '重分配',
+    'wait': '等待',
+    'latency_title': '延迟',
+    'ylabel1': '归一化延迟',
+    'ylabel2': '违例率',
+}
+
+# --- ablation title 映射 ---
+ABLA_TITLES_ZH = {
+    'Ablation-2: Effect of Spatial Partitioning': '空间分区的效果',
+    'Ablation-2: Latency Breakdown vs num_bins': '延迟分解与分区数',
+    'Ablation-3: Effect of Reservation (bins=8)': '分区下动态预留效果',
+    'Ablation-3: Latency Breakdown vs ratioB (bins=8)': '延迟分解与预留分位数（bins=8）',
+}
+
+# --- _plot_satisfy_projection 标签 ---
+ABLA_SATISFY_LABELS_ZH = {
+    'xlabel': '软预留分位数 (exec_t_comp_ratioB)',
+    'ylabel': '延迟满足率',
+    'title': '满足率投影 (cyc-S vs cyc)',
+    'cyc_S': 'cyc-S',
+    'cyc_prefix': 'cyc',
+}

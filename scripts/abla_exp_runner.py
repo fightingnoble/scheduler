@@ -34,6 +34,14 @@ from scripts.exp_common import (
     runtime_args,
     ParamTemplate,
     run_main_approach_inproc,
+    configure_zh_fonts,
+    MOTIV_CASE1_LABELS_ZH,
+    MOTIV_FONTSIZE_EN,
+    MOTIV_CASE1_TABLE_CFG,
+    ABLA_OVERHEAD_LABELS_ZH,
+    ABLA_TRADEOFF_LABELS_ZH,
+    ABLA_TITLES_ZH,
+    ABLA_SATISFY_LABELS_ZH,
 )
 
 from approach_collector import StatisticsCollector
@@ -53,23 +61,67 @@ ABLA_COLORS = {
 }
 
 # Unified font/marker settings (aligned with motiv experiments in approach_collector.py)
+ABLA_FONT_SCALE_EN = 1.3
+ABLA_MAIN_FONTSIZE = 11
+ABLA_TICK_FONTSIZE = 10
+ABLA_AUX_FONTSIZE = 8
+ABLA_MAIN_FONTSIZE_EN = ABLA_MAIN_FONTSIZE * ABLA_FONT_SCALE_EN
+ABLA_TICK_FONTSIZE_EN = ABLA_TICK_FONTSIZE * ABLA_FONT_SCALE_EN
+ABLA_AUX_FONTSIZE_EN = ABLA_AUX_FONTSIZE * ABLA_FONT_SCALE_EN
+
+ABLA_CASE1_FONTSIZE_EN = {
+    key: (val * ABLA_FONT_SCALE_EN if isinstance(val, (int, float)) else val)
+    for key, val in MOTIV_FONTSIZE_EN.items()
+}
+ABLA_CASE1_TABLE_CFG_EN = {
+    **MOTIV_CASE1_TABLE_CFG,
+    'figsize': (5.0, 3.12),
+    'left': -0.21,
+    'width': 1.43,
+    'table_top': -0.68,
+    'row_height': 0.23,
+    'col_unit': [0.16, 0.22, 0.22],
+    'cell_pad': 0.01,
+    'subplots_adjust': {'left': 0.16, 'right': 0.78, 'bottom': 0.52, 'top': 0.82},
+    'font_size': MOTIV_FONTSIZE_EN['table'] * ABLA_FONT_SCALE_EN,
+}
+
 ABLA_PLOT_STYLE = {
-    'fontsize_label': 9,      # xlabel, ylabel
-    'fontsize_tick': 7,       # xticklabels, yticklabels
-    'fontsize_title': 9,      # title
-    'fontsize_legend': 6,     # legend
-    'fontsize_annot': 6,      # annotations (bar labels, etc.)
+    'fontsize_label': ABLA_MAIN_FONTSIZE,      # xlabel, ylabel
+    'fontsize_tick': ABLA_TICK_FONTSIZE,       # xticklabels, yticklabels
+    'fontsize_title': ABLA_MAIN_FONTSIZE,      # title
+    'fontsize_legend': ABLA_AUX_FONTSIZE,      # legend
+    'fontsize_annot': ABLA_AUX_FONTSIZE,       # annotations (bar labels, etc.)
     'markersize': 4,          # line markers
     'linewidth': 1.5,         # line width
 }
 
+# 英文版使用同一主字号，避免中英文图的轴标题/图标题不一致。
+ABLA_PLOT_STYLE_EN = {
+    'fontsize_label': ABLA_MAIN_FONTSIZE_EN,
+    'fontsize_tick': ABLA_TICK_FONTSIZE_EN,
+    'fontsize_title': ABLA_MAIN_FONTSIZE_EN,
+    'fontsize_legend': ABLA_AUX_FONTSIZE_EN,
+    'fontsize_annot': ABLA_AUX_FONTSIZE_EN,
+    'markersize': 6,
+    'linewidth': 1.8,
+}
+
 # 3 representative load configurations (all chains averaged)
 ABLA_LOAD_CONFIGS = [
-    {'tiles': 400, 'load_factor': 0.5, 'label': 'Low (400T-0.5×)'},
-    {'tiles': 400, 'load_factor': 1.0, 'label': 'Mid (400T-1.0×)'},
-    {'tiles': 200, 'load_factor': 1.0, 'label': 'High (200T-1.0×)'},
+    {'tiles': 400, 'load_factor': 0.5, 'label': 'Low'},
+    {'tiles': 400, 'load_factor': 1.0, 'label': 'Mid'},
+    {'tiles': 200, 'load_factor': 1.0, 'label': 'High'},
+]
+ABLA_LOAD_CONFIGS_ZH = [
+    {'tiles': cfg['tiles'], 'load_factor': cfg['load_factor'], 'label': label}
+    for cfg, label in zip(ABLA_LOAD_CONFIGS, ['低负载', '中负载', '高负载'])
 ]
 ABLA_LOAD_COLORS = ['#1f77b4', '#ff7f0e', '#d62728']  # blue, orange, red
+
+
+def _abla_load_configs(is_zh: bool):
+    return ABLA_LOAD_CONFIGS_ZH if is_zh else ABLA_LOAD_CONFIGS
 
 
 def _filter_and_avg_by_load(data_points, group_key, group_val, load_cfg):
@@ -115,12 +167,48 @@ def _avg_latency_breakdown(pts):
     }
 
 
+def _place_clustered_bar_labels(ax, label_specs, fontsize, y_pad_frac=0.015, y_gap_frac=0.055):
+    """Place bar value labels with a minimum vertical gap within each cluster."""
+    if not label_specs:
+        return
+
+    y_min, y_max = ax.get_ylim()
+    y_range = max(y_max - y_min, 1e-9)
+    y_pad = y_range * y_pad_frac
+    y_gap = y_range * y_gap_frac
+
+    grouped = {}
+    for spec in label_specs:
+        grouped.setdefault(spec['cluster'], []).append(spec)
+
+    placed = []
+    max_label_y = y_max
+    for specs in grouped.values():
+        prev_y = None
+        for spec in sorted(specs, key=lambda s: (s['bar_height'], s['x'])):
+            target_y = spec['bar_height'] + y_pad
+            label_y = target_y if prev_y is None else max(target_y, prev_y + y_gap)
+            placed.append({**spec, 'label_y': label_y})
+            prev_y = label_y
+            max_label_y = max(max_label_y, label_y)
+
+    if max_label_y + y_pad > y_max:
+        ax.set_ylim(y_min, max_label_y + y_pad)
+
+    for spec in placed:
+        ax.text(spec['x'], spec['label_y'], spec['text'],
+                ha='center', va='bottom', fontsize=fontsize,
+                color=spec['color'], clip_on=False)
+
+
 def _plot_abla_overhead(data_points, x_key, x_values, x_labels, title, save_path,
-                        load_configs=None, load_colors=None, pglb_baseline=None):
+                        load_configs=None, load_colors=None, pglb_baseline=None,
+                        labels=None, style=None):
     """
     Universal ablation overhead plot: clustered bars (realloc_count) + lines (realloc_ratio).
     Clusters = load configs, within-cluster X = x_values (bins or ratioB).
     """
+    S = style or ABLA_PLOT_STYLE
     import numpy as np
     import matplotlib.pyplot as plt
 
@@ -134,8 +222,9 @@ def _plot_abla_overhead(data_points, x_key, x_values, x_labels, title, save_path
     bar_width = 0.7 / n_bars
     cluster_width = n_bars * bar_width + 0.3
 
-    fig, ax1 = plt.subplots(figsize=(7.0, 3.2))
+    fig, ax1 = plt.subplots(figsize=(4.5, 2.5))
     ax2 = ax1.twinx()
+    bar_label_specs = []
 
     for ci, (lcfg, color) in enumerate(zip(load_configs, load_colors)):
         cluster_center = ci * cluster_width
@@ -146,8 +235,13 @@ def _plot_abla_overhead(data_points, x_key, x_values, x_labels, title, save_path
             x_pos = cluster_center + (bi - (n_bars - 1) / 2) * bar_width
             ax1.bar(x_pos, avg['realloc_mean_count'], bar_width * 0.85,
                     color=color, alpha=0.25 + 0.15 * bi, edgecolor=color, linewidth=0.5)
-            ax1.text(x_pos, avg['realloc_mean_count'], f"{avg['realloc_mean_count']:.1f}",
-                     ha='center', va='bottom', fontsize=ABLA_PLOT_STYLE['fontsize_annot'], color=color)
+            bar_label_specs.append({
+                'cluster': ci,
+                'x': x_pos,
+                'bar_height': avg['realloc_mean_count'],
+                'text': f"{avg['realloc_mean_count']:.1f}",
+                'color': color,
+            })
 
         # Line: realloc_ratio
         line_xs, line_ys = [], []
@@ -160,7 +254,7 @@ def _plot_abla_overhead(data_points, x_key, x_values, x_labels, title, save_path
             line_ys.append(avg['realloc_mean_ratio'])
         if line_xs:
             ax2.plot(line_xs, line_ys, 'o-', color=color,
-                     linewidth=ABLA_PLOT_STYLE['linewidth'], markersize=ABLA_PLOT_STYLE['markersize'],
+                     linewidth=S['linewidth'], markersize=S['markersize'],
                      label=lcfg['label'])
 
     # pglb baseline horizontal lines (Case 3 only)
@@ -170,26 +264,32 @@ def _plot_abla_overhead(data_points, x_key, x_values, x_labels, title, save_path
                 bv = pglb_baseline[lcfg['label']]
                 ax2.axhline(y=bv, color=color, linestyle=':', alpha=0.5, linewidth=1)
 
+    _place_clustered_bar_labels(ax1, bar_label_specs, fontsize=S['fontsize_legend'])
+
     # X-tick labels at cluster centers
     cluster_centers = [ci * cluster_width for ci in range(n_clusters)]
     ax1.set_xticks(cluster_centers)
-    ax1.set_xticklabels([lc['label'] for lc in load_configs], fontsize=ABLA_PLOT_STYLE['fontsize_tick'])
+    ax1.set_xticklabels([lc['label'] for lc in load_configs], fontsize=S['fontsize_tick'])
+    ax1.tick_params(axis='x', pad=18)
 
     # Inner x labels (bins or ratioB) — add minor ticks
     for ci in range(n_clusters):
         cc = ci * cluster_width
         for bi, xl in enumerate(x_labels):
             x_pos = cc + (bi - (n_bars - 1) / 2) * bar_width
-            ax1.text(x_pos, -0.02, xl, ha='center', va='top', fontsize=ABLA_PLOT_STYLE['fontsize_annot'],
-                     transform=ax1.get_xaxis_transform(), color='gray')
+            ax1.text(x_pos, -0.012, xl, ha='right', va='top',
+                     fontsize=S['fontsize_legend'], rotation=30,
+                     rotation_mode='anchor', transform=ax1.get_xaxis_transform(),
+                     color='gray')
 
-    ax1.set_ylabel('Realloc Count (bars)', fontsize=ABLA_PLOT_STYLE['fontsize_label'])
-    ax2.set_ylabel('Realloc Ratio (lines)', fontsize=ABLA_PLOT_STYLE['fontsize_label'])
-    ax1.tick_params(axis='y', labelsize=ABLA_PLOT_STYLE['fontsize_tick'])
-    ax2.tick_params(axis='y', labelsize=ABLA_PLOT_STYLE['fontsize_tick'])
+    ax1.set_ylabel((labels or {}).get('ylabel1', 'Realloc Count (bars)'),
+                   fontsize=S['fontsize_label'])
+    ax2.set_ylabel((labels or {}).get('ylabel2', 'Realloc Ratio (lines)'),
+                   fontsize=S['fontsize_label'])
+    ax1.tick_params(axis='y', labelsize=S['fontsize_tick'])
+    ax2.tick_params(axis='y', labelsize=S['fontsize_tick'])
     ax1.grid(True, alpha=0.2, linestyle='--', axis='y')
-    ax1.set_title(title, fontsize=ABLA_PLOT_STYLE['fontsize_title'], pad=8)
-    ax2.legend(loc='upper right', fontsize=ABLA_PLOT_STYLE['fontsize_legend'], framealpha=0.7)
+    ax1.set_title(title, fontsize=S['fontsize_title'], pad=8)
 
     fig.tight_layout()
     fig.savefig(save_path, dpi=300, bbox_inches='tight')
@@ -198,7 +298,8 @@ def _plot_abla_overhead(data_points, x_key, x_values, x_labels, title, save_path
 
 
 def _plot_abla_tradeoff(data_points, x_key, x_values, x_labels, title, save_path,
-                        load_configs=None, load_colors=None):
+                        load_configs=None, load_colors=None, labels=None, style=None):
+    S = style or ABLA_PLOT_STYLE
     """
     Universal ablation tradeoff plot: stacked bars (latency breakdown) + line (miss rate).
     Clusters = load configs, within-cluster X = x_values.
@@ -216,10 +317,15 @@ def _plot_abla_tradeoff(data_points, x_key, x_values, x_labels, title, save_path
     bar_width = 0.7 / n_bars
     cluster_width = n_bars * bar_width + 0.3
 
-    fig, ax1 = plt.subplots(figsize=(7.0, 3.2))
+    fig, ax1 = plt.subplots(figsize=(4.5, 2.5))
     ax2 = ax1.twinx()
 
     comp_colors = {'exec': ABLA_COLORS['exec'], 'realloc': ABLA_COLORS['realloc'], 'wait': ABLA_COLORS['wait']}
+    comp_names = {
+        'exec': (labels or {}).get('exec', 'Exec'),
+        'realloc': (labels or {}).get('realloc', 'Realloc'),
+        'wait': (labels or {}).get('wait', 'Wait'),
+    }
 
     for ci, (lcfg, color) in enumerate(zip(load_configs, load_colors)):
         cluster_center = ci * cluster_width
@@ -244,35 +350,40 @@ def _plot_abla_tradeoff(data_points, x_key, x_values, x_labels, title, save_path
             miss_ys.append(avg['miss_mean_count'])
 
         if miss_xs:
-            ax2.plot(miss_xs, miss_ys, 's-', color=color, linewidth=ABLA_PLOT_STYLE['linewidth'],
-                     markersize=ABLA_PLOT_STYLE['markersize'], label=lcfg['label'])
+            ax2.plot(miss_xs, miss_ys, 's-', color=color, linewidth=S['linewidth'],
+                     markersize=S['markersize'], label=lcfg['label'])
 
     # X-tick labels
     cluster_centers = [ci * cluster_width for ci in range(n_clusters)]
     ax1.set_xticks(cluster_centers)
-    ax1.set_xticklabels([lc['label'] for lc in load_configs], fontsize=ABLA_PLOT_STYLE['fontsize_tick'])
+    ax1.set_xticklabels([lc['label'] for lc in load_configs], fontsize=S['fontsize_tick'])
+    ax1.tick_params(axis='x', pad=18)
 
     for ci in range(n_clusters):
         cc = ci * cluster_width
         for bi, xl in enumerate(x_labels):
             x_pos = cc + (bi - (n_bars - 1) / 2) * bar_width
-            ax1.text(x_pos, -0.02, xl, ha='center', va='top', fontsize=ABLA_PLOT_STYLE['fontsize_annot'],
-                     transform=ax1.get_xaxis_transform(), color='gray')
+            ax1.text(x_pos, -0.012, xl, ha='right', va='top',
+                     fontsize=S['fontsize_legend'], rotation=30,
+                     rotation_mode='anchor', transform=ax1.get_xaxis_transform(),
+                     color='gray')
 
     # Legend for stacked components
     from matplotlib.patches import Patch
-    legend_patches = [Patch(facecolor=comp_colors[c], alpha=0.5, label=c.capitalize())
+    legend_patches = [Patch(facecolor=comp_colors[c], alpha=0.5, label=comp_names[c])
                       for c in ['exec', 'realloc', 'wait']]
-    ax1.legend(handles=legend_patches, loc='upper left', fontsize=ABLA_PLOT_STYLE['fontsize_legend'],
-               framealpha=0.7, title='Latency', title_fontsize=ABLA_PLOT_STYLE['fontsize_legend']+1)
+    ax1.legend(handles=legend_patches, loc='upper left', fontsize=S['fontsize_legend'],
+               framealpha=0.7, title=(labels or {}).get('latency_title', 'Latency'),
+               title_fontsize=S['fontsize_legend']+1)
 
-    ax1.set_ylabel('Latency / Constraint', fontsize=ABLA_PLOT_STYLE['fontsize_label'])
-    ax2.set_ylabel('Miss Rate', fontsize=ABLA_PLOT_STYLE['fontsize_label'])
-    ax1.tick_params(axis='y', labelsize=ABLA_PLOT_STYLE['fontsize_tick'])
-    ax2.tick_params(axis='y', labelsize=ABLA_PLOT_STYLE['fontsize_tick'])
+    ax1.set_ylabel((labels or {}).get('ylabel1', 'Normalized Latency'),
+                   fontsize=S['fontsize_label'])
+    ax2.set_ylabel((labels or {}).get('ylabel2', 'Miss Rate'),
+                   fontsize=S['fontsize_label'])
+    ax1.tick_params(axis='y', labelsize=S['fontsize_tick'])
+    ax2.tick_params(axis='y', labelsize=S['fontsize_tick'])
     ax1.grid(True, alpha=0.2, linestyle='--', axis='y')
-    ax1.set_title(title, fontsize=ABLA_PLOT_STYLE['fontsize_title'], pad=8)
-    ax2.legend(loc='upper right', fontsize=ABLA_PLOT_STYLE['fontsize_legend'], framealpha=0.7)
+    ax1.set_title(title, fontsize=S['fontsize_title'], pad=8)
 
     fig.tight_layout()
     fig.savefig(save_path, dpi=300, bbox_inches='tight')
@@ -392,6 +503,7 @@ class AblaExp1Runner:
         self.ratioBs = [float(r) for r in args.case1_ratioBs.split(',')]
         self.cyc_ratios = [float(r) for r in args.case1_cyc_ratios.split(',')]
         self.ratioA = args.case1_ratioA
+        self.cycS_policy = args.case1_cycS_policy
         self.results = []
     
     def run(self):
@@ -400,6 +512,7 @@ class AblaExp1Runner:
         print("Ablation-1: cyc(S) vs cyc - 预留在串行执行下的影响")
         print("="*60)
         print(f"cyc(S) 扫描 repack 分位数: {self.ratioBs} (固定 ratioA={self.ratioA})")
+        print(f"cyc(S) simulation policy: {self.cycS_policy}")
         print(f"cyc 参考点: {self.cyc_ratios} (硬隔离，用于投影)")
         print(f"输出目录: {self.output_dir}")
         
@@ -442,7 +555,7 @@ class AblaExp1Runner:
                     'exec_t_comp_ratioB': ratioB,
                     'num_bins': -1,
                 },
-                runtime={'policy': 'reserv'},
+                runtime={'policy': self.cycS_policy},
                 specific={'root_dir': str(self.output_dir / f'cycS_p{int(self.ratioA*100)}_p{int(ratioB*100)}')}
             )
             tasks.append({
@@ -482,13 +595,15 @@ class AblaExp1Runner:
             with open(json_path, 'r') as f:
                 summary = json.load(f)
             results = summary.get('results', [])
-            # 检查缓存数据点数量是否与预期扫描参数一致
-            expected_count = len(self.ratioBs) + len(self.cyc_ratios)
-            if len(results) != expected_count:
-                print(f"Error: Cache file is invalid. Expected {expected_count} results, found {len(results)}.")
-                return
-            # 直接使用缓存数据
-            plot_data = results
+            # 过滤缓存数据，只保留匹配当前扫描参数的条目
+            ratioB_set = set(self.ratioBs)
+            cyc_ratio_set = set(self.cyc_ratios)
+            plot_data = [r for r in results if (
+                (r.get('exp_type') == 'cyc-S' and r.get('ratio') in ratioB_set) or
+                (r.get('exp_type') == 'cyc' and r.get('ratio') in cyc_ratio_set)
+            )]
+            print(f"  Cache: {len(results)} entries -> filtered to {len(plot_data)} "
+                  f"(cyc-S ratioB={self.ratioBs}, cyc ratios={self.cyc_ratios})")
         else:
             if not self.results:
                 print("Warning: No simulation results found to generate a report.")
@@ -511,8 +626,18 @@ class AblaExp1Runner:
             print(f"摘要已保存到: {json_path}")
 
         if plot_data:
-            cyc_ref = [{'ratio': d['ratio'], 'miss_mean_count': d['miss_mean_count']}
-                       for d in plot_data if d.get('exp_type') == 'cyc']
+            # 中文标签配置
+            is_zh = self.args.lang == 'zh'
+            zh_case1 = MOTIV_CASE1_LABELS_ZH if is_zh else None
+            zh_satisfy = ABLA_SATISFY_LABELS_ZH if is_zh else None
+            _fs_case1 = MOTIV_FONTSIZE_EN if is_zh else ABLA_CASE1_FONTSIZE_EN
+
+            # cyc_ref: 只选取 p50/p70/p99 三个代表点用于投影
+            cyc_ref_all = [{'ratio': d['ratio'],
+                            'miss_mean_count': d['miss_mean_count'],
+                            'idle_mean_ratio': d['idle_mean_ratio']}
+                           for d in plot_data if d.get('exp_type') == 'cyc']
+            cyc_ref = [d for d in cyc_ref_all if d['ratio'] in (0.8,)]
 
             # 使用 Motiv-Exp-1 的绘图方法
             cycS_points = [{
@@ -529,18 +654,36 @@ class AblaExp1Runner:
                 cycS_points = sorted(cycS_points, key=lambda x: x['ratio'])
                 for p in cycS_points:
                     p.pop('ratio', None)
+                _tbl_cfg = MOTIV_CASE1_TABLE_CFG if is_zh else ABLA_CASE1_TABLE_CFG_EN
+                # 版本1：包含 Realloc
                 plot_path = self.output_dir / 'case1_motiv1_style.pdf'
-                StatisticsCollector.plot_motiv_case1(data_points=cycS_points, save_path=str(plot_path))
-            
+                StatisticsCollector.plot_motiv_case1(data_points=cycS_points, save_path=str(plot_path),
+                    show_realloc=True, labels=zh_case1, fontsize=_fs_case1, table_cfg=_tbl_cfg)
+                # 版本2：不包含 Realloc（禁用调度开销）
+                plot_path_no_realloc = self.output_dir / 'case1_motiv1_style_no_realloc.pdf'
+                StatisticsCollector.plot_motiv_case1(data_points=cycS_points, save_path=str(plot_path_no_realloc),
+                    show_realloc=False, labels=zh_case1, fontsize=_fs_case1, table_cfg=_tbl_cfg)
+
             # 额外的投影图
-            self._plot_satisfy_projection(data_points=plot_data)
+            self._plot_satisfy_projection(data_points=plot_data, labels=zh_satisfy, style=ABLA_PLOT_STYLE_EN if not is_zh else None)
         
         print(f"\n✓ Case 1 完成！结果保存在: {self.output_dir}")
     
-    def _plot_satisfy_projection(self, data_points: List[Dict]):
+    def _plot_satisfy_projection(self, data_points: List[Dict], labels: Dict[str, str] = None, style=None):
         """绘制延迟满足率投影图"""
         import numpy as np
         import matplotlib.pyplot as plt
+
+        _SP = style or ABLA_PLOT_STYLE
+
+        _S = {
+            'xlabel': 'Soft Reservation Percentile (exec_t_comp_ratioB)',
+            'ylabel': 'Latency Satisfaction Rate',
+            'title': 'Satisfaction Projection (cyc-S vs cyc)',
+            'cyc_S': 'cyc-S', 'cyc_prefix': 'cyc',
+        }
+        if labels:
+            _S.update(labels)
 
         cyc_data = [d for d in data_points if d['exp_type'] == 'cyc']
         cycS_data = sorted([d for d in data_points if d['exp_type'] == 'cyc-S'], key=lambda d: d['ratio'])
@@ -551,21 +694,23 @@ class AblaExp1Runner:
             xs = [d['ratio'] for d in cycS_data]
             ys = [max(0.0, min(1.0, 1.0 - d['miss_mean_count'])) for d in cycS_data]
             ax.plot(xs, ys, 'o-', color=ABLA_COLORS['miss_line'],
-                    linewidth=ABLA_PLOT_STYLE['linewidth'], markersize=ABLA_PLOT_STYLE['markersize'], label='cyc-S')
+                    linewidth=_SP['linewidth'], markersize=_SP['markersize'],
+                    label=_S['cyc_S'])
 
         for d in cyc_data:
             y = max(0.0, min(1.0, 1.0 - d['miss_mean_count']))
             ax.axhline(y=y, color='gray', linestyle=':', alpha=0.6, linewidth=1)
-            ax.text(0.905, y, f"cyc p{int(d['ratio']*100)}", transform=ax.get_yaxis_transform(),
-                   ha='left', va='center', fontsize=ABLA_PLOT_STYLE['fontsize_annot'], color='gray')
+            ax.text(0.905, y, f"{_S['cyc_prefix']} p{int(d['ratio']*100)}",
+                    transform=ax.get_yaxis_transform(),
+                   ha='left', va='center', fontsize=_SP['fontsize_annot'], color='gray')
 
-        ax.set_xlabel('Soft Reservation Percentile (exec_t_comp_ratioB)', fontsize=ABLA_PLOT_STYLE['fontsize_label'])
-        ax.set_ylabel('Latency Satisfaction Rate', fontsize=ABLA_PLOT_STYLE['fontsize_label'])
+        ax.set_xlabel(_S['xlabel'], fontsize=_SP['fontsize_label'])
+        ax.set_ylabel(_S['ylabel'], fontsize=_SP['fontsize_label'])
         ax.set_ylim(0.0, 1.02)
         ax.grid(True, alpha=0.2, linestyle='--', axis='y')
-        ax.tick_params(axis='both', labelsize=ABLA_PLOT_STYLE['fontsize_tick'])
-        ax.legend(loc='lower right', fontsize=ABLA_PLOT_STYLE['fontsize_legend'], framealpha=0.7)
-        ax.set_title('Ablation-1: Satisfaction Projection (cyc-S vs cyc)', fontsize=ABLA_PLOT_STYLE['fontsize_title'], pad=8)
+        ax.tick_params(axis='both', labelsize=_SP['fontsize_tick'])
+        ax.legend(loc='lower right', fontsize=_SP['fontsize_legend'], framealpha=0.7)
+        ax.set_title(_S['title'], fontsize=_SP['fontsize_title'], pad=8)
 
         fig.tight_layout()
         save_path = str(self.output_dir / 'case1_satisfy_projection.pdf')
@@ -708,17 +853,30 @@ class AblaExp2Runner:
             x_values = sorted(set(d['num_bins'] for d in plot_data))
             x_labels = [str(b) for b in x_values]
 
+            is_zh = self.args.lang == 'zh'
+            _style = ABLA_PLOT_STYLE if is_zh else ABLA_PLOT_STYLE_EN
+            _load_configs = _abla_load_configs(is_zh)
             _plot_abla_overhead(
                 data_points=plot_data,
                 x_key='num_bins', x_values=x_values, x_labels=x_labels,
-                title='Ablation-2: Effect of Spatial Partitioning',
+                title=ABLA_TITLES_ZH.get('Ablation-2: Effect of Spatial Partitioning',
+                       '空间分区的效果') if is_zh else
+                       'Effect of Spatial Partitioning',
                 save_path=str(self.output_dir / 'case2_overhead.pdf'),
+                load_configs=_load_configs,
+                labels=ABLA_OVERHEAD_LABELS_ZH if is_zh else None,
+                style=_style,
             )
             _plot_abla_tradeoff(
                 data_points=plot_data,
                 x_key='num_bins', x_values=x_values, x_labels=x_labels,
-                title='Ablation-2: Latency Breakdown vs num_bins',
+                title=ABLA_TITLES_ZH.get('Ablation-2: Latency Breakdown vs num_bins',
+                       '延迟分解与分区数') if is_zh else
+                       'Latency Breakdown vs num_bins',
                 save_path=str(self.output_dir / 'case2_tradeoff.pdf'),
+                load_configs=_load_configs,
+                labels=ABLA_TRADEOFF_LABELS_ZH if is_zh else None,
+                style=_style,
             )
 
         print(f"\n✓ Case 2 完成！结果保存在: {self.output_dir}")
@@ -908,6 +1066,9 @@ class AblaExp3Runner:
             available_bins = sorted(set(d['num_bins'] for d in reserv_data))
             focus_bins = max(available_bins) if available_bins else 8
             reserv_focus = [d for d in reserv_data if d['num_bins'] == focus_bins]
+            # 只保留当前 ratioBs 参数范围内的数据点
+            ratioB_set = set(self.ratioBs)
+            reserv_focus = [d for d in reserv_focus if d['exec_t_comp_ratioB'] in ratioB_set]
 
             x_values = sorted(set(d['exec_t_comp_ratioB'] for d in reserv_focus))
             x_labels = [f"p{int(x*100)}" for x in x_values]
@@ -915,8 +1076,11 @@ class AblaExp3Runner:
             # Compute pglb baseline per load config for reference lines
             pglb_data = [d for d in plot_data if d.get('exp_type') == 'pglb'
                          and d['num_bins'] == focus_bins]
+            is_zh = self.args.lang == 'zh'
+            _style = ABLA_PLOT_STYLE if is_zh else ABLA_PLOT_STYLE_EN
+            _load_configs = _abla_load_configs(is_zh)
             pglb_baseline = {}
-            for lcfg in ABLA_LOAD_CONFIGS:
+            for lcfg in _load_configs:
                 pts = [d for d in pglb_data
                        if d['tiles'] == lcfg['tiles']
                        and d['load_factor'] == lcfg['load_factor']]
@@ -928,15 +1092,25 @@ class AblaExp3Runner:
             _plot_abla_overhead(
                 data_points=reserv_focus,
                 x_key='exec_t_comp_ratioB', x_values=x_values, x_labels=x_labels,
-                title=f'Ablation-3: Effect of Reservation (bins={focus_bins})',
+                title=f'Effect of Reservation (bins={focus_bins})' if not is_zh else
+                       ABLA_TITLES_ZH.get(f'Ablation-3: Effect of Reservation (bins={focus_bins})',
+                       f'分区下动态预留效果（bins={focus_bins}）'),
                 save_path=str(self.output_dir / 'case3_overhead.pdf'),
+                load_configs=_load_configs,
                 pglb_baseline=pglb_baseline,
+                labels=ABLA_OVERHEAD_LABELS_ZH if is_zh else None,
+                style=_style,
             )
             _plot_abla_tradeoff(
                 data_points=reserv_focus,
                 x_key='exec_t_comp_ratioB', x_values=x_values, x_labels=x_labels,
-                title=f'Ablation-3: Latency Breakdown vs ratioB (bins={focus_bins})',
+                title=f'Latency Breakdown vs ratioB (bins={focus_bins})' if not is_zh else
+                       ABLA_TITLES_ZH.get(f'Ablation-3: Latency Breakdown vs ratioB (bins={focus_bins})',
+                       f'延迟分解与预留分位数（bins={focus_bins}）'),
                 save_path=str(self.output_dir / 'case3_tradeoff.pdf'),
+                load_configs=_load_configs,
+                labels=ABLA_TRADEOFF_LABELS_ZH if is_zh else None,
+                style=_style,
             )
 
         print(f"\n✓ Case 3 完成！结果保存在: {self.output_dir}")
@@ -955,12 +1129,14 @@ def parse_args():
                        help='输出目录（默认: ./abla_exp_results）')
     
     # Case 1 特定参数
-    parser.add_argument('--case1_ratioBs', type=str, default='0.5,0.6,0.7,0.8,0.9,0.99',
+    parser.add_argument('--case1_ratioBs', type=str, default='0.5,0.6,0.7',
                        help='Case 1: cyc(S)的exec_t_comp_ratioB扫描值')
     parser.add_argument('--case1_ratioA', type=float, default=0.7,
                        help='Case 1: cyc(S)的exec_t_comp_ratioA固定值')
     parser.add_argument('--case1_cyc_ratios', type=str, default='0.5,0.6,0.7,0.8,0.9,0.99',
                        help='Case 1: cyc参考点的exec_t_comp_ratioA值')
+    parser.add_argument('--case1_cycS_policy', type=str, default='reserv',
+                       help='Case 1: cyc(S)的simulation policy (默认: reserv，可尝试cyc)')
     
     # Case 2 特定参数
     parser.add_argument('--case2_bins', type=str, default='1,2,4,8',
@@ -1001,6 +1177,8 @@ def parse_args():
                        help='只打印命令，不执行')
     parser.add_argument('--use_plot_cache', action='store_true',
                        help='跳过仿真，直接从缓存的JSON结果生成图表')
+    parser.add_argument('--lang', type=str, default='en', choices=['en', 'zh'],
+                       help='绘图语言: en=英文（默认）, zh=中文')
     
     # 传递给main_approach.py的额外参数
     parser.add_argument('--extra_args', type=str, default='',
@@ -1012,7 +1190,12 @@ def parse_args():
 def main():
     """主函数"""
     args = parse_args()
-    
+
+    # 配置中文标签
+    if args.lang == 'zh':
+        configure_zh_fonts()
+        print("[中文模式] 已配置中文字体")
+
     # 构造基础参数模板
     base_mapping = {**mapping_args}
     base_runtime = {**runtime_args, 'n_p': args.num_hp}
