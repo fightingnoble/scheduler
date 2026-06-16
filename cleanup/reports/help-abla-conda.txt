@@ -1,0 +1,69 @@
+usage: abla_exp_runner.py [-h] --case {1,2,3} [--output_dir OUTPUT_DIR]
+                          [--case1_ratioBs CASE1_RATIOBS]
+                          [--case1_ratioA CASE1_RATIOA]
+                          [--case1_cyc_ratios CASE1_CYC_RATIOS]
+                          [--case1_cycS_policy CASE1_CYCS_POLICY]
+                          [--case2_bins CASE2_BINS]
+                          [--case2_tiles CASE2_TILES]
+                          [--case2_chains CASE2_CHAINS]
+                          [--case2_loads CASE2_LOADS]
+                          [--case3_tiles CASE3_TILES]
+                          [--case3_chains CASE3_CHAINS]
+                          [--case3_loads CASE3_LOADS]
+                          [--case3_ratioBs CASE3_RATIOBS]
+                          [--case3_bins CASE3_BINS] [--case3_fixed_strength]
+                          [--case3_fixed_tiles CASE3_FIXED_TILES]
+                          [--case3_fixed_chains CASE3_FIXED_CHAINS]
+                          [--case3_fixed_load CASE3_FIXED_LOAD]
+                          [--num_hp NUM_HP] [--verbose] [--dry_run]
+                          [--use_plot_cache] [--lang {en,zh}]
+                          [--extra_args EXTRA_ARGS]
+
+Ablation Experiments Runner
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --case {1,2,3}        实验编号: 1=cyc-S vs cyc, 2=pglb vs glb, 3=reserv vs pglb
+  --output_dir OUTPUT_DIR
+                        输出目录（默认: ./abla_exp_results）
+  --case1_ratioBs CASE1_RATIOBS
+                        Case 1: cyc(S)的exec_t_comp_ratioB扫描值
+  --case1_ratioA CASE1_RATIOA
+                        Case 1: cyc(S)的exec_t_comp_ratioA固定值
+  --case1_cyc_ratios CASE1_CYC_RATIOS
+                        Case 1: cyc参考点的exec_t_comp_ratioA值
+  --case1_cycS_policy CASE1_CYCS_POLICY
+                        Case 1: cyc(S)的simulation policy (默认: reserv，可尝试cyc)
+  --case2_bins CASE2_BINS
+                        Case 2: num_bins扫描值
+  --case2_tiles CASE2_TILES
+                        Case 2: 硬件tile数扫描值
+  --case2_chains CASE2_CHAINS
+                        Case 2: 任务链数量扫描值
+  --case2_loads CASE2_LOADS
+                        Case 2: 负载倍数扫描值
+  --case3_tiles CASE3_TILES
+                        Case 3: 硬件tile数扫描值
+  --case3_chains CASE3_CHAINS
+                        Case 3: 任务链数量扫描值
+  --case3_loads CASE3_LOADS
+                        Case 3: 负载倍数扫描值
+  --case3_ratioBs CASE3_RATIOBS
+                        Case 3: reserv的exec_t_comp_ratioB扫描值
+  --case3_bins CASE3_BINS
+                        Case 3: reserv/num_bins扫描值（-1表示单分区）
+  --case3_fixed_strength
+                        Case 3: 使用固定负载强度组合（而非多组扫描）
+  --case3_fixed_tiles CASE3_FIXED_TILES
+                        Case 3 固定模式: tiles
+  --case3_fixed_chains CASE3_FIXED_CHAINS
+                        Case 3 固定模式: chains
+  --case3_fixed_load CASE3_FIXED_LOAD
+                        Case 3 固定模式: load_factor
+  --num_hp NUM_HP       仿真超周期数（默认: 100）
+  --verbose             详细输出
+  --dry_run             只打印命令，不执行
+  --use_plot_cache      跳过仿真，直接从缓存的JSON结果生成图表
+  --lang {en,zh}        绘图语言: en=英文（默认）, zh=中文
+  --extra_args EXTRA_ARGS
+                        传递给main_approach.py的额外参数

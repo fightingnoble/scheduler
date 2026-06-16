@@ -1,0 +1,74 @@
+{
+  "archive_ref": "archive/test_pipeline-20260612",
+  "source_head": "d5bfda5000c4a9597cd2ad51986037dc200d6b29",
+  "audit_worktree": "/home/zhangchg/git_repo/scheduler-audit-20260612",
+  "integration_base": "master",
+  "integration_worktree": "/home/zhangchg/git_repo/scheduler-integration-20260612",
+  "status_counts": {
+    "REMOVE_FROM_CLEAN": 46,
+    "REVIEW": 112,
+    "KEEP": 67,
+    "REUSE_CANDIDATE": 12
+  },
+  "remove_candidates": 46,
+  "review_candidates": 112,
+  "reuse_candidates": 12,
+  "symbol_candidates": 1179,
+  "decision_ids": [
+    "P1-GIT-001",
+    "P1-GIT-002",
+    "P1-KEEP-001",
+    "P1-REUSE-001",
+    "P1-DEP-001",
+    "P1-DEP-002",
+    "P1-NODE-001",
+    "P1-CACHE-001",
+    "P1-CACHE-002",
+    "P1-REMOVE-B7-DOCS",
+    "P1-REMOVE-B8-EXAMPLE",
+    "P1-REMOVE-B14-RUN",
+    "P1-REMOVE-B19-TESTS",
+    "P1-REMOVE-B3-ANALYZE",
+    "P1-REMOVE-B13-ROOT",
+    "P1-REMOVE-B11-OPTIMIZER",
+    "P1-REMOVE-B15-SCHED",
+    "P1-REVIEW-DOCS-001",
+    "P1-REVIEW-RUNTIME-001",
+    "P1-SYMBOL-001"
+  ],
+  "entrypoint_smoke": "PASS in zsh + conda activate gurobi; base python failures retained only as environment caution",
+  "user_decisions_2026_06_12": {
+    "approved": [
+      "P1-DEP-001",
+      "P1-GIT-001",
+      "P1-GIT-002",
+      "P1-KEEP-001",
+      "P1-NODE-001",
+      "P1-REUSE-001",
+      "P1-SYMBOL-001"
+    ],
+    "keep_review": [
+      "P1-DEP-002",
+      "P1-REVIEW-DOCS-001",
+      "P1-REVIEW-RUNTIME-001"
+    ],
+    "not_approved": [
+      "all P1-REMOVE-* cleanup batches",
+      "P1-CACHE-001",
+      "P1-CACHE-002"
+    ],
+    "scope_constraints": [
+      "Do not operate directly on /home/zhangchg/git_repo/scheduler.",
+      "Ignore untracked files; focus only on tracked/git-cache cleanup.",
+      ".claude is necessary; do not delete.",
+      "claude_talk is important conversation history; do not delete.",
+      "doc/spec, doc/guide, doc/dev are important and may need updates after code changes.",
+      "P1-REMOVE-B19-TESTS is rejected; tests should be kept."
+    ]
+  },
+  "status_counts_after_user_decision": {
+    "KEEP": 124,
+    "REVIEW": 101,
+    "REUSE_CANDIDATE": 12
+  }
+}

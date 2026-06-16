@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "scripts/motiv_exp_runner.py", line 45, in <module>
+    from approach_collector import StatisticsCollector
+  File "/home/zhangchg/git_repo/scheduler-audit-20260612/./approach_collector.py", line 12, in <module>
+    from ref_tdigest import TDigestStreamingHistogram # Assuming ref_tdigest.py is in the same directory
+  File "/home/zhangchg/git_repo/scheduler-audit-20260612/./ref_tdigest.py", line 6, in <module>
+    from tdigest import TDigest
+ModuleNotFoundError: No module named 'tdigest'

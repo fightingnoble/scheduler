@@ -1,0 +1,9 @@
+topic,decision_id,status,recommendation,evidence,next_batch
+optional-dependencies,P1-DEP-002,KEEP_REVIEW,Do not remove bokeh plotly pyyaml in B1,"not importable in current gurobi env; bokeh references comments only; plotly branch exists but imports are commented; pyyaml only in requirement.txt",B2-OPTIONAL-DEPS-DECISION
+protected-docs,P1-REVIEW-DOCS-001,KEEP_CONSTRAINT,Keep protected docs and do not bulk delete,"user protected .claude claude_talk doc/spec doc/guide doc/dev",B2-DOC-INVENTORY
+other-docs,P1-REVIEW-DOCS-001,KEEP_REVIEW,Inventory remaining docs before any exact-path action,"doc analytical_report verification imgs and root doc files remain review",B2-DOC-INVENTORY
+runtime-adjacent,P1-REVIEW-RUNTIME-001,KEEP_REVIEW_TEST_REQUIRED,Run targeted tests before moving or deleting runtime-adjacent files,"23 python review files AST_OK; shell/reflection/generated risk signals remain",B2-RUNTIME-TEST-INVENTORY
+reuse-candidates,P1-REUSE-001,CONSTRAINT_ACTIVE,Preserve reuse candidates by default,"12 reuse candidates recorded; approval means keep as reuse candidates",none
+symbols,P1-SYMBOL-001,CONSTRAINT_ACTIVE,Use symbol candidates as record-only risk index,"1179 symbol records; approval does not authorize symbol deletion",none
+old-remove-batches,P1-REMOVE-*,NOT_APPROVED,Do not execute old remove batches,"user rejected all old P1-REMOVE batches",none
+cache-cleanup,P1-CACHE-*,NOT_APPROVED,Do not execute cache cleanup,"user rejected low-risk cleanup classification",none

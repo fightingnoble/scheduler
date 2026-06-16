@@ -1,0 +1,12 @@
+worktree /home/zhangchg/git_repo/scheduler
+HEAD d5bfda5000c4a9597cd2ad51986037dc200d6b29
+branch refs/heads/test_pipeline
+
+worktree /home/zhangchg/git_repo/scheduler-audit-20260612
+HEAD d5bfda5000c4a9597cd2ad51986037dc200d6b29
+branch refs/heads/audit/minimal-from-test_pipeline-20260612
+
+worktree /home/zhangchg/git_repo/scheduler-integration-20260612
+HEAD 656dbbf3c656f7ee510468f5a41e354f547377d1
+branch refs/heads/integrate/minimal-to-main-20260612
+

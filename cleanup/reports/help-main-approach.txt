@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "main_approach.py", line 4, in <module>
+    from approach_def import set_verbose_output, set_realloc_disabled
+  File "/home/zhangchg/git_repo/scheduler-audit-20260612/approach_def.py", line 6, in <module>
+    import networkx as nx
+ModuleNotFoundError: No module named 'networkx'

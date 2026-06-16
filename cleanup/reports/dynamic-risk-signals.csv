@@ -1,0 +1,279 @@
+path,line,risk_type,snippet
+allocator_agent.py,64,shell-call,                # TODO: push operation based on the max heap
+analyze/UE_extract.py,122,generated-code,"        #     df = df.append({'case': 'generated', 'var_slowdown': point[0], 'var_sen': point[1], 'flag': 'unknown'}, ignore_index=True)"
+appoach_plot6.py,35,shell-call,"    # process the event (1. external, 2. finish and reallocate)"
+approach_collector.py,332,reflection,"                elif hasattr(item, '__iter__'):"
+approach_collector.py,2667,reflection,"            if (getattr(self, dist_name).to_dict() != getattr(loaded_collector, dist_name).to_dict()):"
+approach_collector.py,2667,reflection,"            if (getattr(self, dist_name).to_dict() != getattr(loaded_collector, dist_name).to_dict()):"
+approach_collector.py,2674,reflection,"            orig_dist_dict = getattr(self, dist_type)"
+approach_collector.py,2675,reflection,"            loaded_dist_dict = getattr(loaded_collector, dist_type)"
+approach_collector.py,2691,reflection,"            orig_dist_dict = getattr(self, dist_type)"
+approach_collector.py,2692,reflection,"            loaded_dist_dict = getattr(loaded_collector, dist_type)"
+approach_collector.py,202,shell-call,        # 1. Find the critical path predecessor based on e2e_lat (finish time relative to offset)
+approach_collector.py,233,shell-call,        # record finish time
+approach_collector.py,545,shell-call,        # 1. Per-task finish time distribution and per-chain E2E latency
+approach_collector.py,581,shell-call,        # 5. Overall E2E latency (merging all non-sink task finish time distributions)
+approach_collector.py,2517,generated-code,"            # summary and p_list are transient, can be re-generated on load if needed"
+approach_collector.py,2617,generated-code,        # summary and p_list are transient and can be re-generated
+approach_def.py,208,reflection,"                    if hasattr(dist, 'load_dist') and hasattr(dist, 'exec_dist'):"
+approach_def.py,208,reflection,"                    if hasattr(dist, 'load_dist') and hasattr(dist, 'exec_dist'):"
+approach_def.py,457,reflection,"        if hasattr(self, 'sys_state'):"
+approach_def.py,460,reflection,"        if hasattr(self, 'running'):"
+approach_def.py,463,reflection,"        if hasattr(self, 'res_map'):"
+approach_def.py,466,reflection,"        if hasattr(self, 'slack_map'):"
+approach_def.py,486,reflection,"        if hasattr(self, 'running') and self.running:"
+approach_def.py,490,reflection,"        if hasattr(self, 'ready'):"
+approach_def.py,493,reflection,"            elif hasattr(self.ready, 'qsize') and self.ready.qsize() > 0:"
+approach_def.py,497,reflection,"        if hasattr(self, 'res_map') and self.res_map:"
+approach_def.py,501,reflection,"        if hasattr(self, 'sys_state') and self.sys_state == ""R"":"
+approach_def.py,717,shell-call,"                    print_if_verbose(f""\t[{self.id}] sink {node} finish at {curr_t}"")"
+approach_initiator.py,67,reflection,"        for cfg_slot_s, next_cfg, cfg_slot_num in getattr(_bin, ""sparse_list"", []):"
+approach_sim.py,61,reflection,"                        for processor in processors if hasattr(processor, 'iter_timeout'))"
+approach_sim.py,90,shell-call,"        # process the event (1. external, 2. finish and reallocate)"
+approach_util33.py,145,shell-call,"                    print(f""\tsink {node} finish at {curr_t}"")"
+approach_util33.py,169,shell-call,"            case 1: complete reallocation progress, new configuration is issued, impose a finish event"
+approach_util33.py,170,shell-call,"            case 2: finish event happens, generate new allocation map, "
+approach_util33.py,172,shell-call,"            case 3: finish event happens, do not change the allocation map, "
+approach_util33.py,173,shell-call,"            continue to execute tasks, and impose a finish event"
+approach_util33.py,164,generated-code,"            Compare the alloc_map_prev with the generated alloc_map_curr, "
+main_approach.py,22,reflection,"    realloc_disabled = getattr(args, 'barrier_dis', False)"
+main_approach.py,65,reflection,"    # if not getattr(args, 'dry_run', False):"
+mapper/mem_planner.py,49,shell-call,    # hash function
+mapper/mem_planner.py,62,shell-call,    # hash function
+model/lru.py,56,shell-call,                # push back the item
+model/message/Context_message.py,65,reflection,"    def setattr(self, attr_name, attr_value, cached=False):"
+model/message/Context_message.py,70,reflection,"    def getattr(self, attr_name):"
+model/message/Context_message.py,123,reflection,                self.msg_context[attr_n] = matched_pair[idx].ctx.getattr(attr_n)
+model/message/Context_message.py,136,reflection,                    self.msg_context[attr_n] = trigger.getattr(attr_n)
+model/message/Context_message.py,29,shell-call,    # 5. finish time
+model/message/Context_message.py,55,generated-code,        # generated data type
+model/message/Context_message.py,57,generated-code,        # information of the generated data
+model/resource_agent.py,199,shell-call,        # replenish the budget
+model/streaming_processing/wartermark_strategy.py,16,generated-code,"    Watermarks are generated at, or directly after, source functions, "
+optimizer/delta_ver.py,179,shell-call,                new_finish = IF_curr_t*(1-IF_prev)
+optimizer/delta_ver.py,24,solver-gurobi,from optimizer.scheduler_base import SchedulerBase
+optimizer/delta_ver.py,31,solver-gurobi,from optimizer.ops import (
+optimizer/delta_ver.py,245,solver-gurobi,"        optimizer = ClippedAdam({""lr"": lr, ""clip_norm"": 10.0})"
+optimizer/delta_ver.py,253,solver-gurobi,"                  optimizer, "
+optimizer/delta_ver.py,299,solver-gurobi,    # scheduler = SchedulingOptimizer()
+optimizer/delta_ver.py,305,solver-gurobi,    from optimizer.scheduler_base import draw_computational_graph
+optimizer/ops.py,76,shell-call,    Update the finish indicator based on the executed load and the arrival load.
+optimizer/scheduler_base.py,10,solver-gurobi,from optimizer.dist_custom import TruncatedNormal
+paths.py,43,generated-code,"    # automatically generated config name and path, not initialized "
+run/max_core_num_scan.py,1,shell-call,# #!/bin/bash
+run/max_core_num_scan.py,79,shell-call,"      subprocess.run(command, stdout=devnull)"
+run/max_core_num_scan.py,93,shell-call,"        subprocess.run(command, stdout=devnull)"
+run/max_core_num_scan.py,107,shell-call,"        subprocess.run(command, stdout=devnull)"
+sched/bin_list_utils.py,1208,reflection,"    if hasattr(item_type, ""update""):"
+sched/global_sched.py,98,shell-call,    # try to push the task into the bins in the bin_list
+sched/global_sched.py,29,solver-gurobi,from sched.packing_solver.gurobi_MP_semi2DClst import ClusterGurobiSolverSemi2D
+sched/global_sched.py,29,solver-gurobi,from sched.packing_solver.gurobi_MP_semi2DClst import ClusterGurobiSolverSemi2D
+sched/global_sched.py,29,solver-gurobi,from sched.packing_solver.gurobi_MP_semi2DClst import ClusterGurobiSolverSemi2D
+sched/global_sched.py,29,solver-gurobi,from sched.packing_solver.gurobi_MP_semi2DClst import ClusterGurobiSolverSemi2D
+sched/global_sched.py,633,solver-gurobi,    # use a gurobi solver to determine the placement of the tasks
+sched/global_sched.py,633,solver-gurobi,    # use a gurobi solver to determine the placement of the tasks
+sched/global_sched.py,645,solver-gurobi,"    placed_p, bin_name_list, sol, bin_size = gurobi_split_solver("
+sched/global_sched.py,645,solver-gurobi,"    placed_p, bin_name_list, sol, bin_size = gurobi_split_solver("
+sched/global_sched.py,757,solver-gurobi,"def gurobi_split_solver(glb_p_list, n_partition, _bin_tb_split, job_graph, sorted_chains):"
+sched/global_sched.py,757,solver-gurobi,"def gurobi_split_solver(glb_p_list, n_partition, _bin_tb_split, job_graph, sorted_chains):"
+sched/global_sched.py,770,solver-gurobi,"        gurobi_obj = ""mux_min_nbin"""
+sched/global_sched.py,773,solver-gurobi,"        gurobi_obj = ""colocate_fix_nbin_min_size"""
+sched/global_sched.py,779,solver-gurobi,    solver = ClusterGurobiSolverSemi2D(
+sched/global_sched.py,779,solver-gurobi,    solver = ClusterGurobiSolverSemi2D(
+sched/global_sched.py,779,solver-gurobi,    solver = ClusterGurobiSolverSemi2D(
+sched/global_sched.py,780,solver-gurobi,"        M, N, K, J, tbd_p, placed_p, probs, duation, 1000, affinity_dict1, affinity_dict2, mode=gurobi_obj"
+sched/global_sched.py,782,solver-gurobi,    solver.create_variables()
+sched/global_sched.py,783,solver-gurobi,    solver.create_constraints()
+sched/global_sched.py,784,solver-gurobi,"    sel, bin_size = solver.solve()    # filter the empty bins"
+sched/global_sched.py,785,solver-gurobi,"    if gurobi_obj == ""mux_min_nbin"":"
+sched/global_sched.py,947,solver-gurobi,# def single_turn_solver(
+sched/global_sched.py,1049,solver-gurobi,#     from sched.packing_solver.gurobi_semi2Dclst_mapping import GurobiSemi2DClstMapping
+sched/global_sched.py,1049,solver-gurobi,#     from sched.packing_solver.gurobi_semi2Dclst_mapping import GurobiSemi2DClstMapping
+sched/global_sched.py,1049,solver-gurobi,#     from sched.packing_solver.gurobi_semi2Dclst_mapping import GurobiSemi2DClstMapping
+sched/global_sched.py,1067,solver-gurobi,#     mapper =  GurobiSemi2DClstMapping(
+sched/packing_solver/chain_slack_assign.py,2,solver-gurobi,import gurobipy as gp
+sched/packing_solver/chain_slack_assign.py,3,solver-gurobi,"from gurobipy import GRB, quicksum"
+sched/packing_solver/chain_slack_assign.py,83,solver-gurobi,class GurobiRscSlackEstim:
+sched/packing_solver/chain_slack_assign.py,85,solver-gurobi,    基于分位数的串行链路资源分配（Gurobi）
+sched/packing_solver/chain_slack_assign.py,122,solver-gurobi,"        self.model = gp.Model(""rsc_slack_estim"")"
+sched/packing_solver/chain_slack_assign.py,134,solver-gurobi,"            self.core.append(self.model.addVar(lb=1, vtype=GRB.INTEGER, name=f'core[{i}]'))"
+sched/packing_solver/chain_slack_assign.py,135,solver-gurobi,"            self.lat.append(self.model.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name=f'lat[{i}]'))"
+sched/packing_solver/chain_slack_assign.py,139,solver-gurobi,"                self.core_sel[i] = self.model.addVars(num_options, vtype=GRB.BINARY, name=f""sel_{i}"")"
+sched/packing_solver/chain_slack_assign.py,141,solver-gurobi,"        self.max_core = self.model.addVar(lb=0, ub=self.tot_cores, vtype=GRB.INTEGER, name=""max_core"")"
+sched/packing_solver/chain_slack_assign.py,159,solver-gurobi,                # Gurobi 支持二次约束: (L_i - io_q) * C_i >= load_q / FLOPS_PER_CORE
+sched/packing_solver/chain_slack_assign.py,185,solver-gurobi,"        print(""Gurobi-RscSlackEstim!!\n"")"
+sched/packing_solver/chain_slack_assign.py,187,solver-gurobi,"        self.model.setObjective(self.max_core, GRB.MINIMIZE)"
+sched/packing_solver/chain_slack_assign.py,202,solver-gurobi,"        assert check_solution_validity(sol, self.node_var_dists, self.e2e_lat, self.quantile, self.constr_core, self.tot_cores), ""Gurobi solution failed post-check"""
+sched/packing_solver/chain_slack_assign.py,204,solver-gurobi,        # except gp.GurobiError as e:
+sched/packing_solver/chain_slack_assign.py,205,solver-gurobi,"        #     print('GurobiError', e.errno, str(e))"
+sched/packing_solver/gurobi_MP_semi2DClst.py,1,solver-gurobi,import gurobipy as gp
+sched/packing_solver/gurobi_MP_semi2DClst.py,2,solver-gurobi,from gurobipy import GRB
+sched/packing_solver/gurobi_MP_semi2DClst.py,7,solver-gurobi,class ClusterGurobiSolverSemi2D:
+sched/packing_solver/gurobi_MP_semi2DClst.py,7,solver-gurobi,class ClusterGurobiSolverSemi2D:
+sched/packing_solver/gurobi_MP_semi2DClst.py,63,solver-gurobi,"        self.model = gp.Model(""2DBP"")"
+sched/packing_solver/gurobi_MP_semi2DClst.py,90,solver-gurobi,"        self.x = self.model.addVars(((i, m) for i in self.Items_tbd_size.keys() for m in range(self.M)), vtype=GRB.BINARY, name=""x"")"
+sched/packing_solver/gurobi_MP_semi2DClst.py,93,solver-gurobi,"            self.util[m] = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f'bin_{m}_util')"
+sched/packing_solver/gurobi_MP_semi2DClst.py,95,solver-gurobi,"                self.usage[j, m] = self.model.addVar(lb=0, ub=self.max_size, vtype=GRB.INTEGER, name=f'bin_{m}_usage_Prob{j}')"
+sched/packing_solver/gurobi_MP_semi2DClst.py,97,solver-gurobi,"        self.affinity_score = self.model.addVar(lb=-self.N, ub=self.N, vtype=GRB.CONTINUOUS, name=""affinity_score"")"
+sched/packing_solver/gurobi_MP_semi2DClst.py,99,solver-gurobi,"        self.min_util = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f'min_util')"
+sched/packing_solver/gurobi_MP_semi2DClst.py,100,solver-gurobi,"        self.max_util = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f'max_util')"
+sched/packing_solver/gurobi_MP_semi2DClst.py,103,solver-gurobi,"            self.bin_sel = self.model.addVars(self.M, vtype=GRB.BINARY, name=""bin_sel"") "
+sched/packing_solver/gurobi_MP_semi2DClst.py,105,solver-gurobi,"        self.tot_size = self.model.addVar(lb=0, ub=self.max_size, vtype=GRB.INTEGER, name=""tot_size"")"
+sched/packing_solver/gurobi_MP_semi2DClst.py,107,solver-gurobi,"            self.bin_size[m] = self.model.addVar(lb=0, ub=self.max_size, vtype=GRB.INTEGER, name=f'bin_{m}_size')"
+sched/packing_solver/gurobi_MP_semi2DClst.py,178,solver-gurobi,            if status == GRB.OPTIMAL:
+sched/packing_solver/gurobi_MP_semi2DClst.py,192,solver-gurobi,            elif status == GRB.INF_OR_UNBD or status == GRB.INFEASIBLE:
+sched/packing_solver/gurobi_MP_semi2DClst.py,192,solver-gurobi,            elif status == GRB.INF_OR_UNBD or status == GRB.INFEASIBLE:
+sched/packing_solver/gurobi_MP_semi2DClst.py,212,solver-gurobi,        except gp.GurobiError as e:
+sched/packing_solver/gurobi_MP_semi2DClst.py,220,solver-gurobi,    bin_packing_solver = ClusterGurobiSolverSemi2D()
+sched/packing_solver/gurobi_MP_semi2DClst.py,220,solver-gurobi,    bin_packing_solver = ClusterGurobiSolverSemi2D()
+sched/packing_solver/gurobi_MP_semi2DClst.py,220,solver-gurobi,    bin_packing_solver = ClusterGurobiSolverSemi2D()
+sched/packing_solver/gurobi_MP_semi2DClst.py,221,solver-gurobi,    bin_packing_solver.create_variables()
+sched/packing_solver/gurobi_MP_semi2DClst.py,222,solver-gurobi,    bin_packing_solver.define_constraints()
+sched/packing_solver/gurobi_MP_semi2DClst.py,223,solver-gurobi,    bin_packing_solver.solve()
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,269,shell-call,"            # relation of arrival, execution and finish time"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,1,solver-gurobi,"from gurobipy import Model, GRB, quicksum"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,3,solver-gurobi,import gurobipy as gp
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,6,solver-gurobi,class GurobiSemi2DClstMapping:
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,53,solver-gurobi,"        self.spt_fmt = GRB.CONTINUOUS if spt_fmt == ""float"" else GRB.INTEGER # Space variable type"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,53,solver-gurobi,"        self.spt_fmt = GRB.CONTINUOUS if spt_fmt == ""float"" else GRB.INTEGER # Space variable type"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,54,solver-gurobi,"        self.temp_fmt = GRB.CONTINUOUS if time_format == ""float"" else GRB.INTEGER # Time variable type"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,54,solver-gurobi,"        self.temp_fmt = GRB.CONTINUOUS if time_format == ""float"" else GRB.INTEGER # Time variable type"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,96,solver-gurobi,"            vtype=GRB.BINARY,"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,101,solver-gurobi,"            vtype=GRB.BINARY,"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,130,solver-gurobi,"                    self.active_at_t[(i, t)] = self.model.addVar(vtype=GRB.BINARY, name=f""Active_At_T[{i},{t}]"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,132,solver-gurobi,"                    self.Lsatisfied[(i, t)] = self.model.addVar(vtype=GRB.BINARY, name=f""L_Satisfied[{i},{t}]"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,134,solver-gurobi,"                    self.Rsatisfied[(i, t)] = self.model.addVar(vtype=GRB.BINARY, name=f""R_Satisfied[{i},{t}]"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,135,solver-gurobi,"                    self.active_at_t_cross_period[(i, t)] = self.model.addVar(vtype=GRB.BINARY, name=f""Active_At_T_Cross_Period[{i},{t}]"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,136,solver-gurobi,"                    self.active_at_t_not_cross_period[(i, t)] = self.model.addVar(vtype=GRB.BINARY, name=f""Active_At_T_Not_Cross_Period[{i},{t}]"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,146,solver-gurobi,"        self.is_cross_period = self.model.addVars(self.N, vtype=GRB.BINARY, name=""Is_Cross_Period"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,148,solver-gurobi,"            [(i, j) for i, j in self.dependencies], vtype=GRB.BINARY, name=""Is_Edge_Cross_Period"""
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,153,solver-gurobi,"                self.is_edge_cross_period[-1, i] = self.model.addVar(vtype=GRB.BINARY, name=f""Is_Edge_Cross_Period_{-1}_{i}"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,163,solver-gurobi,"        #         self.speedup_rate[i] = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f""Speedup_Rate_{i}"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,166,solver-gurobi,"        self.affinity_score = self.model.addVar(vtype=GRB.CONTINUOUS, name=""affinity_score"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,167,solver-gurobi,"        self.spatial_affinity = self.model.addVars([(i,j) for i,j in self.dependencies], vtype=GRB.CONTINUOUS, name=""spatial_affinity"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,168,solver-gurobi,"        self.temporal_affinity = self.model.addVars([(i,j) for i,j in self.dependencies], vtype=GRB.CONTINUOUS, name=""temporal_affinity"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,169,solver-gurobi,"        self.temporal_affinity_bool = self.model.addVars([(i,j) for i,j in self.dependencies], vtype=GRB.BINARY, name=""temporal_affinity_bool"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,170,solver-gurobi,"        self.st_affinity_bool = self.model.addVars([(i,j) for i,j in self.dependencies], vtype=GRB.CONTINUOUS, name=""st_affinity_bool"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,177,solver-gurobi,"        # self.spatial_rda_ratio = self.model.addVars(self.S, lb=0, ub=1, vtype=GRB.CONTINUOUS, name=""Spatial_RDA_Ratio"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,180,solver-gurobi,"            vtype=GRB.CONTINUOUS,"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,185,solver-gurobi,"            vtype=GRB.CONTINUOUS,"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,190,solver-gurobi,"            vtype=GRB.CONTINUOUS,"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,194,solver-gurobi,"            vtype=GRB.CONTINUOUS,"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,201,solver-gurobi,"            vtype=GRB.CONTINUOUS,"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,461,solver-gurobi,"            vtype=GRB.CONTINUOUS,"
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,539,solver-gurobi,                if where == gp.GRB.Callback.MIPSOL:
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,541,solver-gurobi,                    obj = model.cbGet(gp.GRB.Callback.MIPSOL_OBJ)  # 获取目标函数值
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,576,solver-gurobi,        except gp.GurobiError as e:
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,586,solver-gurobi,        if status == GRB.OPTIMAL:
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,616,solver-gurobi,        elif status == GRB.INF_OR_UNBD or status == GRB.INFEASIBLE:
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,616,solver-gurobi,        elif status == GRB.INF_OR_UNBD or status == GRB.INFEASIBLE:
+sched/packing_solver/gurobi_semi2Dclst_mapping.py,803,solver-gurobi,    scheduler = GurobiSemi2DClstMapping(**test_input)
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,254,shell-call,"            # relation of arrival, execution and finish time"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,1,solver-gurobi,"from gurobipy import Model, GRB, quicksum"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,3,solver-gurobi,import gurobipy as gp
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,6,solver-gurobi,class GurobiSemi2DClstMapping:
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,53,solver-gurobi,"        self.spt_fmt = GRB.CONTINUOUS if spt_fmt == ""float"" else GRB.INTEGER # Space variable type"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,53,solver-gurobi,"        self.spt_fmt = GRB.CONTINUOUS if spt_fmt == ""float"" else GRB.INTEGER # Space variable type"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,54,solver-gurobi,"        self.temp_fmt = GRB.CONTINUOUS if time_format == ""float"" else GRB.INTEGER # Time variable type"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,54,solver-gurobi,"        self.temp_fmt = GRB.CONTINUOUS if time_format == ""float"" else GRB.INTEGER # Time variable type"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,93,solver-gurobi,"        self.is_start_tick = self.model.addVars(self.N, self.NT, vtype=GRB.BINARY, name=""Is_Start_Node"") "
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,95,solver-gurobi,"        self.is_end_tick = self.model.addVars(self.N, self.NT, vtype=GRB.BINARY, name=""Is_End_Node"")  "
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,99,solver-gurobi,"            vtype=GRB.BINARY,"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,104,solver-gurobi,"            vtype=GRB.BINARY,"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,116,solver-gurobi,"            vtype=GRB.BINARY,"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,126,solver-gurobi,"        self.utilization = self.model.addVars(self.S, lb=0, ub=1, vtype=GRB.CONTINUOUS, name=""Utilization"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,127,solver-gurobi,"        self.min_util = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f'min_util')"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,128,solver-gurobi,"        self.max_util = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f'max_util')"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,134,solver-gurobi,"                self.speedup_rate[i] = self.model.addVar(lb=0, ub=1, vtype=GRB.CONTINUOUS, name=f""Speedup_Rate_{i}"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,137,solver-gurobi,"        self.affinity_score = self.model.addVar(lb=-len(self.dependencies), ub=len(self.dependencies), vtype=GRB.CONTINUOUS, name=""affinity_score"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,140,solver-gurobi,"        self.spatial_rda_ratio = self.model.addVars(self.S, lb=0, ub=1, vtype=GRB.CONTINUOUS, name=""Spatial_RDA_Ratio"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,143,solver-gurobi,"            vtype=GRB.CONTINUOUS,"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,148,solver-gurobi,"            vtype=GRB.CONTINUOUS,"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,152,solver-gurobi,"            vtype=GRB.CONTINUOUS,"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,162,solver-gurobi,"        self.is_cross_period = self.model.addVars(self.N, vtype=GRB.BINARY, name=""Is_Cross_Period"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,164,solver-gurobi,"            [(i, j) for i, j in self.dependencies], vtype=GRB.BINARY, name=""Is_Edge_Cross_Period"""
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,169,solver-gurobi,"                self.is_edge_cross_period[-1, i] = self.model.addVar(vtype=GRB.BINARY, name=f""Is_Edge_Cross_Period_{-1}_{i}"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,290,solver-gurobi,"        v_start = self.model.addVars(self.N, self.NT, vtype=GRB.CONTINUOUS, lb=0, ub=self.T, name=""V_Start"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,291,solver-gurobi,"        v_end = self.model.addVars(self.N, self.NT, vtype=GRB.CONTINUOUS, lb=0, ub=self.T, name=""V_End"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,393,solver-gurobi,"                    self.at_bin_t[i, s, t] = self.model.addVar(vtype=GRB.BINARY, name=f""z_{i}_{s}_{t}"")"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,410,solver-gurobi,"            vtype=GRB.BINARY,"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,416,solver-gurobi,"            vtype=GRB.BINARY,"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,421,solver-gurobi,"            vtype=GRB.BINARY,"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,426,solver-gurobi,"            vtype=GRB.BINARY,"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,474,solver-gurobi,"            vtype=GRB.INTEGER,"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,515,solver-gurobi,"            vtype=GRB.CONTINUOUS,"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,530,solver-gurobi,"        # self.model.setObjective(self.static_wasted_resources, GRB.MINIMIZE)"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,558,solver-gurobi,"        # # self.model.setObjective(quicksum(self.peak_bin_usage[s] for s in range(self.S)), GRB.MINIMIZE)"
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,576,solver-gurobi,                if where == gp.GRB.Callback.MIPSOL:
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,577,solver-gurobi,                    obj = model.cbGet(gp.GRB.Callback.MIPSOL_OBJ)  # 获取目标函数值
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,605,solver-gurobi,        except gp.GurobiError as e:
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,615,solver-gurobi,        if status == GRB.OPTIMAL:
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,642,solver-gurobi,        elif status == GRB.INF_OR_UNBD or status == GRB.INFEASIBLE:
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,642,solver-gurobi,        elif status == GRB.INF_OR_UNBD or status == GRB.INFEASIBLE:
+sched/packing_solver/gurobi_semi2Dclst_mapping2.py,807,solver-gurobi,    scheduler = GurobiSemi2DClstMapping(**test_input)
+sched/pre_alloc.py,26,shell-call,    # push the ready task into the idle slot
+sched/pre_alloc.py,32,shell-call,    #   try to allocate the enough resources for the task to finish before the deadline
+sched/pre_alloc.py,34,shell-call,    #   timing constraint first: use just enough resources to finish the task before the deadline
+sched/pre_alloc.py,131,shell-call,    # try to push the task into the bins in the bin_list
+sched/pre_alloc_new.py,39,shell-call,    # push the ready task into the idle slot
+sched/pre_alloc_new.py,45,shell-call,    #   try to allocate the enough resources for the task to finish before the deadline
+sched/pre_alloc_new.py,47,shell-call,    #   timing constraint first: use just enough resources to finish the task before the deadline
+sched/pre_alloc_new.py,217,shell-call,    # Step: try to push the task into the bins in the bin_list
+sched/sched_fn.py,141,shell-call,    # logic for updating the cfg and replenish the budget
+sched/sched_fn.py,361,shell-call,                    # tries to finish the remaining work assigned by the configuration chunk until the now
+sched/sched_fn.py,583,shell-call,    # logic for updating the cfg and replenish the budget
+sched/sched_fn.py,838,shell-call,    # logic for updating the cfg and replenish the budget
+sched/scheduler_agent.py,43,shell-call,     operation: a push operation is executed to see if some task can be moved to another queue. 
+sched/scheduler_agent.py,61,shell-call,        4.2. make the preemption/pull/push decision
+sched/slack_estim.py,17,solver-gurobi,"from sched.packing_solver.chain_slack_assign import GurobiRscSlackEstim, HeuriRscSlackEstim"
+sched/slack_estim.py,17,solver-gurobi,"from sched.packing_solver.chain_slack_assign import GurobiRscSlackEstim, HeuriRscSlackEstim"
+sched/slack_estim.py,108,solver-gurobi,"                    quantile: float, threshold: float = None, algorithm: str = ""gurobi"", total_cores: int = 300) -> Dict[str, Tuple[int, float, str]]:"
+sched/slack_estim.py,118,solver-gurobi,"        algorithm: 求解算法，可选 ""heuristic"" 或 ""gurobi"""
+sched/slack_estim.py,177,solver-gurobi,"        if algorithm == ""gurobi"":"
+sched/slack_estim.py,178,solver-gurobi,"            solver = GurobiRscSlackEstim(node_var_dists, remaining_deadline, quantile, constr_core, tot_cores, verbose=False)"
+sched/slack_estim.py,178,solver-gurobi,"            solver = GurobiRscSlackEstim(node_var_dists, remaining_deadline, quantile, constr_core, tot_cores, verbose=False)"
+sched/slack_estim.py,179,solver-gurobi,            solver.create_variables()
+sched/slack_estim.py,180,solver-gurobi,            solver.define_constraints()
+sched/slack_estim.py,181,solver-gurobi,            solution = solver.solve()
+sched/slack_estim.py,234,solver-gurobi,"    assert algorithm in [""avg"", 'gurobi']"
+sched/slack_estim.py,345,solver-gurobi,"    # update ert, ddl, exp_comp_t to graph based on solver outputs"
+scripts/abla_exp_runner.py,341,eval-exec,            # Stacked bars: exec (bottom) → realloc → wait
+scripts/repack_sweep.py,40,reflection,"        setattr(split_args, ""repack_mode"", False)"
+scripts/repack_sweep.py,41,reflection,"        if hasattr(split_args, ""binpack_cfg"") and isinstance(split_args.binpack_cfg, dict):"
+scripts/repack_sweep.py,55,reflection,"        setattr(repack_args, ""repack_mode"", True)"
+scripts/repack_sweep.py,56,reflection,"        setattr(repack_args, ""exec_t_comp_ratioB"", B)"
+scripts/repack_sweep.py,58,reflection,"        if hasattr(repack_args, ""binpack_cfg"") and isinstance(repack_args.binpack_cfg, dict):"
+sim_main.py,437,reflection,"    if not hasattr(args, ""binpack_cfg"") or args.binpack_cfg is None:"
+sim_main.py,644,solver-gurobi,        from sched.global_sched import single_turn_solver
+sim_main.py,646,solver-gurobi,"        pid2_bin_id, bin_size_list = single_turn_solver("
+simple_test_collector.py,282,reflection,"                elif hasattr(item, '__iter__'):"
+task/graph_scaling.py,5,generated-code,"if freq_A < freq_B, the ith data generated by A is reused by the jth process of B, and j == i+freq_A*t, "
+task/graph_scaling.py,6,generated-code,and each data generated by A is reused for at most math.ceil(freq_B/freq_A) times
+task/task_agent.py,584,reflection,"                load_q = float(getattr(dist, 'quantile', lambda qq: _p.remburst)(q))"
+task/task_agent.py,590,reflection,"                    constr, max_size, max(1, getattr(_p, 'core_max', 1))"
+task/task_agent.py,82,generated-code,        self.deadline = deadline_abs      # recored when the process is generated  
+task/task_agent.py,114,generated-code,        self.msg_cache:List[ContextMsg] = []    # cache the generated messages
+task/task_agent.py,799,generated-code,        # self.release_time = self.ERT + self.i_offset # recored when the process is generated
+task/task_agent.py,800,generated-code,        # self.deadline = self.release_time + self.ddl # recored when the process is generated  
+task/task_agent.py,1053,generated-code,"                print(f""{n_event} events of {self.name} are generated"")"
+task/task_cfg.py,330,reflection,"            if hasattr(obj, 'to_dict'):"
+task/task_cfg.py,342,reflection,"            elif hasattr(obj, '__dict__'):"
+task/task_cfg.py,966,reflection,"                    ERT=getattr(task_attr, ""ERT"", None), "
+task/task_cfg.py,967,reflection,"                    ddl=getattr(task_attr, ""ddl"", None), "
+task/task_cfg.py,968,reflection,"                    exp_comp_t=getattr(task_attr, ""exp_comp_t"", None), "
+task/task_cfg.py,969,reflection,"                    RDA_size=getattr(task_attr, ""rda_size"", None), "
+task/task_cfg.py,970,reflection,"                    main_size=getattr(task_attr, ""main_size"", None),"
+task/task_cfg.py,1278,shell-call,    # add1216: distinguish the task defined by user and the process in the task queue
+task/task_cfg.py,1289,shell-call,"            print(""TASK {:d}:{:s}({:d}), is expected to finish {}T OPs in {:f}-{:f} !!"".format("
+task/task_cfg.py,1065,solver-gurobi,    # detect if gurobi is available
+task/task_cfg.py,1067,solver-gurobi,        import gurobipy as gp
+task/task_cfg.py,1068,solver-gurobi,        m = gp.Model()
+task/task_cfg.py,1069,solver-gurobi,        algorithm = 'gurobi'
+task/task_cfg.py,1071,solver-gurobi,"        print(f""Gurobi 模块未安装或未正确配置：{e}"")"
+test_approach_collector.py,69,reflection,"        monkeypatch.setattr(plt, ""show"", mock_show)"
+test_approach_collector.py,70,reflection,"        monkeypatch.setattr(plt.Figure, ""savefig"", mock_savefig)"
+test_approach_collector.py,105,shell-call,    # 5. Record task finish and check propagation
+test_approach_collector.py,113,shell-call,    # 6. Record E2E finish
+test_approach_collector.py,176,shell-call,    # Record E2E finish with proper task start time and compute time
+test_repack_diagnostic.py,6,solver-gurobi,    conda activate gurobi
+tile_2d_mesh_mapper_fixed.py,246,shell-call,    # 创建10x10的2D-mesh

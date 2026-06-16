@@ -5,3 +5,11 @@ matplotlib
 pyyaml
 plotly
 bokeh
+gurobipy
+h5py
+networkx
+psutil
+pyinstrument
+pytest
+tdigest
+tqdm

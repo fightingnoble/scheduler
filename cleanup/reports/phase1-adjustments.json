@@ -1,0 +1,44 @@
+{
+  "status_counts": {
+    "REMOVE_FROM_CLEAN": 46,
+    "REVIEW": 112,
+    "KEEP": 67,
+    "REUSE_CANDIDATE": 12
+  },
+  "kind_counts": {
+    "docs": 83,
+    "config": 6,
+    "other": 16,
+    "shared-config": 6,
+    "python": 100,
+    "test": 10,
+    "script": 16
+  },
+  "remove_candidates_after_adjustment": 46,
+  "review_candidates_after_adjustment": 112,
+  "reuse_candidates_after_adjustment": 19,
+  "force_keep_paths": {
+    "cfgs/Bp_guided.json": "runtime default --bin_pack_cfg from utils.input_parser",
+    "cfgs/Bp_scratch.json": "documented alternate bin-packing mode, keep until policy support is removed explicitly",
+    "cfgs/var_sim_cfg.json": "runtime default --var_sim_cfg loaded unconditionally by utils.input_parser",
+    "profiling/profiling.csv": "default input for task/task_cfg.py and sched/slack_estim.py helpers",
+    "profiling/profiling_light.csv": "current default input for main_approach.py and scripts/exp_common.py",
+    "scripts/run_motiv_exps.sh": "official shell wrapper for scripts/motiv_exp_runner.py",
+    "scripts/run_abla_exps.sh": "official shell wrapper for scripts/abla_exp_runner.py",
+    "scripts/README_motiv_exp_runner.md": "entrypoint usage documentation"
+  },
+  "reuse_promotions": {
+    "scripts/e2e_exp_runner.py": "not in declared Phase 1 entrypoints but same experiment-runner family; preserve as future port candidate",
+    "scripts/e2e_hyperparam.py": "not in declared Phase 1 entrypoints but likely useful for future hyperparameter sweeps",
+    "scripts/repack_sweep.py": "reflection/dynamic runner; not safe to remove without owner review",
+    "optimizer/delta_ver.py": "optimizer research prototype with torch/pyro deps; keep as optional reuse candidate",
+    "optimizer/dist_custom.py": "optimizer research prototype with torch deps; keep as optional reuse candidate",
+    "optimizer/ops.py": "optimizer research prototype with torch/seaborn deps; keep as optional reuse candidate",
+    "optimizer/scheduler_base.py": "optimizer prototype with Gurobi/networkx signals; not current runtime but reusable",
+    "model/noc.py": "hardware/interconnect model prototype; not reachable from current entrypoints but semantically relevant",
+    "sched/packing_solver/gurobi_semi2Dclst_mapping.py": "alternate Gurobi mapping solver; not imported by current runtime but solver reuse candidate",
+    "sched/packing_solver/gurobi_semi2Dclst_mapping2.py": "alternate Gurobi mapping solver variant; not imported by current runtime but solver reuse candidate",
+    "tile_2d_mesh_mapper_fixed.py": "standalone mapper prototype with shell-call risk; preserve for review/reuse rather than low-risk deletion",
+    "unused_fun.py": "explicitly named unused, but referenced by docs; record symbol/file review before deletion"
+  }
+}

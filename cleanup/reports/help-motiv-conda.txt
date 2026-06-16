@@ -1,0 +1,47 @@
+usage: motiv_exp_runner.py [-h] --case {1,2,3} [--output_dir OUTPUT_DIR]
+                           [--cache_collectors] [--case1_ratios CASE1_RATIOS]
+                           [--case2_tiles CASE2_TILES]
+                           [--case2_loads CASE2_LOADS]
+                           [--case2_chains CASE2_CHAINS]
+                           [--case3_mode {raw,binned}] [--case3_baseline]
+                           [--case3_experiment]
+                           [--case3_num_periods CASE3_NUM_PERIODS]
+                           [--num_hp NUM_HP] [--verbose] [--dry_run]
+                           [--use_plot_cache] [--lang {en,zh}]
+                           [--base_ratioA BASE_RATIOA]
+                           [--base_ratioB BASE_RATIOB]
+                           [--extra_args EXTRA_ARGS]
+
+Motivation Experiments Runner
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --case {1,2,3}        实验编号: 1=静态利用率问题, 2=动态可扩展性问题, 3=切换不确定性
+  --output_dir OUTPUT_DIR
+                        输出目录（默认: ./motiv_exp_results）
+  --cache_collectors    缓存StatisticsCollector对象（默认: True）
+  --case1_ratios CASE1_RATIOS
+                        Case 1: exec_t_comp_ratioA扫描值（逗号分隔）
+  --case2_tiles CASE2_TILES
+                        Case 2: 硬件tile数扫描值（逗号分隔，与--case2_loads等长且一一对应）
+  --case2_loads CASE2_LOADS
+                        Case 2: 负载倍数扫描值（逗号分隔，与--case2_tiles等长且一一对应）
+  --case2_chains CASE2_CHAINS
+                        Case 2: 任务链数量扫描值（逗号分隔）
+  --case3_mode {raw,binned}
+                        Case 3: 数据收集模式（raw或binned）
+  --case3_baseline      Case 3: 运行基线组（禁用切换开销）
+  --case3_experiment    Case 3: 运行实验组（启用切换开销）
+  --case3_num_periods CASE3_NUM_PERIODS
+                        Case 3: 仿真周期数
+  --num_hp NUM_HP       仿真超周期数（默认: 100）
+  --verbose             详细输出
+  --dry_run             只打印命令，不执行
+  --use_plot_cache      跳过仿真，直接从缓存的JSON结果生成图表
+  --lang {en,zh}        绘图语言: en=英文（默认）, zh=中文
+  --base_ratioA BASE_RATIOA
+                        Case 2/3: 基准 exec_t_comp_ratioA（默认: 0.9）
+  --base_ratioB BASE_RATIOB
+                        Case 2/3: 基准 exec_t_comp_ratioB（默认: -1）
+  --extra_args EXTRA_ARGS
+                        传递给main_approach.py的额外参数（空格分隔）

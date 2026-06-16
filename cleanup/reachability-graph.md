@@ -1,0 +1,375 @@
+# Reachability graph
+
+## Entrypoints
+- `scripts/motiv_exp_runner.py`
+- `scripts/abla_exp_runner.py`
+- `main_approach.py`
+
+## Reachable files (59)
+- `allocator_agent.py` — REVIEW risk: shell-call
+- `approach_Eq.py`
+- `approach_collector.py` — REVIEW risk: generated-code, reflection, shell-call
+- `approach_def.py` — REVIEW risk: reflection, shell-call
+- `approach_initiator.py` — REVIEW risk: reflection
+- `approach_sched.py`
+- `approach_setup.py`
+- `approach_sim.py` — REVIEW risk: reflection, shell-call
+- `example/bm4.py`
+- `global_var.py`
+- `main_approach.py` — REVIEW risk: reflection
+- `mapper/mem_planner.py` — REVIEW risk: shell-call
+- `model/barrier_agent.py`
+- `model/buffer.py`
+- `model/event_gen/e2e_latency.py`
+- `model/lru.py` — REVIEW risk: shell-call
+- `model/message/Context_message.py` — REVIEW risk: generated-code, reflection, shell-call
+- `model/message/data_pipe.py`
+- `model/message/message_handler.py`
+- `model/message/message_pipe.py`
+- `model/message/msg_dispatcher.py`
+- `model/performance.py`
+- `model/position_table.py`
+- `model/resource_agent.py` — REVIEW risk: shell-call
+- `model/streaming_processing/wartermark_strategy.py` — REVIEW risk: generated-code
+- `model/task_queue_agent.py`
+- `model/trace_example.py`
+- `paths.py` — REVIEW risk: generated-code
+- `ref_tdigest.py`
+- `sched/bin_list_utils.py` — REVIEW risk: reflection
+- `sched/bin_ops.py`
+- `sched/binpack_config.py`
+- `sched/global_sched.py` — REVIEW risk: shell-call, solver-gurobi
+- `sched/monitor_agent.py`
+- `sched/packing_solver/chain_slack_assign.py` — REVIEW risk: solver-gurobi
+- `sched/packing_solver/gurobi_MP_semi2DClst.py` — REVIEW risk: solver-gurobi
+- `sched/placement.py`
+- `sched/pre_alloc.py` — REVIEW risk: shell-call
+- `sched/pre_alloc_new.py` — REVIEW risk: shell-call
+- `sched/ref_alloc_search.py`
+- `sched/sched_fn.py` — REVIEW risk: shell-call
+- `sched/sched_utils.py`
+- `sched/scheduler_agent.py` — REVIEW risk: shell-call
+- `sched/scheduling_table.py`
+- `sched/slack_estim.py` — REVIEW risk: solver-gurobi
+- `sched/sort_function.py`
+- `sched/state_trans.py`
+- `scripts/abla_exp_runner.py` — REVIEW risk: eval-exec
+- `scripts/exp_common.py`
+- `scripts/motiv_exp_runner.py`
+- `sim_main.py` — REVIEW risk: reflection, solver-gurobi
+- `task/graph_breakdown.py`
+- `task/graph_scaling.py` — REVIEW risk: generated-code
+- `task/load_cfg/loadA.py`
+- `task/spec.py`
+- `task/task_agent.py` — REVIEW risk: generated-code, reflection
+- `task/task_cfg.py` — REVIEW risk: reflection, shell-call, solver-gurobi
+- `test_approach_collector.py` — REVIEW risk: reflection, shell-call
+- `utils.py`
+
+## Import edges among reachable files
+- `allocator_agent.py`
+  - -> `global_var.py`
+  - -> `model/buffer.py`
+  - -> `model/message/Context_message.py`
+  - -> `model/message/data_pipe.py`
+  - -> `model/message/message_handler.py`
+  - -> `model/message/message_pipe.py`
+  - -> `model/message/msg_dispatcher.py`
+  - -> `model/resource_agent.py`
+  - -> `model/task_queue_agent.py`
+  - -> `sched/bin_list_utils.py`
+  - -> `sched/global_sched.py`
+  - -> `sched/monitor_agent.py`
+  - -> `sched/scheduler_agent.py`
+  - -> `sched/scheduling_table.py`
+  - -> `task/spec.py`
+  - -> `task/task_agent.py`
+  - -> `task/task_cfg.py`
+  - -> `utils.py`
+- `approach_Eq.py`
+  - -> `global_var.py`
+  - -> `sched/ref_alloc_search.py`
+- `approach_collector.py`
+  - -> `approach_Eq.py`
+  - -> `approach_def.py`
+  - -> `ref_tdigest.py`
+  - -> `test_approach_collector.py`
+- `approach_def.py`
+  - -> `approach_Eq.py`
+  - -> `approach_collector.py`
+  - -> `utils.py`
+- `approach_initiator.py`
+  - -> `approach_Eq.py`
+  - -> `approach_collector.py`
+  - -> `approach_def.py`
+  - -> `approach_sched.py`
+  - -> `global_var.py`
+  - -> `task/task_cfg.py`
+  - -> `utils.py`
+- `approach_sched.py`
+  - -> `approach_Eq.py`
+  - -> `approach_collector.py`
+  - -> `approach_def.py`
+  - -> `utils.py`
+- `approach_setup.py`
+  - -> `approach_initiator.py`
+  - -> `global_var.py`
+  - -> `sim_main.py`
+  - -> `task/task_cfg.py`
+- `approach_sim.py`
+  - -> `approach_Eq.py`
+  - -> `approach_collector.py`
+  - -> `approach_def.py`
+  - -> `approach_initiator.py`
+  - -> `approach_sched.py`
+  - -> `example/bm4.py`
+  - -> `global_var.py`
+  - -> `utils.py`
+- `main_approach.py`
+  - -> `approach_Eq.py`
+  - -> `approach_def.py`
+  - -> `approach_initiator.py`
+  - -> `approach_sched.py`
+  - -> `approach_setup.py`
+  - -> `approach_sim.py`
+  - -> `global_var.py`
+  - -> `utils.py`
+- `mapper/mem_planner.py`
+  - -> `global_var.py`
+  - -> `utils.py`
+- `model/buffer.py`
+  - -> `model/message/Context_message.py`
+  - -> `task/task_agent.py`
+- `model/event_gen/e2e_latency.py`
+  - -> `global_var.py`
+- `model/message/Context_message.py`
+  - -> `model/buffer.py`
+  - -> `model/trace_example.py`
+  - -> `task/task_agent.py`
+- `model/message/data_pipe.py`
+  - -> `model/buffer.py`
+  - -> `model/event_gen/e2e_latency.py`
+  - -> `model/performance.py`
+  - -> `model/task_queue_agent.py`
+- `model/message/message_handler.py`
+  - -> `global_var.py`
+  - -> `model/message/Context_message.py`
+  - -> `model/message/data_pipe.py`
+  - -> `model/task_queue_agent.py`
+  - -> `task/task_agent.py`
+- `model/message/msg_dispatcher.py`
+  - -> `model/buffer.py`
+- `model/performance.py`
+  - -> `global_var.py`
+- `model/resource_agent.py`
+  - -> `global_var.py`
+  - -> `model/event_gen/e2e_latency.py`
+  - -> `model/performance.py`
+  - -> `model/resource_agent.py`
+  - -> `model/task_queue_agent.py`
+  - -> `sched/scheduling_table.py`
+  - -> `task/task_agent.py`
+- `model/streaming_processing/wartermark_strategy.py`
+  - -> `global_var.py`
+  - -> `model/buffer.py`
+  - -> `task/task_agent.py`
+- `paths.py`
+  - -> `global_var.py`
+- `sched/bin_list_utils.py`
+  - -> `global_var.py`
+  - -> `model/lru.py`
+  - -> `model/resource_agent.py`
+  - -> `sched/scheduling_table.py`
+  - -> `task/task_agent.py`
+  - -> `utils.py`
+- `sched/bin_ops.py`
+  - -> `global_var.py`
+  - -> `model/lru.py`
+  - -> `sched/scheduling_table.py`
+  - -> `sched/sort_function.py`
+  - -> `task/task_agent.py`
+- `sched/binpack_config.py`
+  - -> `approach_Eq.py`
+- `sched/global_sched.py`
+  - -> `global_var.py`
+  - -> `mapper/mem_planner.py`
+  - -> `model/buffer.py`
+  - -> `model/message/data_pipe.py`
+  - -> `model/message/message_handler.py`
+  - -> `model/message/msg_dispatcher.py`
+  - -> `model/performance.py`
+  - -> `model/position_table.py`
+  - -> `model/resource_agent.py`
+  - -> `model/streaming_processing/wartermark_strategy.py`
+  - -> `model/task_queue_agent.py`
+  - -> `sched/bin_ops.py`
+  - -> `sched/binpack_config.py`
+  - -> `sched/monitor_agent.py`
+  - -> `sched/packing_solver/gurobi_MP_semi2DClst.py`
+  - -> `sched/pre_alloc.py`
+  - -> `sched/pre_alloc_new.py`
+  - -> `sched/scheduler_agent.py`
+  - -> `sched/scheduling_table.py`
+  - -> `sched/slack_estim.py`
+  - -> `sched/sort_function.py`
+  - -> `task/task_agent.py`
+  - -> `task/task_cfg.py`
+- `sched/monitor_agent.py`
+  - -> `sched/scheduling_table.py`
+- `sched/packing_solver/chain_slack_assign.py`
+  - -> `approach_Eq.py`
+  - -> `global_var.py`
+  - -> `sched/ref_alloc_search.py`
+  - -> `utils.py`
+- `sched/packing_solver/gurobi_MP_semi2DClst.py`
+  - -> `utils.py`
+- `sched/placement.py`
+  - -> `sched/scheduler_agent.py`
+- `sched/pre_alloc.py`
+  - -> `global_var.py`
+  - -> `model/lru.py`
+  - -> `model/task_queue_agent.py`
+  - -> `sched/bin_ops.py`
+  - -> `sched/monitor_agent.py`
+  - -> `sched/scheduling_table.py`
+  - -> `sched/sort_function.py`
+  - -> `task/task_agent.py`
+- `sched/pre_alloc_new.py`
+  - -> `global_var.py`
+  - -> `model/lru.py`
+  - -> `model/task_queue_agent.py`
+  - -> `sched/bin_ops.py`
+  - -> `sched/monitor_agent.py`
+  - -> `sched/ref_alloc_search.py`
+  - -> `sched/scheduling_table.py`
+  - -> `sched/sort_function.py`
+  - -> `task/task_agent.py`
+- `sched/sched_fn.py`
+  - -> `global_var.py`
+  - -> `model/buffer.py`
+  - -> `model/message/data_pipe.py`
+  - -> `model/message/msg_dispatcher.py`
+  - -> `model/performance.py`
+  - -> `model/resource_agent.py`
+  - -> `model/streaming_processing/wartermark_strategy.py`
+  - -> `sched/monitor_agent.py`
+  - -> `sched/placement.py`
+  - -> `sched/sched_utils.py`
+  - -> `sched/scheduler_agent.py`
+  - -> `sched/scheduling_table.py`
+  - -> `sched/slack_estim.py`
+  - -> `sched/state_trans.py`
+  - -> `task/task_agent.py`
+  - -> `utils.py`
+- `sched/sched_utils.py`
+  - -> `global_var.py`
+  - -> `model/buffer.py`
+  - -> `model/message/Context_message.py`
+  - -> `model/message/data_pipe.py`
+  - -> `sched/placement.py`
+  - -> `sched/scheduler_agent.py`
+  - -> `task/task_agent.py`
+  - -> `utils.py`
+- `sched/scheduler_agent.py`
+  - -> `global_var.py`
+  - -> `model/barrier_agent.py`
+  - -> `model/buffer.py`
+  - -> `model/event_gen/e2e_latency.py`
+  - -> `model/lru.py`
+  - -> `model/message/data_pipe.py`
+  - -> `model/message/msg_dispatcher.py`
+  - -> `model/resource_agent.py`
+  - -> `model/task_queue_agent.py`
+  - -> `sched/monitor_agent.py`
+  - -> `sched/sched_fn.py`
+  - -> `sched/scheduling_table.py`
+  - -> `task/task_agent.py`
+- `sched/scheduling_table.py`
+  - -> `global_var.py`
+  - -> `model/lru.py`
+  - -> `model/resource_agent.py`
+  - -> `task/task_agent.py`
+  - -> `utils.py`
+- `sched/slack_estim.py`
+  - -> `approach_Eq.py`
+  - -> `global_var.py`
+  - -> `sched/packing_solver/chain_slack_assign.py`
+  - -> `sched/ref_alloc_search.py`
+  - -> `task/graph_breakdown.py`
+  - -> `task/task_agent.py`
+  - -> `task/task_cfg.py`
+- `sched/sort_function.py`
+  - -> `global_var.py`
+  - -> `model/lru.py`
+  - -> `task/task_agent.py`
+- `sched/state_trans.py`
+  - -> `global_var.py`
+  - -> `model/buffer.py`
+  - -> `model/message/Context_message.py`
+  - -> `model/message/data_pipe.py`
+  - -> `model/message/msg_dispatcher.py`
+  - -> `model/streaming_processing/wartermark_strategy.py`
+  - -> `model/task_queue_agent.py`
+  - -> `sched/monitor_agent.py`
+  - -> `sched/scheduler_agent.py`
+  - -> `sched/scheduling_table.py`
+  - -> `task/task_agent.py`
+- `scripts/abla_exp_runner.py`
+  - -> `approach_collector.py`
+  - -> `scripts/exp_common.py`
+- `scripts/exp_common.py`
+  - -> `main_approach.py`
+- `scripts/motiv_exp_runner.py`
+  - -> `approach_collector.py`
+  - -> `scripts/exp_common.py`
+- `sim_main.py`
+  - -> `allocator_agent.py`
+  - -> `global_var.py`
+  - -> `model/event_gen/e2e_latency.py`
+  - -> `model/message/data_pipe.py`
+  - -> `model/message/msg_dispatcher.py`
+  - -> `model/resource_agent.py`
+  - -> `model/task_queue_agent.py`
+  - -> `paths.py`
+  - -> `sched/bin_list_utils.py`
+  - -> `sched/binpack_config.py`
+  - -> `sched/global_sched.py`
+  - -> `sched/monitor_agent.py`
+  - -> `sched/placement.py`
+  - -> `sched/pre_alloc_new.py`
+  - -> `sched/scheduler_agent.py`
+  - -> `sched/scheduling_table.py`
+  - -> `task/spec.py`
+  - -> `task/task_agent.py`
+  - -> `task/task_cfg.py`
+  - -> `utils.py`
+- `task/spec.py`
+  - -> `task/task_agent.py`
+- `task/task_agent.py`
+  - -> `approach_Eq.py`
+  - -> `global_var.py`
+  - -> `model/buffer.py`
+  - -> `model/event_gen/e2e_latency.py`
+  - -> `model/message/Context_message.py`
+  - -> `model/performance.py`
+  - -> `model/resource_agent.py`
+  - -> `sched/ref_alloc_search.py`
+- `task/task_cfg.py`
+  - -> `approach_Eq.py`
+  - -> `global_var.py`
+  - -> `model/task_queue_agent.py`
+  - -> `sched/slack_estim.py`
+  - -> `task/graph_scaling.py`
+  - -> `task/load_cfg/loadA.py`
+  - -> `task/task_agent.py`
+- `test_approach_collector.py`
+  - -> `approach_Eq.py`
+  - -> `approach_collector.py`
+  - -> `approach_def.py`
+  - -> `ref_tdigest.py`
+- `utils.py`
+  - -> `global_var.py`
+  - -> `sched/binpack_config.py`
+
+## Note
+This graph is conservative. Dynamic imports, registries, shell calls, config references, and solver-specific paths must remain REVIEW unless proven safe.

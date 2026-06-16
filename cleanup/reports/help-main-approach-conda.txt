@@ -1,0 +1,109 @@
+usage: main_approach.py [-h] [--verbose] [--test_case TEST_CASE] [--plot PLOT]
+                        [--plot_fmt PLOT_FMT] [--test_all TEST_ALL]
+                        [--num_cores NUM_CORES] [--num_bins NUM_BINS]
+                        [--timestepxus TIMESTEPXUS]
+                        [--BinExtendRule BINEXTENDRULE] [--preemptable]
+                        [--quantum_check_en] [--quantumSize QUANTUMSIZE]
+                        [--warmup_dis] [--n_p N_P] [--jitter_sim_en]
+                        [--jitter_sim_para JITTER_SIM_PARA] [--exec_var_en]
+                        [--exec_var_para EXEC_VAR_PARA] [--var_sim_en]
+                        [--var_sim_cfg VAR_SIM_CFG] [--load_var_sim_en]
+                        [--load_var_sim_para LOAD_VAR_SIM_PARA]
+                        [--e2e_var_sim_en]
+                        [--e2e_var_sim_para E2E_VAR_SIM_PARA] [--seed SEED]
+                        [--file_suffix FILE_SUFFIX]
+                        [--i_file_suffix I_FILE_SUFFIX] [--barrier_dis]
+                        [--data_lifetime_mode DATA_LIFETIME_MODE]
+                        [--exec_t_comp_ratioA EXEC_T_COMP_RATIOA]
+                        [--exec_t_comp_ratioB EXEC_T_COMP_RATIOB]
+                        [--profiling_filename PROFILING_FILENAME]
+                        [--lateness_mode LATENESS_MODE]
+                        [--e2e_latency E2E_LATENCY]
+                        [--wsc_slack_ratio WSC_SLACK_RATIO]
+                        [--slack_threshold SLACK_THRESHOLD]
+                        [--aux_scale_factor AUX_SCALE_FACTOR]
+                        [--load_factor LOAD_FACTOR] [--gen_benchmark]
+                        [--root_dir ROOT_DIR] [--bin_pack_cfg BIN_PACK_CFG]
+                        [--bin_pack_para BIN_PACK_PARA]
+                        [--max_core_stat MAX_CORE_STAT] [--forbid_miss]
+                        [--allow_realloc] [--G_decomp_mode G_DECOMP_MODE]
+                        [--policy POLICY] [--stat_param STAT_PARAM]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --verbose             verbose
+  --test_case TEST_CASE
+                        task name
+  --plot PLOT           plot
+  --plot_fmt PLOT_FMT   plot format
+  --test_all TEST_ALL   test all the task
+  --num_cores NUM_CORES
+                        number of cores
+  --num_bins NUM_BINS   number of bins
+  --timestepxus TIMESTEPXUS
+                        timestep in us
+  --BinExtendRule BINEXTENDRULE
+                        Rule for when and how to extend the bin
+  --preemptable         enable preemption
+  --quantum_check_en    enable quantum check
+  --quantumSize QUANTUMSIZE
+                        quantum size, # of simulation steps
+  --warmup_dis          warmup disable
+  --n_p N_P             number of periods
+  --jitter_sim_en       enable jitter simulation
+  --jitter_sim_para JITTER_SIM_PARA
+                        jitter simulation parameters
+  --exec_var_en         enable exec jitter simulation
+  --exec_var_para EXEC_VAR_PARA
+                        exec jitter simulation parameters
+  --var_sim_en          enable global variation simulation
+  --var_sim_cfg VAR_SIM_CFG
+                        variation simulation config file
+  --load_var_sim_en     enable dynamic object simulation
+  --load_var_sim_para LOAD_VAR_SIM_PARA
+                        dynamic object simulation parameters
+  --e2e_var_sim_en      enable e2e latency variation simulation
+  --e2e_var_sim_para E2E_VAR_SIM_PARA
+                        e2e latency variation simulation parameters
+  --seed SEED           random seed
+  --file_suffix FILE_SUFFIX
+                        file suffix
+  --i_file_suffix I_FILE_SUFFIX
+                        file suffix
+  --barrier_dis         disable barrier
+  --data_lifetime_mode DATA_LIFETIME_MODE
+                        lifetime mode: most_recent, ref_count, timeout,
+                        watermark
+  --exec_t_comp_ratioA EXEC_T_COMP_RATIOA
+                        temporal ratio
+  --exec_t_comp_ratioB EXEC_T_COMP_RATIOB
+                        temporal ratio
+  --profiling_filename PROFILING_FILENAME
+                        profiling filename
+  --lateness_mode LATENESS_MODE
+                        lateness mode
+  --e2e_latency E2E_LATENCY
+                        e2e latency
+  --wsc_slack_ratio WSC_SLACK_RATIO
+                        wsc slack ratio
+  --slack_threshold SLACK_THRESHOLD
+                        slack threshold
+  --aux_scale_factor AUX_SCALE_FACTOR
+                        aux scale factor
+  --load_factor LOAD_FACTOR
+                        load factor multiplier
+  --gen_benchmark       generate benchmark
+  --root_dir ROOT_DIR   root directory
+  --bin_pack_cfg BIN_PACK_CFG
+                        bin pack config file
+  --bin_pack_para BIN_PACK_PARA
+                        bin pack algorithm parameters
+  --max_core_stat MAX_CORE_STAT
+                        max core stat
+  --forbid_miss         forbid miss
+  --allow_realloc       allow reallocation of resources amount
+  --G_decomp_mode G_DECOMP_MODE
+                        mode: manual, full
+  --policy POLICY       policy
+  --stat_param STAT_PARAM
+                        stat parameter
