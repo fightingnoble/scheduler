@@ -1,6 +1,6 @@
 # Cleanup status
 
-Last updated: 2026-06-16 (B2-MOVE-DEAD-SIM-CHAIN executed + committed to audit branch; gate PASS)
+Last updated: 2026-06-16 (B3 完成 + 归档语义重分类 old/unused; gate PASS; 未 commit)
 
 This is the canonical global status file for the scheduler cleanup work. It supersedes `PHASE1_STATUS_FOR_NEXT_AGENT.md` as the main entry point for future agents.
 
@@ -186,6 +186,72 @@ Deferred (not done this batch):
 - `Scheduler` class-internal dead methods (user: 先不管)
 - `sched_fn`/`state_trans`/`sched_utils` dead standalone fns (import * tangle — next batch)
 
+### B3-BINPACK-DEAD-MOVE — batch 1 EXECUTED (2026-06-16), batch 2/3 pending
+
+**Batch 1 (group A + bound pair) — DONE, gate PASS:**
+- ✅ B3-MOVE-002: pre_alloc.py → unused/
+- ✅ B3-MOVE-004/005: gurobi_semi2Dclst_mapping*.py → packing_solver/old/
+- ✅ B3-CLEAN-001: deleted global_sched.py:25 dead import
+- ❌ B3-MOVE-001/003: **N/A** — bin_ops.old.py & message_handler_old.py are UNTRACKED ghost files in main working tree, NOT in test_pipeline (git cat-file confirmed). Out of scope per P1-GIT-002.
+
+**Ghost-file discovery (important):** earlier bin_packing analysis ran grep in MAIN working tree, mixing untracked ghosts (bin_ops.old.py 775L, message_handler_old.py 246L) into the dead-code inventory. The "~2400 lines" estimate was inflated by ~1021 lines. Future analysis must run in audit worktree (cleanup basis). True tracked bin_packing dead code is smaller.
+
+**Batch 2 (group B symbol-level) — DONE, gate PASS, byte-identical:**
+- ✅ B3-MOVE-006: bin_select_new (L287-327, 41 lines) → pre_alloc_new_unused.py
+- ✅ B3-MOVE-007: naive_iso (L280-315, 36 lines) → global_sched_unused.py
+- ✅ B3-MOVE-008: commented test block (L627-749, 123 lines) → pre_alloc_new_unused.py
+- Line numbers re-verified in audit worktree via AST end_lineno BEFORE slicing (naive_iso shifted to L280-315 due to CLEAN-001; main-tree analysis said L281-317 — would have mis-cut).
+- byte-identical: pre_alloc_new.py +0/-164; global_sched.py +0/-37 (pure deletion, trailing newline matched test_pipeline).
+
+**Batch 3 (group D docs) — DONE:**
+- ✅ B3-DOC-001: deprecated_code.md §8 澄清（scheduler_agent/monitor_agent 部分活）+ 新增 §10 清理记录 + bin_ops.old 幽灵标注
+- ✅ B3-DOC-002: spec §8.1.1/8.1.2/8.2/8.3 标注✅已解决（保留原文，保护路径只标注不删）
+
+**B3 COMPLETE**: 7 executed (002/004/005/006/007/008/CLEAN-001) + 2 N/A (001/003 幽灵文件) + 2 docs. 全部回归门 PASS.
+
+### 归档目录语义重分类（2026-06-16）— DONE
+
+用户定义语义：`old/`=历史版本（被新实现取代）；`unused/`=独立功能暂无引用。按此重分类所有 B2/B3 归档：
+
+| 类 | 位置 | 内容 |
+|----|------|------|
+| **old/**（历史版本） | `old/` | allocator_agent.py, pre_alloc.py |
+| **old/**（符号级） | `*_old.py` | sim_main_old.py, sched/pre_alloc_new_old.py, sched/global_sched_old.py |
+| **unused/**（独立功能） | `scripts/unused/` | repack_sweep.py |
+| **unused/**（独立功能） | `sched/packing_solver/unused/` | gurobi_semi2Dclst_mapping.py, _mapping2.py |
+
+语义约定已写入 `cleanup-policy.md`（slim + repo）。删除空目录：model/message/old、unused/(根)、scripts/old、packing_solver/old。回归门 PASS。改动未 commit。
+
+pre_alloc_new.py 深度分析完成（内部调用图 + spec 覆盖核对）。Packet: `REVIEW_PACKET_BATCH_B3-BINPACK-DEAD-MOVE.md`，11 个决策：
+
+| 组 | 决策 | 对象 | 风险 |
+|----|------|------|------|
+| A 整文件 | B3-MOVE-001 | `bin_ops.old.py` (775L) → `unused/` | 低（独立） |
+| A 整文件 | B3-MOVE-002 | `pre_alloc.py` (592L) → `unused/` | 低（**绑定 B3-CLEAN-001**） |
+| A 整文件 | B3-MOVE-003 | `message_handler_old.py` (246L) → `model/message/old/` | 低（独立） |
+| A 整文件 | B3-MOVE-004/005 | `gurobi_semi2Dclst_mapping.py` + `_mapping2.py` → `packing_solver/old/` | 低（独立） |
+| B 符号级 | B3-MOVE-006 | `pre_alloc_new.py::bin_select_new` (L287-328) | 低（bin_sel 留活） |
+| B 符号级 | B3-MOVE-007 | `global_sched.py::naive_iso` (L281-317) | 低 |
+| B 符号级 | B3-MOVE-008 | `pre_alloc_new.py` 注释测试 (L627-748) | 低（死注释） |
+| C 配套 | B3-CLEAN-001 | 删 `global_sched.py:25` 死 import | 低（绑定 B3-MOVE-002） |
+| D 文档 | B3-DOC-001 | 更新 `deprecated_code.md`（补全） | 低 |
+| D 文档 | B3-DOC-002 | 更新 `spec §8.1`（标记已解决，保护路径） | 低-中 |
+
+总清理 ~2400+ 行死代码 + 2 处文档同步。不动：test_mem_planner（保留）、single_turn_solver（不管）、参数语义错位（记录）。
+
+
+
+Reports: `cleanup/reports/bin_packing_inventory.md` + `cleanup/reports/bin_packing_function_map.md`. Analysis only, no source change.
+
+- spec (`binpack_solver_spec.md §2.1`) function hierarchy is **ACCURATE** — maps to live code. Trustworthy canonical map.
+- LIVE (guided/scratch): `sim_main::perform_bin_packing` → `global_sched.{coleasing_alloc_cluster, push_task_into_bins_new}` → `pre_alloc_new.glb_alloc_new2` + `bin_ops` + `gurobi_MP_semi2DClst`.
+- DEAD whole files (0 live deps, safe to move): `bin_ops.old.py` (775L), `pre_alloc.py` (592L), `message_handler_old.py` (246L), `gurobi_semi2Dclst_mapping.py` + `_mapping2.py`.
+- DEAD import fossil: `global_sched.py:25 from sched.pre_alloc import glb_alloc_new` (imported, never called).
+- DEAD function: `global_sched.py::naive_iso` (0 calls).
+- 3 contradictions resolved (import ≠ used): mapping import commented out; pre_alloc glb_alloc_new dead-import; sim_main doesn't import pre_alloc.
+- User decisions: test_mem_planner **KEEP**; single_turn_solver **LEAVE AS-IS** (broken branch).
+- Doc: `guide/deprecated_code.md` INCOMPLETE (misses pre_alloc/message_handler_old/dead solvers); `doc/dev/` process docs candidates for archival.
+
 
 
 Do not treat `scheduler_agent.py` / `monitor_agent.py` as REMOVABLE at file level. Any packet proposing file-level deletion of these is a violation; only symbol-level dead-function/method removal is acceptable.
@@ -293,13 +359,16 @@ System `python3` outside this environment is not valid for this repo.
 
 ## Recommended next action
 
-B2-MOVE-DEAD-SIM-CHAIN **EXECUTED** (3 moves, gate PASS). Changes are uncommitted in the audit worktree — consider committing to the audit branch to secure them (recovery commands in `FILE_ADJUSTMENT_RECORD.md`).
+B3-BINPACK-DEAD-MOVE packet **ready, awaiting approval**（11 decisions）。见 `REVIEW_PACKET_BATCH_B3-BINPACK-DEAD-MOVE.md`。
 
-Next options:
-1. **Commit B2 results** to the audit branch (secures the 3 moves + artifacts; recommended before next batch).
-2. **Deferred sim-loop cleanup**: `Scheduler` class-internal dead methods + `sched_fn`/`state_trans`/`sched_utils` dead standalone fns (the `import *` tangle — needs import-cleanup coordination).
-3. **Batch A**: independent scripts (`analyze/*`, `run/*`, `appoach_plot6.py`+`approach_util33.py`, `test_core_allocation.py`, `test_repack_diagnostic.py`) via move-reference.
-4. `B2-DOC-INVENTORY`, `B2-OPTIONAL-DEPS-DECISION`.
+批准方式建议：
+- `approve all` — 执行全部（5 整文件 + 3 符号 + 1 import + 2 文档）
+- 分组批准：组A（独立整文件 001/003/004/005）+ 绑定组（002+CLEAN-001）+ 组B（符号级 006/007/008）+ 组D（文档）
+- `reject B3-DOC-002` — 若不想动 spec 保护路径
+
+执行后：跑回归门（6 import 探针 + 3 --help），记录 FILE_ADJUSTMENT_RECORD，flip ledger → executed，再 commit。
+
+其他待续：延后 sim-loop 清理（Scheduler 死方法 + sched_fn/state_trans/sched_utils 死独立函数）；Batch A（独立脚本）。
 
 Do not start cleanup execution from old `P1-REMOVE-*` or `P1-CACHE-*` decisions.
 

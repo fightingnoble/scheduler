@@ -1,4 +1,4 @@
-"""sim_main_unused.py — moved dead code from sim_main.py (B2-MOVE-002).
+"""sim_main_old.py — moved dead code from sim_main.py (B2-MOVE-002 (reclassified unused→old)).
 Contents: others() (infrequent cases split from main) + main() (superseded entry,
 replaced by main_approach.py) + if __name__ block.
 Moved, not rewritten. Recover: git checkout archive/test_pipeline-20260612 -- sim_main.py

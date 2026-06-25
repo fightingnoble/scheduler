@@ -413,11 +413,13 @@ if _p_2b_preempt.currentburst > 0 and not reach_preempt_grain:
 
 ## 8. 关键问题与改进建议
 
-### 8.1 当前问题
+### 8.1 当前问题（§8.1.1/8.1.2 均已于 2026-06-16 解决，详见各节标注）
 
-#### 8.1.1 pre_defined 模式的硬退出
+#### 8.1.1 pre_defined 模式的硬退出 ✅ 已解决（2026-06-16）
 
-**位置**: `pre_alloc_new.py:192-195`
+> **状态**: 已落实建议。`sys.exit(1)` 已改为 `raise ResourceInsufficientError`（`pre_alloc_new.py:206`，异常类定义于 `:21`）。
+
+**位置**（历史）: `pre_alloc_new.py:192-195`
 
 ```python
 if bin_list[bin_id].num_resources < req_rsc_size:
@@ -426,11 +428,13 @@ if bin_list[bin_id].num_resources < req_rsc_size:
 
 **问题**: 当 repack 阶段资源估算与 Phase 1 不一致时，直接退出
 
-**建议**: 改为抛出异常或警告
+**建议**: 改为抛出异常或警告 ✅ 已落实
 
-#### 8.1.2 资源估算依赖外部常量
+#### 8.1.2 资源估算依赖外部常量 ✅ 已解决（2026-06-16）
 
-**位置**: `pre_alloc_new.py:173`
+> **状态**: 已落实建议。`tot_cores = 300` 已改为 `tot_cores = binpack_cfg.get("total_cores", 300)`（`pre_alloc_new.py:158`）。
+
+**位置**（历史）: `pre_alloc_new.py:173`
 
 ```python
 tot_cores = 300  # TODO: Make this a configurable parameter
@@ -438,7 +442,7 @@ tot_cores = 300  # TODO: Make this a configurable parameter
 
 **问题**: 硬编码的最大核心数
 
-**建议**: 从 binpack_cfg 或全局配置读取
+**建议**: 从 binpack_cfg 或全局配置读取 ✅ 已落实
 
 ### 8.2 功能完整性评估
 
@@ -449,12 +453,12 @@ tot_cores = 300  # TODO: Make this a configurable parameter
 | 抢占 | ✅ | 支持优先级抢占 |
 | 部分分配 | ⚠️ | 代码存在但默认禁用 |
 | 量子检查 | ⚠️ | 代码存在但默认禁用 |
-| pre_defined 模式 | ⚠️ | 存在硬退出问题 |
+| pre_defined 模式 | ✅ | 硬退出已改为异常（2026-06-16，见 §8.1.1） |
 
 ### 8.3 改进建议
 
-1. **移除硬退出**: 将 `sys.exit(1)` 改为异常
-2. **配置化 tot_cores**: 添加到 BinPackConfig
+1. **移除硬退出**: 将 `sys.exit(1)` 改为异常 ✅ 已落实（ResourceInsufficientError）
+2. **配置化 tot_cores**: 添加到 BinPackConfig ✅ 已落实（binpack_cfg["total_cores"]）
 3. **增强日志**: 添加更详细的分配/抢占日志
 4. **统一参数名**: `quantile` vs `exec_t_comp_ratioB` 的语义澄清
 

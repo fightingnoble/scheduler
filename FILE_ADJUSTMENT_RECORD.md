@@ -316,3 +316,284 @@ Scope kept out:
 Recovery:
 - Undo commit keeping changes staged: `git switch audit/minimal-from-test_pipeline-20260612 && git reset --soft d9bf216`
 - Restore moved files: `git checkout archive/test_pipeline-20260612 -- allocator_agent.py scripts/repack_sweep.py sim_main.py`
+
+## 2026-06-16 B2-MOVE-DEAD-SIM-FNS analysis — MAJOR CORRECTION + packet ready
+
+Action type: preflight (analysis / no-source-change)
+
+Reason:
+- Analyzed the deferred sim-loop standalone functions (sched_fn/state_trans/sched_utils). Prepared move packet.
+
+⚠️ MAJOR ANALYSIS CORRECTION (important for trust):
+- First-pass reverse analysis (calling-context heuristic) WRONGLY concluded all 23 functions dead.
+- Forward-reachability BFS from confirmed-live roots corrected it: push_task_into_bins_new (repack core) → push_step_new (global_sched.py:131) → check_miss/check_complete/data_pipe_read/pendingToReady → release_rsc is LIVE.
+- Without checking global_sched.py:131 (the push_step_new call site), 5 live functions would have been wrongly moved, breaking the repack path. Lesson: liveness MUST be proven by forward reachability from entrypoints, not by "all my callers look dead" heuristics — because a dead-looking caller (push_step_new) can itself be called by a live function (push_task_into_bins_new).
+
+Accurate dead/alive list (forward reachability):
+- LIVE (KEEP, 5): state_trans.{check_miss, check_complete, release_rsc, pendingToReady}, sched_utils.data_pipe_read
+- DEAD (move, 18): sched_fn (all 6), state_trans {throttleToReady, check_throttle, pendingToReady_cbs}, sched_utils {9 fns except data_pipe_read}
+
+Packet + plan:
+- Created REVIEW_PACKET_BATCH_B2-MOVE-DEAD-SIM-FNS.md (decisions B2-MOVE-004/005/006).
+- Move 18 dead fns → sched/<module>_unused.py (3 files). Keep shell (imports + TYPE_CHECKING) + live fns.
+- Companion import cleanup: NONE — global_sched named imports all live; import * self-adapts.
+- Scheduler class-internal dead methods: out of scope (先不管).
+- Execution method: AST-driven function-name slicing (not line-number) to guarantee byte-identical survivors.
+
+Changed files: none in source. Only audit artifact (this packet).
+
+Scope kept out:
+- No source moved yet. Execution pending user confirmation of the corrected 5-function LIVE list (given the analysis error, explicit confirmation requested before the interleaved cut).
+- test_pipeline untouched.
+
+Next:
+- Awaiting user confirmation of LIVE list {check_miss, check_complete, release_rsc, pendingToReady, data_pipe_read}, then execute B2-MOVE-004/005/006 + regression gate.
+
+## 2026-06-16 bin_packing 函数与文档现状分析
+
+Action type: preflight (analysis / no-source-change)
+
+Reason:
+- User: bin_packing 部分写过好几版，函数在文件中组织非常乱，先整理和分析。
+- Did AST reachability closure from perform_bin_packing (not text grep — same import-* caveat as B2). Produced structured inventory report.
+
+Key findings:
+- 3 generations stacked across 5 files (3431 lines), ~40% dead.
+- LIVE path (guided/scratch): sim_main::perform_bin_packing → global_sched.{coleasing_alloc_cluster, push_task_into_bins_new} → pre_alloc_new.glb_alloc_new2 + bin_ops + gurobi_MP_semi2DClst.
+- DEAD whole files: sched/bin_ops.old.py (775 lines, 0 live importers), sched/pre_alloc.py (592 lines, only called by bin_ops.old). These are the v0/v1 generations replaced by _new/_new2.
+- DEAD solver variants: packing_solver/gurobi_semi2Dclst_mapping.py + _mapping2.py (GurobiSemi2DClstMapping, 0 live callers). Live one is gurobi_MP_semi2DClst.py.
+- BROKEN branch: perform_bin_packing `elif algorithm=="full"` calls single_turn_solver, but its def is commented out (global_sched.py:947 `# def single_turn_solver`). Would ImportError if triggered.
+- CONDITIONAL dead: test_mem_planner only in `algorithm=="mem_plan"` branch; default guided never hits it.
+- First-round "external caller" check MISJUDGED several fns as dead (coleasing_alloc_1bin, build_greedy_obj, build_search_obj, etc.); reachability closure corrected them — they are indirectly called by live coleasing_alloc_cluster.
+
+Output: cleanup/reports/bin_packing_inventory.md (structured analysis, not a cleanup packet).
+
+Changed files: none (analysis only). Added cleanup/reports/bin_packing_inventory.md + this record + CLEANUP_STATUS update.
+
+Scope kept out:
+- No source moved/deleted. No execution. test_pipeline untouched.
+- Did not cover chain_slack_assign.py, fit.py, ref_alloc_search.py, test scripts, or the 28 doc files (deferred to follow-up if user wants).
+
+Next:
+- Awaiting user decision on整理方向: (1) move bin_ops.old.py + pre_alloc.py → unused/; (2) move dead solver variants → packing_solver/old/; (3) handle single_turn_solver broken branch; (4) test_mem_planner keep?; (5) doc archival.
+
+## 2026-06-16 bin_packing spec 对照 + 文档层深挖
+
+Action type: preflight (analysis / no-source-change)
+
+Reason:
+- User: 参考 binpack_solver_spec.md 梳理函数关系；继续深挖文档层。User decisions: test_mem_planner 留着, single_turn_solver 不管.
+- Cross-checked spec-described function hierarchy vs actual AST call graph; resolved 3 apparent contradictions.
+
+Key findings:
+- spec (binpack_solver_spec.md §2.1) function hierarchy is ACCURATE — all described functions map to live code. Trustworthy as the canonical function map.
+- 5 contradictions resolved (import exists ≠ used):
+  1. gurobi_semi2Dclst_mapping import in global_sched.py is COMMENTED OUT (L1049/1067) → both mapping files confirmed dead.
+  2. pre_alloc.py glb_alloc_new imported by global_sched.py:25 but NEVER called (dead import fossil); only caller is bin_ops.old.py (dead).
+  3. sim_main.py does NOT import pre_alloc (earlier grep false positive).
+- check_miss/check_complete/pendingToReady/data_pipe_read: spec says push_step_new calls them — TRUE, but real defs are in state_trans.py/sched_utils.py; global_sched gets them via scheduler_agent's import-* re-export (B2 "fake body" pattern). Functionally fine, pollutes definition-location tracking.
+- Dead whole files (0 live deps, safe to move): bin_ops.old.py (775L), pre_alloc.py (592L), message_handler_old.py (246L, new finding), gurobi_semi2Dclst_mapping.py + _mapping2.py.
+- Dead import fossil: global_sched.py:25 `from sched.pre_alloc import glb_alloc_new` (never called).
+- Dead function: global_sched.py naive_iso (0 calls).
+- User decisions locked: test_mem_planner KEEP (mem_plan branch); single_turn_solver LEAVE AS-IS (broken branch not touched).
+
+Doc layer findings:
+- 3 tiers: spec/(25, keep) / dev/(10, process logs) / guide/(8, navigation).
+- guide/deprecated_code.md is INCOMPLETE — only lists bin_ops.old.py; misses pre_alloc.py, message_handler_old.py, dead solver variants. Needs update.
+- doc/dev/ process docs (code_cleanup_2026/ablation_dev/repack_debug_instrumentation/claude_revise) candidates for archival to doc/dev/archive/.
+
+Output: cleanup/reports/bin_packing_function_map.md (spec↔code function map + doc analysis).
+
+Changed files: none (analysis only). Added bin_packing_function_map.md + this record + CLEANUP_STATUS update.
+
+Scope kept out: no source/doc change, no execution. test_pipeline untouched.
+
+Next: awaiting user decision on cleanup packet — proposed low-risk moves (bin_ops.old/pre_alloc/message_handler_old/dead solvers → unused/old/) + dead-import cleanup + naive_iso removal + deprecated_code.md update.
+
+## 2026-06-16 B3-BINPACK-DEAD-MOVE packet prepared + pre_alloc_new.py 深度分析
+
+Action type: preflight (analysis + packet / no-source-change)
+
+Reason:
+- User: pre_alloc_new.py 函数定义混乱，含义/用途/文档覆盖存疑，深入思考后出 packet.
+- Deep-analyzed pre_alloc_new.py internal call graph (AST); cross-checked spec coverage; identified staleness.
+
+pre_alloc_new.py findings:
+- 8 top-level symbols. Internal call graph: glb_alloc_new2→allocate_rsc_4_process_new2→{bin_sel, check_and_preemt_alloc, Bp_print_util}; check_and_preemt_alloc→{index_occupy_by_id_chunk_ver, push_into_bin}.
+- bin_select_new (L287-328) is DEAD — a wrapper that only calls bin_sel, 0 external callers. Name collision with bin_sel (similar name, overlapping role). spec §2.1 only mentions bin_sel.
+- L627-748 (~122 lines) is commented-out test code referencing pre_alloc.py old fns (check_and_preemt_at_queue/get_preempt_candi/bin_select) — fully detached.
+- spec §8.1 STALE: §8.1.1 sys.exit(1)→already raise ResourceInsufficientError (L206); §8.1.2 tot_cores=300→already binpack_cfg.get (L158). Suggestions implemented but spec not updated.
+- Known issue (NOT fixed this round — rewrite scope): index_occupy_by_id_chunk_ver param named process_sort but called with key=lambda _p:_p.deadline (L453). Callable so runs, but semantic mismatch.
+
+Packet: REVIEW_PACKET_BATCH_B3-BINPACK-DEAD-MOVE.md (11 decisions: 5 whole-file moves + 3 symbol moves + 1 import cleanup + 2 doc updates). Ledger rows B3-MOVE-001~008 + B3-CLEAN-001 added (status=proposed).
+
+Dependencies: B3-MOVE-002 (pre_alloc.py) BINDS B3-CLEAN-001 (delete global_sched.py:25 dead import) — same coupling pattern as B2. Rest independent.
+
+Out of scope (user decisions): test_mem_planner KEEP; single_turn_solver LEAVE AS-IS; param-semantic-mismatch record-only.
+
+Changed files: none in source. Added packet + 9 ledger rows + this record + CLEANUP_STATUS update.
+
+Scope kept out: no source moved. Execution pending approval. test_pipeline untouched.
+
+Next: awaiting user approval (approve all / per-group / pause).
+
+## 2026-06-16 B3 packet double-check vs 顶层 spec (readme/e2e/test_plan)
+
+Action type: verification (no-source-change)
+
+Reason:
+- User requested cross-checking B3 packet against doc/spec/readme.md + e2e_sched_sim_flow.md + test_plan.md before approval.
+
+Result: ZERO contradiction. B3 packet validated.
+- DEAD symbols to move (bin_ops.old/pre_alloc/message_handler_old/gurobi_semi2Dclst_mapping*/bin_select_new/naive_iso/glb_alloc_new): 0 references in all 3 top-level specs.
+- LIVE path retained (coleasing_alloc_cluster/push_task_into_bins_new/perform_bin_packing/apply_forced_num_cores): explicitly described as active in specs (test_plan:11/25/29/92/100, e2e:24/61/109/63/114/123, readme:37).
+- User decisions (single_turn_solver LEAVE / test_mem_planner KEEP): also 0 refs in top-level specs → spec only recognizes guided algo (test_plan:27/288); mem_plan/full branches are not spec-sanctioned paths. Consistent with user decisions.
+- Granularity note: top-level specs describe at "algorithm name" granularity (coleasing_alloc_cluster / push_task_into_bins_new), not internal impl fns (glb_alloc_new2 etc, those in binpack_solver_spec.md). So moving internal dead fns does not affect top-level specs.
+
+Minor note (out of B3 scope): test_plan:11 misspells `coalesce_alloc_cluster` (missing 's'); code is `coleasing_alloc_cluster`. Spec typo, recorded not fixed.
+
+Changed files: REVIEW_PACKET_BATCH_B3-BINPACK-DEAD-MOVE.md (added §4 Double-check section). No source change.
+
+Scope kept out: no execution. test_pipeline untouched.
+
+Next: B3 packet double-checked, awaiting user approval.
+
+## 2026-06-16 B3 batch 1 executed (4/6) + ghost-file discovery
+
+Action type: execution (move-reference) — PARTIAL + 2 N/A
+
+Reason:
+- User approved "分组" execution. Batch 1 = group A (independent whole-file) + bound pair (002+CLEAN-001).
+
+Executed (4, tracked files, regression gate PASS):
+- B3-MOVE-002: git mv sched/pre_alloc.py → unused/pre_alloc.py
+- B3-MOVE-004: git mv sched/packing_solver/gurobi_semi2Dclst_mapping.py → packing_solver/old/
+- B3-MOVE-005: git mv sched/packing_solver/gurobi_semi2Dclst_mapping2.py → packing_solver/old/
+- B3-CLEAN-001: deleted sched/global_sched.py:25 `from sched.pre_alloc import glb_alloc_new` (dead import fossil)
+
+Regression gate (gurobi) — ALL PASS:
+- import probe: sched.global_sched/scheduler_agent/monitor_agent, approach_sim/approach_setup/main_approach → OK
+- main_approach/motiv/abla --help → PASS
+- global_sched imports cleanly after dead-import removal.
+
+N/A (2 — important discovery):
+- B3-MOVE-001 (bin_ops.old.py) and B3-MOVE-003 (message_handler_old.py) FAILED `git mv: bad source` in audit worktree. Investigation:
+  - These files exist in MAIN working tree (~/git_repo/scheduler/) but are UNTRACKED.
+  - `git ls-files` returns empty; `git cat-file -e test_pipeline:<path>` → "Not a valid object name" → NOT in test_pipeline.
+  - => They are ghost files in the main working tree, never committed. Per P1-GIT-002 (untracked out of scope) and user rule (only touch git-tracked files), NO action. They won't enter clean main anyway (which derives from test_pipeline).
+- Methodology lesson: earlier bin_packing analysis ran grep in MAIN working tree, which mixed untracked ghosts (bin_ops.old.py 775L, message_handler_old.py 246L) into the dead-code inventory. The "~2400 lines" estimate was inflated by ~1021 lines of ghost files. True tracked dead code is smaller. Future analysis should run in audit worktree (the cleanup basis), not main.
+
+Ledger: B3-MOVE-001/003 status → N/A; 002/004/005/CLEAN-001 → executed.
+
+Changed source files: sched/global_sched.py (1 line del); 3 renames (pre_alloc.py, 2 mapping files). test_pipeline untouched.
+
+Recovery:
+- git checkout archive/test_pipeline-20260612 -- sched/global_sched.py sched/pre_alloc.py sched/packing_solver/gurobi_semi2Dclst_mapping.py sched/packing_solver/gurobi_semi2Dclst_mapping2.py
+- then git mv back / rmdir unused & packing_solver/old as needed.
+
+Next: batch 2 = group B symbol-level (B3-MOVE-006 bin_select_new / 007 naive_iso / 008 commented test). Will re-verify line numbers in audit worktree first (analysis was in main tree). Then batch 3 = group D docs.
+
+## 2026-06-16 B3 batch 2 executed (group B symbol-level)
+
+Action type: execution (move-reference, symbol-level slice)
+
+Executed (3, byte-identical surviving code, gate PASS):
+- B3-MOVE-006: pre_alloc_new.py::bin_select_new (L287-327, 41 lines) → new sched/pre_alloc_new_unused.py
+- B3-MOVE-007: global_sched.py::naive_iso (L280-315, 36 lines) → new sched/global_sched_unused.py
+- B3-MOVE-008: pre_alloc_new.py commented test block (L627-749, 123 lines) → sched/pre_alloc_new_unused.py
+
+Line numbers re-verified in audit worktree via AST end_lineno BEFORE slicing (critical: global_sched.py had shifted by -1 vs main-tree analysis due to B3-CLEAN-001 deleting line 25; naive_iso was L280-315 in audit, not L281-317 from main). This avoided a mis-cut.
+
+byte-identical verification (git diff vs test_pipeline, pure deletion):
+- pre_alloc_new.py: +0 / -164 (bin_select_new 41 + commented test 123)
+- global_sched.py: +0 / -37 (line-25 import 1 [from CLEAN-001] + naive_iso 36). Trailing newline matched to test_pipeline (which has no final newline) to keep diff pure-deletion.
+
+Surviving functions verified present:
+- pre_alloc_new.py: glb_alloc_new2, allocate_rsc_4_process_new2, Bp_print_util, bin_sel (L288), push_into_bin, check_and_preemt_alloc, index_occupy_by_id_chunk_ver
+- global_sched.py: push_task_into_bins_new, push_step_new, test_mem_planner (L281), coleasing_alloc_1bin, coleasing_alloc_cluster, update_bp_result2_schedtab, gurobi_split_solver, rename_bins_and_relable_assignments, build_greedy_obj, build_search_obj
+
+Regression gate (gurobi) — ALL PASS: 6-line import probe OK; main_approach/motiv/abla --help PASS.
+
+Changed source files: sched/pre_alloc_new.py (M, -164), sched/global_sched.py (M, -36 naive_iso, cumulative with CLEAN-001). New: sched/pre_alloc_new_unused.py (untracked), sched/global_sched_unused.py (untracked). test_pipeline untouched.
+
+Recovery:
+- git checkout archive/test_pipeline-20260612 -- sched/pre_alloc_new.py sched/global_sched.py
+- rm sched/pre_alloc_new_unused.py sched/global_sched_unused.py
+
+Ledger: B3-MOVE-006/007/008 → executed.
+
+Next: batch 3 (group D docs): B3-DOC-001 (deprecated_code.md 补全) + B3-DOC-002 (spec §8.1 标记已解决). Then commit all of B3.
+
+## 2026-06-16 B3 batch 3 executed (group D docs)
+
+Action type: execution (doc updates, no code change)
+
+Executed (2):
+- B3-DOC-001: updated doc/guide/deprecated_code.md:
+  - §8 澄清: scheduler_agent/monitor_agent 仿真循环被替代但工具函数仍活（B2 发现），文件级不可删
+  - 新增 §10: B3 bin_packing 清理记录表（pre_alloc.py/mapping/bin_select_new/naive_iso/注释测试 的新归档位置）
+  - 待确认: bin_ops.old.py 标注为主仓库未跟踪幽灵文件（不在 test_pipeline）
+  - 日期 → 2026-06-16
+- B3-DOC-002: updated doc/spec/algorithm/binpack_solver_spec.md §8（保护路径，只标注不删）:
+  - §8.1.1 sys.exit(1) → 标注✅已解决（raise ResourceInsufficientError, pre_alloc_new.py:206）
+  - §8.1.2 tot_cores=300 → 标注✅已解决（binpack_cfg.get, pre_alloc_new.py:158）
+  - §8.2 表格 pre_defined 行 ⚠️→✅
+  - §8.3 改进建议 1/2 标注✅已落实
+  - 保留所有原建议文本（历史），只加✅标注+新代码位置
+
+Regression gate (gurobi): import probe OK; main_approach --help PASS (docs don't affect code, confirmed no .py touched).
+
+Changed files: doc/guide/deprecated_code.md (M), doc/spec/algorithm/binpack_solver_spec.md (M). No source change.
+
+Ledger: B3-DOC-001/002 → executed.
+
+B3 COMPLETE: 7 executed (002/004/005/006/007/008/CLEAN-001) + 2 N/A (001/003 ghost files) + 2 docs. All batches gate PASS. Uncommitted — ready to commit.
+
+## 2026-06-16 归档目录语义重新分类（old vs unused）
+
+Action type: status-maintenance + git mv (reclassification, no logic change)
+
+Reason:
+- User defined archive semantics: `old/` = historical versions (superseded by newer live impl); `unused/` = standalone features currently unreferenced (no version relationship).
+- Review found prior B2/B3 classification was by location not semantics — most files were in the wrong dir. Reclassified all.
+
+Reclassification (7 moves + 3 renames + 4 empty-dir removals):
+- unused/ → old/ (historical versions): allocator_agent.py, pre_alloc.py
+- old/ → unused/ (standalone features): repack_sweep.py (→ scripts/unused/), gurobi_semi2Dclst_mapping.py + _mapping2.py (→ packing_solver/unused/)
+- *_unused.py → *_old.py (symbol-level historical versions): sim_main_old.py, pre_alloc_new_old.py, global_sched_old.py (naive_iso = old, user-confirmed: predecessor of coleasing)
+- Removed empty dirs: model/message/old (误建), unused/ (root, emptied), scripts/old (emptied), sched/packing_solver/old (emptied)
+
+Policy codified: added "Archive directory naming — old/ vs unused/" section to cleanup-policy.md (slim canonical + repo copy). Decision test: "Is there a newer live version of THIS feature?" Yes→old/, No→unused/.
+
+Docs/ledger updated: deprecated_code.md §10 paths; move-ledger target_path for all B2/B3 rows + RECLASSIFIED note.
+
+Regression gate (gurobi): import probe OK (global_sched/pre_alloc_new/approach_sim/main_approach); --help PASS. No logic change (pure git mv + rename + header text).
+
+Final layout:
+- old/ (historical): allocator_agent.py, pre_alloc.py
+- scripts/unused/: repack_sweep.py
+- sched/packing_solver/unused/: gurobi_semi2Dclst_mapping.py, _mapping2.py
+- *_old.py: sim_main_old.py, sched/pre_alloc_new_old.py, sched/global_sched_old.py
+
+Changed files: git mv (7) + mv (2 untracked) + header sed (3 _old.py) + move-ledger + deprecated_code.md + cleanup-policy.md (slim+repo). test_pipeline untouched.
+
+Recovery: git checkout archive/test_pipeline-20260612 -- <original path> (paths in ledger source_path column).
+
+Next: B3 + reclassification all done, gate PASS, uncommitted. Ready to commit.
+
+## 2026-06-16 commit B3 + 归档语义重分类 to audit branch
+
+Action type: status-maintenance (git checkpoint)
+
+Reason: B3-BINPACK-DEAD-MOVE (3 batches) + old/unused semantic reclassification all executed and gate-passed but uncommitted. Securing to audit branch.
+
+Snapshot (no new source change in this action):
+- B3: pre_alloc.py→old/, mapping×2→packing_solver/unused/, dead-import delete, bin_select_new/naive_iso/注释测试 symbol-level slice to *_old.py; deprecated_code.md §10 + spec §8 doc updates.
+- Reclassification: allocator_agent.py unused/→old/, repack_sweep scripts/old/→scripts/unused/, *_unused.py→*_old.py, 4 empty dirs removed; cleanup-policy.md old/unused semantics codified (slim+repo).
+- Audit artifacts: CLEANUP_STATUS, FILE_ADJUSTMENT_RECORD, move-ledger, B3 packet, bin_packing reports.
+
+Scope kept out: no main/master merge; test_pipeline untouched; Phase 3 not started.
+
+Recovery:
+- Undo commit keeping changes staged: git switch audit/minimal-from-test_pipeline-20260612 && git reset --soft HEAD~1
+- Restore moved files: git checkout archive/test_pipeline-20260612 -- <path>
