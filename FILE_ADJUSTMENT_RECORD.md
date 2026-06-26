@@ -641,3 +641,27 @@ byte-identical: bin_list_utils.py +0/-517 (1209→692). matplotlib import stays 
 Changed files: sched/bin_list_utils.py (M, -517), sched/bin_list_utils_old.py (new), sched/bin_list_utils_unused.py (new). test_pipeline untouched.
 
 Recovery: git checkout archive/test_pipeline-20260612 -- sched/bin_list_utils.py
+
+## 2026-06-16 创建绘图函数总览文档
+
+Action type: doc creation (no code change)
+
+Reason:
+- User: 是否有相应的绘图函数的文档，请写一个.
+- Surveyed: no unified plotting doc exists. doc/spec/exp_design/ covers only motiv API; plot fns scattered across 6+ files. Created doc/guide/plotting_overview.md.
+
+New doc: doc/guide/plotting_overview.md — unified inventory of all live plotting functions:
+- §2 approach_collector.plot_motiv_case1/2/3 + plot_motiv_legend + plot_load_latency_binned/raw (experiment results)
+- §3 sim_main.render_bin_pack_plots / render_runtime_full_plot (sim process)
+- §4 bin_list_utils get_task_layout_compact/compact1bin + Bin_list_print (layout/print; notes archived fns in _old/_unused)
+- §5 plot_timeline_graph / plot_workflow_g / draw_computational_graph (structure/topology)
+- §6 scripts _plot_abla_overhead/tradeoff + plot_grouped_bar/tradeoff_curve (script helpers)
+- §7 unified font/style: exp_common.py rcParams (Microsoft YaHei)
+- §8 conventions for new plot fns; §9 related-doc index
+Also: added plotting_overview.md to doc/guide/README.md index.
+
+Records backend fact: matplotlib is sole live backend (bokeh/plotly removed in B4). Documents archived plot fns (B5 _old/_unused) to avoid misuse.
+
+Changed files: doc/guide/plotting_overview.md (new), doc/guide/README.md (index +1 line). No source change.
+
+Scope kept out: no code change; test_pipeline untouched.

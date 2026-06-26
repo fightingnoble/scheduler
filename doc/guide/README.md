@@ -11,6 +11,7 @@
 | 调度核心 | [sched_core_overview.md](./sched_core_overview.md) | 两阶段装箱算法 |
 | 仿真流程 | [simulation_flow_overview.md](./simulation_flow_overview.md) | 端到端流程图 |
 | 统计收集 | [collector_overview.md](./collector_overview.md) | StatisticsCollector |
+| 绘图函数 | [plotting_overview.md](./plotting_overview.md) | 全仓绘图函数总览（matplotlib 统一后端） |
 | 任务模型 | [task_model_overview.md](./task_model_overview.md) | ProcessInt生命周期 |
 | 废弃代码 | [deprecated_code.md](./deprecated_code.md) | 废弃模块记录 |
 
