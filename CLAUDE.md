@@ -8,6 +8,9 @@ This file provides guidance to Claude Code when working with this repository.
 conda activate gurobi   # MUST run before any code execution or testing
 ```
 
+**非交互 shell（子进程/脚本/`python -c`）**：`conda activate` 不生效，用绝对路径
+`/home/zhangchg/miniconda3/envs/gurobi/bin/python`（base python 缺 scipy/networkx/gurobipy）。
+
 ## Quick Code Location
 
 | What you need | Where to look |
@@ -32,13 +35,13 @@ conda activate gurobi   # MUST run before any code execution or testing
 | Repack debug history | `doc/dev/ablation_dev.md` §五 Repack 执行验证 |
 | Debug test script | `test_repack_diagnostic.py` (standalone repack verification) |
 | Shared experiment utilities | `scripts/exp_common.py` (ParamTemplate, run_main_approach_inproc) |
-| Resource allocation (runtime) | `allocator_agent.py` (glb_sched, cyclic_sched) |
+| Resource allocation (runtime, archived) | `old/allocator_agent.py` — old sim-chain, moved B2 |
 | Path resolution | `paths.py` |
 
 ### Deprecated (do not use)
-- `sched/scheduler_agent.py` — replaced by `approach_sim.py`
-- `sched/monitor_agent.py` — replaced by `approach_collector.py`
-- `unused_fun.py`, `old/`, `ref/` — dead code
+- `sched/scheduler_agent.py` — 仿真循环被 `approach_sim.py` 替代；但 `Scheduler` 类 + 工具函数仍活（repack 路径用），**文件级不可删**
+- `sched/monitor_agent.py` — 仿真循环被替代；但 `get_target_bin_id`/`get_rsc_2b_released` 仍活（`pre_alloc_new` 用），**文件级不可删**
+- `unused_fun.py`, `old/`, `ref/`, `unused/` — dead code（`old/`=历史版本, `unused/`=独立未完成）
 
 ---
 
@@ -319,6 +322,19 @@ Speed-reference (full per-experiment details below):
 5. Use `StatisticsCollector.plot_motiv_case1/2()` for standard plots
 6. **Do not modify** `plot_motiv_case1/2()` in `approach_collector.py` — shared with motiv experiments
 7. For ablation-specific plots, use `ABLA_COLORS` dict in `abla_exp_runner.py` (unified with motiv color scheme: exec=C0, realloc=C1, wait=C2, miss_bar=C3, miss_line=C4, idle=C7)
+
+## 代码清理（legacy-prune）
+
+清理工作在 audit worktree `~/git_repo/scheduler-audit-20260612/`（基于 `test_pipeline`）进行，**不碰主仓库**。
+
+| 约定 | 说明 |
+|------|------|
+| 全局状态入口 | `CLEANUP_STATUS.md`（当前状态+下一步）；`FILE_ADJUSTMENT_RECORD.md`（更改历史+recovery）。每次动作后强制更新两者 |
+| 幽灵文件陷阱 | 分析**必须在 audit worktree 做**。主仓库有未跟踪旧文件（`bin_ops.old.py`/`message_handler_old.py` 等）会污染死代码判定 |
+| 死活判定用 AST | `from X import *` 造成假定义位置。用 `inspect.getsourcefile(fn)` 或 AST 调用图，**不要靠 grep 反查定义** |
+| byte-identical 验证 | `git diff -- <f> \| awk '/^\+[^+]/{i++}/^-[^-]/{d++}'` → 删除操作应为 `i=0`（纯删除，0 插入） |
+| 归档语义 | `old/`=历史版本（有新版本取代）；`unused/`=独立未完成功能。符号级→`*_old.py`/`*_unused.py`。详见 `.claude/skills/legacy-prune/references/cleanup-policy.md` |
+| 回归门 | 每次清理后跑：6 行 import 探针 + `main_approach.py`/`motiv_exp_runner`/`abla_exp_runner` `--help`（gurobi 环境） |
 
 ## Troubleshooting
 

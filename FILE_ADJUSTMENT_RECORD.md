@@ -682,3 +682,17 @@ New spec: doc/spec/algorithm/task_layout_plotting.md — 原理规范 (not API l
 Core insight documented: 绘图难点不是画图而是给共存任务分配不重叠垂直位置 = 一维装箱问题.
 
 Changed files: doc/spec/algorithm/task_layout_plotting.md (new), doc/spec/readme.md (algorithm index +1). No code change. test_pipeline untouched.
+
+## 2026-06-27 CLAUDE.md 修订（revise-claude-md）
+
+Action type: doc update (CLAUDE.md, no code change)
+
+Reason: Session review (revise-claude-md) — capture missing context for future sessions + fix stale entries post-B2/B3.
+
+Applied 4 updates to CLAUDE.md:
+1. Environment Setup: added non-interactive shell gurobi path (/home/zhangchg/miniconda3/envs/gurobi/bin/python) — conda activate doesn't work in subprocesses; base python lacks scipy/networkx.
+2. Quick Code Location: fixed allocator_agent row (moved to old/ in B2).
+3. Deprecated section: corrected scheduler_agent/monitor_agent — NOT fully replaced; sim-loop superseded but Scheduler class + get_target_bin_id/get_rsc_2b_released still live (file-level deletion breaks repack path). Added unused/ to dead-code list.
+4. New "代码清理（legacy-prune）" section: cleanup conventions table (CLEANUP_STATUS/FILE_ADJUSTMENT_RECORD entries, ghost-file trap, AST-over-grep for import *, byte-identical verify cmd, old/unused semantics, regression gate).
+
+Changed files: CLAUDE.md only. No source change. test_pipeline untouched.
