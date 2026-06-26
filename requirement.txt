@@ -2,9 +2,6 @@ scipy
 numpy
 pandas
 matplotlib
-pyyaml
-plotly
-bokeh
 gurobipy
 h5py
 networkx

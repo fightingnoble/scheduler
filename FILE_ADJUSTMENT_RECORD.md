@@ -597,3 +597,27 @@ Scope kept out: no main/master merge; test_pipeline untouched; Phase 3 not start
 Recovery:
 - Undo commit keeping changes staged: git switch audit/minimal-from-test_pipeline-20260612 && git reset --soft HEAD~1
 - Restore moved files: git checkout archive/test_pipeline-20260612 -- <path>
+
+## 2026-06-16 B4-OPTIONAL-DEPS executed (remove pyyaml/plotly/bokeh)
+
+Action type: execution (dependency removal + commented-import cleanup)
+
+Reason:
+- User: 先做 B2-OPTIONAL-DEPS-DECISION, 首先探索绘图函数.
+- Explored plotting system: matplotlib is the sole live backend (14+ files). bokeh/plotly imports all commented; 0 function-body references. backend="matplotlib" param in add_bar/add_text/add_v_grid is a fossil (only matplotlib branch, else NotImplementedError). pyyaml 0 import (cfg is JSON).
+
+Executed:
+- B4-DEP-001: removed pyyaml/plotly/bokeh from requirement.txt (3 lines). requirement.txt now: scipy/numpy/pandas/matplotlib/gurobipy/h5py/networkx/psutil/pyinstrument/pytest/tdigest/tqdm.
+- B4-DEP-002 (companion): removed 12 commented bokeh/plotly imports from sched/scheduling_table.py (6) + sched/bin_list_utils.py (6).
+
+byte-identical (pure deletion, 0 insertions): requirement.txt -3, scheduling_table.py -6, bin_list_utils.py -6.
+
+Regression gate (gurobi): import probe OK (scheduling_table/bin_list_utils/approach_collector/main_approach); main_approach --help PASS.
+
+Changed files: requirement.txt, sched/scheduling_table.py, sched/bin_list_utils.py. test_pipeline untouched.
+
+Recovery: git checkout archive/test_pipeline-20260612 -- requirement.txt sched/scheduling_table.py sched/bin_list_utils.py
+
+Ledger: cleanup/dependency-ledger.csv rows B4-DEP-001 (pyyaml/plotly/bokeh) → executed.
+
+Note: P1-DEP-002 (Codex's keep-review) is now resolved — decision is REMOVE.

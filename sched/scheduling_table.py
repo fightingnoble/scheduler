@@ -16,12 +16,6 @@ import matplotlib.colors as mcolors
 from matplotlib import pyplot as plt
 # import networkx as nx
 # import matplotlib as mpl
-# from bokeh.plotting import figure, show
-# from bokeh.models import ColumnDataSource, HoverTool, Range1d, LabelSet, Label, Legend
-# from bokeh.layouts import row, column, gridplot
-# import plotly.graph_objects as go
-# import plotly.express as px
-# from plotly.subplots import make_subplots
 from model.lru import LRUCache
 
 class SchedulingTableInt(object): 

@@ -1,6 +1,6 @@
 # Cleanup status
 
-Last updated: 2026-06-16 (B3 完成 + 归档语义重分类 old/unused; gate PASS; 未 commit)
+Last updated: 2026-06-16 (B3 committed + B4-OPTIONAL-DEPS executed; gate PASS; 未 commit)
 
 This is the canonical global status file for the scheduler cleanup work. It supersedes `PHASE1_STATUS_FOR_NEXT_AGENT.md` as the main entry point for future agents.
 
