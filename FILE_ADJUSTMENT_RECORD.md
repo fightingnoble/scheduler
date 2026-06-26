@@ -621,3 +621,23 @@ Recovery: git checkout archive/test_pipeline-20260612 -- requirement.txt sched/s
 Ledger: cleanup/dependency-ledger.csv rows B4-DEP-001 (pyyaml/plotly/bokeh) → executed.
 
 Note: P1-DEP-002 (Codex's keep-review) is now resolved — decision is REMOVE.
+
+## 2026-06-16 B5-BIN-LIST-CLEANUP executed (bin_list_utils.py dead fns)
+
+Action type: execution (move-reference, symbol-level slice)
+
+Reason: User asked to clean up bin_list_utils.py (1209 lines). AST reachability from sim_main's 3 live imports (get_task_layout_compact/compact1bin/Bin_list_print) found 7 dead fns (~517 lines).
+
+Executed (split by semantics per cleanup-policy old/unused):
+- B5-MOVE-001 → bin_list_utils_old.py (HISTORICAL versions, 261 lines):
+  - get_task_layout (pre-compact predecessor)
+  - get_sparse_flops + update_sparse_dict (old sim-chain sparse flops; only caller was old/allocator_agent)
+- B5-MOVE-002 → bin_list_utils_unused.py (UNFINISHED standalone, 337 lines):
+  - get_task_layout_sparse + add_bar/add_text/add_v_grid (multi-backend viz attempt, never landed; backend param only has matplotlib branch, else NotImplementedError)
+  - User clarification: sparse version is unfinished UNUSED, not historical OLD.
+
+byte-identical: bin_list_utils.py +0/-517 (1209→692). matplotlib import stays live (compact fns use it, 21 refs each). Regression gate PASS.
+
+Changed files: sched/bin_list_utils.py (M, -517), sched/bin_list_utils_old.py (new), sched/bin_list_utils_unused.py (new). test_pipeline untouched.
+
+Recovery: git checkout archive/test_pipeline-20260612 -- sched/bin_list_utils.py
