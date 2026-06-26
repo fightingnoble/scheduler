@@ -665,3 +665,20 @@ Records backend fact: matplotlib is sole live backend (bokeh/plotly removed in B
 Changed files: doc/guide/plotting_overview.md (new), doc/guide/README.md (index +1 line). No source change.
 
 Scope kept out: no code change; test_pipeline untouched.
+
+## 2026-06-27 创建 bin_list_utils 绘图原理 spec
+
+Action type: doc creation (no code change)
+
+Reason:
+- User: bin_list_utils 里面绘图函数的大致原理，写一个 spec，用 spec-writer.
+- Used spec-writer skill (设计思想 > 代码设计 > 实现模板). Read get_task_layout_compact full impl (L23-326) to extract原理.
+
+New spec: doc/spec/algorithm/task_layout_plotting.md — 原理规范 (not API list):
+- §1 设计思想: 5 key decisions (变化点绘图/position_dict/first-fit装箱/size_minus先于plus/多bin堆叠) + 4 principles
+- §2 数据流: bin_list → 遍历时间槽检测rsc_map变化点 → broken_barh + position_dict更新 → 多bin堆叠
+- §3 核心概念: rsc_map(分段常量) / position_dict[[starts],[sizes],is_new] / 一维空间装箱(first-fit+leftmost, 这是compact命名由来) / Bin_list_print
+- §4 接口速查 / §5 实现细节(变化点检测/first-fit/性能) / §6 归档函数警示(get_task_layout→_old, sparse+add_*→_unused)
+Core insight documented: 绘图难点不是画图而是给共存任务分配不重叠垂直位置 = 一维装箱问题.
+
+Changed files: doc/spec/algorithm/task_layout_plotting.md (new), doc/spec/readme.md (algorithm index +1). No code change. test_pipeline untouched.

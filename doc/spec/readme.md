@@ -37,6 +37,7 @@
 | [algorithm/guided_hybrid_allocation_algorithm.md](./algorithm/guided_hybrid_allocation_algorithm.md) | 两阶段分配算法：Split (`coleasing_alloc_cluster`) + Repack (`push_task_into_bins_new`) |
 | [algorithm/chain_slack_assignment_algorithm.md](./algorithm/chain_slack_assignment_algorithm.md) | Step 1 实现：链松弛分配，计算 per-task deadline |
 | [algorithm/binpack_solver_spec.md](./algorithm/binpack_solver_spec.md) | 装箱启发式求解器规范 |
+| [algorithm/task_layout_plotting.md](./algorithm/task_layout_plotting.md) | 任务布局绘图（bin_list_utils）原理：时间-空间甘特图 + 一维装箱位置分配 |
 
 ### 2.3 统计收集规范
 
