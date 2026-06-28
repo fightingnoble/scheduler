@@ -24,7 +24,6 @@ from model.performance import slack_comp
 from task.task_agent import ProcessInt
 from sched.scheduling_table import SchedulingTableInt, process_tab_event, parse_event_msg
 from sched.monitor_agent import Monitor
-from sched.slack_estim import EstimCoreNums4Process
 from sched.sched_utils import * 
 from sched.state_trans import *
 from sched.placement import update_phy_posi
@@ -1603,3 +1602,83 @@ def glb_dynamic_sched_step(sched:Scheduler, msg_dispatcher:MsgDispatcher, a_data
         monitor.add_a_record(res_cfg)
     else:
         monitor.add_a_placehold_record()
+
+
+# === B6-SPLIT-003 (2026-06-29): relocated from slack_estim.py (sole consumer = sched_fn) ===
+# deps: math (top-level), Dict (typing). Self-contained, no slack_estim internal deps.
+def EstimCoreNums4Process(_p:ProcessInt, flops, expected_slack, 
+                          round_mode="round", curr_aval_rsc:int=None):
+    if round_mode == "ceil":
+        round_func = math.ceil
+    elif round_mode == "floor":
+        round_func = math.floor
+    else:
+        round_func = round
+    req_rsc_size = flops / expected_slack / FLOPS_PER_CORE
+
+    constr = None
+    if _p.parallel_mode in ["upb","range"]:
+        req_rsc_size = min(round_func(req_rsc_size), _p.core_max)
+        if req_rsc_size==_p.core_max: 
+            constr = "upb"
+    elif _p.parallel_mode in ["lwb", "range"]:
+        if curr_aval_rsc is not None:
+            if _p.core_min > curr_aval_rsc:
+                # no available solution
+                return 0, "N/A"
+        req_rsc_size = max(round_func(req_rsc_size), _p.core_min)
+        if req_rsc_size==_p.core_min:
+            constr = "lwb"
+    elif _p.parallel_mode == "list":
+        # select the nearest one
+        # filter the core_list by the current available resource
+        if curr_aval_rsc is not None:
+            core_list = [x for x in _p.core_list if 0 < x <= curr_aval_rsc] 
+            if len(core_list) == 0:
+                # no available solution
+                return 0, "N/A"
+        else:
+            core_list = _p.core_list
+        req_rsc_size = min(_p.core_list, key=lambda x:abs(x-req_rsc_size))
+        if req_rsc_size==max(_p.core_list):
+            constr = "upb"
+        elif req_rsc_size==min(_p.core_list):
+            constr = "lwb"
+    else:
+        req_rsc_size = max(round_func(req_rsc_size), 1)
+    if curr_aval_rsc is not None:
+        req_rsc_size = min(req_rsc_size, curr_aval_rsc)
+    got_latency = flops / req_rsc_size / FLOPS_PER_CORE
+    return req_rsc_size, got_latency, constr
+
+def EstimCoreNums4Task(task_dict:Dict[str, TaskBase], flops_dict, node, expected_slack, round_mode="round"):
+    if round_mode == "ceil":
+        round_func = math.ceil
+    elif round_mode == "floor":
+        round_func = math.floor
+    else:
+        round_func = round
+    req_rsc_size = flops_dict[node] / expected_slack / FLOPS_PER_CORE
+
+    constr = None
+    _task = task_dict[node]
+    if _task.parallel_mode in ["upb","range"]:
+        req_rsc_size = min(round_func(req_rsc_size), _task.core_max_compile)
+        if req_rsc_size==_task.core_max_compile: 
+            constr = "upb"
+    elif _task.parallel_mode in ["lwb", "range"]:
+        req_rsc_size = max(round_func(req_rsc_size), _task.core_min_compile)
+        if req_rsc_size==_task.core_min_compile:
+            constr = "lwb"
+    elif _task.parallel_mode == "list":
+        # select the nearest one
+        # filter the core_list by the current available resource
+        req_rsc_size = min(_task.core_list_compile, key=lambda x:abs(x-req_rsc_size))
+        if req_rsc_size==max(_task.core_list_compile):
+            constr = "upb"
+        elif req_rsc_size==min(_task.core_list_compile):
+            constr = "lwb"
+    else:
+        req_rsc_size = max(round_func(req_rsc_size), 1)
+    got_latency = elim_nume_error(flops_dict[node] / req_rsc_size / FLOPS_PER_CORE)
+    return req_rsc_size, got_latency, constr

@@ -20,83 +20,6 @@ from sched.ref_alloc_search import TaskConstraints
 
 ## Old defines
 
-def EstimCoreNums4Process(_p:ProcessInt, flops, expected_slack, 
-                          round_mode="round", curr_aval_rsc:int=None):
-    if round_mode == "ceil":
-        round_func = math.ceil
-    elif round_mode == "floor":
-        round_func = math.floor
-    else:
-        round_func = round
-    req_rsc_size = flops / expected_slack / FLOPS_PER_CORE
-
-    constr = None
-    if _p.parallel_mode in ["upb","range"]:
-        req_rsc_size = min(round_func(req_rsc_size), _p.core_max)
-        if req_rsc_size==_p.core_max: 
-            constr = "upb"
-    elif _p.parallel_mode in ["lwb", "range"]:
-        if curr_aval_rsc is not None:
-            if _p.core_min > curr_aval_rsc:
-                # no available solution
-                return 0, "N/A"
-        req_rsc_size = max(round_func(req_rsc_size), _p.core_min)
-        if req_rsc_size==_p.core_min:
-            constr = "lwb"
-    elif _p.parallel_mode == "list":
-        # select the nearest one
-        # filter the core_list by the current available resource
-        if curr_aval_rsc is not None:
-            core_list = [x for x in _p.core_list if 0 < x <= curr_aval_rsc] 
-            if len(core_list) == 0:
-                # no available solution
-                return 0, "N/A"
-        else:
-            core_list = _p.core_list
-        req_rsc_size = min(_p.core_list, key=lambda x:abs(x-req_rsc_size))
-        if req_rsc_size==max(_p.core_list):
-            constr = "upb"
-        elif req_rsc_size==min(_p.core_list):
-            constr = "lwb"
-    else:
-        req_rsc_size = max(round_func(req_rsc_size), 1)
-    if curr_aval_rsc is not None:
-        req_rsc_size = min(req_rsc_size, curr_aval_rsc)
-    got_latency = flops / req_rsc_size / FLOPS_PER_CORE
-    return req_rsc_size, got_latency, constr
-
-def EstimCoreNums4Task(task_dict:Dict[str, TaskBase], flops_dict, node, expected_slack, round_mode="round"):
-    if round_mode == "ceil":
-        round_func = math.ceil
-    elif round_mode == "floor":
-        round_func = math.floor
-    else:
-        round_func = round
-    req_rsc_size = flops_dict[node] / expected_slack / FLOPS_PER_CORE
-
-    constr = None
-    _task = task_dict[node]
-    if _task.parallel_mode in ["upb","range"]:
-        req_rsc_size = min(round_func(req_rsc_size), _task.core_max_compile)
-        if req_rsc_size==_task.core_max_compile: 
-            constr = "upb"
-    elif _task.parallel_mode in ["lwb", "range"]:
-        req_rsc_size = max(round_func(req_rsc_size), _task.core_min_compile)
-        if req_rsc_size==_task.core_min_compile:
-            constr = "lwb"
-    elif _task.parallel_mode == "list":
-        # select the nearest one
-        # filter the core_list by the current available resource
-        req_rsc_size = min(_task.core_list_compile, key=lambda x:abs(x-req_rsc_size))
-        if req_rsc_size==max(_task.core_list_compile):
-            constr = "upb"
-        elif req_rsc_size==min(_task.core_list_compile):
-            constr = "lwb"
-    else:
-        req_rsc_size = max(round_func(req_rsc_size), 1)
-    got_latency = elim_nume_error(flops_dict[node] / req_rsc_size / FLOPS_PER_CORE)
-    return req_rsc_size, got_latency, constr
-
 
 def build_score_dict_ref_flops(task_dict:Dict[str, TaskBase], nodes:Any, score_dict):
     for node_n in nodes: 
@@ -298,7 +221,6 @@ def get_chains(task_graph:DiGraph, start_nodes, end_nodes,
         *info["name_idx"]
     ))
     return chains_info
-
 
 
 def init_topo_time_attr(
@@ -518,45 +440,4 @@ def plot_timeline_graph(logical_graph_nx, path=f"plot/jobTask_graph_dbg.pdf"):
         t.set_rotation(60)
     fig.tight_layout()
     plt.savefig(path, format="pdf")
-    plt.close()  
-
-
-def test():
-    import argparse
-    import numpy as np 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--verbose", action="store_true", help="verbose")
-    parser.add_argument("--profiling_filename", type=str, default="profiling/profiling.csv", help="profiling filename") 
-    parser.add_argument("--e2e_latency", type=float, default=0.09, help="e2e latency")
-    # parser.add_argument("--freq", type=float, default=10, help="frequency")
-    parser.add_argument("--exec_t_comp_ratioA", default=0.05, type=float, help="temporal ratio")
-    parser.add_argument("--wsc_slack_ratio", default=0.8, type=float, help="wsc slack ratio")
-    parser.add_argument("--slack_threshold", default=5e-4, type=float, help="slack threshold")
-    parser.add_argument("--aux_scale_factor", default=1, type=int, help="aux scale factor")
-    args = parser.parse_args() 
-
-    from task.task_cfg import task_graph_srcs, task_graph_sinks, creat_logical_graph, task_graph_ops
-    from task.task_cfg import load_taskattrib, gen_taskint_from_cfg
-    taskattr_dict, f_gcd = load_taskattrib(args.profiling_filename, verbose=args.verbose) 
-    hyper_p = 1/f_gcd
-    if args.aux_scale_factor != 1:
-        for node, taskattr in taskattr_dict.items():
-            # scale up the thread scaling factor
-            if taskattr.timing_flag == "realtime":
-                taskattr.thread_scaling_factor *= args.aux_scale_factor
-    logical_graph_nx = creat_logical_graph(task_graph_srcs, task_graph_ops, task_graph_sinks)
-    slack_threshold = args.slack_threshold
-    ert, ddl, rsc_map_w = deduce_cfg2(taskattr_dict, 
-               logical_graph_nx, task_graph_srcs, task_graph_sinks, 0.99,
-               slack_threshold, verbose=True)
-    
-    update_taskattr_dict(ert, ddl, rsc_map_w, taskattr_dict, f_gcd, hyper_p, 
-               logical_graph_nx, verbose=False)
-    glb_n_task_dict = gen_taskint_from_cfg(taskattr_dict, f_gcd)
-
-    for node, taskint in glb_n_task_dict.items():
-        print(node, taskint)
-        print()
-
-if __name__ == "__main__":
-    test()
+    plt.close()

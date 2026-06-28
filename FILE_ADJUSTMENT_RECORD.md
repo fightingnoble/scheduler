@@ -696,3 +696,86 @@ Applied 4 updates to CLAUDE.md:
 4. New "代码清理（legacy-prune）" section: cleanup conventions table (CLEANUP_STATUS/FILE_ADJUSTMENT_RECORD entries, ghost-file trap, AST-over-grep for import *, byte-identical verify cmd, old/unused semantics, regression gate).
 
 Changed files: CLAUDE.md only. No source change. test_pipeline untouched.
+
+## 2026-06-27 B6-FILE-SPLIT — design + packet prepared (no source change yet)
+
+Action type: preflight (analysis + design / no-source-change) — execution pending approval
+
+Reason:
+- User observed some sched/ files mix unrelated purposes (classification hard). Requested physical split.
+- Brainstorming session (superpowers:brainstorming): explored core tension (split vs "分离不是改写" / test_pipeline mergeability). User chose option A (physical split, accepts mergeability cost), variant B (re-export shell) for global_sched & scheduling_table, and iii (no split) for slack_estim.
+
+Design (AST-verified intra-file call graphs):
+- global_sched.py (1057L): repack group & alloc group have ZERO mutual calls → clean split into global_sched_alloc.py (7 fns, Step2) + global_sched_repack.py (2 fns, Step3); original → re-export shell (variant B, explicit re-export, no import *).
+- scheduling_table.py (1080L): event group (7 fns) not called by any class method → split to scheduling_table_event.py; original retains body + appends re-export.
+- slack_estim.py: NOT split (plot_timeline_graph called by deduce_cfg2; coupled, low payoff).
+
+Split rule (extends delete-vs-rewrite): functions move byte-identical; only imports adjusted; new re-export shells contain import-forwarding only (no logic).
+
+Changed files: none in source. Only audit artifacts (this record, CLEANUP_STATUS, packet, move-ledger rows).
+
+Scope kept out:
+- No source split yet. Execution pending user approval of B6-SPLIT-001/002.
+- test_pipeline untouched. Per "不要随意的提交", no auto-commit.
+
+Recovery (if executed and needs undo):
+- git checkout archive/test_pipeline-20260612 -- sched/global_sched.py sched/scheduling_table.py
+- rm sched/global_sched_alloc.py sched/global_sched_repack.py sched/scheduling_table_event.py
+
+### B6-SPLIT-003 addendum (slack_estim) — 2026-06-28
+
+User refined: EstimCoreNums4Process/Task should go to their consumer (sched_fn.py), not a new unused file.
+- AST verified: both fns self-contained (deps math/Dict only; zero dependence on slack_estim main-line).
+- No circular import (slack_estim does not import sched_fn; one-way edge, move removes it).
+- test() deletion: user rationale corrected — test() DID call deduce_cfg2/update_taskattr_dict (runnable smoke), but is obsolete (hardcoded params, no asserts, print-only, 0 external callers, only __main__). Deleted as dead code.
+- plot_timeline_graph kept (deduce_cfg2:466 debug viz; user: 绘图不变).
+Packet updated: B6-SPLIT-003 added; SAFE SUMMARY/response format/gate updated.
+
+## 2026-06-29 B6-FILE-SPLIT — EXECUTED (3 splits, regression gate PASS)
+
+Action type: execution (move-reference / file split by purpose)
+
+Executed changes:
+- B6-SPLIT-001: global_sched.py split → global_sched_alloc.py (Step2, 7 fns, 612L) + global_sched_repack.py (Step3, 2 fns, 279L) + global_sched.py re-export shell (29L). All 9 fns byte-identical (md5-verified).
+  - Bug found & fixed during gate: `default_binpack_cfg = BinPackConfig()` (module-level constant, used as default param in 5 fn signatures) was missed by the move script — added to both alloc + repack. Lesson: move scripts must carry module-level constants, not just import block + functions.
+  - test_mem_planner moved out of shell → root test_mem_planner.py (it's a mapper.mem_planner test, misplaced in global_sched; zero relation to alloc/repack).
+- B6-SPLIT-002: scheduling_table.py split → scheduling_table_event.py (7 event fns, 160L) + scheduling_table.py body retained (966L) with appended re-export. 7 fns byte-identical.
+- B6-SPLIT-003: slack_estim.py — EstimCoreNums4Process + EstimCoreNums4Task relocated to sched_fn.py (sole consumer, self-contained, no circular import). Deleted sched_fn.py:27 import line. slack_estim.test() → root test_deduce_cfg2.py (renamed main(), deduce_cfg2 external test). Cleaned residual `if __name__: test()`. plot_timeline_graph kept (debug viz, deduce_cfg2:466).
+
+Regression gate (gurobi env) — ALL PASS:
+- 10 import probe: global_sched/alloc/repack, scheduling_table/event, slack_estim, sched_fn, approach_sim/setup, main_approach → all OK
+- re-export: global_sched shell (alloc+repack) ✓; scheduling_table event ✓
+- 3× --help (main_approach/motiv/abla): rc=0 PASS
+- 2 external test files syntax OK
+
+Scope kept out:
+- No operation on main working tree (test_pipeline). All in audit worktree.
+- Surviving code byte-identical (pure relocation); only new code: re-export shells + 2 external test files + relocated fns unchanged.
+- Per "不要随意的提交": NOT committed. Awaiting explicit commit instruction.
+
+Recovery (if needs undo):
+- git checkout archive/test_pipeline-20260612 -- sched/global_sched.py sched/scheduling_table.py sched/slack_estim.py sched/sched_fn.py
+- rm sched/global_sched_alloc.py sched/global_sched_repack.py sched/scheduling_table_event.py test_mem_planner.py test_deduce_cfg2.py
+
+## 2026-06-29 commit B6-FILE-SPLIT results to audit branch
+
+Action type: status-maintenance (git checkpoint)
+
+Reason:
+- B6-FILE-SPLIT executed (3 splits, gate PASS) but uncommitted. Securing to audit branch per mandatory record-update rule. Per "不要随意的提交", this commit is user-explicitly authorized.
+
+Changed files (snapshots existing B6 work, no new source change in this action):
+- sched/global_sched.py (shell, 1057→29L), sched/global_sched_alloc.py (new 612L), sched/global_sched_repack.py (new 279L)
+- sched/scheduling_table.py (1080→966L + re-export), sched/scheduling_table_event.py (new 160L)
+- sched/slack_estim.py (561→~445L: EstimCore moved out, test() removed), sched/sched_fn.py (1605→1684L: EstimCore added, import:27 deleted)
+- test_mem_planner.py (new, external mapper test), test_deduce_cfg2.py (new, external deduce_cfg2 test)
+- Audit: REVIEW_PACKET_BATCH_B6-FILE-SPLIT.md, move-ledger.csv (3 rows executed), CLEANUP_STATUS.md, this record.
+
+Scope kept out:
+- test_pipeline untouched (still d5bfda5). All in audit worktree.
+- Not merged into main/master.
+
+Recovery:
+- Undo commit keeping changes: `git switch audit/minimal-from-test_pipeline-20260612 && git reset --soft e0bf71e`
+- Restore original files: `git checkout archive/test_pipeline-20260612 -- sched/global_sched.py sched/scheduling_table.py sched/slack_estim.py sched/sched_fn.py`
+- rm sched/global_sched_alloc.py sched/global_sched_repack.py sched/scheduling_table_event.py test_mem_planner.py test_deduce_cfg2.py

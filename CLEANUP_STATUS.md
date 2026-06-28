@@ -1,6 +1,6 @@
 # Cleanup status
 
-Last updated: 2026-06-27 (B5 committed + 绘图函数总览文档创建; gate PASS; 未 commit)
+Last updated: 2026-06-29 (B6-FILE-SPLIT executed + committed to audit branch; gate PASS)
 
 This is the canonical global status file for the scheduler cleanup work. It supersedes `PHASE1_STATUS_FOR_NEXT_AGENT.md` as the main entry point for future agents.
 
@@ -359,16 +359,18 @@ System `python3` outside this environment is not valid for this repo.
 
 ## Recommended next action
 
-B3-BINPACK-DEAD-MOVE packet **ready, awaiting approval**（11 decisions）。见 `REVIEW_PACKET_BATCH_B3-BINPACK-DEAD-MOVE.md`。
+B6-FILE-SPLIT **EXECUTED** (3 splits, gate PASS)。改动未提交。**不自动 commit**（用户约束），等明确指令。
 
-批准方式建议：
-- `approve all` — 执行全部（5 整文件 + 3 符号 + 1 import + 2 文档）
-- 分组批准：组A（独立整文件 001/003/004/005）+ 绑定组（002+CLEAN-001）+ 组B（符号级 006/007/008）+ 组D（文档）
-- `reject B3-DOC-002` — 若不想动 spec 保护路径
+执行结果：
+- B6-SPLIT-001: global_sched → alloc(612L)+repack(279L)+shell(29L)；test_mem_planner→根目录外部测试
+- B6-SPLIT-002: scheduling_table → event(160L)+主体保留(966L)+re-export
+- B6-SPLIT-003: slack_estim EstimCore→sched_fn；删 import:27；test()→根目录 test_deduce_cfg2.py
+- 回归门：10 import + re-export + 3 --help 全 PASS；byte-identical (md5) 验证
 
-执行后：跑回归门（6 import 探针 + 3 --help），记录 FILE_ADJUSTMENT_RECORD，flip ledger → executed，再 commit。
-
-其他待续：延后 sim-loop 清理（Scheduler 死方法 + sched_fn/state_trans/sched_utils 死独立函数）；Batch A（独立脚本）。
+下一步选项：
+1. **commit B6** 到 audit 分支（secures 3 splits + 5 new files；recovery 在 FILE_ADJUSTMENT_RECORD）。
+2. 继续 sched/ 其他不纯粹文件（如有）或延后 sim-loop 清理。
+3. Batch A（独立脚本）。
 
 Do not start cleanup execution from old `P1-REMOVE-*` or `P1-CACHE-*` decisions.
 
