@@ -1,6 +1,6 @@
 # Cleanup status
 
-Last updated: 2026-06-29 (B6-FILE-SPLIT executed + committed to audit branch; gate PASS)
+Last updated: 2026-07-01 (B7-RUNTIME-LEGACY-SEPARATION + CLAUDE.md committed to audit branch)
 
 This is the canonical global status file for the scheduler cleanup work. It supersedes `PHASE1_STATUS_FOR_NEXT_AGENT.md` as the main entry point for future agents.
 
@@ -359,18 +359,21 @@ System `python3` outside this environment is not valid for this repo.
 
 ## Recommended next action
 
-B6-FILE-SPLIT **EXECUTED** (3 splits, gate PASS)。改动未提交。**不自动 commit**（用户约束），等明确指令。
+**B7-RUNTIME-LEGACY-SEPARATION EXECUTED** (gate PASS)。改动未提交（含上一轮遗留 `M CLAUDE.md`）。**不自动 commit**（用户约束），等明确指令。
 
-执行结果：
-- B6-SPLIT-001: global_sched → alloc(612L)+repack(279L)+shell(29L)；test_mem_planner→根目录外部测试
-- B6-SPLIT-002: scheduling_table → event(160L)+主体保留(966L)+re-export
-- B6-SPLIT-003: slack_estim EstimCore→sched_fn；删 import:27；test()→根目录 test_deduce_cfg2.py
-- 回归门：10 import + re-export + 3 --help 全 PASS；byte-identical (md5) 验证
+B7 执行结果：
+- B7-MOVE: 4 文件 git mv → `sched/runtime_legacy/`（scheduler_agent/sched_fn/state_trans/sched_utils）+ `__init__.py`
+- B7-IMPORT-FIX: 3 处 intra-cluster `import *` 路径 `sched.X` → `sched.runtime_legacy.X`（scheduler_agent:18, sched_fn:27/28；sched_fn:27 尾随空格已修正）
+- B7-SHELL: 原 sched/ 位建 4 个 re-export 桥（`from sched.runtime_legacy.X import *`）
+- 内部符号删除：ZERO（用户：内部不再删）；monitor_agent 未动（活）
+- 回归门：4 桥 import + 活借用符号转发 + 6 import 探针 + 3 --help 全 PASS；runtime_legacy 无循环
+
+关键纠偏（B7 分析期）：Monitor 类**活**（被 create_common_scheduler_elements 实例化）；push_step_new 是**保留路径**（未来修复启用，非死链）；Scheduler 类**活**（repack 当容器）。
 
 下一步选项：
-1. **commit B6** 到 audit 分支（secures 3 splits + 5 new files；recovery 在 FILE_ADJUSTMENT_RECORD）。
-2. 继续 sched/ 其他不纯粹文件（如有）或延后 sim-loop 清理。
-3. Batch A（独立脚本）。
+1. **commit**（B7 + 遗留 CLAUDE.md）到 audit 分支。
+2. Batch A（独立脚本 analyze/run/plot/test）。
+3. B2-DOC-INVENTORY / B2-OPTIONAL-DEPS-DECISION。
 
 Do not start cleanup execution from old `P1-REMOVE-*` or `P1-CACHE-*` decisions.
 

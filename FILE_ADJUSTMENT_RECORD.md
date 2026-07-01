@@ -779,3 +779,51 @@ Recovery:
 - Undo commit keeping changes: `git switch audit/minimal-from-test_pipeline-20260612 && git reset --soft e0bf71e`
 - Restore original files: `git checkout archive/test_pipeline-20260612 -- sched/global_sched.py sched/scheduling_table.py sched/slack_estim.py sched/sched_fn.py`
 - rm sched/global_sched_alloc.py sched/global_sched_repack.py sched/scheduling_table_event.py test_mem_planner.py test_deduce_cfg2.py
+
+## 2026-07-01 B7-RUNTIME-LEGACY-SEPARATION — EXECUTED (gate PASS)
+
+Action type: execution (move-reference + re-export shell, variant B)
+
+Reason:
+- C-class investigation (post-B6) revealed the deprecated runtime-scheduling cluster (scheduler_agent/sched_fn/state_trans/sched_utils) is NOT purely dead: repack's retained path (push_step_new, to be re-enabled) borrows check_miss/check_complete/pendingToReady/data_pipe_read/release_rsc + Scheduler class methods (updateRunningQueue/get_queues/get_buffer/get_state); active repack instantiates Scheduler (container) and Monitor.
+- User decision: respect "类内先不管" (no internal symbol deletion), physically separate the whole cluster to sched/runtime_legacy/ for future reuse. monitor_agent excluded (Monitor + 2 helpers live).
+- Corrected 3 prior misjudgments: Monitor class is LIVE (instantiated by create_common_scheduler_elements); push_step_new is a RETAINED path (future fix), not dead; Scheduler class is LIVE (container).
+
+Executed changes:
+- B7-MOVE: git mv 4 files -> sched/runtime_legacy/ (git rename R, history preserved). New sched/runtime_legacy/__init__.py.
+- B7-IMPORT-FIX: 3 intra-cluster import-* paths updated (scheduler_agent:18, sched_fn:27/28): from sched.X -> from sched.runtime_legacy.X. NOTE: sched_fn:27 had trailing whitespace, caught and fixed. Path-only change (no symbol/logic change).
+- B7-SHELL: 4 re-export shells at original sched/ positions (from sched.runtime_legacy.X import *).
+- Internal symbol deletion: ZERO. monitor_agent: NOT moved.
+
+Regression gate (gurobi) — ALL PASS:
+- 4 shells import OK; symbol forward OK (Scheduler/check_miss/check_complete/data_pipe_read/pendingToReady from shell; Scheduler.__module__ = sched.runtime_legacy.scheduler_agent)
+- import probe: global_sched_alloc/repack/global_sched/approach_sim/approach_setup/main_approach all OK
+- main_approach/motiv_exp_runner/abla_exp_runner --help all rc=0
+- runtime_legacy 4 真身独立可导入 (no circular load)
+
+Scope kept out:
+- No internal symbol deletion (user: 内部不再删).
+- monitor_agent.py untouched (live).
+- test_pipeline untouched. All in audit worktree.
+
+Recovery:
+- git checkout archive/test_pipeline-20260612 -- sched/scheduler_agent.py sched/sched_fn.py sched/state_trans.py sched/sched_utils.py
+- rm -rf sched/runtime_legacy/
+
+## 2026-07-01 commit B7 + CLAUDE.md to audit branch
+
+Action type: status-maintenance (git checkpoint)
+
+Reason:
+- B7-RUNTIME-LEGACY-SEPARATION executed (gate PASS) + prior uncommitted CLAUDE.md (revise-claude-md 3 updates). Securing to audit branch per mandatory rule.
+
+Changed files (this commit snapshots existing work):
+- No new source change. Commits: B7 moves (4 renames -> sched/runtime_legacy/), 4 re-export shells, 3 intra-cluster import fixes, runtime_legacy/__init__.py; plus prior CLAUDE.md updates (global_sched path + 2 lesson rows).
+
+Scope kept out:
+- Did not operate on /home/zhangchg/git_repo/scheduler (test_pipeline). All in audit worktree.
+- Did not merge into main/master. Phase 3 not started.
+
+Recovery:
+- Undo commit keeping changes staged: `git switch audit/minimal-from-test_pipeline-20260612 && git reset --soft <prev>`
+- B7 recovery: `git checkout archive/test_pipeline-20260612 -- sched/scheduler_agent.py sched/sched_fn.py sched/state_trans.py sched/sched_utils.py; rm -rf sched/runtime_legacy/`

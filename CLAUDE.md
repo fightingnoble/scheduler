@@ -19,8 +19,8 @@ conda activate gurobi   # MUST run before any code execution or testing
 | Benchmark setup pipeline | `approach_setup.py:setup_benchmark()` |
 | Bin-packing core (both phases) | `sim_main.py:perform_bin_packing()` — handles Phase 1, repack, backup/fallback |
 | Slack allocation formula | `sched/packing_solver/chain_slack_assign.py:287` — `ideal_cores = ceil(flops_rem/(slack_rem*FLOPS_PER_CORE))` |
-| Bin-packing (Phase 1 split) | `sched/global_sched.py:coleasing_alloc_cluster()` |
-| Bin-packing (Phase 2 repack) | `sched/global_sched.py:push_task_into_bins_new()` |
+| Bin-packing (Phase 1 split) | `sched/global_sched_alloc.py:coleasing_alloc_cluster()` (B6: split from global_sched.py) |
+| Bin-packing (Phase 2 repack) | `sched/global_sched_repack.py:push_task_into_bins_new()` (B6: split from global_sched.py) |
 | Per-task deadline calculation (Step 1) | `sched/slack_estim.py:deduce_cfg2()` |
 | Event-driven simulation | `approach_sim.py:run_simulation()` |
 | Statistics collection | `approach_collector.py:StatisticsCollector` |
@@ -335,6 +335,8 @@ Speed-reference (full per-experiment details below):
 | byte-identical 验证 | `git diff -- <f> \| awk '/^\+[^+]/{i++}/^-[^-]/{d++}'` → 删除操作应为 `i=0`（纯删除，0 插入） |
 | 归档语义 | `old/`=历史版本（有新版本取代）；`unused/`=独立未完成功能。符号级→`*_old.py`/`*_unused.py`。详见 `.claude/skills/legacy-prune/references/cleanup-policy.md` |
 | 回归门 | 每次清理后跑：6 行 import 探针 + `main_approach.py`/`motiv_exp_runner`/`abla_exp_runner` `--help`（gurobi 环境） |
+| 搬迁函数陷阱 | 函数签名默认参数（如 `def f(cfg=default_binpack_cfg)`）在定义时求值，依赖**模块级常量**（夹在 import 块与 def 之间）。搬迁脚本只搬 import+函数会漏常量 → import 探针抓 `NameError`。md5 验搬迁无损，**不证搬迁完整** |
+| `--help` 退出码假阳性 | 不要用 `cmd >/dev/null 2>&1 && echo ✓`（for 循环+变量传播会假阳性）。显式 `"$GP" "$cmd" --help >/tmp/o 2>&1; rc=$?` 判 `rc==0` |
 
 ## Troubleshooting
 
