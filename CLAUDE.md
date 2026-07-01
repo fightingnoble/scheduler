@@ -348,7 +348,7 @@ Speed-reference (full per-experiment details below):
 | Statistics data missing | `forward_hyperperiod()` not called | Simulation main loop — hyperperiod boundary |
 | Repack incomplete (tasks not placed) | Greedy algorithm cannot reproduce ILP solution | `push_task_into_bins_new` — algorithm incompatibility; fallback handles this |
 | Repack falls back to Phase 1 | Expected behavior — `extract_pid2_bin_id` clears scheduling_table | Check log for "Repack failed" message; fallback is intentional |
-| `TypeError: cannot pickle 'PyCapsule'` | Gurobi license expired | Check `gurobi` env license; renew if needed |
+| `TypeError: cannot pickle 'PyCapsule'` / `HostID mismatch (licensed to X, hostid is Y)` | WSL2 eth0 MAC 重生成致 license HostID 不匹配（**非过期**，license 可能仍有效） | 用 `gurobi-wsl-fix` skill 创建 bond0（MAC=license HOSTID，如 `00:15:5d:80:30:e7`）；`~/.zshrc` 只保留手动 `gurobi_fix` 函数，不能自动跑 sudo；若要全自动，需另行批准 systemd service |
 | `KeyError: 'acc_pN'` in simulation | `num_bins` exceeds actual task groups | `coleasing_alloc_cluster()` produces fewer bins; worker has try/except guard |
 | `KeyError: 'miss_mean_count'` | Case 2 nests it in `stats['utilization']`, Case 3 flattens to top-level | `_case2_worker` vs `_case3_worker` data structure difference |
 | Diagnostic `print()` invisible | `run_benchmark_setup_pipeline` uses `redirect_stdout` to log file | Use `sys.stderr.write()` for terminal-visible diagnostics |

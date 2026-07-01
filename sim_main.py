@@ -601,6 +601,43 @@ def perform_bin_packing(args, glb_p_list, num_cores, bin_list, hyper_p,
     # 返回装箱结果（不包含资源约束和 dump）
     return bin_list, max_core_num, glb_p_list, hyper_p, repack_success
 
+def init_sched_components(args, path_params, path_ctx, workload, num_cores, bin_list):
+    """初始化 global_sched 系列方法的公用组件 + 仿真环境，返回执行句柄。
+
+    封装 step 4-5：创建统一接口所需的公用组件（Scheduler/Monitor/msg_dispatcher/
+    a_data_pipe/w_data_pipe）+ 仿真环境，绑定到闭包。调用句柄即执行 perform_bin_packing。
+
+    句柄属性：
+        .sim_step / .num_periods — 供 step 9 打印/绘制使用
+    句柄调用签名：
+        pack(glb_p_list, bin_list, hyper_p, physical_graph_nx, need_repack)
+            -> perform_bin_packing 结果 (bin_list, max_core_num, glb_p_list, hyper_p, repack_success)
+    """
+    # step 4: 调度器元素（global_sched 统一接口的公用组件）
+    sched_elements = create_scheduler_elements_with_config(
+        args, path_params, path_ctx, workload, num_cores, bin_list
+    )
+    _, _, msg_dispatcher, a_data_pipe, w_data_pipe, \
+        scheduler_list, monitor_list, _, sim_step = sched_elements
+    # step 5: 仿真环境
+    num_periods, _, quantumSize, _, event_iter_dict = build_simulation_env(args, workload, sim_step)
+    # path_params 解包（绑定闭包）
+    cfg_para_dict, para_scan_group1, _, path_para_dict, _, _, plot_path_para, _, _ = path_params
+
+    def pack(glb_p_list, bin_list, hyper_p, physical_graph_nx, need_repack):
+        return perform_bin_packing(
+            args, glb_p_list, num_cores, bin_list, hyper_p,
+            sim_step, path_para_dict, para_scan_group1,
+            event_iter_dict, quantumSize, num_periods,
+            cfg_para_dict, physical_graph_nx, need_repack,
+            plot_path_para, path_ctx,
+            scheduler_list, monitor_list, msg_dispatcher, a_data_pipe, w_data_pipe,
+        )
+    pack.sim_step = sim_step
+    pack.num_periods = num_periods
+    return pack
+
+
 def preprocess_args(args):
     """
     预处理 args，包括强制后缀、enforce_wc、参数断言和特殊 case 检查。

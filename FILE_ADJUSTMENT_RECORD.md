@@ -827,3 +827,76 @@ Scope kept out:
 Recovery:
 - Undo commit keeping changes staged: `git switch audit/minimal-from-test_pipeline-20260612 && git reset --soft <prev>`
 - B7 recovery: `git checkout archive/test_pipeline-20260612 -- sched/scheduler_agent.py sched/sched_fn.py sched/state_trans.py sched/sched_utils.py; rm -rf sched/runtime_legacy/`
+
+## 2026-07-01 B8-INIT-SCHED-COMPONENTS — EXECUTED (initial no-regression gate; Gurobi HostID later fixed)
+
+Action type: execution (extract-function refactor)
+
+Reason:
+- B7 diagnosis: approach_setup:36-61 unconditionally creates 5 legacy runtime components + sim env, passed (20 args) to perform_bin_packing. User prior: these are the shared components of the unified global_sched interface (kept intact). Decision: encapsulate step 4-5 init as reusable function returning an execution handle (closure + function attributes, option A).
+
+Executed changes:
+- NEW sim_main.py::init_sched_components(args, path_params, path_ctx, workload, num_cores, bin_list) -> pack handle. Closure binds 15 components/params; pack(glb_p_list, bin_list, hyper_p, physical_graph_nx, need_repack) executes perform_bin_packing; pack.sim_step/pack.num_periods exposed for step 9.
+- EDIT approach_setup.py::run_benchmark_setup_pipeline: step 4-6 collapse to 2 lines (pack = init_sched_components(...); pack(...)). step 8 retains path_params unpack (for path_para_dict/trace_path_para/plot_path_para). step 9 uses pack.sim_step/pack.num_periods. Discarded downstream-unused: task_spec/rsc_list/trace_path/warmup/event_range.
+- EDIT approach_setup.py imports: replaced create_scheduler_elements_with_config/build_simulation_env/perform_bin_packing with init_sched_components.
+- Logic change: NONE (pure extract+recompose; perform_bin_packing receives identical args via closure).
+
+Regression gate (gurobi):
+- import probe: sim_main/approach_setup/approach_sim/main_approach all OK; init_sched_components callable=True ✓
+- 3 --help (main_approach/motiv/abla) all rc=0 ✓
+- Deep run (motiv case1 standard path): initially blocked by pre-existing `TypeError: cannot pickle 'PyCapsule' object`; later traced to WSL Gurobi HostID mismatch, not license expiry.
+- DECISIVE stash compare: B7 (pre-B8) on standard path → SAME PyCapsule error, same rc=1. => B8 introduces NO regression. pack() is pure forwarding; B7/B8 behavior identical at the point gurobi license blocks.
+
+Follow-up: HostID mismatch was fixed with bond0 and the B8 deep gate passed; see the next entry.
+
+Scope kept out: test_pipeline untouched; all in audit worktree.
+
+Recovery: git checkout archive/test_pipeline-20260612 -- approach_setup.py sim_main.py
+
+Verification artifacts left in worktree before cleanup: motiv_exp_results_b8verify/ and temporary /tmp/b8_* files.
+
+## 2026-07-01 B8 pack() end-to-end VERIFIED (gurobi HostID fixed)
+
+Action type: env-fix + verification (no source change)
+
+Reason:
+- B8 deep run was blocked by `GurobiError: HostID mismatch (licensed to 5d8030e7, hostid is 5d8989c0)` — WSL2 eth0 MAC regenerated, license binding broken. Root cause was NOT license expiry (valid till 2027) but HostID mismatch (corrects CLAUDE.md's "PyCapsule=expired" diagnosis to "PyCapsule=HostID mismatch").
+
+Env fix (gurobi-wsl-fix skill):
+- Created bond0 virtual interface, MAC bound to 00:15:5d:80:30:e7 (license HOSTID 5d8030e7), brought UP. (sudo commands run by user via `!` prefix; non-interactive sudo denied.)
+- Verified: `import gurobipy; gp.Model()` OK.
+
+Verification (NO source change to B8):
+- motiv case1 (--num_hp 3 --case1_ratios 0.7) FULL run rc=0: "Benchmark Setup Finished" + "实验完成" + case1_summary.json saved.
+- This exercises the complete pack() chain: init_sched_components → pack closure → perform_bin_packing → coleasing_alloc_cluster → gurobi_split_solver. => pack() closure forwarding CONFIRMED end-to-end.
+
+Conclusion: B8 fully validated. Earlier "no regression via stash-compare" upgraded to "end-to-end PASS".
+
+Scope kept out: no source change this step; bond0 fix is environment-only. Manual `gurobi_fix` is available in `~/.zshrc`, but it is not auto-run because it needs sudo.
+
+Recovery (bond0): the bond0 interface is runtime-only; on WSL full shutdown it may need re-creation. Use manual `gurobi_fix`, or install a systemd service later only after explicit user approval.
+
+## 2026-07-01 B8 status cleanup + commit preparation
+
+Action type: status-maintenance + artifact cleanup + git checkpoint preparation
+
+Reason:
+- User asked to continue after the previous agent ran out of token budget. Remaining tasks were: commit B8, correct the Gurobi/PyCapsule diagnosis, decide persistence handling, and clean `motiv_exp_results_b8verify/`.
+
+Executed changes:
+- Corrected B8 records that still described the blocker as license expiry. The verified root cause is WSL Gurobi HostID mismatch; license validity was not the problem.
+- Updated `CLAUDE.md` to say `~/.zshrc` may keep a manual `gurobi_fix` helper but must not auto-run sudo. Full auto persistence should be a systemd service only after explicit user approval.
+- Updated `CLEANUP_STATUS.md` recommended next action from stale B7-uncommitted text to current B8 verified/commit state.
+- Appended B8 postscript to `REVIEW_PACKET_BATCH_B8-INIT-SCHED-COMPONENTS.md` recording user-authorized commit and the motiv case1 rc=0 verification.
+- Removed untracked validation output directory `motiv_exp_results_b8verify/` from the audit worktree.
+
+Persistence decision:
+- Chosen default: no new systemd service in this cleanup commit. Keep manual `gurobi_fix` only. Rationale: system-level root persistence is outside the audit branch diff and should be explicitly approved before installation.
+
+Scope kept out:
+- Did not touch `/home/zhangchg/git_repo/scheduler`.
+- Did not edit `test_pipeline`.
+- Did not install systemd service or auto-run sudo from `.zshrc`.
+
+Next:
+- Commit B8 to `audit/minimal-from-test_pipeline-20260612`.

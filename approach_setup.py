@@ -1,8 +1,7 @@
 
 from task.task_cfg import export_json_graph_utils
 from sim_main import (build_paths_and_ctx, build_workload_and_criticality,
-                     build_simulation_env, perform_bin_packing, preprocess_args,
-                     create_scheduler_elements_with_config,
+                     init_sched_components, preprocess_args,
                      apply_forced_num_cores, generate_bin_paths, Bin_list_print,
                      render_bin_pack_plots, dump_and_check)
 from global_var import *
@@ -33,31 +32,12 @@ def run_benchmark_setup_pipeline(
             # 3. 根据case类型以及是否强制指定核心数，更新num_cores和bin_list
             # num_cores, bin_list = determine_resource_config(args, path_params, path_ctx, need_repack, bin_list)
 
-            # 4. 使用资源配置创建调度器元素
-            scheduler_elements = create_scheduler_elements_with_config(
-                args, path_params, path_ctx, workload, num_cores, bin_list
-            )
-            task_spec, rsc_list, msg_dispatcher, a_data_pipe, w_data_pipe, \
-                scheduler_list, monitor_list, trace_path, sim_step = scheduler_elements
+            # 4-5. 初始化调度组件（global_sched 统一接口公用组件 + 仿真环境），返回执行句柄
+            pack = init_sched_components(args, path_params, path_ctx, workload, num_cores, bin_list)
 
-            # 5. 构建仿真环境参数
-            num_periods, warmup, quantumSize, event_range, event_iter_dict = build_simulation_env(
-                args, workload, sim_step
-            )
-
-            cfg_para_dict, para_scan_group1, para_scan_group2, path_para_dict, \
-            bin_path_format, trace_path_para, plot_path_para, csv_xlxs_root, case_pth = path_params
-
-            # 6. 执行装箱算法（backup 和 fallback 逻辑已封装在 perform_bin_packing 内部）
-            bin_list, max_core_num, glb_p_list, hyper_p, repack_success = perform_bin_packing(
-                args, glb_p_list, num_cores, bin_list, hyper_p,
-                sim_step, path_para_dict, para_scan_group1,
-                event_iter_dict, quantumSize, num_periods,
-                cfg_para_dict, physical_graph_nx, need_repack,
-                plot_path_para, path_ctx,
-                scheduler_list, monitor_list,
-                msg_dispatcher,
-                a_data_pipe, w_data_pipe,
+            # 6. 执行装箱算法（句柄封装了公用组件；backup/fallback 在 perform_bin_packing 内部）
+            bin_list, max_core_num, glb_p_list, hyper_p, repack_success = pack(
+                glb_p_list, bin_list, hyper_p, physical_graph_nx, need_repack
             )
 
             # 7. 应用资源约束（仅 non-repack 时应用，repack 不改变资源数量）
@@ -67,7 +47,9 @@ def run_benchmark_setup_pipeline(
                 else:
                     num_cores = max_core_num
 
-            # 8. 生成 dump 路径
+            # 8. 生成 dump 路径（解包 path_params 取路径相关成员）
+            cfg_para_dict, para_scan_group1, para_scan_group2, path_para_dict, \
+                bin_path_format, trace_path_para, plot_path_para, csv_xlxs_root, case_pth = path_params
             if need_repack:
                 extra_suffix = f"_ov_{args.exec_t_comp_ratioB:.2f}_repack(T)"
             else:
@@ -80,10 +62,10 @@ def run_benchmark_setup_pipeline(
                 extra_suffix
             )
 
-            # 9. 打印和绘制
-            Bin_list_print(bin_list, glb_p_list, sim_step)
+            # 9. 打印和绘制（sim_step/num_periods 取自执行句柄）
+            Bin_list_print(bin_list, glb_p_list, pack.sim_step)
             if args.plot:
-                render_bin_pack_plots(args, bin_list, glb_p_list, sim_step, hyper_p, num_periods, plot_path_para, path_ctx)
+                render_bin_pack_plots(args, bin_list, glb_p_list, pack.sim_step, hyper_p, pack.num_periods, plot_path_para, path_ctx)
 
             # 10. Dump
             dump_and_check(bin_list_save_path, bin_list)

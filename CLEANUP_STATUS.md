@@ -1,6 +1,6 @@
 # Cleanup status
 
-Last updated: 2026-07-01 (B7-RUNTIME-LEGACY-SEPARATION + CLAUDE.md committed to audit branch)
+Last updated: 2026-07-01 (B8 pack() end-to-end VERIFIED via motiv case1 rc=0 after gurobi HostID fix; committed to audit branch)
 
 This is the canonical global status file for the scheduler cleanup work. It supersedes `PHASE1_STATUS_FOR_NEXT_AGENT.md` as the main entry point for future agents.
 
@@ -37,15 +37,14 @@ Rules still in force:
 
 The B0 source changes, Phase 1 analysis artifacts (`cleanup/`), review packets, and the two global status files were committed to the audit branch on 2026-06-16 (first commit beyond `test_pipeline`; see `FILE_ADJUSTMENT_RECORD.md`).
 
-Current uncommitted audit-worktree changes are B2 inventory/status artifacts only:
+Current audit-worktree state after B8:
 
-- `REVIEW_PACKET_BATCH_B2-RUNTIME-TEST-INVENTORY.md`
-- `cleanup/reports/batch-B2-RUNTIME-TEST-INVENTORY.md`
-- `cleanup/reports/b2-runtime-test-inventory.csv`
-- updated `CLEANUP_STATUS.md`
-- updated `FILE_ADJUSTMENT_RECORD.md`
+- B8 source change: `approach_setup.py` step 4-6 now uses `sim_main.py::init_sched_components(...)` to create the shared global_sched component context and run `perform_bin_packing` through a small pack handle.
+- B8 status docs: `REVIEW_PACKET_BATCH_B8-INIT-SCHED-COMPONENTS.md`, `CLEANUP_STATUS.md`, `FILE_ADJUSTMENT_RECORD.md`, and the Gurobi troubleshooting row in `CLAUDE.md`.
+- B8 validation: import probe + 3 help commands PASS; motiv case1 (`--num_hp 3 --case1_ratios 0.7`) full run rc=0 after fixing WSL Gurobi HostID via bond0.
+- Validation artifacts from `motiv_exp_results_b8verify/` were removed before commit.
 
-No runtime source file was changed by this B2 inventory/report step.
+No changes were made to `/home/zhangchg/git_repo/scheduler` or `test_pipeline`.
 
 Committed B0 source changes (recovery: `git checkout archive/test_pipeline-20260612 -- <path>`):
 
@@ -359,21 +358,18 @@ System `python3` outside this environment is not valid for this repo.
 
 ## Recommended next action
 
-**B7-RUNTIME-LEGACY-SEPARATION EXECUTED** (gate PASS)。改动未提交（含上一轮遗留 `M CLAUDE.md`）。**不自动 commit**（用户约束），等明确指令。
+**B8-INIT-SCHED-COMPONENTS EXECUTED AND VERIFIED**. The B8 commit is the current checkpoint on the audit branch.
 
-B7 执行结果：
-- B7-MOVE: 4 文件 git mv → `sched/runtime_legacy/`（scheduler_agent/sched_fn/state_trans/sched_utils）+ `__init__.py`
-- B7-IMPORT-FIX: 3 处 intra-cluster `import *` 路径 `sched.X` → `sched.runtime_legacy.X`（scheduler_agent:18, sched_fn:27/28；sched_fn:27 尾随空格已修正）
-- B7-SHELL: 原 sched/ 位建 4 个 re-export 桥（`from sched.runtime_legacy.X import *`）
-- 内部符号删除：ZERO（用户：内部不再删）；monitor_agent 未动（活）
-- 回归门：4 桥 import + 活借用符号转发 + 6 import 探针 + 3 --help 全 PASS；runtime_legacy 无循环
+B8 result:
+- `sim_main.py::init_sched_components(...)` encapsulates the shared Scheduler/Monitor/msg_dispatcher/DataPipe + simulation-env setup used by the unified `global_sched` interface.
+- `approach_setup.py::run_benchmark_setup_pipeline(...)` no longer unpacks and forwards those runtime-adjacent components manually; it calls the pack handle.
+- Logic change: none intended. `perform_bin_packing(...)` still receives the same values, just through the closure.
+- Gurobi diagnosis corrected: the PyCapsule failure was from WSL HostID mismatch, not license expiry. `gurobi-wsl-fix`/manual `gurobi_fix` creates bond0 with MAC `00:15:5d:80:30:e7`.
 
-关键纠偏（B7 分析期）：Monitor 类**活**（被 create_common_scheduler_elements 实例化）；push_step_new 是**保留路径**（未来修复启用，非死链）；Scheduler 类**活**（repack 当容器）。
-
-下一步选项：
-1. **commit**（B7 + 遗留 CLAUDE.md）到 audit 分支。
-2. Batch A（独立脚本 analyze/run/plot/test）。
-3. B2-DOC-INVENTORY / B2-OPTIONAL-DEPS-DECISION。
+Recommended next options:
+1. Review B8 commit/diff if desired.
+2. Continue with the next user-approved cleanup batch.
+3. If WSL is fully restarted and Gurobi fails again, run `gurobi_fix` manually or install a systemd service after explicit user approval. Do not auto-run sudo from `.zshrc`.
 
 Do not start cleanup execution from old `P1-REMOVE-*` or `P1-CACHE-*` decisions.
 
