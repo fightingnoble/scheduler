@@ -1,6 +1,6 @@
 # Cleanup status
 
-Last updated: 2026-07-01 (B8 pack() end-to-end VERIFIED via motiv case1 rc=0 after gurobi HostID fix; committed to audit branch)
+Last updated: 2026-09-02 (B9 committed; REQ-002 closed; next: REQ-003 pending user preview)
 
 This is the canonical global status file for the scheduler cleanup work. It supersedes `PHASE1_STATUS_FOR_NEXT_AGENT.md` as the main entry point for future agents.
 
@@ -14,6 +14,29 @@ After every cleanup action, preflight, environment verification, status-maintena
 - `FILE_ADJUSTMENT_RECORD.md`: append a chronological action-history entry. If the action did not change source/tracked files, explicitly record that it was a no-source-change or preflight/status-only action.
 
 Per-batch packets and ledgers are still required when applicable, but they do not replace these two global records.
+
+## Peer-review gate
+
+`AGENT_DIALOGUE.md` is the coordination channel between Codex and the peer reviewer. Only one request may be active. Codex must receive proposal approval before changing the requested code and result acceptance before starting the next request.
+
+Current coordination state:
+
+- Request: `REQ-002` (closed)
+- State: `ACCEPTED`
+- Scope: move `sched/scheduling_table.py` `__main__` demo to `test_scheduling_table.py`
+- Next writer: proposer/implementer (`codex` in the event log, may open the next request)
+- Source changes: implemented and independently verified; not committed
+- Ledger result: `B9-MAINOUT` is one 14-field LF-terminated addition; every non-B9 byte remains identical to HEAD
+
+`E0014` closes REQ-002. The moved demo preserves the reviewed behavior, and the final ledger diff contains no unrelated rewrite. Monitoring remains active because the previously agreed refactor discussion still has further candidates; completing this one request is not the global termination condition.
+
+Background monitoring:
+
+- Hidden local watcher: Windows PID `35404`, following only `AGENT_DIALOGUE.md`.
+- Watch log: `C:\Users\diyuf\.codex\state\scheduler-agent-dialogue\watch.log`.
+- Codex heartbeat: `scheduler-agent`, active every 5 minutes to wake this review task.
+- The shell watcher is runtime-only and may stop after Windows/WSL restart; the heartbeat remains the wake mechanism.
+- Termination: after all collaboration requests are closed and there is no pending or agreed next refactor, stop PID `35404` if present and delete the `scheduler-agent` heartbeat. A single batch completing is not sufficient.
 
 ## Scope
 
@@ -358,6 +381,8 @@ System `python3` outside this environment is not valid for this repo.
 
 ## Recommended next action
 
+**Coordination gate: `REQ-002` is `ACCEPTED` and closed.** The proposer/implementer may open the next request for one of the previously identified low-risk refactor candidates. Every new proposal and its implementation still require reviewer approval; do not combine the higher-risk `global_sched_repack.py` or `pre_alloc_new.py` refactors with routine cleanup.
+
 **B8-INIT-SCHED-COMPONENTS EXECUTED AND VERIFIED**. The B8 commit is the current checkpoint on the audit branch.
 
 B8 result:
@@ -367,14 +392,15 @@ B8 result:
 - Gurobi diagnosis corrected: the PyCapsule failure was from WSL HostID mismatch, not license expiry. `gurobi-wsl-fix`/manual `gurobi_fix` creates bond0 with MAC `00:15:5d:80:30:e7`.
 
 Recommended next options:
-1. Review B8 commit/diff if desired.
-2. Continue with the next user-approved cleanup batch.
+1. Propose the next narrow, behavior-preserving cleanup/refactor request from the earlier candidate list.
+2. Keep higher-risk runtime/repack restructuring in a separate request with targeted equivalence tests.
 3. If WSL is fully restarted and Gurobi fails again, run `gurobi_fix` manually or install a systemd service after explicit user approval. Do not auto-run sudo from `.zshrc`.
 
 Do not start cleanup execution from old `P1-REMOVE-*` or `P1-CACHE-*` decisions.
 
 ## File roles
 
+- `AGENT_DIALOGUE.md`: append-oriented Codex/reviewer handoff log and review gate.
 - `CLEANUP_STATUS.md`: current global status and next-action entry point.
 - `FILE_ADJUSTMENT_RECORD.md`: chronological global action/change history; include recovery commands for actual file changes.
 - `REVIEW_PACKET_BATCH_*.md`: per-batch review details.

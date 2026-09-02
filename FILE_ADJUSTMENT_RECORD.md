@@ -900,3 +900,204 @@ Scope kept out:
 
 Next:
 - Commit B8 to `audit/minimal-from-test_pipeline-20260612`.
+
+## 2026-09-01 REQ-001 双 Agent 协作协议启动
+
+Action type: status-maintenance / collaboration bootstrap
+
+Reason:
+- 用户要求 Codex 与另一个 agent 通过仓库内文件协作。
+- 每个变更需要先交给 reviewer 检查；收到反馈前，不得继续相关修改。
+- 协议需要避免双方同时写入、无限等待和读取旧状态，同时保持简单。
+
+Changed files:
+- 新建 `AGENT_DIALOGUE.md`，定义单文件、单在途请求、追加式事件和 `next_writer` 交接规则。
+- 更新 `CLEANUP_STATUS.md`，登记 peer-review 门禁和 `REQ-001 / WAITING_REVIEW`。
+- 更新本文件，记录这次协议启动。
+
+Scope kept out:
+- 没有修改 Python 源码、测试、依赖、配置或受保护目录。
+- 没有操作 `/home/zhangchg/git_repo/scheduler` 或 `test_pipeline`。
+- 没有开始 B9，没有提交 commit。
+
+Synchronization state:
+- Base HEAD: `f54a146e7de8ddf7ea6934ad2bcb0cf85c98b4d3`。
+- 当前请求：`REQ-001`。
+- 当前状态：`WAITING_REVIEW`。
+- 下一位写入者：reviewer。
+- reviewer 接受前，Codex 只可进行无关的只读分析。
+
+Recovery:
+```bash
+git restore CLEANUP_STATUS.md FILE_ADJUSTMENT_RECORD.md
+rm -- AGENT_DIALOGUE.md
+```
+
+## 2026-09-02 REQ-002 提案审核与后台监控启动
+
+Action type: proposal review / environment monitoring / no-source-change
+
+Actions:
+- 启动隐藏的本地 `tail -F` watcher，仅监控 `AGENT_DIALOGUE.md`；Windows PID 为 `35404`。
+- 创建 Codex heartbeat `scheduler-agent`，每 5 分钟检查一次新事件，用于在任务停止运行后重新唤醒审核流程。
+- 审核 B9 第一个提案：将 `sched/scheduling_table.py` 的 `__main__` 调试块外移到 `test_scheduling_table.py`。
+
+Review result:
+- 外移范围合理，核心类和 event re-export 不应改动。
+- 提案漏掉 `typing.List` import，实施前必须补齐。
+- 旧基线必须通过 `python -m sched.scheduling_table` 运行；直接执行文件当前会因 `model` 导入路径失败。
+- 旧模块四种参数基线：`no constrants`、`upb`、`list` rc=0；`lwb` 现有 rc=1，并在 `aeap_insert` 抛出 broadcast `ValueError`。外移应保持该既有失败，不在本批修复。
+
+Changed repository files:
+- 仅更新 `AGENT_DIALOGUE.md`、`CLEANUP_STATUS.md` 和本记录。
+- 没有修改源码、测试、依赖或受保护目录。
+- 没有操作 `/home/zhangchg/git_repo/scheduler`，没有提交 commit。
+
+Next:
+- 等 proposer/implementer 按 `E0004` 修订并实施，再审核真实 diff 和四种参数的行为对照。
+
+## 2026-09-02 REQ-002 修订提案批准
+
+Action type: proposal review / no-source-change
+
+Review result:
+- 实现者在 `E0006` 补齐 `typing.List`，并把旧行为入口改为 `python -m sched.scheduling_table`。
+- 批准外移 `sched/scheduling_table.py` 的 `__main__` 调试块到根目录 `test_scheduling_table.py`。
+- 实施前保存旧入口四种 case 的输出；实施后比较前三项成功结果，并确认 `lwb` 仍以相同异常类型和算法触发点失败。
+- 不修改核心类、event re-export 或其他符号，不顺手修复 lwb。
+
+Changed repository files:
+- 仅更新协作与全局记录，没有源码或测试改动。
+- 没有操作 `/home/zhangchg/git_repo/scheduler`，没有提交 commit。
+
+Next:
+- 等实现者提交 REQ-002 实际 diff 和等价性结果，再做结果审核。
+
+## 2026-09-02 B9 REQ-002 — scheduling_table __main__ 调试样例外移（gate PASS）
+
+Action type: execution (move-reference, byte-identical)
+
+Reason:
+- 杂糅点整理第 1 项（4 项中风险最低）。REQ-002 经 E0003 提案 → E0004/E0005 补正（补 typing.List import；基线入口改 -m 模块入口；lwb 不修）→ E0007 APPROVED 后实施。
+
+Executed changes:
+- sched/scheduling_table.py: 966 → 852 行（删除 L841 的 if 行 + L842-954 的 113 行调试块；核心类、event re-export 不动）。
+- test_scheduling_table.py（新建，根目录）: docstring 头 + 4 import（List/SchedulingTableInt/TaskInt + main() 内 argparse 原位）+ def main(): 块体（缩进层级不变，语句零改动）+ __main__ 入口。
+
+Validation (gurobi, 旧基线先行保存于 /tmp/b9_baseline):
+- 块体 md5: 28aef54c945c（原文 vs 外移后逐字一致）。
+- 行为对照: no constrants(526 行)/upb(565)/list(580) rc=0 且 stdout 逐字一致; lwb rc=1，ValueError broadcast，失败源头 aeap_insert @ scheduling_table.py L276 新旧一致（调用方帧变为 test 文件，符合 E0007 判据）。
+- import probe: sched.scheduling_table + test_scheduling_table 均可导入。3 个 --help rc=0。
+
+Scope kept out:
+- lwb 既有异常不修（E0005 约束）。核心类/event re-export/其他符号不动。
+- 未 commit（等待用户指令）。test_pipeline 未动。
+
+Recovery:
+- git checkout archive/test_pipeline-20260612 -- sched/scheduling_table.py && rm test_scheduling_table.py
+
+## 2026-09-02 REQ-002 独立结果审核
+
+Action type: result review / no source edit
+
+Independent verification:
+- `sched/scheduling_table.py` 的剩余内容与 HEAD 删除原 `__main__` AST 节点后的预期内容逐字一致。
+- 新 `main()` 函数体与原 if-body 文本、AST 均一致。
+- `no constrants`、`upb`、`list` 三项新 stdout 与保存的旧基线逐字节一致，rc=0。
+- `lwb` 保持 rc=1、同一 broadcast `ValueError` 和 `aeap_insert` 触发点。
+- 两模块 import、`py_compile`、三个入口 `--help` 均 rc=0；`git diff --check` 通过。
+
+Review result:
+- 源码等价性通过，不要求修改源码。
+- `cleanup/move-ledger.csv` 的新增 B9 行为 13 列，而表头为 14 列；`archive_ref` 缺失导致后续字段错位。REQ-002 暂不关闭，只要求修正该行后重提。
+
+Scope kept out:
+- reviewer 没有修改源码、测试或 ledger。
+- 没有操作 `/home/zhangchg/git_repo/scheduler`，没有提交 commit。
+
+## 2026-09-02 REQ-002 审核意见交付重试
+
+Action type: coordination recovery / no source edit
+
+Action:
+- 实现者反馈未观察到 `E0009` 后，在 `AGENT_DIALOGUE.md` 末尾追加 `E0010`，重新发送相同审核结论并制造一次新的文件变动。
+- `REQ-002` 状态仍为 `CHANGES_REQUESTED`；源码等价性已经通过，唯一待办仍是修正 `cleanup/move-ledger.csv` 的 `B9-MAINOUT` 列对齐。
+
+Diagnosis:
+- reviewer 的隐藏 watcher 正常运行，但它只记录文件变化，不能唤醒另一个 agent。
+- 仓库范围内只有一份 `AGENT_DIALOGUE.md`；较可能的原因是实现者在 `E0009` 写入后才开始监听，错过了既有事件。
+
+Scope kept out:
+- 没有修改源码、测试或 ledger。
+- 没有操作 `/home/zhangchg/git_repo/scheduler`，没有提交 commit。
+
+## 2026-09-02 REQ-002 ledger 修正复核
+
+Action type: result review / no source edit
+
+Verified:
+- `B9-MAINOUT` 现在唯一匹配，表头和数据行均为 14 列。
+- `archive_ref`、`recovery_command`、`batch_id`、`approved_by`、`notes` 均符合 `E0009`。
+- 源码未再次变动，不需要重跑行为测试。
+
+Remaining correction:
+- CSV 写回同时重写了既有 B5-B7 行并引入 CRLF，导致 `git diff --check` 在 lines 14-22 失败。
+- `E0012` 只要求恢复所有非 B9 行和 LF 行尾，保留正确 B9 新行；不扩大到源码。
+
+Scope kept out:
+- reviewer 没有修改源码、测试或 ledger。
+- 没有操作 `/home/zhangchg/git_repo/scheduler`，没有提交 commit。
+
+## 2026-09-02 监控终止条件更新
+
+Action type: monitoring policy update / no source edit
+
+Action:
+- 更新 `scheduler-agent` heartbeat：只有全部协作请求完成、没有待审事件且没有约定中的下一项重构时，才停止隐藏文件 watcher 并删除定时监控。
+- 单个批次完成不会提前终止监控。
+
+Scope kept out:
+- 没有修改源码、测试、依赖或 ledger。
+- 没有操作 `/home/zhangchg/git_repo/scheduler`，没有提交 commit。
+
+## 2026-09-02 REQ-002 最终接受
+
+Action type: result acceptance / no source edit
+
+Independent verification:
+- `cleanup/move-ledger.csv` 相对 HEAD 只新增一条 `B9-MAINOUT`，没有删除或改写既有行。
+- 去掉末尾 B9 行后，当前 ledger 与 HEAD 逐字节一致；新增行以 LF 结尾。
+- CSV 结构为表头 14 列、B9 唯一匹配且为 14 列；`archive_ref`、`recovery_command`、`batch_id`、`approved_by`、`notes` 均符合 E0009 的要求。
+- `git diff --check` 通过。源码自 E0009 的独立等价性验证后没有再次改动，因此未重复运行行为测试。
+
+Review result:
+- 在 `AGENT_DIALOGUE.md` 追加 `E0014`，状态为 `ACCEPTED`，关闭 REQ-002。
+- `sched/scheduling_table.py` 的调试入口外移及 B9 ledger 记录均已通过审核；当前改动仍未 commit。
+- 监控继续运行，等待下一个杂糅点提案；单个请求完成不满足全局终止条件。
+
+Scope kept out:
+- reviewer 没有修改源码、测试、依赖或 ledger，只更新协作与全局记录。
+- 没有操作 `/home/zhangchg/git_repo/scheduler`，没有提交 commit。
+
+## 2026-09-02 commit B9 results + AGENT_DIALOGUE protocol to audit branch
+
+Action type: status-maintenance (git checkpoint)
+
+Reason:
+- REQ-002 (B9) closed with reviewer ACCEPTED (E0014). User explicitly instructed commit ("先提交").
+- Secures: scheduling_table.py __main__ externalization (966→852), test_scheduling_table.py (new, behavior-parity verified incl. preserved lwb failure), move-ledger B9-MAINOUT row (14-col, LF, no side-rewrites), AGENT_DIALOGUE.md dual-agent protocol (E0001–E0014).
+
+Changed files (this commit snapshots existing B9 work; no new source change in this action):
+- M sched/scheduling_table.py (-114 lines: __main__ debug block removed)
+- A test_scheduling_table.py (129 lines: externalized debug block, byte-identical statements)
+- M cleanup/move-ledger.csv (+1 line: B9-MAINOUT, 14 cols, LF)
+- A AGENT_DIALOGUE.md (dual-agent protocol + events E0001–E0014, REQ-001/REQ-002 closed)
+- M CLEANUP_STATUS.md / M FILE_ADJUSTMENT_RECORD.md (records)
+
+Scope kept out:
+- No source change in this action itself; test_pipeline untouched (d5bfda5).
+- lwb known failure (aeap_insert ValueError) intentionally preserved, not fixed.
+
+Recovery:
+- Undo commit keeping changes staged: git reset --soft f54a146
+- Restore B9 files: git checkout f54a146 -- sched/scheduling_table.py cleanup/move-ledger.csv && rm test_scheduling_table.py
