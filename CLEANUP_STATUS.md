@@ -1,6 +1,6 @@
 # Cleanup status
 
-Last updated: 2026-09-02 (B9 committed; REQ-002 closed; next: REQ-003 pending user preview)
+Last updated: 2026-09-04 (REQ-005 closed at E0027; user authorized the accepted B10/protocol checkpoint commit, then continuation with sequence item 4)
 
 This is the canonical global status file for the scheduler cleanup work. It supersedes `PHASE1_STATUS_FOR_NEXT_AGENT.md` as the main entry point for future agents.
 
@@ -21,11 +21,13 @@ Per-batch packets and ledgers are still required when applicable, but they do no
 
 Current coordination state:
 
-- Request: `REQ-002` (closed)
-- State: `ACCEPTED`
-- Scope: move `sched/scheduling_table.py` `__main__` demo to `test_scheduling_table.py`
-- Next writer: proposer/implementer (`codex` in the event log, may open the next request)
-- Source changes: implemented and independently verified; not committed
+- Request: `REQ-005` (closed; REQ-004 accepted at E0025, REQ-003 remains cancelled)
+- State: `ACCEPTED` (E0027 review-only verdict: `KEEP_AS_IS`; no item-6 implementation follows)
+- Scope: keep the remaining live `SchedulingTableInt` adjuncts and `slack_estim.py` plotting in place. The approximately 90-line dead subset is only a future candidate and has no execution authorization.
+- Next writer: `codex`; user authorized a checkpoint commit on 2026-09-04, followed by a new review request for sequence item 4.
+- Source changes: none for REQ-005. The checkpoint contains B10 tests/audit data, protocol v1.1, the guard, dialogue archive, and global records; production paths remain unchanged.
+- Protocol v1.1: guard state is `last=E0027`, `next_writer=codex`, and the tail hash matches.
+- Workspace note (2026-09-03): per user instruction, closed events E0001–E0014 (REQ-001 protocol bootstrap, REQ-002 B9) archived verbatim to `AGENT_DIALOGUE_archive.md`; main dialogue keeps protocol body, event numbering continues globally from E0015
 - Ledger result: `B9-MAINOUT` is one 14-field LF-terminated addition; every non-B9 byte remains identical to HEAD
 
 `E0014` closes REQ-002. The moved demo preserves the reviewed behavior, and the final ledger diff contains no unrelated rewrite. Monitoring remains active because the previously agreed refactor discussion still has further candidates; completing this one request is not the global termination condition.
@@ -60,12 +62,31 @@ Rules still in force:
 
 The B0 source changes, Phase 1 analysis artifacts (`cleanup/`), review packets, and the two global status files were committed to the audit branch on 2026-06-16 (first commit beyond `test_pipeline`; see `FILE_ADJUSTMENT_RECORD.md`).
 
-Current audit-worktree state after B8:
+Current audit-worktree state after B10 acceptance and the REQ-005 verdict:
 
 - B8 source change: `approach_setup.py` step 4-6 now uses `sim_main.py::init_sched_components(...)` to create the shared global_sched component context and run `perform_bin_packing` through a small pack handle.
 - B8 status docs: `REVIEW_PACKET_BATCH_B8-INIT-SCHED-COMPONENTS.md`, `CLEANUP_STATUS.md`, `FILE_ADJUSTMENT_RECORD.md`, and the Gurobi troubleshooting row in `CLAUDE.md`.
 - B8 validation: import probe + 3 help commands PASS; motiv case1 (`--num_hp 3 --case1_ratios 0.7`) full run rc=0 after fixing WSL Gurobi HostID via bond0.
 - Validation artifacts from `motiv_exp_results_b8verify/` were removed before commit.
+
+B10 result:
+
+- Added `test_binpack_pipeline_contract.py`: one fast B8 closure/21-argument forwarding contract and two real pipeline characterization cases.
+- Added `cleanup/reports/b10-binpack-behavior-baseline.json`: Split and fixcore-Repack golden hashes, environment/config metadata, packing-call traces, and three readable timing samples per scenario.
+- All 53 packed PIDs contribute `name`, `ert`, and `ddl` to the canonical signature. Split and Repack each matched across two independent worker processes and separate temporary directories.
+- Gurobi preflight created a real model with 11.0.3 and the license at `/home/zhangchg/gurobi1003/gurobi.lic` (expires 2027-03-14).
+- Validation: new pytest `3 passed`; 12-module import probe PASS; all three entry-point `--help` checks PASS; `py_compile`, JSON parse, and production zero-diff checks PASS.
+
+Current refactor-sequence progress:
+
+1. Behavior baseline: COMPLETE and reviewer-accepted (`B10`, E0025).
+2. Binpack initialization context: COMPLETE in `B8`; B10 now protects its forwarding contract.
+3. Narrow `perform_bin_packing`: NOT STARTED; earlier move proposal REQ-003 was cancelled by user.
+4. Separate Repack event/queue advancement from decisions: NOT STARTED.
+5. Split `pre_alloc_new.py` planning from mutation: NOT STARTED.
+6. Scheduling-table adjunct split: CLOSED with `KEEP_AS_IS` (E0027). Event handling and the debug entry were already moved in B6/B9; the remaining live bin helpers and `slack_estim.py` plotting stay in place.
+7. Move `approach_*` into a package with compatibility exports: NOT STARTED.
+8. Historical filenames and naming cleanup: NOT STARTED.
 
 No changes were made to `/home/zhangchg/git_repo/scheduler` or `test_pipeline`.
 
@@ -381,7 +402,9 @@ System `python3` outside this environment is not valid for this repo.
 
 ## Recommended next action
 
-**Coordination gate: `REQ-002` is `ACCEPTED` and closed.** The proposer/implementer may open the next request for one of the previously identified low-risk refactor candidates. Every new proposal and its implementation still require reviewer approval; do not combine the higher-risk `global_sched_repack.py` or `pre_alloc_new.py` refactors with routine cleanup.
+**Coordination gate: `REQ-004` was accepted at E0025 and `REQ-005` closed at E0027 with `KEEP_AS_IS`.** The user authorized committing this accepted checkpoint on 2026-09-04.
+
+**B10-BINPACK-BEHAVIOR-BASELINE IMPLEMENTED AND VERIFIED.** The two golden signatures now cover final task timing, so the Repack case can detect a broken ratioB deadline-window recalculation even when fixcore retains the Phase-1 bin layout.
 
 **B8-INIT-SCHED-COMPONENTS EXECUTED AND VERIFIED**. The B8 commit is the current checkpoint on the audit branch.
 
@@ -391,10 +414,10 @@ B8 result:
 - Logic change: none intended. `perform_bin_packing(...)` still receives the same values, just through the closure.
 - Gurobi diagnosis corrected: the PyCapsule failure was from WSL HostID mismatch, not license expiry. `gurobi-wsl-fix`/manual `gurobi_fix` creates bond0 with MAC `00:15:5d:80:30:e7`.
 
-Recommended next options:
-1. Propose the next narrow, behavior-preserving cleanup/refactor request from the earlier candidate list.
-2. Keep higher-risk runtime/repack restructuring in a separate request with targeted equivalence tests.
-3. If WSL is fully restarted and Gurobi fails again, run `gurobi_fix` manually or install a systemd service after explicit user approval. Do not auto-run sudo from `.zshrc`.
+Next:
+1. Commit the accepted B10/protocol/REQ-005 checkpoint without touching the original worktree.
+2. Skip cancelled sequence item 3 and open a separate review request for item 4: separate Repack event/queue advancement from decision logic.
+3. Use B10 as the regression gate; do not modify item 4 production code before reviewer approval.
 
 Do not start cleanup execution from old `P1-REMOVE-*` or `P1-CACHE-*` decisions.
 

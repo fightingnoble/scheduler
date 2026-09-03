@@ -1,0 +1,134 @@
+{
+  "batch": "B10-BINPACK-BEHAVIOR-BASELINE",
+  "base_head": "b4e055d3dd388658be1455dc3a103ff0843f11a9",
+  "canonicalization": "UTF-8 JSON with sorted keys and separators (comma, colon)",
+  "environment": {
+    "conda_python": "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+    "gurobi_license_expiration": "2027-03-14",
+    "gurobi_version": "11.0.3",
+    "platform": "WSL Ubuntu-20.04"
+  },
+  "fixed_config": {
+    "G_decomp_mode": "full",
+    "exec_t_comp_ratioA": 0.7,
+    "n_p": 2,
+    "num_bins": 2,
+    "profiling_filename": "profiling/profiling_light.csv",
+    "seed": 42
+  },
+  "scenarios": {
+    "repack": {
+      "exec_t_comp_ratioB": 0.5,
+      "packing_calls": [
+        {
+          "bin_count": 2,
+          "max_core_num": 258,
+          "need_repack": false,
+          "repack_success": true
+        },
+        {
+          "bin_count": 2,
+          "max_core_num": 258,
+          "need_repack": true,
+          "repack_success": true
+        }
+      ],
+      "policy": "reserv",
+      "sha256": "2fa6482637aed04afbe19fbdd9dbd8d1b68029bc666dae8340eabe56a0eca462",
+      "summary": {
+        "bin_count": 2,
+        "hyper_period": 0.1,
+        "logical_task_count": 118,
+        "pid_count": 53,
+        "policy": "reserv",
+        "scenario": "repack",
+        "total_resources": 258
+      },
+      "timing_samples": [
+        {
+          "ddl": 0.055533333333,
+          "ert": 0.0,
+          "name": "Traffic_light_detection_0_0",
+          "pid": 0
+        },
+        {
+          "ddl": 0.048814,
+          "ert": 0.0,
+          "name": "ImageBB_0_0",
+          "pid": 3
+        },
+        {
+          "ddl": 0.036464081633,
+          "ert": 0.0,
+          "name": "Stereo_feature_enc_0_0",
+          "pid": 42
+        }
+      ]
+    },
+    "split": {
+      "exec_t_comp_ratioB": -1.0,
+      "packing_calls": [
+        {
+          "bin_count": 2,
+          "max_core_num": 258,
+          "need_repack": false,
+          "repack_success": true
+        }
+      ],
+      "policy": "pglb",
+      "sha256": "d8d21983e1c7305dfe1f3fdeaf210fa8ff05648497ba601fed6a06bb26273e36",
+      "summary": {
+        "bin_count": 2,
+        "hyper_period": 0.1,
+        "logical_task_count": 118,
+        "pid_count": 53,
+        "policy": "pglb",
+        "scenario": "split",
+        "total_resources": 258
+      },
+      "timing_samples": [
+        {
+          "ddl": 0.089999999,
+          "ert": 0.001161885812,
+          "name": "Traffic_light_detection_0_0",
+          "pid": 0
+        },
+        {
+          "ddl": 0.069657422619,
+          "ert": 0.001161885812,
+          "name": "ImageBB_0_0",
+          "pid": 3
+        },
+        {
+          "ddl": 0.058667404209,
+          "ert": 0.001742828218,
+          "name": "Stereo_feature_enc_0_0",
+          "pid": 42
+        }
+      ]
+    }
+  },
+  "signature_fields": [
+    "bin_count",
+    "total_resources",
+    "pid_count",
+    "pids",
+    "bins[].id",
+    "bins[].num_resources",
+    "bins[].time_slots",
+    "bins[].tasks[].pid",
+    "bins[].tasks[].intervals[].start",
+    "bins[].tasks[].intervals[].cores",
+    "bins[].tasks[].intervals[].length",
+    "task_timing[].pid",
+    "task_timing[].name",
+    "task_timing[].ert",
+    "task_timing[].ddl",
+    "hyper_period",
+    "logical_task_count",
+    "pid_to_name",
+    "policy",
+    "scenario",
+    "packing_calls"
+  ]
+}

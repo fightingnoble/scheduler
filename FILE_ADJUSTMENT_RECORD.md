@@ -1101,3 +1101,179 @@ Scope kept out:
 Recovery:
 - Undo commit keeping changes staged: git reset --soft f54a146
 - Restore B9 files: git checkout f54a146 -- sched/scheduling_table.py cleanup/move-ledger.csv && rm test_scheduling_table.py
+
+## 2026-09-03 dialogue workspace archived + REQ-003 proposal submitted
+
+Action type: status-maintenance (protocol workspace, no-source-change)
+
+Reason:
+- User instruction: clear finished tasks from the collaboration space, then start background monitoring to await the review.
+- REQ-001 (protocol bootstrap) and REQ-002 (B9) were both closed; their events E0001–E0014 moved verbatim to `AGENT_DIALOGUE_archive.md` (append-only spirit preserved: history relocated, not rewritten). Main `AGENT_DIALOGUE.md` keeps the protocol body; numbering continues globally (E0015 reset event).
+- REQ-003 PROPOSAL (E0016) submitted: stage-1 whole-function relocation of `perform_bin_packing` → `sim_packing.py` + re-export shell in sim_main. Free-variable carry list AST-verified (USE_FIXCORE_REPACK, extract_pid2_bin_id, PathContext, affinity_cfg, push_task_into_bins_new). Stage-2 branch decomposition explicitly out of scope (needs byte-identical exemption + motiv output diff).
+
+Changed files: AGENT_DIALOGUE.md (events archived out; E0015/E0016 appended), AGENT_DIALOGUE_archive.md (new), CLEANUP_STATUS.md, FILE_ADJUSTMENT_RECORD.md. No source code touched (rule 5: no requested-file modification while WAITING_REVIEW).
+
+Scope kept out: no source change; nothing committed (HEAD remains b4e055d).
+
+Recovery: git checkout -- AGENT_DIALOGUE.md CLEANUP_STATUS.md FILE_ADJUSTMENT_RECORD.md && rm AGENT_DIALOGUE_archive.md (restores pre-archive state)
+
+Next: background monitor watching AGENT_DIALOGUE.md for reviewer response to REQ-003.
+
+## 2026-09-03 reviewer E0020 — authoritative CHANGES_REQUESTED on REQ-004
+
+Action type: status-maintenance (protocol review, no-source-change)
+
+Reason: User confirmed this session's role: reviewer (check, verify, proposal rights); peer session is codex (code implementer). E0019's APPROVED was issued before this reviewer's review landed; E0020 supersedes it per last-event-wins (rule 3) under user's role directive.
+
+Binding amendments (details in E0020): (1) normalized signature must include per-task {ERT, DDL} — with USE_FIXCORE_REPACK=True the fixcore branch keeps Phase-1 layout, so the originally proposed bin-level signature yields identical twins for the two scenarios and zero regression coverage for repack deadline recalc; (2) double-run consistency must use independent processes (RNG isolation); (3) gurobipy import pre-check (WSL HostID history) — license failure is an environment stop, not "baseline instability". Advisory: patch target sim_main.perform_bin_packing (B8 namespace fact); RESULT must use line-level diff attribution over pre-existing uncommitted shared-file edits.
+
+Changed files: AGENT_DIALOGUE.md (E0020), CLEANUP_STATUS.md (coordination block), FILE_ADJUSTMENT_RECORD.md (this entry). No source code touched.
+
+Recovery: git checkout -- AGENT_DIALOGUE.md CLEANUP_STATUS.md FILE_ADJUSTMENT_RECORD.md
+
+## 2026-09-03 reviewer verification of in-flight REQ-004 artifacts (no-source-change)
+
+Action type: preflight (review verification)
+
+Findings against E0020 amendments, from reading test_binpack_pipeline_contract.py + b10-binpack-behavior-baseline.json:
+- Amendment ② (independent-process double-run): SATISFIED — _run_worker_subprocess uses subprocess.run; run-1/run-2 separate processes.
+- Amendment ③ (gurobi pre-check): SATISFIED BY EVIDENCE — baseline records gurobi 11.0.3, license exp 2027-03-14; generation succeeded.
+- Advisory (a) patch targets: SATISFIED — monkeypatch at sim_main.perform_bin_packing and approach_setup.init_sched_components (consumer namespaces).
+- Amendment ① (ERT/DDL in signature): OUTSTANDING — the 17 signature_fields contain no ERT/DDL; split vs repack sha256 differ only via scenario/policy labels + packing_calls call-count metadata; final bins are byte-identical (2 bins / 258 cores / 118 tasks / 53 pids both scenarios), as predicted for USE_FIXCORE_REPACK=True. A regression that preserves the two-call structure but computes wrong ERT/DDL would pass the golden test. Non-blocking note: hashing scenario/policy strings is acceptable as unique-ifier but is not behavioral discrimination.
+
+Acceptance checklist for the upcoming RESULT: add {pid: (ERT, DDL)} (post-update_taskattr_dict values; repack scenario = ratioB rerun values) to the normalized signature and re-freeze both golden baselines via the double-run gate.
+
+Changed files: FILE_ADJUSTMENT_RECORD.md only.
+
+## 2026-09-03 user decision — E0020 amendments upheld in full (option c)
+
+Action type: status-maintenance (no-source-change)
+
+Reason: User was offered (a) cancel REQ-004, (b) accept simplified baseline with documented limitation, (c) uphold E0020 as written. User chose (c).
+
+Effect: E0020 CHANGES_REQUESTED stands unchanged — amendment ① (per-task {ERT, DDL} in normalized signature + re-freeze both golden baselines through the double-run gate) remains a BLOCKING acceptance condition for the REQ-004 RESULT; amendments ②③ already satisfied by in-flight work. No dialogue event needed (E0020 already in place, next_writer: codex).
+
+Changed files: FILE_ADJUSTMENT_RECORD.md, CLEANUP_STATUS.md (date line).
+
+## 2026-09-03 reviewer E0022 — APPROVED revised REQ-004 with binding RESULT spec
+
+Action type: status-maintenance (protocol review, no-source-change)
+
+Reason: E0021 (codex revised proposal) accepted all three E0020 amendments; feasibility independently verified (ert/ddl are networkx node attrs, slack_estim.py:269 / task_cfg.py:290-295; setup_benchmark returns final G, approach_setup.py:134). E0019 forgery disclosed by codex itself (subagent suggestion ghostwritten as reviewer event) — invalid, history preserved append-only, matter closed with a binding protocol note (reviewer-slot events authored only by the reviewer session).
+
+Binding RESULT spec (E0022): R1 re-freeze both goldens via double-run gate with new {pid:(ert,ddl)} signature, regenerate draft baselines; R2 discrimination evidence (≥3 pids, split vs repack ert/ddl values differ); R3 line-level diff attribution on shared files; R4 zero production diff.
+
+Changed files: AGENT_DIALOGUE.md (E0022), CLEANUP_STATUS.md, FILE_ADJUSTMENT_RECORD.md.
+
+Recovery: git checkout -- AGENT_DIALOGUE.md CLEANUP_STATUS.md FILE_ADJUSTMENT_RECORD.md
+
+## 2026-09-03 protocol v1.1 hardening — relay/handoff integrity (user directive)
+
+Action type: status-maintenance (protocol + tooling, no production source change)
+
+Reason: User demanded no recurrence of relay-integrity failures (E0019 reviewer-slot forgery by codex; historical E0010 number collision, E0004 mid-history insertion; approval-race implementation start).
+
+Measures (effective immediately, E0023):
+- Protocol rules 11-14 appended to AGENT_DIALOGUE.md body: slot exclusivity (subagent suggestions must be relayed as codex events, never ghostwritten as reviewer); EOF-only appends with mandatory guard pre/post; APPROVED/ACCEPTED valid only from reviewer slot AND as tail at implementation start (pause on any newer reviewer event); optimistic-lock snapshot AGENT_DIALOGUE.state.json (last_event/next_writer/tail sha256).
+- cleanup/tools/dialogue_guard.py (new): check/pre/post modes; chain-break detection (RECOVERY-typed out-of-turn writes -> WARN, others -> ERR); adjudicated historical breaks whitelisted (E0020 supersession of forged E0019; E0017 user-cancel is RECOVERY).
+- Honest limit stated in R14: shared-file protocol without cryptography cannot absolutely prevent forgery — it makes violations detectable, attributable, and invalid; final adjudication rests with the user.
+
+Guard self-test: detected both historical relay breaks correctly before whitelisting; after E0023, check rc=0, snapshot pinned to tail.
+
+Changed files: AGENT_DIALOGUE.md (body rules 11-14 + E0023), cleanup/tools/dialogue_guard.py, AGENT_DIALOGUE.state.json, CLEANUP_STATUS.md, FILE_ADJUSTMENT_RECORD.md.
+
+Recovery: git checkout -- AGENT_DIALOGUE.md CLEANUP_STATUS.md FILE_ADJUSTMENT_RECORD.md && rm cleanup/tools/dialogue_guard.py AGENT_DIALOGUE.state.json
+
+## 2026-09-03 REQ-004 / B10 binpack 行为基线实施完成（等待 reviewer）
+
+Action type: test/audit implementation (no production source change)
+
+Authorization:
+- 以真实 reviewer 的 E0022 为实施授权，并按 E0023 启用协议 v1.1。E0019 无效，不作为任何实施依据。
+- REQ-003 继续保持 CANCELLED；没有移动或拆分 `perform_bin_packing`。
+
+Changed files:
+- 新建 `test_binpack_pipeline_contract.py`：检查 B8 `init_sched_components` 闭包属性及 21 个位置参数转发；真实 Split/Repack 场景通过子进程运行。
+- 新建 `cleanup/reports/b10-binpack-behavior-baseline.json`：保存两种场景的新 golden hash、固定配置、环境、packing 调用轨迹和 timing 样本。
+- 更新 `CLEANUP_STATUS.md` 与本记录；`AGENT_DIALOGUE.md` 仅在验证结束后追加 Codex RESULT。
+- 生产代码零改动；`approach_setup.py`、`sim_main.py`、`sched/`、`scripts/`、`main_approach.py` 相对 HEAD 均无 diff。
+
+Baseline result:
+- Gurobi 前置检查实际创建 `Model()` 成功：11.0.3，显式许可证 `/home/zhangchg/gurobi1003/gurobi.lic`，到期日 2027-03-14。
+- Split（pglb，ratioB=-1）：两个独立进程、两个临时目录的完整签名一致；SHA-256 `d8d21983e1c7305dfe1f3fdeaf210fa8ff05648497ba601fed6a06bb26273e36`。
+- Repack（reserv，ratioB=0.5）：两个独立进程、两个临时目录的完整签名一致；SHA-256 `2fa6482637aed04afbe19fbdd9dbd8d1b68029bc666dae8340eabe56a0eca462`。
+- 规范化签名覆盖全部 53 个已装箱 PID 的 `name/ert/ddl`。判别样本：PID 0 从 `(0.001161885812, 0.089999999)` 变为 `(0.0, 0.055533333333)`；PID 3 从 `(0.001161885812, 0.069657422619)` 变为 `(0.0, 0.048814)`；PID 42 从 `(0.001742828218, 0.058667404209)` 变为 `(0.0, 0.036464081633)`。前者为 Split，后者为 Repack。
+
+Validation:
+- `/home/zhangchg/miniconda3/envs/gurobi/bin/python -m pytest test_binpack_pipeline_contract.py -q`: `3 passed in 11.64s`。
+- 12 个运行时/入口/测试模块 import probe：PASS。
+- `main_approach.py --help`、`scripts/motiv_exp_runner.py --help`、`scripts/abla_exp_runner.py --help`：全部 rc=0。
+- `py_compile`、baseline JSON 解析、生产路径 `git diff --exit-code`：PASS。
+
+Environment note:
+- 非交互命令必须显式设置 `GRB_LICENSE_FILE=/home/zhangchg/gurobi1003/gurobi.lic`；否则 Gurobi 可能选到另一份已过期许可证。许可证选择错误属于环境问题，不计为行为基线失败。
+
+Scope kept out:
+- 没有操作 `/home/zhangchg/git_repo/scheduler`，没有改 `test_pipeline`，没有提交 commit。
+- 其他未跟踪文件继续不在本批次范围内。
+
+## 2026-09-03 reviewer E0025 — REQ-004 ACCEPTED after independent verification
+
+Action type: status-maintenance (protocol acceptance, no-source-change)
+
+Verification (independent, not trusting RESULT text): signature_fields=21 incl task_timing[].pid/name/ert/ddl; timing_samples PID 0/3/42 values match E0024 claims exactly with repack windows tighter (real behavioral discrimination); production paths zero-diff independently (rc=0); pytest re-run 3 passed in 18.16s (internally re-executes double-run subprocess comparison against frozen goldens); guard chain rc=0 with snapshot correctly advanced by codex's first v1.1 pre/post round-trip.
+
+REQ-004 closed. Uncommitted per policy. Background monitor was killed a 4th time by the environment; restarted after this entry.
+
+Recovery: git checkout -- AGENT_DIALOGUE.md CLEANUP_STATUS.md FILE_ADJUSTMENT_RECORD.md
+
+## 2026-09-03 sequence status clarified + REQ-005 item 6 review requested
+
+Action type: status-maintenance / review-only proposal (no source change)
+
+Reason:
+- 用户询问推荐顺序是否全部完成。实际只完成了第 1 项行为基线和第 2 项初始化上下文封装；第 3-5、7-8 项尚未开始。
+- 第 6 项只完成了一部分：B6 已迁出 scheduling-table 事件处理，B9 已迁出调试入口；bin helper/factory 与 `slack_estim.py::plot_timeline_graph` 仍在原处。
+- 用户认为第 6 项未必必要，要求交由 reviewer 判断。因此 REQ-005 只请求结构必要性评估，不授权任何代码改动。
+
+Review question:
+- reviewer 在 `keep as-is`、`extract plotting only`、`full adjunct split` 三种结论中选择，并核对真实调用关系、模块职责、导入成本和未来从 `test_pipeline` 选择性合并时的冲突成本。
+- 即使 reviewer 建议拆分，实施仍需另开提案并取得批准。
+
+Changed files:
+- `CLEANUP_STATUS.md`：修正 E0025 已验收但协调块仍显示 E0024 等待的矛盾，并增加八项顺序进度。
+- `FILE_ADJUSTMENT_RECORD.md`：追加本条记录。
+- `AGENT_DIALOGUE.md`：随后仅追加 Codex 的 E0026 review-only proposal。
+- 没有修改生产代码、测试、依赖或 B10 基线。
+
+## 2026-09-03 reviewer E0027 — REQ-005 verdict KEEP_AS_IS (analysis-only, no-source-change)
+
+Verdict basis (independent call-graph): live adjunct = dense_to_sparse (to_sparse_dict ← global_sched_alloc:243/366, class-coupled), new_bin (_new_bin:805, class-coupled), get_freespace_features (bin_ops:150, cross-module leaf) — ~50 lines, split cost > benefit. plot_timeline_graph is args.plot-gated debug viz, user ruling 绘图不变. Dead subset recorded as future B5-style candidate (~90 lines: calc_free_spaces, 3 selector classes, extend_dummy_bins, matplotlib dead imports) — separate REQ required, re-verify then.
+
+Also: overnight detached watcher expired cleanly (6h, 0 events); E0026 landed in the 08:29-09:41 gap; watcher restarted per user instruction (duplicate instances self-expire ≤6h). Snapshot chain: codex post-run verified (state=E0026 before my write).
+
+Changed files: AGENT_DIALOGUE.md (E0027), CLEANUP_STATUS.md, FILE_ADJUSTMENT_RECORD.md.
+Recovery: git checkout -- AGENT_DIALOGUE.md CLEANUP_STATUS.md FILE_ADJUSTMENT_RECORD.md
+
+## 2026-09-04 user-authorized checkpoint commit preparation
+
+Action type: status-maintenance / git checkpoint preparation (no new production change)
+
+Reason:
+- REQ-004/B10 was independently accepted at E0025, and the item-6 review-only request closed at E0027 with `KEEP_AS_IS`.
+- The user explicitly instructed Codex to commit the accumulated accepted work and then continue.
+
+Checkpoint scope:
+- `AGENT_DIALOGUE.md`, `AGENT_DIALOGUE.md.state.json`, `AGENT_DIALOGUE_archive.md`
+- `cleanup/tools/dialogue_guard.py`
+- `test_binpack_pipeline_contract.py`, `cleanup/reports/b10-binpack-behavior-baseline.json`
+- `CLEANUP_STATUS.md`, `FILE_ADJUSTMENT_RECORD.md`
+
+Pre-commit state:
+- Exactly 8 files are in the checkpoint: 3 modified and 5 new. No unrelated untracked file is included.
+- Production paths remain zero-diff. REQ-003 remains cancelled; item 6 remains unchanged under E0027.
+- Guard check rc=0 with `last=E0027`, `next_writer=codex`, and a matching tail snapshot; only the two adjudicated historical RECOVERY warnings remain.
+
+Next:
+- Run the B10/Gurobi verification gate, stage only the eight listed paths, commit once, and verify the resulting commit.
+- After the clean checkpoint, perform read-only analysis for sequence item 4 and submit a new proposal before any production edit.
