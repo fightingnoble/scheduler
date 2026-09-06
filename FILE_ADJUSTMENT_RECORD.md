@@ -2813,3 +2813,38 @@ Recovery: 暂存本身未改变工作区文件；需要取消暂存时可用git 
 完整暂存diff --check为rc2，共465条空白提示；461条trailing-whitespace逐行与a1d933b相应源文件核对一致，另外4条是3份原样approach文件和已验收sim_main的EOF空行。没有新增未归因空白，不为消除提示改写源码；详细计数写入快照清单。真实源码仍与已验收177代码快照相同。
 
 本动作只补最终暂存证据与双记录，接下来执行用户授权的commit。恢复检查仅只读，没有执行回退。后续记录提交将只改变两份全局文件，不改变本源码快照。
+
+
+## 2026-09-06 | Codex | 已提交Audit源码快照 ea46783
+
+用户授权的commit已经成功：
+
+- Commit：`ea46783b5892b80c135e1e59180971a1475797c8`，`audit: checkpoint accepted B11-B25 cleanup work`。
+- Parent：`a1d933b1f26efd4d569eb3d8ffb313447294443b`；tree：`b0dfe197c98cb069f2edec9f9a0da7dbf59db5ec`。
+- 分支：`audit/minimal-from-test_pipeline-20260612`。13已验收源码批次B11-B21/B23/B24与B22/B25只读报告、测试、归档、恢复材料和协作记录已快照。未重写此前提交，未操作原worktree、test_pipeline或master，未push。
+- 精确97路径已入commit；rename视图为95项。commit tree与写前git write-tree一致。源码快照完成时`git status --short --untracked-files=no`为空，index/工作区tracked无遗留差异；其他untracked没有枚举或纳入。
+- 本次15模块回归330=325passed+原5collector失败，0error/skip；177代码SHA与验收一致。原有空白保留，检查明细在快照清单；本次临时禁用共享hooks，明确测试已实际运行，不称为全绿发布。
+
+本动作将真实hash与恢复方式写入CLEANUP_STATUS.md和本文件。随后只对这两份记录执行单独commit，避免“提交之后又留下未提交状态文件”。记录提交自身hash通过git日志定位，不反复改写文件追逐自身hash。历史审批和旧批次当时的未提交状态保留，当前提交事实以本条与状态页Latest Git Snapshot为准。
+
+### 恢复命令（本次没有执行）
+
+以下命令均从audit worktree运行；不使用reset --hard，也不覆盖原始worktree。
+
+```bash
+# 先查看这次快照和所含路径
+ git show --stat ea46783b5892b80c135e1e59180971a1475797c8
+ git diff --name-status ea46783b5892b80c135e1e59180971a1475797c8^ ea46783b5892b80c135e1e59180971a1475797c8
+
+# 要查看或运行该快照，优先在获准的新目录建独立恢复worktree。
+# 目标目录必须不存在；不要把路径替换成已有audit或原始scheduler目录。
+ git worktree add --detach /home/zhangchg/git_repo/scheduler-recovery-ea46783 ea46783b5892b80c135e1e59180971a1475797c8
+
+# 若决定撤销整个累计快照，先另存后续工作并明确批准；此命令创建反向提交。
+# 若与后续双记录提交冲突，停止并审查，不强制覆盖。
+ git revert ea46783b5892b80c135e1e59180971a1475797c8
+```
+
+只撤一批时，不直接revert整个累计快照。使用该批JSON的validation.recovery限定patch，先解码验SHA、reverse--check，再由用户/独立reviewer确认；本次没有重构历史去伪造逐批commit。恢复点是提交前a1d933b与本次完整快照ea46783，各批原字节和补丁仍可追溯。
+
+持续目标当前暂停。本次用户请求的恢复快照已完成；下一源码动作需重新核HEAD与reviewer状态，不用旧a1d933b冒充当前HEAD。

@@ -1,10 +1,20 @@
 # Cleanup status
 
-Last updated: 2026-09-06 (B25 independently accepted E0102; user-authorized audit snapshot commit being prepared)
+Last updated: 2026-09-06 (audit snapshot ea46783 committed; final global-record commit)
 
 This is the canonical global status file for the scheduler cleanup work. It supersedes `PHASE1_STATUS_FOR_NEXT_AGENT.md` as the main entry point for future agents.
 
 Use this file to understand the current cleanup state, approved decisions, executed batches, protected areas, and next actions. Use `FILE_ADJUSTMENT_RECORD.md` for the global action/change history.
+
+## Latest Git Snapshot
+
+- 源码快照：`ea46783b5892b80c135e1e59180971a1475797c8`，父提交 `a1d933b1f26efd4d569eb3d8ffb313447294443b`。
+- 分支：`audit/minimal-from-test_pipeline-20260612`；主线 `master` 和原始 `test_pipeline` worktree未操作。
+- 范围：13个已独立验收源码批次B11-B21、B23、B24；B22/B25分析、获批测试、归档及恢复材料。精确97路径，见 `cleanup/reports/snapshot-b11-b25-20260906.json`。
+- 验证：本次15模块330项，325通过，原5个collector失败不变，0error/skip。177代码哈希与验收状态一致。不是全仓测试全绿。
+- 当前动作：源码快照已完成。本节与历史条目随后单独提交，只含两份全局记录；该记录提交可用 `git log -1 --format='%H %s' -- CLEANUP_STATUS.md FILE_ADJUSTMENT_RECORD.md` 定位，无需在文件内自引用其hash。
+- 历史口径：下方旧批次的“未提交”“无commit授权”是当时状态；本次用户明确授权并完成上述快照，旧审查证据不回写。
+- 下一步：当前持续目标暂停，本轮不继续源码清理；下一批开始前重新读取实际HEAD、协议末尾和本节，不沿用a1d933b作为新的执行基线。
 
 ## Mandatory update rule
 
@@ -39,7 +49,7 @@ Current coordination state:
 - Erratum: NUL分隔git ls-files恰16份shell，全部存在；此前两个假失败来自reviewer把含空格的run/aba_scalability_scan copy.sh拆开，不是索引缺失。reviewer已补正历史说明，E0102原文不回写；不改index。
 - Safety: 本轮未运行训练、实验、交互绘图、清理主体或pytest，未安装依赖。run/clean.sh及共享/tmp/fd1旧脚本保持未执行。六个旧目标仅记录不在tracked/approved清单，不检查untracked。
 - Followup: 等待期间完整只读fit.py、throughput_cnt.py、scripts/test_alloc_lat.py。前两者待引用/行为审查；后者是保护测试，L2把原始worktree加入sys.path，因此不执行、不改写。此三项不扩展E0102源码授权。
-- Snapshot: 用户明确授权当前audit快照；提交前清单已闭合为97路径（27既有改动、36批准新增代码、33批准审计材料及1快照清单），详见cleanup/reports/snapshot-b11-b25-20260906.json。本次gurobi回归330=325通过+相同5个collector失败，0error/skip。177代码哈希不变；B25六日志严格后缀断言全通过。精确97路径已完整暂存（Git合并两对rename后显示95个变更项），每份blob与工作区一致；两old目标已限定git add -f，忽略规则不变。465条暂存空白提示中461条逐行确认来自原源码，另外4条是已验收EOF空行；不重格式化。准备创建快照，真实hash随后登记；不push、不碰原worktree。
+- Snapshot: 已提交 `ea46783b5892b80c135e1e59180971a1475797c8`（`audit: checkpoint accepted B11-B25 cleanup work`），父提交a1d933b1f26efd4d569eb3d8ffb313447294443b。13个源码批次B11-B21/B23/B24、B22/B25分析及相关审计/测试/归档均已纳入，97精确路径；不再有这些批次的未提交源码。177代码与验收SHA一致，15模块回归325通过+同5个collector失败。两old归档已纳入，未收其他untracked、未push、未操作原worktree。当前只补双全局记录并形成单独记录提交。
 - Next/protocol: 末尾E0102、next_writer=codex，11983会话保持。全仓语义审查未完成，持续目标当前暂停；本轮只按用户要求建立快照，不开新源码批次、不重开REQ003/005/006/007。
 
 B24 已关闭记录（以下不是当前在途请求）：
