@@ -1,0 +1,473 @@
+{
+  "batch_id": "B13-UNUSED-HDF5-UTILS",
+  "request": "REQ-010",
+  "approval": "reviewer E0043 D1-D6",
+  "base_head": "a1d933b1f26efd4d569eb3d8ffb313447294443b",
+  "source_sha256": "94c6ac9d52a1a3506fae0ab9a68629cbcd3a5c817f67103431ca7ac7de0c4790",
+  "removed_cluster": "# 定义分块大小\nCHUNK_SIZE = 25\ndef get_next_chunk_id(f):\n    try:\n        chunk_ids = [int(name.split('_')[1]) for name in f.keys()]\n        if chunk_ids:\n            return max(chunk_ids) + 1\n        else:\n            return 0\n    except (OSError, KeyError):\n        return 0\n\ndef save_chunk(file_name, data: list, force:bool=False):\n    check_parents_path(file_name)\n    if len(data) < CHUNK_SIZE and not force:\n        return\n    if len(data) > 0:\n        with h5py.File(file_name, 'a') as f:\n            chunk_id = get_next_chunk_id(f)\n            dataset_name = f'chunk_{chunk_id}'\n            data_as_json = np.array([json.dumps(item) for item in data], dtype=h5py.special_dtype(vlen=str))\n            f.create_dataset(dataset_name, data=data_as_json, compression=\"gzip\")\n        data.clear()\n    if force:\n        try:\n            load_h5_file(file_name)\n            print(f\"{file_name} saved and loaded successfully\")\n        except:\n            print(f\"{file_name} bad\")\n            exit()\n\ndef load_h5_file(file_name):\n    data = []\n    with h5py.File(file_name, 'r') as f:\n        for name in f.keys():\n            # 只有使用 [:]，你才能获得 h5py.Dataset 对象中的实际数据内容\n            data_as_json = f[name][:]\n            dataset = [json.loads(item) for item in data_as_json]\n            data.extend(dataset)\n    return data\n",
+  "removed_cluster_sha256": "643f7a3ce5365f7f8b536529768c710748e136c306c6f95fa7aa8a5673ab6347",
+  "removed_import": "import h5py\n",
+  "expected_remaining_sha256": "14bcb37deccafb0b390ed8cb724eba4b0f167dee1aaa4e4d4c97b68168542965",
+  "source_line_count": 459,
+  "cluster_line_count": 40,
+  "non_b13_source_sha256": {
+    "__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "analyze/UE_extract.py": "647236fe7503c80740cca43e08858ccbe436a18ac4ed7d2bc54ad0b9b5d46cad",
+    "analyze/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "analyze/analyze_ctx_switch.py": "d7856b1f2ccb2fbf3652f00ee5552bfb570836953060f2dbfa1265554a67038d",
+    "analyze/analyze_timing.py": "45b94574b8ee2c7014e3ad5814b5348df28691dcaee124c5a7e15102f044ce8c",
+    "analyze/analyze_tp.py": "cd54307337eb3d37408e50b15b31fb7266b90a3c7addba3c5c3e707b400a3d38",
+    "analyze/pattern.py": "75c5a0ca22d710f7b301be118d820a0d3ca833176abd8777d43c104eaf119a46",
+    "analyze/stat_num_exec.py": "d830debb487d25b50f79384b2580e5d52a853e61e7fd3c2c01651e106b71cafe",
+    "analyze/xlsl_e2e_lat_abla.py": "2803dd27f7c4031af44116eae11439e2e80abb5823ef0255285669dadf6ef826",
+    "analyze/xlsl_e2e_latency.py": "db352b4685c6fa76f3c8c5e5940c469af14b1db6297e6df29135e0beae1c0f60",
+    "analyze/xlsl_max_tp.py": "1468390c1e293780e32b81e649cd501542e9d0d1d9b88b37018c7e1ad8f11201",
+    "analyze/xlsl_min_core.py": "90d91b24da0e3015783044713c84a7abd72b70ba82edd8c56f2415719c614f8d",
+    "analyze/xlsl_safe_scalable.py": "d16deee46b74bd34883d39abfab86691c36455b8fe02547cb5f275ad65b6ee55",
+    "approach/__init__.py": "25606592fea79200c3a2512098898d0af5b53b81bf863b221281d3a46328b68c",
+    "approach/approach_Eq.py": "f5eff8c44b804be60e8de8a4c2d1a3afad9a127b9e80b931fd5edd86d5d0a773",
+    "approach/approach_collector.py": "8f42d09dfe455ebdbf931a11266b5f4afccef485029d02affc5e36546754ffd1",
+    "approach/approach_def.py": "3bf4c156262a66c636be06e744da862240ebf619c5926a2b6928bf3f6e6df931",
+    "approach/approach_initiator.py": "4e805f25b057c5f66220ee491f40523587af265d948316f7c7993df3082decc9",
+    "approach/approach_sched.py": "fe9e3ab6bbb45ed4ee11215417b99a8868d7d0dba648949fc92a0f52a59c5a8e",
+    "approach/approach_setup.py": "0e30787994a6a23ea8c048a10ece4c5dc58bb157a311a2c5e8c242cda7c6bbbf",
+    "approach/approach_sim.py": "1d064618107e7888b9e75debc1e983dbc7e56a4e09240be75214d4dc770b2f4e",
+    "approach_Eq.py": "6a869b99f96cf2bd633f27904fe4d2831e39868bb0aa8f14b4efbbce1d21c09e",
+    "approach_collector.py": "e5d2c0a346067a134ed26204a0e367e94aa2131394d6387e60e4a6ab2fcb46e0",
+    "approach_def.py": "65470e4b084aa67d3c1dcb583c9c15cbf3e521c06cffa17855bd0097b7afb501",
+    "approach_initiator.py": "c55558bf6de3422b61a609f300776f68de7a3e27521a2bb8e81566de5a0e12ef",
+    "approach_sched.py": "44ae9baacc4246eb8a0bac53508be8220bb33064f369ee7e654fb6315d538d42",
+    "approach_setup.py": "7cf7d1550204beb4abba7d7cf0c0c52575253fe7296002ad9033109cb8d6506b",
+    "approach_sim.py": "46247bf523cae1a8a0a62e71109ef0aba3c86b4c278754b28493718815e02369",
+    "cleanup/tools/dialogue_guard.py": "f758288168b13d1f13400d0f84665b6f2323e030707cae190b259401a3fa1a10",
+    "debug_sink_constraint.py": "91b99637ccbc7472819776419d52e659027e37c97732ab248841fc1cf950959b",
+    "example/bm1.py": "9cb4482dd34b5102c5f9c9257a25bbef15273b8d5c4b94665c3f9f151c0fc57f",
+    "example/bm2.py": "a83603e2af0a4637c768a8f8594617fd9629083de2cd716d209436b043b09dfc",
+    "example/bm3.py": "200cd9bc6935e660d0c7d1f3ad6f25b46cb3492db946b694f8c4b7275c8f6b10",
+    "example/bm4.py": "381bebb8759796b353478cfb9aba4c24bab6c5b108dc3fbc9172710426bca4a2",
+    "global_var.py": "5a66c7836d03f4a50251c8cee3a8533b48a63ebb69bb1606df8b59577108562d",
+    "main_approach.py": "e32f1ec431614e4ea30761eaab6278fe65ba2166717b5386bc0148cfad22db3d",
+    "mapper/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "mapper/mem_planner.py": "6d5bb9291bac221b6da31b9671933aec22b5b0e780ac334a32e7e60030fe947e",
+    "model/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model/barrier_agent.py": "57d2943c3ac1c21423e29affce89f2b7f664d097d2d0cefb0124736545685ab7",
+    "model/buffer.py": "aec736f78d35ba582d8d091cb2078181c53e195f7a97346c9cefb6b09a4576c8",
+    "model/event_gen/e2e_latency.py": "7c460e9258b1b7384ffb4605167e4ccc69b026fc83eb0161429bd9f60b994248",
+    "model/lru.py": "b2be894c685be6c3a5fd48b7b7117d2cc90059a4109c7374c68979f74d4a7013",
+    "model/message/Context_message.py": "c8d4de2ad5e73b2db072f710777d6f846285be1e03d038711aecb46a25247c64",
+    "model/message/data_pipe.py": "544689f0008568d77eeec76ab35ff12d7ce7d5c808dc933e06e76bd6db3b74c0",
+    "model/message/message_handler.py": "7d0c4520760f95b791e1c9f8d0c3220be1959f8ab58aabd8d2328fd8793a0785",
+    "model/message/message_pipe.py": "6d6d8228acca9ff2fd1e2cf02573d35f058845ebafe6dfdae98acba9226fd309",
+    "model/message/msg_dispatcher.py": "1021025fd86f50c8f82799bea77911e05564531fc93fcba886639da1a430a3e3",
+    "model/noc.py": "001d30e29ffe3ebc8b9724e151c445e100ef885287fe5abdd00a9bb0048d8f51",
+    "model/performance.py": "273eabbd6dbc16df28db18758e8f51defe84caba3f6ca3cf40fa22c7b041235a",
+    "model/position_table.py": "fa6615a4b3e54e41304463dda597494be7bc5e672abbae1149e11cfb8f2ecc59",
+    "model/resource_agent.py": "7290b7b496e0a46a0ef74540b1747fcb35e6724443a5f70072562bc7ab8cefd8",
+    "model/streaming_processing/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model/streaming_processing/wartermark_strategy.py": "5af8e0035e2a360ae5bd6201f57f55b30970d8bebf8d542f08815db34264e596",
+    "model/task_queue_agent.py": "227fcd0bc10129614b6481b94f239a621ea6a460de815ee007e828142cad1c24",
+    "model/trace_example.py": "ff2e00c361a9ba9ca0386704abe57acb3e8ca924b3a9187d6fb1129f0e4cd880",
+    "old/allocator_agent.py": "f7b48b84465c9f1390b9ce44e0bfd463f896fb869e2d1364e3e9fe79ef892582",
+    "old/appoach_plot6.py": "44332d84c5d05f7d520b505c96c80c62a8ec6511c41440db41ca4bc6081d0d81",
+    "old/approach_util33.py": "89ae0ac387bd44484b1a345e5bd3999cc279acc2f5a705cba6ab6fc285701352",
+    "old/pre_alloc.py": "8a2e3724401e442c505cc5af34b22abdf30034a7dd7417526c10865df5ed76c0",
+    "optimizer/delta_ver.py": "da1762a2d66c80ca5fbd9a3de4eff3fb96f3d2d6f3ca16186996c0853cd5c9a3",
+    "optimizer/dist_custom.py": "923e2cafa54bd27646b620d3f13e8ab98386f8a6b93a4ad73c78e6dd69f479f9",
+    "optimizer/ops.py": "41d6ddb143b93e14c51d49dbaea2db60ca6adcd0fdc163c784266e64dcb9595c",
+    "optimizer/ops_test.py": "6584b9cff086fb2492e5131153c23b78225a27ed6ce953aee8a84244bd66e758",
+    "optimizer/scheduler_base.py": "323b0e48b88910f152e8c21a06d4c8a0f9f965aa6f2b09bf3388868737a9c884",
+    "paths.py": "b8aa8a5471c8a6420f9b9532013be1b39ea8a195c2c301bdb42193eccc111170",
+    "ref_tdigest.py": "0e7642c9892553f579b5340d21982b589bdb4a85d4965cbfc70fa35289f9c287",
+    "run/1/all.sh": "05105542d6b66aaf914ad86ccd1338ea4049ed8d2c21a91b2783f9c37a0ff6e4",
+    "run/1/scan_aux.sh": "9d7cb82e0805928fed87f4efb9c727c96d371ae51382ea8fce0192eff92180d3",
+    "run/1/scan_core.sh": "958401b5016d0e19eade15c3f7831b07cf8ad611e627ff6d1f4a06db8d27503a",
+    "run/1/sweep_seed.sh": "dea4922a271e4e318ecc29f39a7ef728de52bd581470c87095b4023c50dcfa8a",
+    "run/2/aba_scalability_scan.sh": "d527b302c374401165e3011cca9d3904710ee4154def52aab5489d725c41f925",
+    "run/2/abla_scalablility.sh": "2f56009e9eb0da9cfa9223737aadb356e444b7e8b2e6212810c2e6385151a498",
+    "run/2/all2.sh": "85638195a489880dc8c26bdba929d3c62a4b0b83c6eaaeb252d040db74824880",
+    "run/3/time_sharing.sh": "b8104f1f3c684290dfbdf781e07b60a70e8feb251bbe9cd80278c3fd9dcfa5ee",
+    "run/aba_scalability_scan copy.sh": "c60b76ec65a851962d4b7235ed76e8450a6e80cbefdd22ce6aaf5530fb348819",
+    "run/abla_chain_sharing.sh": "17943f0885c65567943936abdc82e6c53a5df33340f3a0ef37ff9a2c52e370b3",
+    "run/bin_sharing.sh": "a94cd42eb610e21321b47921c5c2063a4590b0b8322cf57ab8b57a13166287b4",
+    "run/cfg_parser.py": "5d8c3a618d13994aee7dbec18e033d938491a9e46fedeaa75ce712b59f7d9f55",
+    "run/clean.sh": "7d5abeedad2abb698003ac37a594feffa5676334a8f615fcdee6c059a1e4ecbe",
+    "run/max_core_num_scan.py": "79fa47da771d7ac88ef383946e4609c8248212f4b4d7fa6517f27ec34f2f464a",
+    "run/scan_coalescing.sh": "2ee0fbb7c0b029075ee071e3ac1af672e63019af484fcc2a30bcdd03173dfa7d",
+    "run/temp.sh": "31236f54d38944c69f2cb3b3f069a7c3931332e4add8cfd252d091d5621a6a49",
+    "sched/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sched/bin_list_utils.py": "67a9aa91714a797d20f504c33bca796836632c6501d954e971cb1aa5aaa79bb4",
+    "sched/bin_list_utils_old.py": "580d943fd5b2057b4fd624c32d6197a24b56a2c5c36d3be3ceb5924032bc4a9e",
+    "sched/bin_list_utils_unused.py": "2142733db35776d6df1936a8091b59cf57e438dad2e10d316ae0be11110a536a",
+    "sched/bin_ops.py": "361bbc497b182e68304694f791354e9a296e93d5941cef267e9775bb9b47c301",
+    "sched/binpack_config.py": "d10829049efd5502328ca5f14d92dbe26435b219a53f3b4b03c06530ebc43f40",
+    "sched/global_sched.py": "a11a8324def4ca8b8763814e7dc8483a5444bc013e29083fa1b1dbbfbbbe4118",
+    "sched/global_sched_alloc.py": "627300a13b10f98ca4c2c8b08807780578cf1cf923c68b9967ce32dc9af1b2e0",
+    "sched/global_sched_old.py": "cc93f501ce6bf24f92841d8a323fe4d9550fd7e76120be27c539242b5e1df425",
+    "sched/global_sched_repack.py": "2e61f425893e6365d711676c53445cf89bec915c3ee5039c82d84d024dfcfece",
+    "sched/monitor_agent.py": "c748029c18bd6c99ffa0fed57536d5344fbc20ae23fc64b37446b2d973f9d83b",
+    "sched/packing_solver/chain_slack_assign.py": "e564906bc80d9b742e321cd9d0395fe6b03a2b891c35ddb9142e852c9c4d141f",
+    "sched/packing_solver/fit.py": "1b3d0b5296648d4d7403016c67f53be21d34b55c334b8d193f4fc770216e7998",
+    "sched/packing_solver/gurobi_MP_semi2DClst.py": "e56adc1a37dbba39cc3f8d707a955bfc64b3b03f71356084f989946593a02895",
+    "sched/packing_solver/unused/gurobi_semi2Dclst_mapping.py": "4d49d05ab20981eafeb9afe897aa0b952c2ce7d2eaac0880b71fa8131430c522",
+    "sched/packing_solver/unused/gurobi_semi2Dclst_mapping2.py": "9c40c2b4e21edcdb5fc25d51b6ce9479bbb4f8c64e2e3bc577d8e61ebf36e3dc",
+    "sched/placement.py": "008ca6d7c2316064c3fce0b75258e35c77f570b727e483d32a2010f6f7408fdf",
+    "sched/pre_alloc_new.py": "6991b6551a7f0ff3fe94f6b47f4fbe469a4da1ccdbd80e8eaca1bb7749cfbea6",
+    "sched/pre_alloc_new_old.py": "97e11a4df33ebc3b3ff6adaeabaa1b1635f34e9ad059cdbda23eb2f6a0cbd878",
+    "sched/ref_alloc_search.py": "c29243f7134518633c9b3f1631420607adef0ef79d994c0152ef579402c88ca7",
+    "sched/runtime_legacy/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sched/runtime_legacy/sched_fn.py": "cc82e889cb203dd7cb306988050c432b92857c559ccd2ab2bb6c85d2a63c79f7",
+    "sched/runtime_legacy/sched_utils.py": "ecc8414c05eeb9f1b7574142c1da5620d0c7a5e4d1ed6d2ecb2a3442604f2135",
+    "sched/runtime_legacy/scheduler_agent.py": "c0e3d3583f0a86947fa1478cb1d42bb9bbd4ff0727aab2128173b878cbc58cac",
+    "sched/runtime_legacy/state_trans.py": "ab3850e46e89c907fd2ca6a19667427c3e787ce1c5cf52e6fc2d93a7a4edc569",
+    "sched/sched_fn.py": "6ddf24cd84d4001c09bc637719430f60a7580950a1499046a0e6f7a1277026ed",
+    "sched/sched_utils.py": "daddd34bce6031198b5866b90eaa22365ee950b41323d2164c00e2e23b8479e6",
+    "sched/scheduler_agent.py": "cf77c531c15130c4dd3a218a9fd197d3daba242c018e1b222bdd1371e893e4de",
+    "sched/scheduling_table.py": "a7df3b3ed412e6b30b29d9cc533749c59b74c38c88e19ff6dba9858f669aad8c",
+    "sched/scheduling_table_event.py": "a79b101f8648cc12411477321025164d0fb6546fa20f9c9780fccc3b7ff46837",
+    "sched/slack_estim.py": "f5389ec5c6f83cf9fc35e07917e66566145a8b2fad7f54a635761e04c69c13d4",
+    "sched/sort_function.py": "50ef837990c9d6a8dda164fca656852a4f25e640394160058d15326291a6183f",
+    "sched/state_trans.py": "29b77a41fed368421d76f5bf06cd698955990684908afbfc03bf49d1262cc628",
+    "scripts/abla_exp_runner.py": "73ca0bccb065a284f1f078c3a4a4027d9134e972b3bba18a6e26380e61e60864",
+    "scripts/e2e_exp_runner.py": "4e64059930d47287f6827beb5043dc382947d6128ae5ef854d0ded49f2ef1286",
+    "scripts/e2e_hyperparam.py": "579229a5e596f3eac366215af6ec2ad67d862d69f5ca43f05b4a06ed466ee9b8",
+    "scripts/exp_common.py": "6d0e913f0eacdc62b2972ce2ee9c25f459891e92da12f32c4001ac74a0f98274",
+    "scripts/motiv_exp_runner.py": "4592032791d2bcfe532aa01adda9f545b9196545bb0c4e8a0e018358e4eb712a",
+    "scripts/run_abla_exps.sh": "3f8d8a01e366995b7e8d4fb0b492e4c1bb0cbe989da2c061d501f80caca7c366",
+    "scripts/run_motiv_exps.sh": "4238e238d4640f53c19f2705f892be988ad19a50439f8c2d48efd2cd43c36d66",
+    "scripts/test_alloc_lat.py": "fc0bf0ead04d6e71fa32e69003388fc1ae402a2cbeee2f18e6ae167cb16ce552",
+    "scripts/unused/repack_sweep.py": "262dad167ec4fad1c6b2b9fe14c5d941f958cdbb0722198b723c2e76adace213",
+    "sim_main.py": "0a16f4cf6c0ebeb1a57079216f4046ab55db8f6bfdbf53b17c537a3488334f5d",
+    "sim_main_old.py": "02aac1cd1af96eec0dbb51393f84cd33c05abaf4b1abf657cb89dd1cd02472cc",
+    "simple_test_collector.py": "b6bff9b527a9941a187d5e89640f5d785791ddd4c69df3a745a1e23a0e127142",
+    "task/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "task/graph_breakdown.py": "5d67c52d35f0ffb2be250b1d1f3a002bd574db50a34cda5b2df832bf88d28933",
+    "task/graph_scaling.py": "23cd8bd44738144c8a4578875a88bab4d06bef003cf0bdaa958e743ce9c88492",
+    "task/load_cfg/loadA.py": "7f75f58b094573322dce01ca6f2366241fbd82e4891292aee390c0a1d98ad287",
+    "task/spec.py": "66f2eeb5f3c35b9ee92fb0f0a90f0bba4e2cecfb88fd2192f3be7ca931d09022",
+    "task/task_agent.py": "21786d243f70d1e41d5ad43f1d8c22dee13d54f3fab28a84719ad3cbe16f8a2e",
+    "task/task_cfg.py": "4320789e8a8f2d5c9e37333bf8b0ee544154a68119d517004770d62ad8521a7d",
+    "task/throughput_cnt.py": "7df7e2fa30a3f6061fffa210952d211666e1dcd00636d18e80fa29cf61fc15ef",
+    "test_approach_collector.py": "efd7b67e99cd0a970dc1a7998461af5a0795fa239ead43e00eb5e8ce0e6f2d68",
+    "test_approach_package_compat.py": "ca4bac52de6e14174ed93fd56d2c23be16d9457be9f15c93122e6ccf94b02792",
+    "test_binpack_pipeline_contract.py": "144f9f0acc656c687adcdc8099124697888c41a4bb0b78a621f43a938cefb1d9",
+    "test_closure_fix.py": "16c04deae220389724a7c4c28a0bb838399d671a61429ddc84cd5d28c3994165",
+    "test_core_allocation.py": "44fe340a041794584e12a30b99cb9aac1aa9dc3dc5e3a6e82f94c9f3ce428045",
+    "test_deduce_cfg2.py": "9edb5c3de657302137144df2ae7425bf36976e3b20a4b5d10f3580f83e41fddb",
+    "test_duplicate.py": "662f0ed5fd5a76dd59e2b82981377297aba2ac118a6c9a150176f619aa2e2dd2",
+    "test_event_update.py": "68ff45c5ff1f5fad893933722565b034bef2e1831f15c56ce398a5b982d7dc95",
+    "test_legacy_approach_archive.py": "b6dc62122ea09a99cbbddf2cffa52613be3376d7f827518487a977fd2fb96d77",
+    "test_mapping.py": "a32256208595f8b9f451c71d9d9c18a8f4f992d161c1bfa79e048b30cbed5b3f",
+    "test_mem_planner.py": "e171129a2a8519f3de13f8e533e2bd74cba08f076dd9e564945be65a01c87b60",
+    "test_repack_diagnostic.py": "d11f52e223cb829fb9dd16c401282b58e035df8bcceac3c000a560b63744b83f",
+    "test_scheduling_table.py": "5a44cb64b2e88744a72816784fb70f87b826dae56bd92a00ee07ffd29200bea0",
+    "test_updated_stats.py": "cbd88f4afd5bdb6b8642fe435e386c38fc7856737a5df80909d3734dbaafe91d",
+    "tile_2d_mesh_mapper_fixed.py": "db0d65db81bdb53079bdf02e22da85432bafb5777de9b1e2d676834ef883e003",
+    "unused_fun.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "ledger_prefix": {
+    "cleanup/move-ledger.csv": {
+      "bytes": 16552,
+      "sha256": "65fc39597ae978da578f22b9b1074419d139a34e2c92fc92e04d88564790c402"
+    },
+    "cleanup/reachable-files.csv": {
+      "bytes": 67145,
+      "sha256": "d7cc8df5fe84e2bc0475458be417511736f150a5ba3dc22c1d6ed131cce77dc7"
+    }
+  },
+  "requirements_sha256": "3110ab9d6c596296f7a15bc98ad7ea7ff2e8f77d1b48286f560e8b92fbc67c2c",
+  "behavior_baseline": {
+    "source_sha256": "94c6ac9d52a1a3506fae0ab9a68629cbcd3a5c817f67103431ca7ac7de0c4790",
+    "chunk_size": 25,
+    "short_buffer": {
+      "file_exists": false,
+      "retained_count": 24,
+      "parent_exists": true
+    },
+    "first_flush": {
+      "remaining_buffer": [],
+      "records": [
+        {
+          "pid": 0,
+          "kind": "trace"
+        },
+        {
+          "pid": 1,
+          "kind": "trace"
+        },
+        {
+          "pid": 2,
+          "kind": "trace"
+        },
+        {
+          "pid": 3,
+          "kind": "trace"
+        },
+        {
+          "pid": 4,
+          "kind": "trace"
+        },
+        {
+          "pid": 5,
+          "kind": "trace"
+        },
+        {
+          "pid": 6,
+          "kind": "trace"
+        },
+        {
+          "pid": 7,
+          "kind": "trace"
+        },
+        {
+          "pid": 8,
+          "kind": "trace"
+        },
+        {
+          "pid": 9,
+          "kind": "trace"
+        },
+        {
+          "pid": 10,
+          "kind": "trace"
+        },
+        {
+          "pid": 11,
+          "kind": "trace"
+        },
+        {
+          "pid": 12,
+          "kind": "trace"
+        },
+        {
+          "pid": 13,
+          "kind": "trace"
+        },
+        {
+          "pid": 14,
+          "kind": "trace"
+        },
+        {
+          "pid": 15,
+          "kind": "trace"
+        },
+        {
+          "pid": 16,
+          "kind": "trace"
+        },
+        {
+          "pid": 17,
+          "kind": "trace"
+        },
+        {
+          "pid": 18,
+          "kind": "trace"
+        },
+        {
+          "pid": 19,
+          "kind": "trace"
+        },
+        {
+          "pid": 20,
+          "kind": "trace"
+        },
+        {
+          "pid": 21,
+          "kind": "trace"
+        },
+        {
+          "pid": 22,
+          "kind": "trace"
+        },
+        {
+          "pid": 23,
+          "kind": "trace"
+        },
+        {
+          "pid": 24,
+          "kind": "trace"
+        }
+      ]
+    },
+    "next_id_after_first_flush": 1,
+    "forced_flush": {
+      "remaining_buffer": [],
+      "records": [
+        {
+          "pid": 0,
+          "kind": "trace"
+        },
+        {
+          "pid": 1,
+          "kind": "trace"
+        },
+        {
+          "pid": 2,
+          "kind": "trace"
+        },
+        {
+          "pid": 3,
+          "kind": "trace"
+        },
+        {
+          "pid": 4,
+          "kind": "trace"
+        },
+        {
+          "pid": 5,
+          "kind": "trace"
+        },
+        {
+          "pid": 6,
+          "kind": "trace"
+        },
+        {
+          "pid": 7,
+          "kind": "trace"
+        },
+        {
+          "pid": 8,
+          "kind": "trace"
+        },
+        {
+          "pid": 9,
+          "kind": "trace"
+        },
+        {
+          "pid": 10,
+          "kind": "trace"
+        },
+        {
+          "pid": 11,
+          "kind": "trace"
+        },
+        {
+          "pid": 12,
+          "kind": "trace"
+        },
+        {
+          "pid": 13,
+          "kind": "trace"
+        },
+        {
+          "pid": 14,
+          "kind": "trace"
+        },
+        {
+          "pid": 15,
+          "kind": "trace"
+        },
+        {
+          "pid": 16,
+          "kind": "trace"
+        },
+        {
+          "pid": 17,
+          "kind": "trace"
+        },
+        {
+          "pid": 18,
+          "kind": "trace"
+        },
+        {
+          "pid": 19,
+          "kind": "trace"
+        },
+        {
+          "pid": 20,
+          "kind": "trace"
+        },
+        {
+          "pid": 21,
+          "kind": "trace"
+        },
+        {
+          "pid": 22,
+          "kind": "trace"
+        },
+        {
+          "pid": 23,
+          "kind": "trace"
+        },
+        {
+          "pid": 24,
+          "kind": "trace"
+        },
+        {
+          "pid": 25,
+          "kind": "tail"
+        },
+        {
+          "pid": 26,
+          "kind": "tail"
+        }
+      ],
+      "stdout": "<FILE> saved and loaded successfully\n"
+    },
+    "dataset_keys": [
+      "chunk_0",
+      "chunk_1"
+    ],
+    "compression": {
+      "chunk_0": "gzip",
+      "chunk_1": "gzip"
+    },
+    "empty_next_id": 0,
+    "malformed_key_exception": "IndexError"
+  },
+  "validation": {
+    "status": "accepted_by_reviewer_E0045",
+    "peer_review": {"event": "E0045", "verdict": "ACCEPTED", "tests": 58, "passed": 53, "failures": 5, "errors": 0, "skipped": 0, "guard_check_exit_code": 0},
+    "red": {
+      "failed": 1,
+      "deselected": 8,
+      "seconds": 0.08,
+      "reason": "utils_unused.py missing"
+    },
+    "new_tests": {
+      "passed": 9,
+      "seconds": 2.82
+    },
+    "output_dir": "/tmp/scheduler-b13-regression-uxov2h3s",
+    "pytest": {
+      "passed": 53,
+      "failed": 5,
+      "failure_messages": {
+        "test_basic_functionality": "AttributeError: 'StatisticsCollector' object has no attribute 'task_realloc_curr'",
+        "test_motiv_exp_specific_stats": "ZeroDivisionError: float division by zero",
+        "test_summary_generation": "ZeroDivisionError: float division by zero",
+        "test_formatted_output": "ZeroDivisionError: division by zero",
+        "test_edge_cases": "ZeroDivisionError: division by zero"
+      }
+    },
+    "help": {
+      "main_approach.py": 0,
+      "scripts/motiv_exp_runner.py": 0,
+      "scripts/abla_exp_runner.py": 0
+    },
+    "unchanged_source_count": 152,
+    "remaining_utils_sha256": "14bcb37deccafb0b390ed8cb724eba4b0f167dee1aaa4e4d4c97b68168542965",
+    "requirements_unchanged": true,
+    "diff_check": 0,
+    "ledger_additions": {
+      "cleanup/move-ledger.csv": {
+        "rows_added": 1,
+        "columns": 14,
+        "prefix_preserved": true,
+        "new_sha256": "9ccf94e4cd97e251cf8eeac85bce1db1dbda6874bef46609c9de56338cb9c7d3"
+      },
+      "cleanup/reachable-files.csv": {
+        "rows_added": 2,
+        "columns": 10,
+        "prefix_preserved": true,
+        "new_sha256": "5616ed90289b81b9083fc77e7add1e624aa2e370018759411f61506086d5bda7"
+      }
+    },
+    "fresh_process_utils_has_h5py": false,
+    "archived_hdf5_import_works": true
+  },
+  "known_boundaries": [
+    "HDF5 symbols retire from utils; import utils_unused explicitly for the preserved independent facility.",
+    "h5py stays in requirement.txt for the preserved HDF5 capability.",
+    "Original IndexError for malformed group keys, eager parent-directory creation and buffer-clearing semantics are preserved."
+  ]
+}

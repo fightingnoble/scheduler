@@ -16,8 +16,6 @@ def decompose_dag_into_chains(dag:nx.DiGraph, start_node, end_node, with_src_sin
     dfs(start_node, [start_node])
     return chains
 
-def sort_chains_by_ddl_flops(chains, flops_dict, ddl_dict):
-    chains.sort(key=lambda x: (-ddl_dict[id(chains[-1])], sum([flops_dict[n] for n in x])), reverse=True)
 
 def test_decompose_dag_into_chains():
     # Example usage

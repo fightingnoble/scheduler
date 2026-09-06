@@ -1,0 +1,174 @@
+{
+  "base_head": "a1d933b1f26efd4d569eb3d8ffb313447294443b",
+  "legacy_pickles": [
+    {
+      "base64": "gASVIQAAAAAAAACMC2FwcHJvYWNoX0VxlIwNc2V0X3RpbWVfdW5pdJSTlC4=",
+      "kind": "reference",
+      "module": "approach_Eq",
+      "symbol": "set_time_unit"
+    },
+    {
+      "base64": "gASVHAAAAAAAAACMDGFwcHJvYWNoX2RlZpSMB015R3JhcGiUk5Qu",
+      "kind": "reference",
+      "module": "approach_def",
+      "symbol": "MyGraph"
+    },
+    {
+      "base64": "gASVJgAAAAAAAACMDmFwcHJvYWNoX3NjaGVklIwPUGFydGl0aW9uQ29uZmlnlJOULg==",
+      "kind": "reference",
+      "module": "approach_sched",
+      "symbol": "PartitionConfig"
+    },
+    {
+      "base64": "gASVLAAAAAAAAACMEmFwcHJvYWNoX2luaXRpYXRvcpSMEWluaXRpYWxpemVfZXZlbnRzlJOULg==",
+      "kind": "reference",
+      "module": "approach_initiator",
+      "symbol": "initialize_events"
+    },
+    {
+      "base64": "gASVLgAAAAAAAACMEmFwcHJvYWNoX2NvbGxlY3RvcpSME1N0YXRpc3RpY3NDb2xsZWN0b3KUk5Qu",
+      "kind": "reference",
+      "module": "approach_collector",
+      "symbol": "StatisticsCollector"
+    },
+    {
+      "base64": "gASVIwAAAAAAAACMDGFwcHJvYWNoX3NpbZSMDnJ1bl9zaW11bGF0aW9ulJOULg==",
+      "kind": "reference",
+      "module": "approach_sim",
+      "symbol": "run_simulation"
+    },
+    {
+      "base64": "gASVJgAAAAAAAACMDmFwcHJvYWNoX3NldHVwlIwPc2V0dXBfYmVuY2htYXJrlJOULg==",
+      "kind": "reference",
+      "module": "approach_setup",
+      "symbol": "setup_benchmark"
+    },
+    {
+      "base64": "gASVcAAAAAAAAACMDGFwcHJvYWNoX2RlZpSMDUdsb2JhbEV2ZW50X3SUk5QpgZR9lCiMB2V2ZW50X3SUXZRHf/AAAAAAAACMCGV4dGVybmFslIaUYYwQX29yaWdpbmFsX2V2ZW50c5RdlEc/4AAAAAAAAGgHhpRhdWIu",
+      "kind": "instance",
+      "module": "approach_def",
+      "state": {
+        "_original_events": [
+          [
+            0.5,
+            "external"
+          ]
+        ]
+      },
+      "symbol": "GlobalEvent_t"
+    },
+    {
+      "base64": "gASVsAAAAAAAAACMDmFwcHJvYWNoX3NjaGVklIwPUGFydGl0aW9uQ29uZmlnlJOUKYGUfZQojAludW1fcGFydHOUSwGMCGNhcF9saXN0lF2USwRhjA1iYXNlX3B3cl9saXN0lF2URz/wAAAAAAAAYYwBR5ROjApUU21hcF9saXN0lF2UTmGMEG1hcHBlZF9ub2RlX2xpc3SUXZROYYwMc3d0X2xhdF9saXN0lF2UTmGMBFRfaHCUTnViLg==",
+      "kind": "instance",
+      "module": "approach_sched",
+      "state": {
+        "base_pwr_list": [
+          1
+        ],
+        "cap_list": [
+          4
+        ],
+        "num_parts": 1
+      },
+      "symbol": "PartitionConfig"
+    }
+  ],
+  "source_sha256": {
+    "approach_Eq.py": "f5eff8c44b804be60e8de8a4c2d1a3afad9a127b9e80b931fd5edd86d5d0a773",
+    "approach_collector.py": "8f42d09dfe455ebdbf931a11266b5f4afccef485029d02affc5e36546754ffd1",
+    "approach_def.py": "3bf4c156262a66c636be06e744da862240ebf619c5926a2b6928bf3f6e6df931",
+    "approach_initiator.py": "4e805f25b057c5f66220ee491f40523587af265d948316f7c7993df3082decc9",
+    "approach_sched.py": "fe9e3ab6bbb45ed4ee11215417b99a8868d7d0dba648949fc92a0f52a59c5a8e",
+    "approach_setup.py": "0e30787994a6a23ea8c048a10ece4c5dc58bb157a311a2c5e8c242cda7c6bbbf",
+    "approach_sim.py": "1d064618107e7888b9e75debc1e983dbc7e56a4e09240be75214d4dc770b2f4e"
+  },
+  "schema_version": 1,
+  "batch": "B11-APPROACH-PACKAGE",
+  "known_boundary": "旧模块名的 pickle 在迁移后的 audit 可读取；新 approach.* 模块名的 pickle 不保证可由未迁移的 test_pipeline 读取。",
+  "baseline": {
+    "b10": {
+      "passed": 3,
+      "failed": 0
+    },
+    "collector": {
+      "passed": 2,
+      "failed": 5,
+      "failures": {
+        "test_basic_functionality": "AttributeError: task_realloc_curr",
+        "test_motiv_exp_specific_stats": "ZeroDivisionError: task_cnt == 0",
+        "test_summary_generation": "ZeroDivisionError: task_cnt == 0",
+        "test_formatted_output": "ZeroDivisionError: task_cnt == 0",
+        "test_edge_cases": "ZeroDivisionError: task_cnt == 0"
+      }
+    },
+    "independent_root_imports": 7,
+    "combined_pytest_duration_seconds": 31.05
+  },
+  "validation": {
+    "status": "passed_with_unchanged_existing_failures",
+    "red_test": "test_package_import_does_not_load_submodules failed before migration: approach package is missing",
+    "compatibility_test": {
+      "passed": 32,
+      "failed": 0,
+      "duration_seconds": 11.76
+    },
+    "combined_post_test": {
+      "passed": 37,
+      "failed": 5,
+      "duration_seconds": 22.3,
+      "failures_introduced": 0
+    },
+    "existing_failures_matched": {
+      "test_basic_functionality": "AttributeError",
+      "test_edge_cases": "ZeroDivisionError",
+      "test_formatted_output": "ZeroDivisionError",
+      "test_motiv_exp_specific_stats": "ZeroDivisionError",
+      "test_summary_generation": "ZeroDivisionError"
+    },
+    "hashes_matched": 7,
+    "import_probe": [
+      "approach_Eq",
+      "approach_collector",
+      "approach_def",
+      "approach_initiator",
+      "approach_sched",
+      "approach_setup",
+      "approach_sim",
+      "sim_main",
+      "task.task_cfg",
+      "sched.global_sched",
+      "sched.scheduler_agent",
+      "sched.monitor_agent"
+    ],
+    "passed": {
+      "test_approach_collector": 2,
+      "test_approach_package_compat": 32,
+      "test_binpack_pipeline_contract": 3
+    },
+    "entry_help_exit_codes": {
+      "main_approach.py": 0,
+      "scripts/motiv_exp_runner.py": 0,
+      "scripts/abla_exp_runner.py": 0
+    },
+    "ledger_validation": {
+      "cleanup/move-ledger.csv": {
+        "addition_newline": "LF",
+        "appended_columns": 14,
+        "appended_rows": 7,
+        "existing_bytes_unchanged": true,
+        "prior_bytes": 11386,
+        "prior_sha256": "addd4e4921726020b6a4730435280e4a59f8f2296be930ea462ac3754ca196c0"
+      },
+      "cleanup/reachable-files.csv": {
+        "addition_newline": "LF",
+        "appended_columns": 10,
+        "appended_rows": 9,
+        "existing_bytes_unchanged": true,
+        "prior_bytes": 62608,
+        "prior_sha256": "0b906884b9833208f1d7afdec94b35f5c47109944f70b4e924a6420a9c6d4d49"
+      }
+    },
+    "git_diff_check": 0,
+    "temporary_evidence_directory": "/tmp/scheduler-b11-post.2Kwyt8"
+  }
+}

@@ -1,0 +1,1491 @@
+{
+  "request": "REQ-018",
+  "batch_id": "B20-UNUSED-SIM-CACHE-HELPERS",
+  "status": "ACCEPTED_E0082",
+  "mainline": "master",
+  "archive_ref": "archive/test_pipeline-20260612",
+  "base_head": "a1d933b1f26efd4d569eb3d8ffb313447294443b",
+  "source_path": "sim_main.py",
+  "archive_path": "sim_main_unused.py",
+  "test_path": "test_unused_sim_cache_helpers.py",
+  "source_sha256": "0a16f4cf6c0ebeb1a57079216f4046ab55db8f6bfdbf53b17c537a3488334f5d",
+  "source_ends_lf": true,
+  "remaining_sha256": "1d04e4aa038b63bc289834fc350442d9ff2b929faabb42a042deb7803bc86520",
+  "remaining_ends_lf": true,
+  "removed_lines": 74,
+  "slices": [
+    {"name":"ensure_csv","start":84,"end":88,"text":"def ensure_csv(csv_path_and_fn, cfg_para_dict, para_scan_group1):\n    import pandas as pd\n    if not os.path.exists(csv_path_and_fn):\n        cols = list(cfg_para_dict.keys()) + list(para_scan_group1.keys()) + [\"num_cores\"]\n        pd.DataFrame(columns=cols).to_csv(csv_path_and_fn, index=False)\n","sha256":"5181772af80f7d8534f05329f07b9406185858774fbf91345e9feadef31ececa"},
+    {"name":"prepare_induced_env_if_needed","start":172,"end":193,"text":"def prepare_induced_env_if_needed(path_para_dict, path_ctx: PathContext,\n                                  trace_path_para, plot_path_para\n                                  ):\n    \"\"\"\n    当 args.binpack_cfg[\"core_size\"] == \"induced\" 时：\n    - 从已存在的 bin_list 文件名解析 num_cores\n    - 更新 plot/trace 的 num_cores\n    - 生成 bin_list/routing_table 路径\n    - 加载 bin_list\n\n    返回：(num_cores, bin_list)\n    \"\"\"\n    folder, files, match = get_core_num_from_trace_name(path_para_dict, path_ctx)\n    if not match:\n        return None\n    matched_num_cores = int(match.group(1))\n\n    plot_path_para['num_cores'] = matched_num_cores\n    trace_path_para['num_cores'] = matched_num_cores\n    bin_list_save_path, routing_table_save_path = generate_bin_paths(path_para_dict, path_ctx, matched_num_cores, \"initial load\")\n    bin_list = load_pickle(bin_list_save_path)\n    return matched_num_cores, bin_list\n","sha256":"a907bfb94c99530254c98fed809abd62dea8e6cf6d7a5044aba2743ec6508ce6"},
+    {"name":"get_core_num_from_trace_name","start":705,"end":730,"text":"def get_core_num_from_trace_name(path_para_dict, path_ctx: PathContext):\n    # 使用旧方法生成路径\n    old_folder = cache_root_fmt.format(**path_para_dict)\n\n    # 使用新方法生成路径并比较\n    new_folder = path_ctx.cache_root\n    compare_paths(old_folder, new_folder, \"cache_root\")\n    folder = new_folder\n\n    # 使用旧方法生成正则表达式\n    old_bin_fn_regex = bin_fn_fmt.format(**path_para_dict, **{\"num_cores\": r\"(\\d*)\"})\n    \n    # 使用新方法生成正则表达式\n    new_bin_fn_regex = path_ctx.get_bin_fn_regex()\n    # 比较正则表达式\n    compare_paths(old_bin_fn_regex, new_bin_fn_regex, \"bin_fn_regex\")\n    bin_fn_regex = new_bin_fn_regex\n    \n    root,dirs,files = os.walk(folder).__next__()\n    assert len(dirs) == 0\n    for fn in files:\n        if match := re.match(bin_fn_regex, fn):\n            break\n    if not match: \n        print(f\"!!! Warning: no bin_list file \"+ bin_fn_regex +f\" in {folder}:{files} !!!\")\n    return folder,files,match\n","sha256":"5d136c8d67f907fde94f1c0d55749af6c9449ff895ac8f01994a5f4049722a4a"},
+    {"name":"check_max_bin_num","start":732,"end":752,"text":"def check_max_bin_num(args, num_cores, bin_path_format, path_ctx: PathContext):\n    max_num_bins = 0\n    for e2e_latency, aux_scale_factor in args.e2e_var_sim_para['event_list']:            \n        # 使用旧方法生成路径\n        old_bin_list_save_path = bin_path_format.format(aux_scale_factor, e2e_latency, num_cores)\n        \n        # 使用新方法生成路径（直接更新 ctx 并刷新）\n        path_ctx.aux_scale_factor = aux_scale_factor\n        path_ctx.e2e_latency = e2e_latency\n        path_ctx.refresh_config()\n        path_ctx.num_cores = num_cores\n        new_bin_list_save_path = path_ctx.get_bin_list_path()\n        \n        # 比较路径\n        compare_paths(old_bin_list_save_path, new_bin_list_save_path, f\"bin_list_save_path (e2e_var: {aux_scale_factor}, {e2e_latency})\")\n        \n        # 使用新路径\n        bin_list = load_pickle(new_bin_list_save_path)\n        max_num_bins = max(max_num_bins, len(bin_list))\n    num_bins = max_num_bins\n    return num_bins\n","sha256":"32540f366cc75f3c6332f19600475dd6a98d8ec32bc36bbb099414e03f72229f"}
+  ],
+  "non_batch_source_sha256": {
+    "__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "analyze/UE_extract.py": "647236fe7503c80740cca43e08858ccbe436a18ac4ed7d2bc54ad0b9b5d46cad",
+    "analyze/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "analyze/analyze_ctx_switch.py": "d7856b1f2ccb2fbf3652f00ee5552bfb570836953060f2dbfa1265554a67038d",
+    "analyze/analyze_timing.py": "45b94574b8ee2c7014e3ad5814b5348df28691dcaee124c5a7e15102f044ce8c",
+    "analyze/analyze_tp.py": "cd54307337eb3d37408e50b15b31fb7266b90a3c7addba3c5c3e707b400a3d38",
+    "analyze/pattern.py": "75c5a0ca22d710f7b301be118d820a0d3ca833176abd8777d43c104eaf119a46",
+    "analyze/stat_num_exec.py": "d830debb487d25b50f79384b2580e5d52a853e61e7fd3c2c01651e106b71cafe",
+    "analyze/xlsl_e2e_lat_abla.py": "2803dd27f7c4031af44116eae11439e2e80abb5823ef0255285669dadf6ef826",
+    "analyze/xlsl_e2e_latency.py": "db352b4685c6fa76f3c8c5e5940c469af14b1db6297e6df29135e0beae1c0f60",
+    "analyze/xlsl_max_tp.py": "1468390c1e293780e32b81e649cd501542e9d0d1d9b88b37018c7e1ad8f11201",
+    "analyze/xlsl_min_core.py": "90d91b24da0e3015783044713c84a7abd72b70ba82edd8c56f2415719c614f8d",
+    "analyze/xlsl_safe_scalable.py": "d16deee46b74bd34883d39abfab86691c36455b8fe02547cb5f275ad65b6ee55",
+    "approach/__init__.py": "25606592fea79200c3a2512098898d0af5b53b81bf863b221281d3a46328b68c",
+    "approach/approach_Eq.py": "bb2e65224f12fe2555c2f12567276a110d8d409808a180f4d4282b86a289cdc8",
+    "approach/approach_Eq_unused.py": "85092d18e980606c456fb8a8a49fdfcff69f519dc75088aab2f3021431093bf4",
+    "approach/approach_collector.py": "8f42d09dfe455ebdbf931a11266b5f4afccef485029d02affc5e36546754ffd1",
+    "approach/approach_def.py": "3bf4c156262a66c636be06e744da862240ebf619c5926a2b6928bf3f6e6df931",
+    "approach/approach_initiator.py": "4e805f25b057c5f66220ee491f40523587af265d948316f7c7993df3082decc9",
+    "approach/approach_sched.py": "fe9e3ab6bbb45ed4ee11215417b99a8868d7d0dba648949fc92a0f52a59c5a8e",
+    "approach/approach_setup.py": "0e30787994a6a23ea8c048a10ece4c5dc58bb157a311a2c5e8c242cda7c6bbbf",
+    "approach/approach_sim.py": "1d064618107e7888b9e75debc1e983dbc7e56a4e09240be75214d4dc770b2f4e",
+    "approach_Eq.py": "6a869b99f96cf2bd633f27904fe4d2831e39868bb0aa8f14b4efbbce1d21c09e",
+    "approach_collector.py": "e5d2c0a346067a134ed26204a0e367e94aa2131394d6387e60e4a6ab2fcb46e0",
+    "approach_def.py": "65470e4b084aa67d3c1dcb583c9c15cbf3e521c06cffa17855bd0097b7afb501",
+    "approach_initiator.py": "c55558bf6de3422b61a609f300776f68de7a3e27521a2bb8e81566de5a0e12ef",
+    "approach_sched.py": "44ae9baacc4246eb8a0bac53508be8220bb33064f369ee7e654fb6315d538d42",
+    "approach_setup.py": "7cf7d1550204beb4abba7d7cf0c0c52575253fe7296002ad9033109cb8d6506b",
+    "approach_sim.py": "46247bf523cae1a8a0a62e71109ef0aba3c86b4c278754b28493718815e02369",
+    "cleanup/tools/dialogue_guard.py": "15879c4efa377efec7c2e114e6d134b33da570e52916dea0ca0bf858bd44691a",
+    "debug_sink_constraint.py": "91b99637ccbc7472819776419d52e659027e37c97732ab248841fc1cf950959b",
+    "example/bm1.py": "9cb4482dd34b5102c5f9c9257a25bbef15273b8d5c4b94665c3f9f151c0fc57f",
+    "example/bm2.py": "a83603e2af0a4637c768a8f8594617fd9629083de2cd716d209436b043b09dfc",
+    "example/bm3.py": "200cd9bc6935e660d0c7d1f3ad6f25b46cb3492db946b694f8c4b7275c8f6b10",
+    "example/bm4.py": "381bebb8759796b353478cfb9aba4c24bab6c5b108dc3fbc9172710426bca4a2",
+    "global_var.py": "1eae1477f532e916e9829942bc4474bc79604809d85171a14356d99818d769cd",
+    "global_var_unused.py": "2a7b284d0b7bb8c3cad4e0c639839f3d09b616b19c644b95560dd20d5b8cfb2b",
+    "main_approach.py": "e32f1ec431614e4ea30761eaab6278fe65ba2166717b5386bc0148cfad22db3d",
+    "mapper/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "mapper/mem_planner.py": "6d5bb9291bac221b6da31b9671933aec22b5b0e780ac334a32e7e60030fe947e",
+    "model/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model/barrier_agent.py": "57d2943c3ac1c21423e29affce89f2b7f664d097d2d0cefb0124736545685ab7",
+    "model/buffer.py": "aec736f78d35ba582d8d091cb2078181c53e195f7a97346c9cefb6b09a4576c8",
+    "model/event_gen/e2e_latency.py": "3043c818e36dbdfcee8ee50573c5274a8549fbb1413e4cb55cde07cc0e990a7e",
+    "model/event_gen/e2e_latency_unused.py": "aab12e28ee3d728540d8f4a016285631f2e935e441e15c76b14a688e20c7a5b3",
+    "model/lru.py": "b2be894c685be6c3a5fd48b7b7117d2cc90059a4109c7374c68979f74d4a7013",
+    "model/message/Context_message.py": "c8d4de2ad5e73b2db072f710777d6f846285be1e03d038711aecb46a25247c64",
+    "model/message/data_pipe.py": "544689f0008568d77eeec76ab35ff12d7ce7d5c808dc933e06e76bd6db3b74c0",
+    "model/message/message_handler.py": "7d0c4520760f95b791e1c9f8d0c3220be1959f8ab58aabd8d2328fd8793a0785",
+    "model/message/message_pipe.py": "6d6d8228acca9ff2fd1e2cf02573d35f058845ebafe6dfdae98acba9226fd309",
+    "model/message/msg_dispatcher.py": "1021025fd86f50c8f82799bea77911e05564531fc93fcba886639da1a430a3e3",
+    "model/noc.py": "001d30e29ffe3ebc8b9724e151c445e100ef885287fe5abdd00a9bb0048d8f51",
+    "model/performance.py": "273eabbd6dbc16df28db18758e8f51defe84caba3f6ca3cf40fa22c7b041235a",
+    "model/position_table.py": "fa6615a4b3e54e41304463dda597494be7bc5e672abbae1149e11cfb8f2ecc59",
+    "model/resource_agent.py": "7290b7b496e0a46a0ef74540b1747fcb35e6724443a5f70072562bc7ab8cefd8",
+    "model/streaming_processing/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model/streaming_processing/wartermark_strategy.py": "5af8e0035e2a360ae5bd6201f57f55b30970d8bebf8d542f08815db34264e596",
+    "model/task_queue_agent.py": "227fcd0bc10129614b6481b94f239a621ea6a460de815ee007e828142cad1c24",
+    "model/trace_example.py": "ff2e00c361a9ba9ca0386704abe57acb3e8ca924b3a9187d6fb1129f0e4cd880",
+    "old/allocator_agent.py": "f7b48b84465c9f1390b9ce44e0bfd463f896fb869e2d1364e3e9fe79ef892582",
+    "old/appoach_plot6.py": "44332d84c5d05f7d520b505c96c80c62a8ec6511c41440db41ca4bc6081d0d81",
+    "old/approach_util33.py": "89ae0ac387bd44484b1a345e5bd3999cc279acc2f5a705cba6ab6fc285701352",
+    "old/pre_alloc.py": "8a2e3724401e442c505cc5af34b22abdf30034a7dd7417526c10865df5ed76c0",
+    "optimizer/delta_ver.py": "da1762a2d66c80ca5fbd9a3de4eff3fb96f3d2d6f3ca16186996c0853cd5c9a3",
+    "optimizer/dist_custom.py": "923e2cafa54bd27646b620d3f13e8ab98386f8a6b93a4ad73c78e6dd69f479f9",
+    "optimizer/ops.py": "41d6ddb143b93e14c51d49dbaea2db60ca6adcd0fdc163c784266e64dcb9595c",
+    "optimizer/ops_test.py": "6584b9cff086fb2492e5131153c23b78225a27ed6ce953aee8a84244bd66e758",
+    "optimizer/scheduler_base.py": "323b0e48b88910f152e8c21a06d4c8a0f9f965aa6f2b09bf3388868737a9c884",
+    "paths.py": "b8aa8a5471c8a6420f9b9532013be1b39ea8a195c2c301bdb42193eccc111170",
+    "ref_tdigest.py": "0e7642c9892553f579b5340d21982b589bdb4a85d4965cbfc70fa35289f9c287",
+    "run/1/all.sh": "05105542d6b66aaf914ad86ccd1338ea4049ed8d2c21a91b2783f9c37a0ff6e4",
+    "run/1/scan_aux.sh": "9d7cb82e0805928fed87f4efb9c727c96d371ae51382ea8fce0192eff92180d3",
+    "run/1/scan_core.sh": "958401b5016d0e19eade15c3f7831b07cf8ad611e627ff6d1f4a06db8d27503a",
+    "run/1/sweep_seed.sh": "dea4922a271e4e318ecc29f39a7ef728de52bd581470c87095b4023c50dcfa8a",
+    "run/2/aba_scalability_scan.sh": "d527b302c374401165e3011cca9d3904710ee4154def52aab5489d725c41f925",
+    "run/2/abla_scalablility.sh": "2f56009e9eb0da9cfa9223737aadb356e444b7e8b2e6212810c2e6385151a498",
+    "run/2/all2.sh": "85638195a489880dc8c26bdba929d3c62a4b0b83c6eaaeb252d040db74824880",
+    "run/3/time_sharing.sh": "b8104f1f3c684290dfbdf781e07b60a70e8feb251bbe9cd80278c3fd9dcfa5ee",
+    "run/aba_scalability_scan copy.sh": "c60b76ec65a851962d4b7235ed76e8450a6e80cbefdd22ce6aaf5530fb348819",
+    "run/abla_chain_sharing.sh": "17943f0885c65567943936abdc82e6c53a5df33340f3a0ef37ff9a2c52e370b3",
+    "run/bin_sharing.sh": "a94cd42eb610e21321b47921c5c2063a4590b0b8322cf57ab8b57a13166287b4",
+    "run/cfg_parser.py": "5d8c3a618d13994aee7dbec18e033d938491a9e46fedeaa75ce712b59f7d9f55",
+    "run/clean.sh": "7d5abeedad2abb698003ac37a594feffa5676334a8f615fcdee6c059a1e4ecbe",
+    "run/max_core_num_scan.py": "79fa47da771d7ac88ef383946e4609c8248212f4b4d7fa6517f27ec34f2f464a",
+    "run/scan_coalescing.sh": "2ee0fbb7c0b029075ee071e3ac1af672e63019af484fcc2a30bcdd03173dfa7d",
+    "run/temp.sh": "31236f54d38944c69f2cb3b3f069a7c3931332e4add8cfd252d091d5621a6a49",
+    "sched/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sched/bin_list_utils.py": "67a9aa91714a797d20f504c33bca796836632c6501d954e971cb1aa5aaa79bb4",
+    "sched/bin_list_utils_old.py": "580d943fd5b2057b4fd624c32d6197a24b56a2c5c36d3be3ceb5924032bc4a9e",
+    "sched/bin_list_utils_unused.py": "2142733db35776d6df1936a8091b59cf57e438dad2e10d316ae0be11110a536a",
+    "sched/bin_ops.py": "361bbc497b182e68304694f791354e9a296e93d5941cef267e9775bb9b47c301",
+    "sched/binpack_config.py": "d10829049efd5502328ca5f14d92dbe26435b219a53f3b4b03c06530ebc43f40",
+    "sched/global_sched.py": "a11a8324def4ca8b8763814e7dc8483a5444bc013e29083fa1b1dbbfbbbe4118",
+    "sched/global_sched_alloc.py": "627300a13b10f98ca4c2c8b08807780578cf1cf923c68b9967ce32dc9af1b2e0",
+    "sched/global_sched_old.py": "cc93f501ce6bf24f92841d8a323fe4d9550fd7e76120be27c539242b5e1df425",
+    "sched/global_sched_repack.py": "2e61f425893e6365d711676c53445cf89bec915c3ee5039c82d84d024dfcfece",
+    "sched/monitor_agent.py": "c748029c18bd6c99ffa0fed57536d5344fbc20ae23fc64b37446b2d973f9d83b",
+    "sched/packing_solver/chain_slack_assign.py": "e564906bc80d9b742e321cd9d0395fe6b03a2b891c35ddb9142e852c9c4d141f",
+    "sched/packing_solver/fit.py": "1b3d0b5296648d4d7403016c67f53be21d34b55c334b8d193f4fc770216e7998",
+    "sched/packing_solver/gurobi_MP_semi2DClst.py": "e56adc1a37dbba39cc3f8d707a955bfc64b3b03f71356084f989946593a02895",
+    "sched/packing_solver/unused/gurobi_semi2Dclst_mapping.py": "4d49d05ab20981eafeb9afe897aa0b952c2ce7d2eaac0880b71fa8131430c522",
+    "sched/packing_solver/unused/gurobi_semi2Dclst_mapping2.py": "9c40c2b4e21edcdb5fc25d51b6ce9479bbb4f8c64e2e3bc577d8e61ebf36e3dc",
+    "sched/placement.py": "008ca6d7c2316064c3fce0b75258e35c77f570b727e483d32a2010f6f7408fdf",
+    "sched/pre_alloc_new.py": "6991b6551a7f0ff3fe94f6b47f4fbe469a4da1ccdbd80e8eaca1bb7749cfbea6",
+    "sched/pre_alloc_new_old.py": "97e11a4df33ebc3b3ff6adaeabaa1b1635f34e9ad059cdbda23eb2f6a0cbd878",
+    "sched/ref_alloc_search.py": "c29243f7134518633c9b3f1631420607adef0ef79d994c0152ef579402c88ca7",
+    "sched/runtime_legacy/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sched/runtime_legacy/sched_fn.py": "cc82e889cb203dd7cb306988050c432b92857c559ccd2ab2bb6c85d2a63c79f7",
+    "sched/runtime_legacy/sched_utils.py": "ecc8414c05eeb9f1b7574142c1da5620d0c7a5e4d1ed6d2ecb2a3442604f2135",
+    "sched/runtime_legacy/scheduler_agent.py": "c0e3d3583f0a86947fa1478cb1d42bb9bbd4ff0727aab2128173b878cbc58cac",
+    "sched/runtime_legacy/state_trans.py": "ab3850e46e89c907fd2ca6a19667427c3e787ce1c5cf52e6fc2d93a7a4edc569",
+    "sched/sched_fn.py": "6ddf24cd84d4001c09bc637719430f60a7580950a1499046a0e6f7a1277026ed",
+    "sched/sched_utils.py": "daddd34bce6031198b5866b90eaa22365ee950b41323d2164c00e2e23b8479e6",
+    "sched/scheduler_agent.py": "cf77c531c15130c4dd3a218a9fd197d3daba242c018e1b222bdd1371e893e4de",
+    "sched/scheduling_table.py": "a7df3b3ed412e6b30b29d9cc533749c59b74c38c88e19ff6dba9858f669aad8c",
+    "sched/scheduling_table_event.py": "a79b101f8648cc12411477321025164d0fb6546fa20f9c9780fccc3b7ff46837",
+    "sched/slack_estim.py": "bda2da01c0bb32873d021dd32efc0debb5017333221baa3bd5cfbf7f17cc39c5",
+    "sched/slack_estim_unused.py": "0dca3dcceabe1e251c93a469c33840165912a9365894377e78f556b35322b3b0",
+    "sched/sort_function.py": "50ef837990c9d6a8dda164fca656852a4f25e640394160058d15326291a6183f",
+    "sched/state_trans.py": "29b77a41fed368421d76f5bf06cd698955990684908afbfc03bf49d1262cc628",
+    "scripts/abla_exp_runner.py": "73ca0bccb065a284f1f078c3a4a4027d9134e972b3bba18a6e26380e61e60864",
+    "scripts/e2e_exp_runner.py": "4e64059930d47287f6827beb5043dc382947d6128ae5ef854d0ded49f2ef1286",
+    "scripts/e2e_hyperparam.py": "579229a5e596f3eac366215af6ec2ad67d862d69f5ca43f05b4a06ed466ee9b8",
+    "scripts/exp_common.py": "6d0e913f0eacdc62b2972ce2ee9c25f459891e92da12f32c4001ac74a0f98274",
+    "scripts/motiv_exp_runner.py": "4592032791d2bcfe532aa01adda9f545b9196545bb0c4e8a0e018358e4eb712a",
+    "scripts/run_abla_exps.sh": "3f8d8a01e366995b7e8d4fb0b492e4c1bb0cbe989da2c061d501f80caca7c366",
+    "scripts/run_motiv_exps.sh": "4238e238d4640f53c19f2705f892be988ad19a50439f8c2d48efd2cd43c36d66",
+    "scripts/test_alloc_lat.py": "fc0bf0ead04d6e71fa32e69003388fc1ae402a2cbeee2f18e6ae167cb16ce552",
+    "scripts/unused/repack_sweep.py": "262dad167ec4fad1c6b2b9fe14c5d941f958cdbb0722198b723c2e76adace213",
+    "sim_main_old.py": "02aac1cd1af96eec0dbb51393f84cd33c05abaf4b1abf657cb89dd1cd02472cc",
+    "simple_test_collector.py": "b6bff9b527a9941a187d5e89640f5d785791ddd4c69df3a745a1e23a0e127142",
+    "task/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "task/graph_breakdown.py": "486b438fa3325f8d035ef91ca63518649986e21aee74cb761092908c579cdbd1",
+    "task/graph_breakdown_unused.py": "ad0d03b8c4b16bb67f0c8a92e8ccd5f2d03767755135703863cb2649c6582537",
+    "task/graph_scaling.py": "23cd8bd44738144c8a4578875a88bab4d06bef003cf0bdaa958e743ce9c88492",
+    "task/load_cfg/loadA.py": "7f75f58b094573322dce01ca6f2366241fbd82e4891292aee390c0a1d98ad287",
+    "task/spec.py": "66f2eeb5f3c35b9ee92fb0f0a90f0bba4e2cecfb88fd2192f3be7ca931d09022",
+    "task/task_agent.py": "21786d243f70d1e41d5ad43f1d8c22dee13d54f3fab28a84719ad3cbe16f8a2e",
+    "task/task_cfg.py": "6194c815e202c298f7789bb37be929dcc59f19d513a2ebb9a476a2fc3b0ef14b",
+    "task/task_cfg_old.py": "06a38533685502a78a0274edd8d5a460f5baa3579f6adb420b38bcbbca2d0356",
+    "task/throughput_cnt.py": "7df7e2fa30a3f6061fffa210952d211666e1dcd00636d18e80fa29cf61fc15ef",
+    "test_approach_collector.py": "efd7b67e99cd0a970dc1a7998461af5a0795fa239ead43e00eb5e8ce0e6f2d68",
+    "test_approach_package_compat.py": "ca4bac52de6e14174ed93fd56d2c23be16d9457be9f15c93122e6ccf94b02792",
+    "test_binpack_pipeline_contract.py": "144f9f0acc656c687adcdc8099124697888c41a4bb0b78a621f43a938cefb1d9",
+    "test_closure_fix.py": "16c04deae220389724a7c4c28a0bb838399d671a61429ddc84cd5d28c3994165",
+    "test_core_allocation.py": "44fe340a041794584e12a30b99cb9aac1aa9dc3dc5e3a6e82f94c9f3ce428045",
+    "test_deduce_cfg2.py": "9edb5c3de657302137144df2ae7425bf36976e3b20a4b5d10f3580f83e41fddb",
+    "test_duplicate.py": "662f0ed5fd5a76dd59e2b82981377297aba2ac118a6c9a150176f619aa2e2dd2",
+    "test_event_update.py": "68ff45c5ff1f5fad893933722565b034bef2e1831f15c56ce398a5b982d7dc95",
+    "test_legacy_approach_archive.py": "b6dc62122ea09a99cbbddf2cffa52613be3376d7f827518487a977fd2fb96d77",
+    "test_mapping.py": "a32256208595f8b9f451c71d9d9c18a8f4f992d161c1bfa79e048b30cbed5b3f",
+    "test_mem_planner.py": "e171129a2a8519f3de13f8e533e2bd74cba08f076dd9e564945be65a01c87b60",
+    "test_old_task_cfg.py": "88498ed6d99d56a16cbbf610c6bc249e309496e5c8e29855da68666fdf274da8",
+    "test_repack_diagnostic.py": "d11f52e223cb829fb9dd16c401282b58e035df8bcceac3c000a560b63744b83f",
+    "test_scheduling_table.py": "5a44cb64b2e88744a72816784fb70f87b826dae56bd92a00ee07ffd29200bea0",
+    "test_unused_e2e_event_generators.py": "9959f891ba33892a0bcf75e3b0eff5b83259247a65e611b15d7b0f3a735aa496",
+    "test_unused_eq_quantiles.py": "7748d46ee067cf89e9707f6ea367733e0ef06e04b6f7d4074d1900f5ec3db832",
+    "test_unused_global_constants.py": "ac3bbe27146f057fa5fe7fa38ed51296f134a7f7dec76828bb8f63542046191d",
+    "test_unused_hdf5_utils.py": "cdc3fab2f6c53006d42c69c1c01abc9cff7bfeb035a828345ea73ebbd4f86fc6",
+    "test_unused_path_utils.py": "01e2d7da2298380db15ab323bc102a1b161788af6f5419d4965e1bfebc9a53ac",
+    "test_unused_slack_graph_helpers.py": "05567227d3c8af745d6598d7616d97e3b69469a0c36e5ccca37c10e82e8c7c3e",
+    "test_updated_stats.py": "cbd88f4afd5bdb6b8642fe435e386c38fc7856737a5df80909d3734dbaafe91d",
+    "tile_2d_mesh_mapper_fixed.py": "db0d65db81bdb53079bdf02e22da85432bafb5777de9b1e2d676834ef883e003",
+    "unused_fun.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "utils.py": "508f1366fb8bb08f16f1ad5f57e651692be7915c6a3c29e054ce73970dcd4e03",
+    "utils_unused.py": "cadac26936dca668f85f6eb6ceb84186c2be32dd52acae7b56785f760c15b40d"
+  },
+  "public_exports": {
+    "os": {
+      "type": "module",
+      "module": null,
+      "qualname": null
+    },
+    "re": {
+      "type": "module",
+      "module": null,
+      "qualname": null
+    },
+    "Dict": {
+      "type": "_SpecialGenericAlias",
+      "module": "typing",
+      "qualname": null
+    },
+    "warnings": {
+      "type": "module",
+      "module": null,
+      "qualname": null
+    },
+    "gen_workloads": {
+      "type": "function",
+      "module": "task.task_cfg",
+      "qualname": "gen_workloads"
+    },
+    "export_json_graph_utils": {
+      "type": "function",
+      "module": "task.task_cfg",
+      "qualname": "export_json_graph_utils"
+    },
+    "affinity_cfg": {
+      "type": "dict",
+      "module": null,
+      "qualname": null
+    },
+    "push_task_into_bins_new": {
+      "type": "function",
+      "module": "sched.global_sched_repack",
+      "qualname": "push_task_into_bins_new"
+    },
+    "TaskInt": {
+      "type": "type",
+      "module": "task.task_agent",
+      "qualname": "TaskInt"
+    },
+    "Spec": {
+      "type": "type",
+      "module": "task.spec",
+      "qualname": "Spec"
+    },
+    "MsgDispatcher": {
+      "type": "type",
+      "module": "model.message.msg_dispatcher",
+      "qualname": "MsgDispatcher"
+    },
+    "DataPipe": {
+      "type": "type",
+      "module": "model.message.data_pipe",
+      "qualname": "DataPipe"
+    },
+    "TriggerPipe": {
+      "type": "type",
+      "module": "model.message.data_pipe",
+      "qualname": "TriggerPipe"
+    },
+    "SchedulingTableInt": {
+      "type": "type",
+      "module": "sched.scheduling_table",
+      "qualname": "SchedulingTableInt"
+    },
+    "get_task_layout_compact": {
+      "type": "function",
+      "module": "sched.bin_list_utils",
+      "qualname": "get_task_layout_compact"
+    },
+    "get_task_layout_compact1bin": {
+      "type": "function",
+      "module": "sched.bin_list_utils",
+      "qualname": "get_task_layout_compact1bin"
+    },
+    "Bin_list_print": {
+      "type": "function",
+      "module": "sched.bin_list_utils",
+      "qualname": "Bin_list_print"
+    },
+    "Resource_model_int": {
+      "type": "type",
+      "module": "model.resource_agent",
+      "qualname": "Resource_model_int"
+    },
+    "Scheduler": {
+      "type": "type",
+      "module": "sched.runtime_legacy.scheduler_agent",
+      "qualname": "Scheduler"
+    },
+    "core_mapping_1d": {
+      "type": "function",
+      "module": "sched.placement",
+      "qualname": "core_mapping_1d"
+    },
+    "Monitor": {
+      "type": "type",
+      "module": "sched.monitor_agent",
+      "qualname": "Monitor"
+    },
+    "TaskQueue": {
+      "type": "type",
+      "module": "model.task_queue_agent",
+      "qualname": "TaskQueue"
+    },
+    "dump_and_check": {
+      "type": "function",
+      "module": "utils",
+      "qualname": "dump_and_check"
+    },
+    "load_pickle": {
+      "type": "function",
+      "module": "utils",
+      "qualname": "load_pickle"
+    },
+    "update_df": {
+      "type": "function",
+      "module": "utils",
+      "qualname": "update_df"
+    },
+    "check_parents_path": {
+      "type": "function",
+      "module": "utils",
+      "qualname": "check_parents_path"
+    },
+    "build_path_old": {
+      "type": "function",
+      "module": "utils",
+      "qualname": "build_path_old"
+    },
+    "get_case_path_str": {
+      "type": "function",
+      "module": "utils",
+      "qualname": "get_case_path_str"
+    },
+    "math": {
+      "type": "module",
+      "module": null,
+      "qualname": null
+    },
+    "FLOPS_PER_CORE": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "trace_file": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "trace_list": {
+      "type": "list",
+      "module": null,
+      "qualname": null
+    },
+    "numerical_error_tol_abs": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "numerical_tol_bit": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "numerical_error_tol_rel": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "elim_nume_error": {
+      "type": "function",
+      "module": "global_var",
+      "qualname": "<lambda>"
+    },
+    "elim_error": {
+      "type": "function",
+      "module": "global_var",
+      "qualname": "elim_error"
+    },
+    "flop1u_error_tol_abs": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "flop1n_error_tol_abs": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "flop1u_error_tol_bit": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "flop1n_error_tol_bit": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "time1u_error_tol_abs": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "time1n_error_tol_abs": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "time1u_error_tol_bit": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "time1n_error_tol_bit": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "fork_pid_base": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "max_fork_candi_num": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "max_fork_pid": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "GLB_BUFFER_SIZE_PER_CORE": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "BW_DRAM": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "LAT_PER_HOP": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "AVG_HOP_NUM": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "AVG_HEAD_LAT": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "BROADCAST_SCALER": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "cfg_dir": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "log_dir": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "plot_dir": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "trace_dir": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "cache_dir": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "csv_dir": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "ld_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "cfg_root_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "cache_root_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "plot_root_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "trace_root_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "log_root_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "cfg_root_dir_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "csv_root_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "bin_fn_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "routing_table_fn_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "bin_save_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "routing_table_save_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "plt_fn_w_seed_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "plt_fn_wo_seed_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "trace_fn_wo_seed_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "trace_fn_w_seed_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "core_stat_fn_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_bp": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_glb": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_dyn": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_cyc": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_fifo": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_pglb": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_suffix_N_barrier": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_bp_input": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_glb_input": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "one_stage_case_coll": {
+      "type": "list",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_dyn_input": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_cyc_input": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_fifo_input": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_pglb_input": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "two_stage_case_coll": {
+      "type": "list",
+      "module": null,
+      "qualname": null
+    },
+    "init_packing_algo_required": {
+      "type": "list",
+      "module": null,
+      "qualname": null
+    },
+    "partition_max": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "core_distr": {
+      "type": "function",
+      "module": "utils",
+      "qualname": "core_distr"
+    },
+    "time_cnt": {
+      "type": "function",
+      "module": "utils",
+      "qualname": "time_cnt"
+    },
+    "vectorized_core_allocation": {
+      "type": "function",
+      "module": "utils",
+      "qualname": "vectorized_core_allocation"
+    },
+    "PathContext": {
+      "type": "type",
+      "module": "paths",
+      "qualname": "PathContext"
+    },
+    "np": {
+      "type": "module",
+      "module": null,
+      "qualname": null
+    },
+    "argparse": {
+      "type": "module",
+      "module": null,
+      "qualname": null
+    },
+    "USE_FIXCORE_REPACK": {
+      "type": "bool",
+      "module": null,
+      "qualname": null
+    },
+    "generate_bin_paths": {
+      "type": "function",
+      "module": "sim_main",
+      "qualname": "generate_bin_paths"
+    },
+    "compare_paths": {
+      "type": "function",
+      "module": "sim_main",
+      "qualname": "compare_paths"
+    },
+    "ensure_csv": {
+      "type": "function",
+      "module": "sim_main",
+      "qualname": "ensure_csv"
+    },
+    "extract_pid2_bin_id": {
+      "type": "function",
+      "module": "sim_main",
+      "qualname": "extract_pid2_bin_id"
+    },
+    "apply_forced_num_cores": {
+      "type": "function",
+      "module": "sim_main",
+      "qualname": "apply_forced_num_cores"
+    },
+    "render_bin_pack_plots": {
+      "type": "function",
+      "module": "sim_main",
+      "qualname": "render_bin_pack_plots"
+    },
+    "render_runtime_full_plot": {
+      "type": "function",
+      "module": "sim_main",
+      "qualname": "render_runtime_full_plot"
+    },
+    "prepare_induced_env_if_needed": {
+      "type": "function",
+      "module": "sim_main",
+      "qualname": "prepare_induced_env_if_needed"
+    },
+    "build_paths_and_ctx": {
+      "type": "function",
+      "module": "sim_main",
+      "qualname": "build_paths_and_ctx"
+    },
+    "build_workload_and_criticality": {
+      "type": "function",
+      "module": "sim_main",
+      "qualname": "build_workload_and_criticality"
+    },
+    "determine_resource_config": {
+      "type": "function",
+      "module": "sim_main",
+      "qualname": "determine_resource_config"
+    },
+    "create_scheduler_elements_with_config": {
+      "type": "function",
+      "module": "sim_main",
+      "qualname": "create_scheduler_elements_with_config"
+    },
+    "build_simulation_env": {
+      "type": "function",
+      "module": "sim_main",
+      "qualname": "build_simulation_env"
+    },
+    "perform_bin_packing": {
+      "type": "function",
+      "module": "sim_main",
+      "qualname": "perform_bin_packing"
+    },
+    "init_sched_components": {
+      "type": "function",
+      "module": "sim_main",
+      "qualname": "init_sched_components"
+    },
+    "preprocess_args": {
+      "type": "function",
+      "module": "sim_main",
+      "qualname": "preprocess_args"
+    },
+    "create_common_scheduler_elements": {
+      "type": "function",
+      "module": "sim_main",
+      "qualname": "create_common_scheduler_elements"
+    },
+    "get_trace_path": {
+      "type": "function",
+      "module": "sim_main",
+      "qualname": "get_trace_path"
+    },
+    "get_core_num_from_trace_name": {
+      "type": "function",
+      "module": "sim_main",
+      "qualname": "get_core_num_from_trace_name"
+    },
+    "check_max_bin_num": {
+      "type": "function",
+      "module": "sim_main",
+      "qualname": "check_max_bin_num"
+    }
+  },
+  "signatures": {
+    "ensure_csv": "(csv_path_and_fn, cfg_para_dict, para_scan_group1)",
+    "prepare_induced_env_if_needed": "(path_para_dict, path_ctx: paths.PathContext, trace_path_para, plot_path_para)",
+    "get_core_num_from_trace_name": "(path_para_dict, path_ctx: paths.PathContext)",
+    "check_max_bin_num": "(args, num_cores, bin_path_format, path_ctx: paths.PathContext)"
+  },
+  "pickle_original": {
+    "ensure_csv": "gASVGwAAAAAAAACMCHNpbV9tYWlulIwKZW5zdXJlX2NzdpSTlC4=",
+    "prepare_induced_env_if_needed": "gASVLgAAAAAAAACMCHNpbV9tYWlulIwdcHJlcGFyZV9pbmR1Y2VkX2Vudl9pZl9uZWVkZWSUk5Qu",
+    "get_core_num_from_trace_name": "gASVLQAAAAAAAACMCHNpbV9tYWlulIwcZ2V0X2NvcmVfbnVtX2Zyb21fdHJhY2VfbmFtZZSTlC4=",
+    "check_max_bin_num": "gASVIgAAAAAAAACMCHNpbV9tYWlulIwRY2hlY2tfbWF4X2Jpbl9udW2Uk5Qu"
+  },
+  "cases": [
+    {"name":"csv_create","kind":"csv","cfg":{"x":1,"y":2},"scan":{"aux":3},"expected":{"result":{"kind":"return","value":{"type":"NoneType","value":null}},"stdout":"","before":{"ctx":null,"trace":{"keep":1},"plot":{"keep":2},"files":{},"csv_text":null},"after":{"ctx":null,"trace":{"keep":1},"plot":{"keep":2},"files":{"limits.csv":"9d20df8290babab3c6f5e66fc50b217c4993d9b747f3bb9ad83b71e9f3816895"},"csv_text":"x,y,aux,num_cores\n"}}},
+    {"name":"csv_existing_unchanged","kind":"csv","cfg":{"x":1},"scan":{"aux":2},"existing":"x,y\n1,2\n","expected":{"result":{"kind":"return","value":{"type":"NoneType","value":null}},"stdout":"","before":{"ctx":null,"trace":{"keep":1},"plot":{"keep":2},"files":{"limits.csv":"81bf9fa83c6f7f151bd491a98cd7d933de3965289e3ebd77c6c425f7eaa16392"},"csv_text":"x,y\n1,2\n"},"after":{"ctx":null,"trace":{"keep":1},"plot":{"keep":2},"files":{"limits.csv":"81bf9fa83c6f7f151bd491a98cd7d933de3965289e3ebd77c6c425f7eaa16392"},"csv_text":"x,y\n1,2\n"}}},
+    {"name":"csv_duplicate_columns","kind":"csv","cfg":{"num_cores":0,"x":1},"scan":{"x":2},"expected":{"result":{"kind":"return","value":{"type":"NoneType","value":null}},"stdout":"","before":{"ctx":null,"trace":{"keep":1},"plot":{"keep":2},"files":{},"csv_text":null},"after":{"ctx":null,"trace":{"keep":1},"plot":{"keep":2},"files":{"limits.csv":"5c81e408c52d36a75add88288e583da285147d3edd5134ca16e93758282d141b"},"csv_text":"num_cores,x,x,num_cores\n"}}},
+    {"name":"csv_missing_parent","kind":"csv","cfg":{"x":1},"scan":{"aux":2},"path":"missing/limits.csv","expected":{"result":{"kind":"exception","type":"OSError","message":"Cannot save file into a non-existent directory: 'missing'"},"stdout":"","before":{"ctx":null,"trace":{"keep":1},"plot":{"keep":2},"files":{},"csv_text":null},"after":{"ctx":null,"trace":{"keep":1},"plot":{"keep":2},"files":{},"csv_text":null}}},
+    {"name":"trace_match","kind":"trace","files":[{"name":"bin_list_8.pkl","pickle":[1,2]}],"expected":{"result":{"kind":"return","value":{"type":"tuple","items":[{"type":"str","value":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard"},{"type":"list","items":[{"type":"str","value":"bin_list_8.pkl"}]},{"type":"Match","pattern":"bin_list_(\\d*).pkl","groups":["8"],"span":[0,14],"text":"bin_list_8.pkl"}]}},"stdout":"✅ 路径匹配 (cache_root): ./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard\n✅ 路径匹配 (bin_fn_regex): bin_list_(\\d*).pkl\n","before":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{"cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/bin_list_8.pkl":"8cbfd92ade96356cbc71dafe4e96e499bcf0862ab3dd1b182c0db72476b332ff"},"csv_text":null},"after":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{"cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/bin_list_8.pkl":"8cbfd92ade96356cbc71dafe4e96e499bcf0862ab3dd1b182c0db72476b332ff"},"csv_text":null}}},
+    {"name":"trace_empty_original_error","kind":"trace","files":[],"expected":{"result":{"kind":"exception","type":"UnboundLocalError","message":"local variable 'match' referenced before assignment"},"stdout":"✅ 路径匹配 (cache_root): ./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard\n✅ 路径匹配 (bin_fn_regex): bin_list_(\\d*).pkl\n","before":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{},"csv_text":null},"after":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{},"csv_text":null}}},
+    {"name":"trace_nonmatch","kind":"trace","files":[{"name":"notice.txt","text":"ignored"}],"expected":{"result":{"kind":"return","value":{"type":"tuple","items":[{"type":"str","value":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard"},{"type":"list","items":[{"type":"str","value":"notice.txt"}]},{"type":"NoneType","value":null}]}},"stdout":"✅ 路径匹配 (cache_root): ./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard\n✅ 路径匹配 (bin_fn_regex): bin_list_(\\d*).pkl\n!!! Warning: no bin_list file bin_list_(\\d*).pkl in ./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard:['notice.txt'] !!!\n","before":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{"cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/notice.txt":"3514cf816e5407a39cb7a1c1e1243f176dda121e06398a8934edb1dc426b0b34"},"csv_text":null},"after":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{"cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/notice.txt":"3514cf816e5407a39cb7a1c1e1243f176dda121e06398a8934edb1dc426b0b34"},"csv_text":null}}},
+    {"name":"trace_nested_original_assert","kind":"trace","subdir":true,"expected":{"result":{"kind":"exception","type":"AssertionError","message":""},"stdout":"✅ 路径匹配 (cache_root): ./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard\n✅ 路径匹配 (bin_fn_regex): bin_list_(\\d*).pkl\n","before":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{},"csv_text":null},"after":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{},"csv_text":null}}},
+    {"name":"trace_missing_folder","kind":"trace","remove_folder":true,"expected":{"result":{"kind":"exception","type":"StopIteration","message":""},"stdout":"✅ 路径匹配 (cache_root): ./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard\n✅ 路径匹配 (bin_fn_regex): bin_list_(\\d*).pkl\n","before":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{},"csv_text":null},"after":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{},"csv_text":null}}},
+    {"name":"prepare_success","kind":"prepare","files":[{"name":"bin_list_8.pkl","pickle":[{"id":1},{"id":2}]}],"expected":{"result":{"kind":"return","value":{"type":"tuple","items":[{"type":"int","value":8},{"type":"list","items":[{"type":"dict","items":[[{"type":"str","value":"id"},{"type":"int","value":1}]]},{"type":"dict","items":[[{"type":"str","value":"id"},{"type":"int","value":2}]]}]}]}},"stdout":"✅ 路径匹配 (cache_root): ./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard\n✅ 路径匹配 (bin_fn_regex): bin_list_(\\d*).pkl\n✅ 路径匹配 (bin_list_save_path (initial load)): ./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/bin_list_8.pkl\n✅ 路径匹配 (routing_table_save_path (initial load)): ./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/routing_table_8.pkl\n","before":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{"cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/bin_list_8.pkl":"271dfc73df30b30a9cb9ee7ed597fb76611bf6e95fef4e266642d619cfe3e6b5"},"csv_text":null},"after":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1,"num_cores":8},"plot":{"keep":2,"num_cores":8},"files":{"cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/bin_list_8.pkl":"271dfc73df30b30a9cb9ee7ed597fb76611bf6e95fef4e266642d619cfe3e6b5"},"csv_text":null}}},
+    {"name":"prepare_stale_context_original_assert","kind":"prepare","context_cores":9,"files":[{"name":"bin_list_8.pkl","pickle":[1,2]}],"expected":{"result":{"kind":"exception","type":"AssertionError","message":"路径不匹配: bin_list_save_path (initial load)"},"stdout":"✅ 路径匹配 (cache_root): ./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard\n✅ 路径匹配 (bin_fn_regex): bin_list_(\\d*).pkl\n❌ 路径不匹配 (bin_list_save_path (initial load)):\n   旧路径: ./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/bin_list_8.pkl\n   新路径: ./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/bin_list_9.pkl\n","before":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":9,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{"cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/bin_list_8.pkl":"8cbfd92ade96356cbc71dafe4e96e499bcf0862ab3dd1b182c0db72476b332ff"},"csv_text":null},"after":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":9,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1,"num_cores":8},"plot":{"keep":2,"num_cores":8},"files":{"cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/bin_list_8.pkl":"8cbfd92ade96356cbc71dafe4e96e499bcf0862ab3dd1b182c0db72476b332ff"},"csv_text":null}}},
+    {"name":"prepare_no_match","kind":"prepare","files":[{"name":"notice.txt","text":"ignored"}],"expected":{"result":{"kind":"return","value":{"type":"NoneType","value":null}},"stdout":"✅ 路径匹配 (cache_root): ./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard\n✅ 路径匹配 (bin_fn_regex): bin_list_(\\d*).pkl\n!!! Warning: no bin_list file bin_list_(\\d*).pkl in ./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard:['notice.txt'] !!!\n","before":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{"cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/notice.txt":"3514cf816e5407a39cb7a1c1e1243f176dda121e06398a8934edb1dc426b0b34"},"csv_text":null},"after":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{"cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/notice.txt":"3514cf816e5407a39cb7a1c1e1243f176dda121e06398a8934edb1dc426b0b34"},"csv_text":null}}},
+    {"name":"prepare_bad_pickle_masked_error","kind":"prepare","files":[{"name":"bin_list_8.pkl","text":"invalid pickle"}],"expected":{"result":{"kind":"exception","type":"FileNotFoundError","message":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/bin_list_8.pkl not found"},"stdout":"✅ 路径匹配 (cache_root): ./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard\n✅ 路径匹配 (bin_fn_regex): bin_list_(\\d*).pkl\n✅ 路径匹配 (bin_list_save_path (initial load)): ./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/bin_list_8.pkl\n✅ 路径匹配 (routing_table_save_path (initial load)): ./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/routing_table_8.pkl\n","before":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{"cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/bin_list_8.pkl":"03883aec6739b7a51c81ca6f1b97ede20c4cba9af9b09d1dc99591ba8f8f8f71"},"csv_text":null},"after":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1,"num_cores":8},"plot":{"keep":2,"num_cores":8},"files":{"cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/bin_list_8.pkl":"03883aec6739b7a51c81ca6f1b97ede20c4cba9af9b09d1dc99591ba8f8f8f71"},"csv_text":null}}},
+    {"name":"prepare_empty_digits","kind":"prepare","files":[{"name":"bin_list_.pkl","pickle":[]}],"expected":{"result":{"kind":"exception","type":"ValueError","message":"invalid literal for int() with base 10: ''"},"stdout":"✅ 路径匹配 (cache_root): ./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard\n✅ 路径匹配 (bin_fn_regex): bin_list_(\\d*).pkl\n","before":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{"cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/bin_list_.pkl":"ec0a6ccf9debf1c16781445c4b9106080d00478b0559469336db7c7b7b9711c8"},"csv_text":null},"after":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{"cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/bin_list_.pkl":"ec0a6ccf9debf1c16781445c4b9106080d00478b0559469336db7c7b7b9711c8"},"csv_text":null}}},
+    {"name":"max_two_caches","kind":"max","events":[[0.1,1],[0.2,2]],"cached":[[0.1,1,2],[0.2,2,5]],"cores":10,"expected":{"result":{"kind":"return","value":{"type":"int","value":5}},"stdout":"✅ 路径匹配 (bin_list_save_path (e2e_var: 1, 0.1)): ./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/bin_list_10.pkl\n✅ 路径匹配 (bin_list_save_path (e2e_var: 2, 0.2)): ./cache/b20/x2_0.2s_rda-70.00%(S)_all_hard/bin_list_10.pkl\n","before":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{"cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/bin_list_10.pkl":"e7f274cfcedf0fdb830410da24d201bebaff2bc011a03ed5fcd19adb3fdfbd86","cache/b20/x2_0.2s_rda-70.00%(S)_all_hard/bin_list_10.pkl":"3cc3cab206eaf1059bdf0b412c3b01e97d5d89154d9b9f36f7a0739c75b4250b"},"csv_text":null},"after":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":2,"e2e_latency":0.2,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":10,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x2_0.2s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x2_0.2s_rda-70.00%(S)_all_hard/graph_x2_0.2s.json","cache_root":"./cache/b20/x2_0.2s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x2_0.2s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x2_0.2s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x2_0.2s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x2_0.2s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{"cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/bin_list_10.pkl":"e7f274cfcedf0fdb830410da24d201bebaff2bc011a03ed5fcd19adb3fdfbd86","cache/b20/x2_0.2s_rda-70.00%(S)_all_hard/bin_list_10.pkl":"3cc3cab206eaf1059bdf0b412c3b01e97d5d89154d9b9f36f7a0739c75b4250b"},"csv_text":null}}},
+    {"name":"max_empty_events","kind":"max","events":[],"cached":[],"cores":10,"expected":{"result":{"kind":"return","value":{"type":"int","value":0}},"stdout":"","before":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{},"csv_text":null},"after":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{},"csv_text":null}}},
+    {"name":"max_missing_second_cache","kind":"max","events":[[0.1,1],[0.2,2]],"cached":[[0.1,1,2]],"cores":10,"expected":{"result":{"kind":"exception","type":"FileNotFoundError","message":"./cache/b20/x2_0.2s_rda-70.00%(S)_all_hard/bin_list_10.pkl not found"},"stdout":"✅ 路径匹配 (bin_list_save_path (e2e_var: 1, 0.1)): ./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/bin_list_10.pkl\n✅ 路径匹配 (bin_list_save_path (e2e_var: 2, 0.2)): ./cache/b20/x2_0.2s_rda-70.00%(S)_all_hard/bin_list_10.pkl\n","before":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{"cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/bin_list_10.pkl":"e7f274cfcedf0fdb830410da24d201bebaff2bc011a03ed5fcd19adb3fdfbd86"},"csv_text":null},"after":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":2,"e2e_latency":0.2,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":10,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x2_0.2s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x2_0.2s_rda-70.00%(S)_all_hard/graph_x2_0.2s.json","cache_root":"./cache/b20/x2_0.2s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x2_0.2s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x2_0.2s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x2_0.2s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x2_0.2s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{"cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/bin_list_10.pkl":"e7f274cfcedf0fdb830410da24d201bebaff2bc011a03ed5fcd19adb3fdfbd86"},"csv_text":null}}},
+    {"name":"max_mismatch_retains_mutation","kind":"max","events":[[0.2,2]],"cached":[[0.2,2,3]],"cores":10,"format":"wrong_{0}_{1}_{2}.pkl","expected":{"result":{"kind":"exception","type":"AssertionError","message":"路径不匹配: bin_list_save_path (e2e_var: 2, 0.2)"},"stdout":"❌ 路径不匹配 (bin_list_save_path (e2e_var: 2, 0.2)):\n   旧路径: wrong_2_0.2_10.pkl\n   新路径: ./cache/b20/x2_0.2s_rda-70.00%(S)_all_hard/bin_list_10.pkl\n","before":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":1,"e2e_latency":0.1,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":8,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x1_0.1s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard/graph_x1_0.1s.json","cache_root":"./cache/b20/x1_0.1s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x1_0.1s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x1_0.1s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x1_0.1s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x1_0.1s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{"cache/b20/x2_0.2s_rda-70.00%(S)_all_hard/bin_list_10.pkl":"459c3a39f143ea11dba8173cd68bfaebd47f776dcbb616bf2be7aab697440d38"},"csv_text":null},"after":{"ctx":{"root_dir":"b20","case":"bin_pack_new","num_bins":2,"aux_scale_factor":2,"e2e_latency":0.2,"file_suffix":"","i_file_suffix":"","force_suffix":"","exec_t_comp_ratioA":0.7,"lateness_mode":"all_hard","num_cores":10,"exec_t_comp_ratioB":-1,"seed":42,"jitter":false,"cfg_n":"x2_0.2s_rda-70.00%(S)_all_hard","graph_fn":"./cache/b20/x2_0.2s_rda-70.00%(S)_all_hard/graph_x2_0.2s.json","cache_root":"./cache/b20/x2_0.2s_rda-70.00%(S)_all_hard","trace_root":"./trace/b20/x2_0.2s_rda-70.00%(S)_all_hard","plot_root":"./plot/b20/x2_0.2s_rda-70.00%(S)_all_hard","log_root":"./log/b20/x2_0.2s_rda-70.00%(S)_all_hard","cfg_root_dir":"./cfgs/b20/x2_0.2s_rda-70.00%(S)_all_hard","csv_root":"./csv/b20"},"trace":{"keep":1},"plot":{"keep":2},"files":{"cache/b20/x2_0.2s_rda-70.00%(S)_all_hard/bin_list_10.pkl":"459c3a39f143ea11dba8173cd68bfaebd47f776dcbb616bf2be7aab697440d38"},"csv_text":null}}}
+  ],
+  "preflight_regression": {
+    "command": [
+      "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+      "-B",
+      "-m",
+      "pytest",
+      "-q",
+      "-p",
+      "no:cacheprovider",
+      "test_binpack_pipeline_contract.py",
+      "test_approach_package_compat.py",
+      "test_legacy_approach_archive.py",
+      "test_approach_collector.py",
+      "test_unused_hdf5_utils.py",
+      "test_unused_path_utils.py",
+      "test_unused_global_constants.py",
+      "test_unused_eq_quantiles.py",
+      "test_old_task_cfg.py",
+      "test_unused_e2e_event_generators.py",
+      "test_unused_slack_graph_helpers.py",
+      "--junitxml=/tmp/scheduler-b20-preflight-nlt8s38r/pytest.xml"
+    ],
+    "suite": [
+      "test_binpack_pipeline_contract.py",
+      "test_approach_package_compat.py",
+      "test_legacy_approach_archive.py",
+      "test_approach_collector.py",
+      "test_unused_hdf5_utils.py",
+      "test_unused_path_utils.py",
+      "test_unused_global_constants.py",
+      "test_unused_eq_quantiles.py",
+      "test_old_task_cfg.py",
+      "test_unused_e2e_event_generators.py",
+      "test_unused_slack_graph_helpers.py"
+    ],
+    "rc": 1,
+    "tests": 186,
+    "seconds": 30.05,
+    "log_dir": "/tmp/scheduler-b20-preflight-nlt8s38r",
+    "failed": [
+      {
+        "name": "test_basic_functionality",
+        "message": "AttributeError: 'StatisticsCollector' object has no attribute 'task_realloc_curr'"
+      },
+      {
+        "name": "test_motiv_exp_specific_stats",
+        "message": "ZeroDivisionError: float division by zero"
+      },
+      {
+        "name": "test_summary_generation",
+        "message": "ZeroDivisionError: float division by zero"
+      },
+      {
+        "name": "test_formatted_output",
+        "message": "ZeroDivisionError: division by zero"
+      },
+      {
+        "name": "test_edge_cases",
+        "message": "ZeroDivisionError: division by zero"
+      }
+    ],
+    "errors": 0,
+    "skipped": 0
+  },
+  "ledger_prefixes": {
+    "cleanup/move-ledger.csv": {
+      "bytes": 22038,
+      "sha256": "99f76fdd1b1a815d51aaf34175be1de36d950a3a8d08914c39309fd3d6cca9c5"
+    },
+    "cleanup/reachable-files.csv": {
+      "bytes": 72055,
+      "sha256": "733c9cde00d706b4c96b2a4e5cb25b6c7a6bf80d02a67fd281f936a11e63e8f9"
+    }
+  },
+  "new_paths_exist": {
+    "sim_main_unused.py": false,
+    "test_unused_sim_cache_helpers.py": false
+  },
+  "index_diff_empty": true,
+  "reference_evidence": {
+    "source_scope": 167,
+    "policy": "tracked existing source/script files plus explicitly approved B11-B19 new targets; no untracked recursion",
+    "external_executable_callers": [],
+    "internal_call": "prepare_induced_env_if_needed -> get_core_num_from_trace_name",
+    "star_importers": [],
+    "tracked_text_hits": [
+      [
+        "AGENT_DIALOGUE.md",
+        343,
+        "- summary: B14-UNUSED-PATH-UTILS：沿approach_sched->utils->paths/global_var/run.cfg_parser深度优先核对后，提议将utils的get_log_path_str（181-182）、_normalize_path及专属标题（291-298）、check_paths_equal（300-310）三个完整函数共21行原样分离。utils仅纯删除这21行，保留其他空白/导入；utils_unused在原1449字节之后追加必要的import os、from global_var import log_dir及三个原片段，原HDF5归档前缀逐字节不动。分类unused：当前无调用的辅助能力，软比较器不是sim_main.compare_paths的同义替换，目录getter也不等于PathContext.get_log_path文件接口；不宣称它们是已被等价新实现替代的old。无根re-export，不维持旧utils符号名/猴子补丁接口；明确的归档入口utils_unused。不修改PathContext或任何类内方法，不迁移build_path_old/get_cfg_n/get_csv_path_str/get_case_path_str、严格compare_paths或prepare_induced_env_if_needed，不改任何依赖/既有测试/保护区，无提交推送。"
+      ],
+      [
+        "cleanup/symbol-candidates.csv",
+        929,
+        "sim_main.py,ensure_csv,function,86,record-only,SYMBOL_CANDIDATE"
+      ],
+      [
+        "cleanup/symbol-candidates.csv",
+        934,
+        "sim_main.py,prepare_induced_env_if_needed,function,174,record-only,SYMBOL_CANDIDATE"
+      ],
+      [
+        "cleanup/symbol-candidates.csv",
+        946,
+        "sim_main.py,get_core_num_from_trace_name,function,903,record-only,SYMBOL_CANDIDATE"
+      ],
+      [
+        "cleanup/symbol-candidates.csv",
+        947,
+        "sim_main.py,check_max_bin_num,function,930,record-only,SYMBOL_CANDIDATE"
+      ],
+      [
+        "doc/dev/change_log_2025.md",
+        69,
+        "- CSV 初始化统一：新增 `ensure_csv`，替换分支内重复 DataFrame 初始化"
+      ],
+      [
+        "doc/dev/change_log_2025.md",
+        70,
+        "- 修复：`bin_split` 分支调用 `get_core_num_from_trace_name` 时缺少 `path_ctx`"
+      ],
+      [
+        "doc/dev/change_log_2025.md",
+        71,
+        "- 统一 runtime induced 环境准备：新增 `prepare_induced_env_if_needed`，收敛核数解析/路径生成/加载 bin_list，替换两阶段分支重复逻辑"
+      ],
+      [
+        "path_replacement_summary.md",
+        54,
+        "#### 2.1 check_max_bin_num 函数"
+      ],
+      [
+        "path_replacement_summary.md",
+        65,
+        "def check_max_bin_num(args, num_cores, bin_path_format):"
+      ],
+      [
+        "path_replacement_summary.md",
+        68,
+        "def check_max_bin_num(args, num_cores, bin_path_format, path_ctx):"
+      ],
+      [
+        "sim_main.py",
+        84,
+        "def ensure_csv(csv_path_and_fn, cfg_para_dict, para_scan_group1):"
+      ],
+      [
+        "sim_main.py",
+        172,
+        "def prepare_induced_env_if_needed(path_para_dict, path_ctx: PathContext,"
+      ],
+      [
+        "sim_main.py",
+        184,
+        "    folder, files, match = get_core_num_from_trace_name(path_para_dict, path_ctx)"
+      ],
+      [
+        "sim_main.py",
+        295,
+        "    #     prepared = prepare_induced_env_if_needed("
+      ],
+      [
+        "sim_main.py",
+        308,
+        "    #         num_bins = check_max_bin_num(args, args.num_bins, bin_path_format, path_ctx)"
+      ],
+      [
+        "sim_main.py",
+        312,
+        "    #     prepared = prepare_induced_env_if_needed("
+      ],
+      [
+        "sim_main.py",
+        705,
+        "def get_core_num_from_trace_name(path_para_dict, path_ctx: PathContext):"
+      ],
+      [
+        "sim_main.py",
+        732,
+        "def check_max_bin_num(args, num_cores, bin_path_format, path_ctx: PathContext):"
+      ],
+      [
+        "sim_main_old.py",
+        93,
+        "    # ensure_csv(csv_path_and_fn, cfg_para_dict, para_scan_group1)"
+      ]
+    ],
+    "history_policy": "2025 change log and path replacement notes preserved; B14's earlier exclusion was that batch's scope, not authorization for B20."
+  },
+  "archive_design": "Root symbol slices -> sim_main_unused.py. Original four complete functions; imports os/re, paths.PathContext, global_var.cache_root_fmt/bin_fn_fmt, utils.load_pickle, and live sim_main.compare_paths/generate_bin_paths. get_core_num_from_trace_name resolves inside archive. Source imports and all other code unchanged. Archive intentionally imports sim_main; no import-isolation claim.",
+  "compatibility_boundary": "Old sim_main exports for four functions and their pre-move function-reference pickle paths retire. New archive references pickle-roundtrip. Other121-4=117 public descriptors unchanged. External usage unknown; no old-name re-export or logic/signature rewrite.",
+  "verification_plan": [
+    "38 new tests:18 double-run real I/O cases in owned /tmp dirs;4 exact blocks;4 signatures;4 old pickle loads fail;4 new pickle identities;2 fresh import orders/full117 exports;archive existence;shared live helpers/internal closure. RED first.",
+    "Full11 existing suites186=181+5 known collector failures plus new38, expected224=219+same5; no errors/skips. All3 entry helps and B13-B16 probes executed this batch.",
+    "Source exactly0added/74deleted; expected remaining SHA and trailing bytes fixed before move.166 non-batch source hashes all unchanged incl.guard; protected paths/dependencies/tests/index/HEAD unchanged.",
+    "Only if tool appends exactly one LF beyond expected full byte string may a full original/remaining SHA and actual==expected+LF guarded truncate -s -1 restore it; any other difference pauses. Do not change expected hash.",
+    "CSV append4 move rows14cols and2 reachable rows10cols; preserve current22038/72055 byte prefixes and8 historical malformed rows. Persist scoped3-code-file recovery patch and decoded reverse--check; no restore.",
+    "Independent reviewer approves proposal and accepts result; no commit/push."
+  ],
+  "dfs_review": {
+    "parent": "approach/approach_setup.py",
+    "read_modules": [
+      "approach/approach_setup.py",
+      "sim_main.py",
+      "sim_main_old.py",
+      "sched/binpack_config.py",
+      "paths.py"
+    ],
+    "classes_kept": [
+      "BinPackConfig",
+      "PathContext"
+    ],
+    "keep_sim_main": [
+      "generate_bin_paths",
+      "compare_paths",
+      "extract_pid2_bin_id",
+      "apply_forced_num_cores",
+      "render_bin_pack_plots",
+      "render_runtime_full_plot",
+      "build_paths_and_ctx",
+      "build_workload_and_criticality",
+      "determine_resource_config",
+      "create_scheduler_elements_with_config",
+      "build_simulation_env",
+      "perform_bin_packing",
+      "init_sched_components",
+      "preprocess_args",
+      "create_common_scheduler_elements",
+      "get_trace_path"
+    ],
+    "legacy_entry_caution": "sim_main_old.py has intended references to current helpers but does not import/bind them; allocator_agent root import and determine_resource_config arity are historical unresolved links. Do not describe these as a verified working borrower, and do not use the broken entry to authorize extra removals. Keep this file and its referenced helpers.",
+    "cancelled_deferred": "REQ-003 and REQ-005/006/007 not reopened",
+    "whole_repo_semantic_audit_complete": false
+  },
+  "approval": {
+    "event": "E0078",
+    "actor": "reviewer",
+    "state": "APPROVED",
+    "binding": "L1-L6; EOF repair only for extra LF, not this missing-LF case"
+  },
+  "validation": {
+    "stage": "ACCEPTED_E0082",
+    "red": {
+      "log": "/tmp/scheduler-b20-red.log",
+      "failed": 1,
+      "deselected": 37,
+      "reason": "archive absent before migration"
+    },
+    "green": {
+      "command": [
+        "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "test_unused_sim_cache_helpers.py",
+        "--junitxml=/tmp/scheduler-b20-green.xml"
+      ],
+      "rc": 0,
+      "seconds": 9.8,
+      "log": "/tmp/scheduler-b20-green.log",
+      "xml": "/tmp/scheduler-b20-green.xml",
+      "output": "......................................                                   [100%]\n--------------- generated xml file: /tmp/scheduler-b20-green.xml ---------------\n38 passed in 8.29s\n"
+    },
+    "eof_anomaly": {
+      "expected_sha": "1d04e4aa038b63bc289834fc350442d9ff2b929faabb42a042deb7803bc86520",
+      "actual_sha": "1cc9920a17f14831f3c7841753cdfb71482b45500fe8940c29a3c725873fa8d1",
+      "expected_length": 30583,
+      "actual_length": 30582,
+      "expected_tail": "b' \\xe6\\xaf\\x94\\xe8\\xbe\\x83\\xe8\\xb7\\xaf\\xe5\\xbe\\x84\\n    compare_paths(old_trace_path, new_trace_path, f\"trace_path ({case_pth})\")\\n    return new_trace_path\\n\\n\\n'",
+      "actual_tail": "b'# \\xe6\\xaf\\x94\\xe8\\xbe\\x83\\xe8\\xb7\\xaf\\xe5\\xbe\\x84\\n    compare_paths(old_trace_path, new_trace_path, f\"trace_path ({case_pth})\")\\n    return new_trace_path\\n\\n'",
+      "ops": [
+        {
+          "kind": "delete",
+          "expected_range": [
+            30582,
+            30583
+          ],
+          "actual_range": [
+            30582,
+            30582
+          ],
+          "expected": "\n",
+          "actual": ""
+        }
+      ],
+      "original_blocks_in_archive": {
+        "ensure_csv": 1,
+        "prepare_induced_env_if_needed": 1,
+        "get_core_num_from_trace_name": 1,
+        "check_max_bin_num": 1
+      },
+      "numstat": "0\t75\tsim_main.py\n",
+      "state": {
+        "last_event": "E0078",
+        "next_writer": "codex",
+        "tail_sha256": "68afb405e01e2ba41f8dfc222efb05428ec76e1879f788732b581e0519f8f07e",
+        "lines": 637
+      }
+    },
+    "correction_executed": true,
+    "amendment_requested": "E0079",
+    "eof_restoration": {
+      "event": "E0080",
+      "before_bytes": 30582,
+      "after_bytes": 30583,
+      "after_sha256": "1d04e4aa038b63bc289834fc350442d9ff2b929faabb42a042deb7803bc86520",
+      "operation": "r+b append one LF; flush/fsync",
+      "full_bytes_equal": true,
+      "numstat": "0\t74\tsim_main.py"
+    },
+    "amendment_approval": "E0080",
+    "temp_dir": "/tmp/scheduler-b20-regression-lomypf0o",
+    "regression": {
+      "command": [
+        "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "test_binpack_pipeline_contract.py",
+        "test_approach_package_compat.py",
+        "test_legacy_approach_archive.py",
+        "test_approach_collector.py",
+        "test_unused_hdf5_utils.py",
+        "test_unused_path_utils.py",
+        "test_unused_global_constants.py",
+        "test_unused_eq_quantiles.py",
+        "test_old_task_cfg.py",
+        "test_unused_e2e_event_generators.py",
+        "test_unused_slack_graph_helpers.py",
+        "test_unused_sim_cache_helpers.py",
+        "--junitxml=/tmp/scheduler-b20-regression-lomypf0o/pytest.xml"
+      ],
+      "rc": 1,
+      "seconds": 29.94,
+      "tests": 224,
+      "failed": [
+        {
+          "name": "test_basic_functionality",
+          "message": "AttributeError: 'StatisticsCollector' object has no attribute 'task_realloc_curr'"
+        },
+        {
+          "name": "test_motiv_exp_specific_stats",
+          "message": "ZeroDivisionError: float division by zero"
+        },
+        {
+          "name": "test_summary_generation",
+          "message": "ZeroDivisionError: float division by zero"
+        },
+        {
+          "name": "test_formatted_output",
+          "message": "ZeroDivisionError: division by zero"
+        },
+        {
+          "name": "test_edge_cases",
+          "message": "ZeroDivisionError: division by zero"
+        }
+      ],
+      "errors": 0,
+      "skipped": 0,
+      "module_counts": {
+        "test_binpack_pipeline_contract": 3,
+        "test_approach_package_compat": 32,
+        "test_legacy_approach_archive": 7,
+        "test_approach_collector": 7,
+        "test_unused_hdf5_utils": 9,
+        "test_unused_path_utils": 19,
+        "test_unused_global_constants": 13,
+        "test_unused_eq_quantiles": 24,
+        "test_old_task_cfg": 18,
+        "test_unused_e2e_event_generators": 25,
+        "test_unused_slack_graph_helpers": 29,
+        "test_unused_sim_cache_helpers": 38
+      }
+    },
+    "helps": [
+      {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "main_approach.py",
+          "--help"
+        ],
+        "rc": 0
+      },
+      {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "scripts/motiv_exp_runner.py",
+          "--help"
+        ],
+        "rc": 0
+      },
+      {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "scripts/abla_exp_runner.py",
+          "--help"
+        ],
+        "rc": 0
+      }
+    ],
+    "benefits_probe": "passed",
+    "non_batch_compared": 166,
+    "non_batch_unchanged": 166,
+    "sources": {
+      "sim_main.py": {
+        "exact_reconstruction": true,
+        "numstat": "0\t74\tsim_main.py",
+        "ends_lf": true
+      }
+    },
+    "python_ast_parsed": 153,
+    "sha256": {
+      "sim_main.py": "1d04e4aa038b63bc289834fc350442d9ff2b929faabb42a042deb7803bc86520",
+      "sim_main_unused.py": "4d60418cea08dd26e7dac15e698dce86056f2212a8e519298e9872352577b8e1",
+      "test_unused_sim_cache_helpers.py": "1dbf81135d8a2c14aa1a0852fefc4043a0220272eb7cc3d7e060ab257d472d5d"
+    },
+    "recovery": {
+      "forward_patch_zlib_base64": "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",
+      "forward_patch_sha256": "1b4734fbf88fd458295b77df0a6e646bdad9623b6a17b2ac0f37cfcb14e23271",
+      "check_rc": 0,
+      "scoped_paths": [
+        "sim_main.py",
+        "sim_main_unused.py",
+        "test_unused_sim_cache_helpers.py"
+      ],
+      "generated_patch": "/tmp/scheduler-b20-regression-lomypf0o/b20-recovery.patch",
+      "extract_command": "/home/zhangchg/miniconda3/envs/gurobi/bin/python -B -c \"import base64,hashlib,json,pathlib,zlib; r=json.loads(pathlib.Path('/home/zhangchg/git_repo/scheduler-audit-20260612/cleanup/reports/b20-unused-sim-cache-helpers-baseline.json').read_text())['validation']['recovery']; b=zlib.decompress(base64.b64decode(r['forward_patch_zlib_base64'])); assert hashlib.sha256(b).hexdigest()==r['forward_patch_sha256']; pathlib.Path('/tmp/scheduler-b20-recovery.patch').write_bytes(b)\"",
+      "check_command": "git -C /home/zhangchg/git_repo/scheduler-audit-20260612 apply --reverse --check /tmp/scheduler-b20-recovery.patch",
+      "restore_command": "git -C /home/zhangchg/git_repo/scheduler-audit-20260612 apply --reverse /tmp/scheduler-b20-recovery.patch",
+      "restore_policy": "Only after explicit recovery authorization and successful check against then-current files. Never whole-file checkout; patch limited to these three code paths; status/ledger history corrected separately."
+    },
+    "head_index_unchanged": true,
+    "protected_diff_empty": true,
+    "diff_check": {
+      "rc": 2,
+      "stdout": "sim_main.py:677: new blank line at EOF.\n",
+      "stderr": "",
+      "cause": "Original HEAD lines704 and731 retained byte-identically; deletion of trailing functions exposes them at EOF. No whitespace edits.",
+      "disposition": "ACCEPTED by independent reviewer E0082 as original-byte preservation; retain raw rc2 and warning, not a clean diff-check."
+    },
+    "previous_validator_stop": {
+      "temp_dir": "/tmp/scheduler-b20-regression-9kk_98n1",
+      "tests": 224,
+      "failed": [
+        {
+          "name": "test_basic_functionality",
+          "message": "AttributeError: 'StatisticsCollector' object has no attribute 'task_realloc_curr'"
+        },
+        {
+          "name": "test_motiv_exp_specific_stats",
+          "message": "ZeroDivisionError: float division by zero"
+        },
+        {
+          "name": "test_summary_generation",
+          "message": "ZeroDivisionError: float division by zero"
+        },
+        {
+          "name": "test_formatted_output",
+          "message": "ZeroDivisionError: division by zero"
+        },
+        {
+          "name": "test_edge_cases",
+          "message": "ZeroDivisionError: division by zero"
+        }
+      ],
+      "errors": 0,
+      "skipped": 0,
+      "module_counts": {
+        "test_binpack_pipeline_contract": 3,
+        "test_approach_package_compat": 32,
+        "test_legacy_approach_archive": 7,
+        "test_approach_collector": 7,
+        "test_unused_hdf5_utils": 9,
+        "test_unused_path_utils": 19,
+        "test_unused_global_constants": 13,
+        "test_unused_eq_quantiles": 24,
+        "test_old_task_cfg": 18,
+        "test_unused_e2e_event_generators": 25,
+        "test_unused_slack_graph_helpers": 29,
+        "test_unused_sim_cache_helpers": 38
+      },
+      "pytest_log_tail": "n-related metrics across periods.\n        - idle_mean_ratio: mean of dist_overall_idle\n        - miss_mean_ratio: mean of dist_overall_miss\n        - realloc_mean_ratio: mean of dist_overall_realloc\n        - used_mean_ratio: mean of dist_overall_used\n        - miss_mean_count: mean number of missed tasks per period\n        (already normalized by total_pwr*T_hp)\n        \"\"\"\n        return {\n            'idle_mean_ratio': float(self.dist_overall_idle.get_mean()),\n            'miss_mean_ratio': float(self.dist_overall_miss.get_mean()),\n            'realloc_mean_ratio': float(self.dist_overall_realloc.get_mean()),\n            'used_mean_ratio': float(self.dist_overall_used.get_mean()),\n>           'miss_mean_count': float(self.dist_overall_miss_count.get_mean()/self.task_cnt)\n        }\nE       ZeroDivisionError: division by zero\n\napproach/approach_collector.py:615: ZeroDivisionError\n----------------------------- Captured stdout call -----------------------------\n\n--- Testing Edge Cases ---\n---- generated xml file: /tmp/scheduler-b20-regression-9kk_98n1/pytest.xml -----\n=========================== short test summary info ============================\nFAILED test_approach_collector.py::test_basic_functionality - AttributeError:...\nFAILED test_approach_collector.py::test_motiv_exp_specific_stats - ZeroDivisi...\nFAILED test_approach_collector.py::test_summary_generation - ZeroDivisionErro...\nFAILED test_approach_collector.py::test_formatted_output - ZeroDivisionError:...\nFAILED test_approach_collector.py::test_edge_cases - ZeroDivisionError: divis...\n5 failed, 219 passed in 30.26s\n",
+      "benefits": "B13-B17 retained\n",
+      "help_logs": {
+        "main_approach.help.log": 5155,
+        "motiv_exp_runner.help.log": 2183,
+        "abla_exp_runner.help.log": 3144
+      },
+      "whitespace_check": {
+        "rc": 2,
+        "stdout": "sim_main.py:677: new blank line at EOF.\n",
+        "stderr": ""
+      },
+      "retained_tail": [
+        [
+          673,
+          700,
+          "b'    \\n'"
+        ],
+        [
+          674,
+          701,
+          "b'    # \\xe6\\xaf\\x94\\xe8\\xbe\\x83\\xe8\\xb7\\xaf\\xe5\\xbe\\x84\\n'"
+        ],
+        [
+          675,
+          702,
+          "b'    compare_paths(old_trace_path, new_trace_path, f\"trace_path ({case_pth})\")\\n'"
+        ],
+        [
+          676,
+          703,
+          "b'    return new_trace_path\\n'"
+        ],
+        [
+          677,
+          704,
+          "b'\\n'"
+        ],
+        [
+          678,
+          731,
+          "b'\\n'"
+        ]
+      ],
+      "exact_remaining": true
+    },
+    "ledger_before": {
+      "cleanup/move-ledger.csv": {
+        "row_count": 42,
+        "widths": {
+          "14": 34,
+          "15": 3,
+          "16": 4,
+          "17": 1
+        },
+        "historical_bad_rows": 8,
+        "last_line": "B19-MOVE-003,task/graph_breakdown.py,task/graph_breakdown_unused.py,move-reference,EXECUTED_WAITING_REVIEW,Independent unused helper; preserve complete original function,MEDIUM,E0074; sort_chains_by_ddl_flops,codex,archive/test_pipeline-20260612,See B19 baseline JSON validation.recovery; extract then git apply -R --check,B19-UNUSED-SLACK-GRAPH-HELPERS,reviewer E0074,Old export and function pickle path retire; existing failures preserved"
+      },
+      "cleanup/reachable-files.csv": {
+        "row_count": 264,
+        "widths": {
+          "10": 264
+        },
+        "historical_bad_rows": 0,
+        "last_line": "test_unused_slack_graph_helpers.py,KEEP,regression-test,codex,pytest explicit B19 suite,29 tests:13 double-run cases; exact blocks; signatures; full exports; pickle,LOW,archive/test_pipeline-20260612,See B19 baseline JSON validation.recovery; extract then git apply -R --check,Approved new tests; original exception and mutation behavior retained"
+      }
+    },
+    "ledger_after": {
+      "cleanup/move-ledger.csv": {
+        "prefix_bytes": 22038,
+        "prefix_sha256": "99f76fdd1b1a815d51aaf34175be1de36d950a3a8d08914c39309fd3d6cca9c5",
+        "prefix_unchanged": true,
+        "rows_before": 42,
+        "rows_after": 46,
+        "added_rows": 4,
+        "widths": {
+          "14": 38,
+          "15": 3,
+          "16": 4,
+          "17": 1
+        },
+        "historical_bad_rows": 8
+      },
+      "cleanup/reachable-files.csv": {
+        "prefix_bytes": 72055,
+        "prefix_sha256": "733c9cde00d706b4c96b2a4e5cb25b6c7a6bf80d02a67fd281f936a11e63e8f9",
+        "prefix_unchanged": true,
+        "rows_before": 264,
+        "rows_after": 266,
+        "added_rows": 2,
+        "widths": {
+          "10": 266
+        },
+        "historical_bad_rows": 0
+      }
+    },
+    "persistent_recovery_check": {
+      "sha256": "1b4734fbf88fd458295b77df0a6e646bdad9623b6a17b2ac0f37cfcb14e23271",
+      "scoped_paths": [
+        "sim_main.py",
+        "sim_main_unused.py",
+        "test_unused_sim_cache_helpers.py"
+      ],
+      "check_rc": 0,
+      "check_stdout": "",
+      "check_stderr": "",
+      "path": "/tmp/scheduler-b20-persisted-recovery.patch"
+    },
+    "acceptance": {
+      "event": "E0082",
+      "actor": "reviewer",
+      "state": "ACCEPTED",
+      "codex_independently_read_xml": true,
+      "reviewer_xml": {
+        "/tmp/b20_review_final/b20only.xml": {
+          "tests": 38,
+          "failed": [],
+          "errors": 0,
+          "skipped": 0,
+          "module_counts": {
+            "test_unused_sim_cache_helpers": 38
+          }
+        },
+        "/tmp/b20_review_final/twelve.xml": {
+          "tests": 224,
+          "failed": [
+            {
+              "name": "test_basic_functionality",
+              "message": "AttributeError: 'StatisticsCollector' object has no attribute 'task_realloc_curr'"
+            },
+            {
+              "name": "test_motiv_exp_specific_stats",
+              "message": "ZeroDivisionError: float division by zero"
+            },
+            {
+              "name": "test_summary_generation",
+              "message": "ZeroDivisionError: float division by zero"
+            },
+            {
+              "name": "test_formatted_output",
+              "message": "ZeroDivisionError: division by zero"
+            },
+            {
+              "name": "test_edge_cases",
+              "message": "ZeroDivisionError: division by zero"
+            }
+          ],
+          "errors": 0,
+          "skipped": 0,
+          "module_counts": {
+            "test_binpack_pipeline_contract": 3,
+            "test_approach_package_compat": 32,
+            "test_legacy_approach_archive": 7,
+            "test_approach_collector": 7,
+            "test_unused_hdf5_utils": 9,
+            "test_unused_path_utils": 19,
+            "test_unused_global_constants": 13,
+            "test_unused_eq_quantiles": 24,
+            "test_old_task_cfg": 18,
+            "test_unused_e2e_event_generators": 25,
+            "test_unused_slack_graph_helpers": 29,
+            "test_unused_sim_cache_helpers": 38
+          }
+        }
+      },
+      "reviewer_probe_logs": "/tmp/b20_review_final/help_main.out; help_motiv.out; help_abla.out; probes.out",
+      "eof_warning": "Explicitly accepted by E0082; rc2 retained and disclosed. Original HEAD blank separator lines704/731 become current677/678; not rewritten.",
+      "post_review_all169_sha_unchanged": true,
+      "next_writer": "codex",
+      "commit_authorized": false
+    }
+  }
+}

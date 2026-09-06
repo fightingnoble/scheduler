@@ -1,0 +1,2506 @@
+{
+  "batch_id": "B24-MAPPER-LEGACY-HELPERS",
+  "request": "REQ-022",
+  "status": "CLOSED_ACCEPTED",
+  "test_fix_approval": {"event": "E0098", "actor": "reviewer", "scope": "two lines in new test only", "applied": true},
+  "red": {
+    "command": [
+      "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+      "-B",
+      "-m",
+      "pytest",
+      "-q",
+      "-p",
+      "no:cacheprovider",
+      "test_mapper_legacy_helpers.py",
+      "-k",
+      "test_archive_targets_exist",
+      "--junitxml=/tmp/scheduler-b24-red-svr67gdj/red.xml"
+    ],
+    "rc": 1,
+    "log": "/tmp/scheduler-b24-red-svr67gdj/red.log",
+    "xml": "/tmp/scheduler-b24-red-svr67gdj/red.xml",
+    "tests": 1,
+    "deselected": 39,
+    "failed": 1,
+    "errors": 0,
+    "reason": "test_archive_targets_exist AssertionError: archive file does not exist, before production migration."
+  },
+  "mainline": "master",
+  "base_head": "a1d933b1f26efd4d569eb3d8ffb313447294443b",
+  "archive_ref": "archive/test_pipeline-20260612",
+  "mode": "SEPARATION_NOT_REWRITING",
+  "source_authorization": "E0094 APPROVED O1-O6 and E0096 per-file import allocation confirmed",
+  "approval": {"event": "E0094", "clarification": "E0096", "actor": "reviewer", "state": "APPROVED", "session_id": 11983},
+  "scope": {
+    "source_paths": [
+      "mapper/mem_planner.py"
+    ],
+    "new_paths": [
+      "mapper/mem_planner_old.py",
+      "mapper/mem_planner_unused.py",
+      "test_mapper_legacy_helpers.py"
+    ],
+    "source_changes_yet": 1,
+    "protected": [
+      "all existing tests",
+      ".claude/",
+      "claude_talk/",
+      "doc/spec/",
+      "doc/guide/",
+      "doc/dev/"
+    ],
+    "preserve": "All 7 classes including MemMap.seq_mapper_old and commented class methods; all remaining top-level code, imports, whitespace and EOF; no fixes to old runtime or test import."
+  },
+  "source_sha256": "6d5bb9291bac221b6da31b9671933aec22b5b0e780ac334a32e7e60030fe947e",
+  "source_eof_lf": true,
+  "remaining_sha256": "482af52853a9ca50ccfef4d940ac6f07bee92b9e4f87e170000031e258e39d10",
+  "removed_lines": 120,
+  "targets": [
+    {
+      "name": "stat_overlapping_old",
+      "start": 429,
+      "end": 536,
+      "line_count": 108,
+      "block": "def stat_overlapping_old(\n    block_list:List[Block], \n    timestep:float, \n    block_contention:Dict[int, int] = dict(),\n    conflict_graph:Dict[int, Set[Block]] = dict(),\n    sparse_list:List[ContentionGroup] = [],\n    mapper:MemMap = None, sort_fn:callable=lambda x: x.s, strategy:str='first_fit'\n    ):\n    \"\"\"\n    Input: block list I: [(s1, r1, c1), (s2, r2, c2), ...]\n        Each triple (si,ri,ci) is an axis-parallel rectangle: \n            (ri,ci) is the interval on the x-axis\n            si is the length on the y-axis\n            the rectangles along the y-axis while stay fixed on x-axis\n    Output: the blocks in each interval, the contention of each task\n    \"\"\"\n    # collect the start and end of the intervals\n    block_list.sort(key=lambda x: x.r)\n    event_list = []\n    for item in block_list:\n        s, r, c, idx = item.s, item.r, item.c, item.idx\n        event_list.extend([r,c])\n    event_list = list(set(event_list))\n    event_list.sort()\n    \n    # some cache\n    curr_items = [] # cache the current items\n    pending_items = [] # cache the pending items\n    max_core_num = 0 # cache the max core number\n    \n    prev_t:float = 0\n    curr_t:float = 0\n    prev_slot_n:int = 0\n    curr_slot_n:int = 0\n    # scan the event list, place, and pop the task into the bin, \n    # expanding the bin size if necessary\n    for curr_t in list(event_list):\n        curr_slot_n = int(curr_t/timestep)\n\n        if prev_t < curr_t and curr_items:\n            if sparse_list is not None:\n                sparse_list.append(ContentionGroup(prev_t, curr_t - prev_t, max_core_num, curr_items.copy()))\n\n            if block_contention is not None or conflict_graph is not None:\n                # set block contention\n                for item in curr_items:\n                    s, r, c, idx = item.s, item.r, item.c, item.idx\n                    if block_contention is not None:\n                        # record the max degree of contention of each block and set of conflicted blocks\n                        block_contention[idx] = max(block_contention.get(idx, 0), len(curr_items))\n                    if conflict_graph is not None:\n                        # get the union of the conflicted blocks, and remove the current block\n                        conflict_graph[idx] = conflict_graph.get(idx, set()).union(set([item for item in curr_items])).difference(set([item]))\n        \n        # get the pending items\n        while len(block_list):\n            s, r, c, idx = block_list[0].s, block_list[0].r, block_list[0].c, block_list[0].idx\n            if r <= curr_t:\n                pending_items.append(block_list.pop(0))\n                # print(\"s:\", s, \"r:\", r, \"c:\", c, \"idx:\", idx)\n            else:\n                break\n\n        # pop the items that are finished regarding the ddl\n        while len(curr_items):\n            s, r, c, idx = curr_items[0].s, curr_items[0].r, curr_items[0].c, curr_items[0].idx\n            if c <= curr_t:\n                if mapper is not None:\n                    # pop the old block\n                    mapper.release(idx)\n                curr_items.pop(0)\n                # print(\"pop item: s:\", s, \"r:\", r, \"c:\", c, \"idx:\", idx)\n            else:\n                break\n            1+1\n        \n        all_items = curr_items + pending_items\n        max_core_num_tmp = sum([item.s for item in all_items])\n\n        # update the bin size\n        if max_core_num_tmp > max_core_num:\n            print(f\"curr_t:{curr_t}, max_core_num: {max_core_num} -> {max_core_num_tmp}\")\n            max_core_num = max_core_num_tmp\n\n        # place the pending items into the bin\n        if mapper is not None:\n            pending_items.sort(key=sort_fn, reverse=True)\n            \n        \n        while len(pending_items):\n            item = pending_items.pop(0)\n            curr_items.append(item)\n            if mapper is not None:\n                # get the best position for the block\n                offset, interv_idx = mapper.try_to_place(item, strategy)\n                # insert the block into the position\n                mapper.alloc(item.idx, offset, item.s, interv_idx)\n                1+1\n            \n            \n            # print(\"place item: s:\", item.s, \"r:\", item.r, \"c:\", item.c, \"idx:\", item.idx)\n            \n        # sort the current items and pending items by the ddl\n        curr_items.sort(key=lambda x: x.c)\n        prev_t = curr_t\n        prev_slot_n = curr_slot_n\n    \n    return max_core_num\n",
+      "block_sha256": "4c3beab15f805a9002bd025d665096de56ff50163c7338aa4f33d17cba5d020d",
+      "archive_path": "mapper/mem_planner_old.py",
+      "path": "mapper/mem_planner.py",
+      "archive_module": "mapper.mem_planner_old"
+    },
+    {
+      "name": "scan_overlap_1d",
+      "start": 712,
+      "end": 721,
+      "line_count": 10,
+      "block": "def scan_overlap_1d(position_recoder):\n    \"\"\"\n    check if the placement is legal: \n        sort the allocated Memalloc by the offset\n        check the adjacent Memallocs if they overlap\n    \"\"\"\n    sorted_memalloc = list(sorted(position_recoder.values(), key=lambda x: x.offset))\n    for i in range(len(sorted_memalloc)-1):\n        if sorted_memalloc[i].nextoffset > sorted_memalloc[i+1].offset:\n            return False\n",
+      "block_sha256": "1d39f4c26dffb6a6062c5fb4cb360f79b9bae451627efe021246603b18c68b56",
+      "archive_path": "mapper/mem_planner_unused.py",
+      "path": "mapper/mem_planner.py",
+      "archive_module": "mapper.mem_planner_unused"
+    },
+    {
+      "name": "sort_fn_conflict_s_r",
+      "start": 801,
+      "end": 802,
+      "line_count": 2,
+      "block": "def sort_fn_conflict_s_r(x:Block):\n    return (x.n_conflict, x.s, -x.r, -x.idx if not isinstance(x, CyclicBlock) else -x.pid)\n",
+      "block_sha256": "736bfee8c9959b4c1f20c5121004e7f1b22c6fbcc16ace81338869070225afcd",
+      "archive_path": "mapper/mem_planner_unused.py",
+      "path": "mapper/mem_planner.py",
+      "archive_module": "mapper.mem_planner_unused"
+    }
+  ],
+  "archive_imports": {
+    "mapper/mem_planner_old.py": [
+      "from __future__ import annotations",
+      "from typing import List, Dict, Set",
+      "from mapper.mem_planner import Block, ContentionGroup, MemMap"
+    ],
+    "mapper/mem_planner_unused.py": [
+      "from __future__ import annotations",
+      "from mapper.mem_planner import Block, CyclicBlock"
+    ]
+  },
+  "exploration": {
+    "fully_read": [
+      "mapper/mem_planner.py",
+      "mapper/__init__.py",
+      "test_mem_planner.py"
+    ],
+    "partial_read": [
+      "utils.py time_cnt and pyinstr_profiler plus header",
+      "sim_main_old.py header and others mem_plan branch"
+    ],
+    "top_level_functions": 16,
+    "kept_top_level_functions": 13,
+    "classes_preserved": 7,
+    "reference_scope": {
+      "readable_count": 340,
+      "code_count": 174,
+      "hits": [
+        {
+          "path": "mapper/mem_planner.py",
+          "line": 429,
+          "text": "def stat_overlapping_old("
+        },
+        {
+          "path": "mapper/mem_planner.py",
+          "line": 712,
+          "text": "def scan_overlap_1d(position_recoder):"
+        },
+        {
+          "path": "mapper/mem_planner.py",
+          "line": 801,
+          "text": "def sort_fn_conflict_s_r(x:Block):"
+        },
+        {
+          "path": "sched/global_sched.py",
+          "line": 7,
+          "text": "test_mem_planner kept here (test fn, only dead refs)."
+        },
+        {
+          "path": "sim_main_old.py",
+          "line": 53,
+          "text": "        from sched.global_sched import test_mem_planner"
+        },
+        {
+          "path": "sim_main_old.py",
+          "line": 54,
+          "text": "        bin_list = test_mem_planner("
+        },
+        {
+          "path": "test_mem_planner.py",
+          "line": 1,
+          "text": "\"\"\"test_mem_planner.py — external test for mapper.mem_planner (mem/block planning)."
+        },
+        {
+          "path": "test_mem_planner.py",
+          "line": 17,
+          "text": "def test_mem_planner("
+        },
+        {
+          "path": "test_mem_planner.py",
+          "line": 36,
+          "text": "    from mapper.mem_planner import Block, test_priority_mapper, \\"
+        }
+      ],
+      "imports": [
+        {
+          "path": "test_mem_planner.py",
+          "line": 36,
+          "text": "from mapper.mem_planner import Block, test_priority_mapper, \\\n        test_seq_mapper, CyclicBlock, test_cyclic_mapper, load_block_list_from_json"
+        }
+      ],
+      "tracked_mapper_paths": [
+        "mapper/__init__.py",
+        "mapper/mem_planner.py",
+        "test_mem_planner.py"
+      ],
+      "comments_376_428": "376: \n377:     # @time_cnt(\"cyclic_mapper\")\n378:     # def cyclic_mapper(self, cyclic_block_list:List[CyclicBlock], time_step, sort_fn:callable=lambda x: x.s, strategy:str='first_fit'):\n379:     #     # get block confliction\n380:     #     conflict_graph,_,_ = scan_conflict(block_list, time_step)\n381:         \n382:     #     cyclic_conflict_graph = {}\n383:     #     # rewrite the confict graph, merge the block confliction\n384:     #     for block in block_list:\n385:     #         block_conflict = conflict_graph[block.idx]\n386:     #         cyclic_conflict = set([blk.pid for blk in block_conflict])\n387:     #         cyclic_conflict_graph[block.pid] = cyclic_conflict_graph.get(block.pid, set()).union(cyclic_conflict)\n388:         \n389:         \n390:                 \n391: \n392:     #     block_list.sort(key=sort_fn, reverse=True)\n393:     #     i=0\n394:     #     for i, item in enumerate(block_list):\n395:     #         # get the best position for the block\n396:     #         offset = search_interval(item, conflict_graph, self.position_recoder, strategy)\n397:     #         # insert the block into the position\n398:     #         self.position_recoder[item.idx] = Memalloc(offset, item.s)\n399:     #         i+=1\n400:     #     return self.position_recoder, conflict_graph\n401: \n402:     # def check_conflict(self, conflict_graph:Dict[int, Set[int]]):\n403:     #     \"\"\"\n404:     #     check if the placement is legal, \n405:     #     \"\"\"\n406:     #     tmp_graph = conflict_graph.copy()\n407:     #     while len(tmp_graph):\n408:     #         idx, conflict_idx_list = tmp_graph.popitem()  \n409:     #         Block_A = self.position_recoder[idx]\n410:     #         for idx_B in conflict_idx_list:\n411:     #             Block_B = self.position_recoder[idx_B]\n412:     #             # also remove the reverse edge\n413:     #             tmp_graph[idx_B].remove(idx)\n414:     #             if Block_A.offset < Block_B.nextoffset and Block_A.nextoffset > Block_B.offset:\n415:     #                 return False\n416:     \n417:     # def check_legalty(self):\n418:     #     \"\"\"\n419:     #     check if the placement is legal: \n420:     #         sort the allocated Memalloc by the offset\n421:     #         check the adjacent Memallocs if they overlap\n422:     #     \"\"\"\n423:     #     sorted_memalloc = list(sorted(self.position_recoder.values(), key=lambda x: x.offset))\n424:     #     for i in range(len(sorted_memalloc)-1):\n425:     #         if sorted_memalloc[i].nextoffset > sorted_memalloc[i+1].offset:\n426:     #             return False\n427:     \n428: "
+    },
+    "classification": {
+      "stat_overlapping_old": "OLD: interval-event sweep predecessor; current scan_conflict and MemMap.seq_mapper call stat_overlapping instead.",
+      "scan_overlap_1d": "UNUSED: independent one-dimensional legality check; no callers found; not equivalent to current scan_overlap_2d.",
+      "sort_fn_conflict_s_r": "UNUSED: independent ordering alternative; current module selects sort_fn_s_r and explicit size/lifetime key."
+    },
+    "caveats": [
+      "Only protected test_mem_planner imports mapper.mem_planner explicitly in current code; test import currently fails. This is not proof of an active primary-CLI mapping chain.",
+      "No candidate references outside their definitions in scoped nonadministrative text; this does not prove absence of external users or arbitrarily constructed dynamic names.",
+      "Protected class internals and manual diagnostic functions remain untouched."
+    ]
+  },
+  "compatibility": {
+    "risk": "MEDIUM",
+    "retired_exports": [
+      "stat_overlapping_old",
+      "scan_overlap_1d",
+      "sort_fn_conflict_s_r"
+    ],
+    "old_function_pickle_paths_retire": true,
+    "shim": false,
+    "public_names_before": 107,
+    "public_names_after_expected": 104,
+    "old_exports_removal_requires_explicit_reviewer_approval": true,
+    "archive_borrows_live_classes": true,
+    "not_import_isolated": true
+  },
+  "behavior_baseline": {
+    "canonical_values_sha256": "ba3301af2937a8f3a1c05ab7faf08bff98b13dde194681ac18e7bf4849e7cbdb",
+    "fresh_process_runs": 2,
+    "identical": true,
+    "log_dir": "/tmp/scheduler-b24-preflight-16n_tbiw",
+    "runs": [
+      {
+        "rc": 0,
+        "log": "/tmp/scheduler-b24-preflight-16n_tbiw/baseline-0.log",
+        "stderr": ""
+      },
+      {
+        "rc": 0,
+        "log": "/tmp/scheduler-b24-preflight-16n_tbiw/baseline-1.log",
+        "stderr": ""
+      }
+    ],
+    "values": {
+      "active": {
+        "priority_mapper": {
+          "blocks": [
+            [
+              2,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              3,
+              2
+            ]
+          ],
+          "graph": {
+            "1": [
+              2
+            ],
+            "2": [
+              1,
+              3
+            ],
+            "3": [
+              2
+            ]
+          },
+          "legal": true,
+          "positions": {
+            "1": {
+              "nextoffset": 5,
+              "offset": 3,
+              "size": 2
+            },
+            "2": {
+              "nextoffset": 3,
+              "offset": 0,
+              "size": 3
+            },
+            "3": {
+              "nextoffset": 4,
+              "offset": 3,
+              "size": 1
+            }
+          }
+        },
+        "scan_conflict": {
+          "blocks": [
+            [
+              2,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              3,
+              2
+            ]
+          ],
+          "graph": {
+            "1": [
+              2
+            ],
+            "2": [
+              1,
+              3
+            ],
+            "3": [
+              2
+            ]
+          },
+          "return": 5,
+          "sparse": [
+            [
+              2,
+              1,
+              5,
+              [
+                1,
+                2
+              ]
+            ]
+          ]
+        },
+        "seq_mapper": {
+          "blocks": [
+            [
+              2,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              3,
+              0
+            ]
+          ],
+          "legal": true,
+          "positions": {
+            "1": {
+              "nextoffset": 2,
+              "offset": 0,
+              "size": 2
+            },
+            "2": {
+              "nextoffset": 5,
+              "offset": 2,
+              "size": 3
+            },
+            "3": {
+              "nextoffset": 1,
+              "offset": 0,
+              "size": 1
+            }
+          }
+        }
+      },
+      "defaults": {
+        "calls": [
+          {
+            "return": 2,
+            "state": {
+              "contention": {
+                "8": 1
+              },
+              "graph": {
+                "8": []
+              },
+              "input_remaining": [],
+              "mapper": null,
+              "sparse": [
+                [
+                  0,
+                  2,
+                  2,
+                  [
+                    8
+                  ]
+                ]
+              ]
+            },
+            "stdout": "curr_t:0, max_core_num: 0 -> 2\n"
+          },
+          {
+            "return": 3,
+            "state": {
+              "contention": {
+                "8": 1,
+                "9": 1
+              },
+              "graph": {
+                "8": [],
+                "9": []
+              },
+              "input_remaining": [],
+              "mapper": null,
+              "sparse": [
+                [
+                  0,
+                  2,
+                  2,
+                  [
+                    8
+                  ]
+                ],
+                [
+                  1,
+                  2,
+                  3,
+                  [
+                    9
+                  ]
+                ]
+              ]
+            },
+            "stdout": "curr_t:1, max_core_num: 0 -> 3\n"
+          }
+        ],
+        "initial_types": [
+          "dict",
+          "dict",
+          "list",
+          "NoneType",
+          "function",
+          "str"
+        ],
+        "same_defaults": [
+          true,
+          true,
+          true
+        ]
+      },
+      "old": {
+        "empty": {
+          "contention": {},
+          "graph": {},
+          "input_remaining": [],
+          "mapper": null,
+          "return": 0,
+          "sparse": [],
+          "stdout": ""
+        },
+        "invalid_blocks": {
+          "contention": {},
+          "error": [
+            "AttributeError",
+            "'NoneType' object has no attribute 'sort'"
+          ],
+          "graph": {},
+          "input_remaining": null,
+          "mapper": null,
+          "sparse": [],
+          "stdout": ""
+        },
+        "mapper_best": {
+          "contention": {
+            "1": 2,
+            "2": 2,
+            "3": 2
+          },
+          "graph": {
+            "1": [
+              2
+            ],
+            "2": [
+              1,
+              3
+            ],
+            "3": [
+              2
+            ]
+          },
+          "input_remaining": [],
+          "mapper": {
+            "free": [
+              [
+                0,
+                2,
+                2
+              ],
+              [
+                2,
+                5,
+                3
+              ]
+            ],
+            "max_offset": 5,
+            "positions": {
+              "1": {
+                "nextoffset": 2,
+                "offset": 0,
+                "size": 2
+              },
+              "2": {
+                "nextoffset": 5,
+                "offset": 2,
+                "size": 3
+              },
+              "3": {
+                "nextoffset": 1,
+                "offset": 0,
+                "size": 1
+              }
+            }
+          },
+          "return": 5,
+          "sparse": [
+            [
+              0,
+              2,
+              2,
+              [
+                1
+              ]
+            ],
+            [
+              2,
+              1,
+              5,
+              [
+                1,
+                2
+              ]
+            ],
+            [
+              3,
+              1,
+              5,
+              [
+                3,
+                2
+              ]
+            ],
+            [
+              4,
+              1,
+              5,
+              [
+                2
+              ]
+            ]
+          ],
+          "stdout": "curr_t:0, max_core_num: 0 -> 2\ncurr_t:2, max_core_num: 2 -> 5\n"
+        },
+        "mapper_first": {
+          "contention": {
+            "1": 2,
+            "2": 2,
+            "3": 2
+          },
+          "graph": {
+            "1": [
+              2
+            ],
+            "2": [
+              1,
+              3
+            ],
+            "3": [
+              2
+            ]
+          },
+          "input_remaining": [],
+          "mapper": {
+            "free": [
+              [
+                0,
+                2,
+                2
+              ],
+              [
+                2,
+                5,
+                3
+              ]
+            ],
+            "max_offset": 5,
+            "positions": {
+              "1": {
+                "nextoffset": 2,
+                "offset": 0,
+                "size": 2
+              },
+              "2": {
+                "nextoffset": 5,
+                "offset": 2,
+                "size": 3
+              },
+              "3": {
+                "nextoffset": 1,
+                "offset": 0,
+                "size": 1
+              }
+            }
+          },
+          "return": 5,
+          "sparse": [
+            [
+              0,
+              2,
+              2,
+              [
+                1
+              ]
+            ],
+            [
+              2,
+              1,
+              5,
+              [
+                1,
+                2
+              ]
+            ],
+            [
+              3,
+              1,
+              5,
+              [
+                3,
+                2
+              ]
+            ],
+            [
+              4,
+              1,
+              5,
+              [
+                2
+              ]
+            ]
+          ],
+          "stdout": "curr_t:0, max_core_num: 0 -> 2\ncurr_t:2, max_core_num: 2 -> 5\n"
+        },
+        "mapper_worst": {
+          "contention": {
+            "1": 2,
+            "2": 2,
+            "3": 2
+          },
+          "graph": {
+            "1": [
+              2
+            ],
+            "2": [
+              1,
+              3
+            ],
+            "3": [
+              2
+            ]
+          },
+          "input_remaining": [],
+          "mapper": {
+            "free": [
+              [
+                0,
+                2,
+                2
+              ],
+              [
+                2,
+                5,
+                3
+              ]
+            ],
+            "max_offset": 5,
+            "positions": {
+              "1": {
+                "nextoffset": 2,
+                "offset": 0,
+                "size": 2
+              },
+              "2": {
+                "nextoffset": 5,
+                "offset": 2,
+                "size": 3
+              },
+              "3": {
+                "nextoffset": 1,
+                "offset": 0,
+                "size": 1
+              }
+            }
+          },
+          "return": 5,
+          "sparse": [
+            [
+              0,
+              2,
+              2,
+              [
+                1
+              ]
+            ],
+            [
+              2,
+              1,
+              5,
+              [
+                1,
+                2
+              ]
+            ],
+            [
+              3,
+              1,
+              5,
+              [
+                3,
+                2
+              ]
+            ],
+            [
+              4,
+              1,
+              5,
+              [
+                2
+              ]
+            ]
+          ],
+          "stdout": "curr_t:0, max_core_num: 0 -> 2\ncurr_t:2, max_core_num: 2 -> 5\n"
+        },
+        "negative_time": {
+          "contention": {
+            "1": 1
+          },
+          "graph": {
+            "1": []
+          },
+          "input_remaining": [],
+          "mapper": null,
+          "return": 2,
+          "sparse": [
+            [
+              -2,
+              2,
+              2,
+              [
+                1
+              ]
+            ]
+          ],
+          "stdout": "curr_t:-2, max_core_num: 0 -> 2\n"
+        },
+        "none_outputs": {
+          "contention": null,
+          "graph": null,
+          "input_remaining": [],
+          "mapper": null,
+          "return": 5,
+          "sparse": null,
+          "stdout": "curr_t:0, max_core_num: 0 -> 2\ncurr_t:1, max_core_num: 2 -> 5\n"
+        },
+        "overlap": {
+          "contention": {
+            "1": 2,
+            "2": 2
+          },
+          "graph": {
+            "1": [
+              2
+            ],
+            "2": [
+              1
+            ]
+          },
+          "input_remaining": [],
+          "mapper": null,
+          "return": 5,
+          "sparse": [
+            [
+              0,
+              2,
+              5,
+              [
+                2,
+                1
+              ]
+            ],
+            [
+              2,
+              1,
+              5,
+              [
+                1
+              ]
+            ]
+          ],
+          "stdout": "curr_t:0, max_core_num: 0 -> 5\n"
+        },
+        "single": {
+          "contention": {
+            "1": 1
+          },
+          "graph": {
+            "1": []
+          },
+          "input_remaining": [],
+          "mapper": null,
+          "return": 2,
+          "sparse": [
+            [
+              1,
+              2,
+              2,
+              [
+                1
+              ]
+            ]
+          ],
+          "stdout": "curr_t:1, max_core_num: 0 -> 2\n"
+        },
+        "touching": {
+          "contention": {
+            "1": 1,
+            "2": 1
+          },
+          "graph": {
+            "1": [],
+            "2": []
+          },
+          "input_remaining": [],
+          "mapper": null,
+          "return": 3,
+          "sparse": [
+            [
+              0,
+              1,
+              2,
+              [
+                1
+              ]
+            ],
+            [
+              1,
+              1,
+              3,
+              [
+                2
+              ]
+            ]
+          ],
+          "stdout": "curr_t:0, max_core_num: 0 -> 2\ncurr_t:1, max_core_num: 2 -> 3\n"
+        },
+        "unsorted": {
+          "contention": {
+            "1": 2,
+            "2": 2,
+            "3": 2
+          },
+          "graph": {
+            "1": [
+              2
+            ],
+            "2": [
+              1,
+              3
+            ],
+            "3": [
+              2
+            ]
+          },
+          "input_remaining": [],
+          "mapper": null,
+          "return": 5,
+          "sparse": [
+            [
+              0,
+              2,
+              2,
+              [
+                1
+              ]
+            ],
+            [
+              2,
+              1,
+              5,
+              [
+                1,
+                2
+              ]
+            ],
+            [
+              3,
+              1,
+              5,
+              [
+                3,
+                2
+              ]
+            ],
+            [
+              4,
+              1,
+              5,
+              [
+                2
+              ]
+            ]
+          ],
+          "stdout": "curr_t:0, max_core_num: 0 -> 2\ncurr_t:2, max_core_num: 2 -> 5\n"
+        },
+        "zero_duration": {
+          "contention": {},
+          "graph": {},
+          "input_remaining": [],
+          "mapper": null,
+          "return": 2,
+          "sparse": [],
+          "stdout": "curr_t:1, max_core_num: 0 -> 2\n"
+        },
+        "zero_step": {
+          "contention": {},
+          "error": [
+            "ZeroDivisionError",
+            "division by zero"
+          ],
+          "graph": {},
+          "input_remaining": [
+            1,
+            2
+          ],
+          "mapper": null,
+          "sparse": [],
+          "stdout": ""
+        }
+      },
+      "pickle_original": {
+        "scan_overlap_1d": "gASVKgAAAAAAAACMEm1hcHBlci5tZW1fcGxhbm5lcpSMD3NjYW5fb3ZlcmxhcF8xZJSTlC4=",
+        "sort_fn_conflict_s_r": "gASVLwAAAAAAAACMEm1hcHBlci5tZW1fcGxhbm5lcpSMFHNvcnRfZm5fY29uZmxpY3Rfc19ylJOULg==",
+        "stat_overlapping_old": "gASVLwAAAAAAAACMEm1hcHBlci5tZW1fcGxhbm5lcpSMFHN0YXRfb3ZlcmxhcHBpbmdfb2xklJOULg=="
+      },
+      "public_names": [
+        "AVG_HEAD_LAT",
+        "AVG_HOP_NUM",
+        "AllocMap",
+        "BROADCAST_SCALER",
+        "BW_DRAM",
+        "Block",
+        "ContentionGroup",
+        "CyclicBlock",
+        "Dict",
+        "FLOPS_PER_CORE",
+        "GLB_BUFFER_SIZE_PER_CORE",
+        "LAT_PER_HOP",
+        "List",
+        "MemMap",
+        "MemRegion",
+        "Memalloc",
+        "OrderedDict",
+        "Set",
+        "Union",
+        "annotations",
+        "asdict",
+        "bin_fn_fmt",
+        "bin_save_fmt",
+        "cache_dir",
+        "cache_root_fmt",
+        "case_name_bp",
+        "case_name_bp_input",
+        "case_name_cyc",
+        "case_name_cyc_input",
+        "case_name_dyn",
+        "case_name_dyn_input",
+        "case_name_fifo",
+        "case_name_fifo_input",
+        "case_name_glb",
+        "case_name_glb_input",
+        "case_name_pglb",
+        "case_name_pglb_input",
+        "case_suffix_N_barrier",
+        "cfg_dir",
+        "cfg_root_dir_fmt",
+        "cfg_root_fmt",
+        "core_stat_fn_fmt",
+        "csv_dir",
+        "csv_root_fmt",
+        "dataclass",
+        "elim_error",
+        "elim_nume_error",
+        "exam_json_result",
+        "field",
+        "flop1n_error_tol_abs",
+        "flop1n_error_tol_bit",
+        "flop1u_error_tol_abs",
+        "flop1u_error_tol_bit",
+        "fork_pid_base",
+        "init_packing_algo_required",
+        "json",
+        "layout_plot",
+        "ld_fmt",
+        "load_block_list_from_json",
+        "log_dir",
+        "log_root_fmt",
+        "math",
+        "max_fork_candi_num",
+        "max_fork_pid",
+        "mcolors",
+        "np",
+        "numerical_error_tol_abs",
+        "numerical_error_tol_rel",
+        "numerical_tol_bit",
+        "one_stage_case_coll",
+        "os",
+        "partition_max",
+        "plot_dir",
+        "plot_root_fmt",
+        "plt",
+        "plt_fn_w_seed_fmt",
+        "plt_fn_wo_seed_fmt",
+        "pyinstr_profiler",
+        "routing_table_fn_fmt",
+        "routing_table_save_fmt",
+        "scan_conflict",
+        "scan_overlap_1d",
+        "scan_overlap_2d",
+        "search_interval",
+        "sort_fn",
+        "sort_fn_conflict_s_r",
+        "sort_fn_s_r",
+        "sort_fn_s_x_lft2_lft_s_r",
+        "stat_overlapping",
+        "stat_overlapping_old",
+        "test_cyclic_mapper",
+        "test_priority_mapper",
+        "test_seq_mapper",
+        "time1n_error_tol_abs",
+        "time1n_error_tol_bit",
+        "time1u_error_tol_abs",
+        "time1u_error_tol_bit",
+        "time_cnt",
+        "tqdm",
+        "trace_dir",
+        "trace_file",
+        "trace_fn_w_seed_fmt",
+        "trace_fn_wo_seed_fmt",
+        "trace_list",
+        "trace_root_fmt",
+        "two_stage_case_coll",
+        "verif_utils"
+      ],
+      "scan": {
+        "disjoint": {
+          "return": null
+        },
+        "empty": {
+          "return": null
+        },
+        "invalid": {
+          "error": [
+            "AttributeError",
+            "'NoneType' object has no attribute 'offset'"
+          ]
+        },
+        "overlap": {
+          "return": false
+        },
+        "reversed": {
+          "return": null
+        },
+        "single": {
+          "return": null
+        },
+        "touching": {
+          "return": null
+        }
+      },
+      "signatures": {
+        "scan_overlap_1d": {
+          "annotations": {},
+          "parameters": [
+            {
+              "annotation": null,
+              "default": {
+                "empty": true
+              },
+              "kind": "POSITIONAL_OR_KEYWORD",
+              "name": "position_recoder"
+            }
+          ]
+        },
+        "sort_fn_conflict_s_r": {
+          "annotations": {
+            "x": "Block"
+          },
+          "parameters": [
+            {
+              "annotation": "Block",
+              "default": {
+                "empty": true
+              },
+              "kind": "POSITIONAL_OR_KEYWORD",
+              "name": "x"
+            }
+          ]
+        },
+        "stat_overlapping_old": {
+          "annotations": {
+            "block_contention": "Dict[int, int]",
+            "block_list": "List[Block]",
+            "conflict_graph": "Dict[int, Set[Block]]",
+            "mapper": "MemMap",
+            "sort_fn": "callable",
+            "sparse_list": "List[ContentionGroup]",
+            "strategy": "str",
+            "timestep": "float"
+          },
+          "parameters": [
+            {
+              "annotation": "List[Block]",
+              "default": {
+                "empty": true
+              },
+              "kind": "POSITIONAL_OR_KEYWORD",
+              "name": "block_list"
+            },
+            {
+              "annotation": "float",
+              "default": {
+                "empty": true
+              },
+              "kind": "POSITIONAL_OR_KEYWORD",
+              "name": "timestep"
+            },
+            {
+              "annotation": "Dict[int, int]",
+              "default": {},
+              "kind": "POSITIONAL_OR_KEYWORD",
+              "name": "block_contention"
+            },
+            {
+              "annotation": "Dict[int, Set[Block]]",
+              "default": {},
+              "kind": "POSITIONAL_OR_KEYWORD",
+              "name": "conflict_graph"
+            },
+            {
+              "annotation": "List[ContentionGroup]",
+              "default": [],
+              "kind": "POSITIONAL_OR_KEYWORD",
+              "name": "sparse_list"
+            },
+            {
+              "annotation": "MemMap",
+              "default": null,
+              "kind": "POSITIONAL_OR_KEYWORD",
+              "name": "mapper"
+            },
+            {
+              "annotation": "callable",
+              "default": {
+                "callable_name": "<lambda>",
+                "sample": 3
+              },
+              "kind": "POSITIONAL_OR_KEYWORD",
+              "name": "sort_fn"
+            },
+            {
+              "annotation": "str",
+              "default": "first_fit",
+              "kind": "POSITIONAL_OR_KEYWORD",
+              "name": "strategy"
+            }
+          ]
+        }
+      },
+      "sort": {
+        "basic": {
+          "return": [
+            0,
+            3,
+            -2,
+            -4
+          ]
+        },
+        "conflicts": {
+          "return": [
+            4,
+            1,
+            0,
+            -9
+          ]
+        },
+        "cyclic": {
+          "return": [
+            0,
+            3,
+            -2,
+            -9
+          ]
+        },
+        "dict": {
+          "error": [
+            "AttributeError",
+            "'dict' object has no attribute 'n_conflict'"
+          ]
+        },
+        "negative_pid": {
+          "return": [
+            0,
+            2,
+            0,
+            1
+          ]
+        },
+        "negative_values": {
+          "return": [
+            -5,
+            -2,
+            3,
+            4
+          ]
+        },
+        "none": {
+          "error": [
+            "AttributeError",
+            "'NoneType' object has no attribute 'n_conflict'"
+          ]
+        }
+      }
+    },
+    "probe_source": "import contextlib,io,json,inspect,pickle,base64\nfrom mapper import mem_planner as m\ndef blocks(rows):\n return [m.Block(*x) for x in rows]\ndef state(mapper, contention, graph, sparse, work):\n return {'input_remaining':None if work is None else [x.idx for x in work],\n 'contention':contention,'graph':None if graph is None else {str(k):sorted(x.idx for x in vs) for k,vs in sorted(graph.items())},\n 'sparse':None if sparse is None else [[x.start,x.duatation,x.tot_size,[b.idx for b in x.block_list]] for x in sparse],\n 'mapper':None if mapper is None else {'positions':mapper.to_json(),'free':[[x.offset,x.nextoffset,x.size] for x in mapper.free_interv],'max_offset':mapper.max_offset}}\nOLD=[\n ('empty',[],1,False,'first_fit',False),\n ('single',[(2,1,3,1)],1,False,'first_fit',False),\n ('overlap',[(2,0,3,1),(3,0,2,2)],1,False,'first_fit',False),\n ('unsorted',[(3,2,5,2),(2,0,3,1),(1,3,4,3)],1,False,'first_fit',False),\n ('touching',[(2,0,1,1),(3,1,2,2)],1,False,'first_fit',False),\n ('zero_duration',[(2,1,1,1)],1,False,'first_fit',False),\n ('negative_time',[(2,-2,0,1)],1,False,'first_fit',False),\n ('zero_step',[(3,2,3,2),(2,0,1,1)],0,False,'first_fit',False),\n ('none_outputs',[(2,0,3,1),(3,1,2,2)],1,False,'first_fit',True),\n ('mapper_first',[(3,2,5,2),(2,0,3,1),(1,3,4,3)],1,True,'first_fit',False),\n ('mapper_best',[(3,2,5,2),(2,0,3,1),(1,3,4,3)],1,True,'best_fit',False),\n ('mapper_worst',[(3,2,5,2),(2,0,3,1),(1,3,4,3)],1,True,'worst_fit',False),\n ('invalid_blocks',None,1,False,'first_fit',False)]\nSCAN=[('empty',[]),('single',[(2,3)]),('touching',[(0,2),(2,3)]),('disjoint',[(0,2),(4,1)]),('overlap',[(0,3),(2,2)]),('reversed',[(5,1),(0,2)]),('invalid',None)]\nSORT=[('basic','block',[3,2,7,4],{}),('cyclic','cyclic',[3,2,7,4],{'pid':9}),('negative_pid','cyclic',[2,0,1,5],{'pid':-1}),('conflicts','block',[1,0,2,9],{'n_conflict':4}),('negative_values','block',[-2,-3,0,-4],{'n_conflict':-5}),('none','none',[],{}),('dict','dict',[],{})]\ndef old_case(fn,c):\n name,rows,step,use_mapper,strategy,no_outputs=c\n work=None if rows is None else blocks(rows)\n cont,graph,sparse=(None,None,None) if no_outputs else ({},{},[])\n mapper=m.MemMap() if use_mapper else None\n stdout=io.StringIO()\n with contextlib.redirect_stdout(stdout):\n  try:ret={'return':fn(work,step,cont,graph,sparse,mapper,strategy=strategy)}\n  except Exception as e:ret={'error':[type(e).__name__,str(e)]}\n ret.update(state(mapper,cont,graph,sparse,work));ret['stdout']=stdout.getvalue()\n return ret\ndef scan_case(fn,c):\n _,rows=c\n values=None if rows is None else {i:m.Memalloc(*x) for i,x in enumerate(rows)}\n if rows is None:values={0:None}\n try:return {'return':fn(values)}\n except Exception as e:return {'error':[type(e).__name__,str(e)]}\ndef sort_case(fn,c):\n _,kind,args,kwargs=c\n obj=m.Block(*args,**kwargs) if kind=='block' else m.CyclicBlock(*args,**kwargs) if kind=='cyclic' else {} if kind=='dict' else None\n try:return {'return':list(fn(obj))}\n except Exception as e:return {'error':[type(e).__name__,str(e)]}\ndef default_sequence(fn):\n before=fn.__defaults__;identity=[id(x) for x in before[:3]]\n out=[]\n for rows in [[(2,0,2,8)],[(3,1,3,9)]]:\n  work=blocks(rows);buf=io.StringIO()\n  with contextlib.redirect_stdout(buf):result=fn(work,1)\n  out.append({'return':result,'stdout':buf.getvalue(),'state':state(None,*fn.__defaults__[:3],work)})\n  out[-1]=json.loads(json.dumps(out[-1]))\n return {'initial_types':[type(x).__name__ for x in before],'same_defaults':[id(x)==y for x,y in zip(fn.__defaults__[:3],identity)],'calls':out}\ndef active_case(which):\n work=blocks([(3,2,5,2),(2,0,3,1),(1,3,4,3)])\n buf=io.StringIO()\n with contextlib.redirect_stdout(buf):\n  if which=='scan_conflict':\n   graph={};sparse=[];ret=m.scan_conflict(work,1,graph,sparse)\n   return {'return':ret,'blocks':[[x.idx,x.n_conflict] for x in work],'graph':{str(k):sorted(x.idx for x in v) for k,v in sorted(graph.items())},'sparse':[[x.start,x.duatation,x.tot_size,[b.idx for b in x.block_list]] for x in sparse]}\n  if which=='seq_mapper':\n   mapper=m.MemMap();ret=mapper.seq_mapper(work,1)\n   return {'positions':mapper.to_json(),'blocks':[[x.idx,x.n_conflict] for x in work],'legal':m.scan_overlap_2d(ret,work)}\n  mapper=m.AllocMap();ret,graph=mapper.prority_mapper(work,1)\n  return {'positions':mapper.to_json(),'blocks':[[x.idx,x.n_conflict] for x in work],'legal':m.scan_overlap_2d(ret,work),'graph':{str(k):sorted(x.idx for x in v) for k,v in sorted(graph.items())}}\ndef signature(fn):\n out=[]\n for name,p in inspect.signature(fn).parameters.items():\n  d=p.default\n  if d is inspect.Parameter.empty:d={'empty':True}\n  elif callable(d):d={'callable_name':d.__name__,'sample':d(m.Block(3,0,1,1))}\n  out.append({'name':name,'kind':p.kind.name,'default':d,'annotation':None if p.annotation is inspect.Parameter.empty else p.annotation})\n return {'parameters':out,'annotations':fn.__annotations__}\n\nnames=['stat_overlapping_old','scan_overlap_1d','sort_fn_conflict_s_r']\nout={'public_names':sorted(n for n in vars(m) if not n.startswith('_')),\n'signatures':{n:json.loads(json.dumps(signature(getattr(m,n)))) for n in names},\n'pickle_original':{n:base64.b64encode(pickle.dumps(getattr(m,n),protocol=4)).decode() for n in names},\n'old':{c[0]:old_case(m.stat_overlapping_old,c) for c in OLD},\n'scan':{c[0]:scan_case(m.scan_overlap_1d,c) for c in SCAN},\n'sort':{c[0]:sort_case(m.sort_fn_conflict_s_r,c) for c in SORT},\n'defaults':default_sequence(m.stat_overlapping_old),\n'active':{n:active_case(n) for n in ['scan_conflict','seq_mapper','priority_mapper']}}\nprint('BASELINE='+json.dumps(out,sort_keys=True))\n",
+    "case_counts": {
+      "old": 13,
+      "scan": 7,
+      "sort": 7,
+      "default_sequence": 1,
+      "active_mapping": 3
+    },
+    "facts": [
+      "scan_overlap_1d returns None when no overlap, False when overlapping; no added True return.",
+      "stat_overlapping_old mutates/sorts/drains block_list and accumulates its mutable defaults across calls; snapshots, stdout, exceptions and real MemMap mutations are baseline behavior.",
+      "Three active-path probes use real scan_conflict, MemMap.seq_mapper and AllocMap.prority_mapper; timing/profiler output is nondeterministic and excluded, placement/graph/order/legal status are compared."
+    ]
+  },
+  "existing_failure": {
+    "rc": 1,
+    "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/home/zhangchg/git_repo/scheduler-audit-20260612/test_mem_planner.py\", line 28, in <module>\n    n_p=1, binpack_cfg:Dict=default_binpack_cfg,\nNameError: name 'default_binpack_cfg' is not defined\n",
+    "log": "/tmp/scheduler-b24-preflight-16n_tbiw/protected-test-import.log"
+  },
+  "before_code_sha256": {
+    "__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "analyze/UE_extract.py": "647236fe7503c80740cca43e08858ccbe436a18ac4ed7d2bc54ad0b9b5d46cad",
+    "analyze/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "analyze/analyze_ctx_switch.py": "d7856b1f2ccb2fbf3652f00ee5552bfb570836953060f2dbfa1265554a67038d",
+    "analyze/analyze_timing.py": "45b94574b8ee2c7014e3ad5814b5348df28691dcaee124c5a7e15102f044ce8c",
+    "analyze/analyze_tp.py": "cd54307337eb3d37408e50b15b31fb7266b90a3c7addba3c5c3e707b400a3d38",
+    "analyze/pattern.py": "75c5a0ca22d710f7b301be118d820a0d3ca833176abd8777d43c104eaf119a46",
+    "analyze/stat_num_exec.py": "0f25b6b6275d0473cedfb669a873b92f81c58ac736d4065aa1225a75fcd405ef",
+    "analyze/xlsl_e2e_lat_abla.py": "2803dd27f7c4031af44116eae11439e2e80abb5823ef0255285669dadf6ef826",
+    "analyze/xlsl_e2e_latency.py": "db352b4685c6fa76f3c8c5e5940c469af14b1db6297e6df29135e0beae1c0f60",
+    "analyze/xlsl_max_tp.py": "1468390c1e293780e32b81e649cd501542e9d0d1d9b88b37018c7e1ad8f11201",
+    "analyze/xlsl_min_core.py": "90d91b24da0e3015783044713c84a7abd72b70ba82edd8c56f2415719c614f8d",
+    "analyze/xlsl_safe_scalable.py": "d16deee46b74bd34883d39abfab86691c36455b8fe02547cb5f275ad65b6ee55",
+    "approach/__init__.py": "25606592fea79200c3a2512098898d0af5b53b81bf863b221281d3a46328b68c",
+    "approach/approach_Eq.py": "bb2e65224f12fe2555c2f12567276a110d8d409808a180f4d4282b86a289cdc8",
+    "approach/approach_Eq_unused.py": "85092d18e980606c456fb8a8a49fdfcff69f519dc75088aab2f3021431093bf4",
+    "approach/approach_collector.py": "8f42d09dfe455ebdbf931a11266b5f4afccef485029d02affc5e36546754ffd1",
+    "approach/approach_def.py": "3bf4c156262a66c636be06e744da862240ebf619c5926a2b6928bf3f6e6df931",
+    "approach/approach_initiator.py": "4e805f25b057c5f66220ee491f40523587af265d948316f7c7993df3082decc9",
+    "approach/approach_sched.py": "fe9e3ab6bbb45ed4ee11215417b99a8868d7d0dba648949fc92a0f52a59c5a8e",
+    "approach/approach_setup.py": "0e30787994a6a23ea8c048a10ece4c5dc58bb157a311a2c5e8c242cda7c6bbbf",
+    "approach/approach_sim.py": "1d064618107e7888b9e75debc1e983dbc7e56a4e09240be75214d4dc770b2f4e",
+    "approach_Eq.py": "6a869b99f96cf2bd633f27904fe4d2831e39868bb0aa8f14b4efbbce1d21c09e",
+    "approach_collector.py": "e5d2c0a346067a134ed26204a0e367e94aa2131394d6387e60e4a6ab2fcb46e0",
+    "approach_def.py": "65470e4b084aa67d3c1dcb583c9c15cbf3e521c06cffa17855bd0097b7afb501",
+    "approach_initiator.py": "c55558bf6de3422b61a609f300776f68de7a3e27521a2bb8e81566de5a0e12ef",
+    "approach_sched.py": "44ae9baacc4246eb8a0bac53508be8220bb33064f369ee7e654fb6315d538d42",
+    "approach_setup.py": "7cf7d1550204beb4abba7d7cf0c0c52575253fe7296002ad9033109cb8d6506b",
+    "approach_sim.py": "46247bf523cae1a8a0a62e71109ef0aba3c86b4c278754b28493718815e02369",
+    "cleanup/tools/dialogue_guard.py": "15879c4efa377efec7c2e114e6d134b33da570e52916dea0ca0bf858bd44691a",
+    "debug_sink_constraint.py": "91b99637ccbc7472819776419d52e659027e37c97732ab248841fc1cf950959b",
+    "example/bm1.py": "9cb4482dd34b5102c5f9c9257a25bbef15273b8d5c4b94665c3f9f151c0fc57f",
+    "example/bm2.py": "a83603e2af0a4637c768a8f8594617fd9629083de2cd716d209436b043b09dfc",
+    "example/bm3.py": "200cd9bc6935e660d0c7d1f3ad6f25b46cb3492db946b694f8c4b7275c8f6b10",
+    "example/bm4.py": "381bebb8759796b353478cfb9aba4c24bab6c5b108dc3fbc9172710426bca4a2",
+    "global_var.py": "1eae1477f532e916e9829942bc4474bc79604809d85171a14356d99818d769cd",
+    "global_var_unused.py": "2a7b284d0b7bb8c3cad4e0c639839f3d09b616b19c644b95560dd20d5b8cfb2b",
+    "main_approach.py": "e32f1ec431614e4ea30761eaab6278fe65ba2166717b5386bc0148cfad22db3d",
+    "mapper/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "mapper/mem_planner.py": "6d5bb9291bac221b6da31b9671933aec22b5b0e780ac334a32e7e60030fe947e",
+    "model/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model/barrier_agent.py": "57d2943c3ac1c21423e29affce89f2b7f664d097d2d0cefb0124736545685ab7",
+    "model/buffer.py": "aec736f78d35ba582d8d091cb2078181c53e195f7a97346c9cefb6b09a4576c8",
+    "model/event_gen/e2e_latency.py": "3043c818e36dbdfcee8ee50573c5274a8549fbb1413e4cb55cde07cc0e990a7e",
+    "model/event_gen/e2e_latency_unused.py": "aab12e28ee3d728540d8f4a016285631f2e935e441e15c76b14a688e20c7a5b3",
+    "model/lru.py": "b2be894c685be6c3a5fd48b7b7117d2cc90059a4109c7374c68979f74d4a7013",
+    "model/message/Context_message.py": "c8d4de2ad5e73b2db072f710777d6f846285be1e03d038711aecb46a25247c64",
+    "model/message/data_pipe.py": "544689f0008568d77eeec76ab35ff12d7ce7d5c808dc933e06e76bd6db3b74c0",
+    "model/message/message_handler.py": "7d0c4520760f95b791e1c9f8d0c3220be1959f8ab58aabd8d2328fd8793a0785",
+    "model/message/message_pipe.py": "6d6d8228acca9ff2fd1e2cf02573d35f058845ebafe6dfdae98acba9226fd309",
+    "model/message/msg_dispatcher.py": "0c9df6adcec6cdda83d285d7e865097e74b9103f513eeadb97f2ac4a3ac3fbcd",
+    "model/message/msg_dispatcher_unused.py": "3a70a0228f01c9f8250390293d690511602fdd7c5c512849ded52700647d4164",
+    "model/noc.py": "001d30e29ffe3ebc8b9724e151c445e100ef885287fe5abdd00a9bb0048d8f51",
+    "model/performance.py": "273eabbd6dbc16df28db18758e8f51defe84caba3f6ca3cf40fa22c7b041235a",
+    "model/position_table.py": "fa6615a4b3e54e41304463dda597494be7bc5e672abbae1149e11cfb8f2ecc59",
+    "model/resource_agent.py": "7290b7b496e0a46a0ef74540b1747fcb35e6724443a5f70072562bc7ab8cefd8",
+    "model/streaming_processing/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model/streaming_processing/wartermark_strategy.py": "5af8e0035e2a360ae5bd6201f57f55b30970d8bebf8d542f08815db34264e596",
+    "model/task_queue_agent.py": "227fcd0bc10129614b6481b94f239a621ea6a460de815ee007e828142cad1c24",
+    "model/trace_example.py": "ff2e00c361a9ba9ca0386704abe57acb3e8ca924b3a9187d6fb1129f0e4cd880",
+    "old/allocator_agent.py": "f7b48b84465c9f1390b9ce44e0bfd463f896fb869e2d1364e3e9fe79ef892582",
+    "old/appoach_plot6.py": "44332d84c5d05f7d520b505c96c80c62a8ec6511c41440db41ca4bc6081d0d81",
+    "old/approach_util33.py": "89ae0ac387bd44484b1a345e5bd3999cc279acc2f5a705cba6ab6fc285701352",
+    "old/pre_alloc.py": "8a2e3724401e442c505cc5af34b22abdf30034a7dd7417526c10865df5ed76c0",
+    "optimizer/delta_ver.py": "da1762a2d66c80ca5fbd9a3de4eff3fb96f3d2d6f3ca16186996c0853cd5c9a3",
+    "optimizer/dist_custom.py": "923e2cafa54bd27646b620d3f13e8ab98386f8a6b93a4ad73c78e6dd69f479f9",
+    "optimizer/ops.py": "41d6ddb143b93e14c51d49dbaea2db60ca6adcd0fdc163c784266e64dcb9595c",
+    "optimizer/ops_test.py": "6584b9cff086fb2492e5131153c23b78225a27ed6ce953aee8a84244bd66e758",
+    "optimizer/scheduler_base.py": "323b0e48b88910f152e8c21a06d4c8a0f9f965aa6f2b09bf3388868737a9c884",
+    "paths.py": "b8aa8a5471c8a6420f9b9532013be1b39ea8a195c2c301bdb42193eccc111170",
+    "ref_tdigest.py": "0e7642c9892553f579b5340d21982b589bdb4a85d4965cbfc70fa35289f9c287",
+    "run/1/all.sh": "05105542d6b66aaf914ad86ccd1338ea4049ed8d2c21a91b2783f9c37a0ff6e4",
+    "run/1/scan_aux.sh": "9d7cb82e0805928fed87f4efb9c727c96d371ae51382ea8fce0192eff92180d3",
+    "run/1/scan_core.sh": "958401b5016d0e19eade15c3f7831b07cf8ad611e627ff6d1f4a06db8d27503a",
+    "run/1/sweep_seed.sh": "dea4922a271e4e318ecc29f39a7ef728de52bd581470c87095b4023c50dcfa8a",
+    "run/2/aba_scalability_scan.sh": "d527b302c374401165e3011cca9d3904710ee4154def52aab5489d725c41f925",
+    "run/2/abla_scalablility.sh": "2f56009e9eb0da9cfa9223737aadb356e444b7e8b2e6212810c2e6385151a498",
+    "run/2/all2.sh": "85638195a489880dc8c26bdba929d3c62a4b0b83c6eaaeb252d040db74824880",
+    "run/3/time_sharing.sh": "b8104f1f3c684290dfbdf781e07b60a70e8feb251bbe9cd80278c3fd9dcfa5ee",
+    "run/aba_scalability_scan copy.sh": "c60b76ec65a851962d4b7235ed76e8450a6e80cbefdd22ce6aaf5530fb348819",
+    "run/abla_chain_sharing.sh": "17943f0885c65567943936abdc82e6c53a5df33340f3a0ef37ff9a2c52e370b3",
+    "run/bin_sharing.sh": "a94cd42eb610e21321b47921c5c2063a4590b0b8322cf57ab8b57a13166287b4",
+    "run/cfg_parser.py": "5d8c3a618d13994aee7dbec18e033d938491a9e46fedeaa75ce712b59f7d9f55",
+    "run/clean.sh": "7d5abeedad2abb698003ac37a594feffa5676334a8f615fcdee6c059a1e4ecbe",
+    "run/max_core_num_scan.py": "79fa47da771d7ac88ef383946e4609c8248212f4b4d7fa6517f27ec34f2f464a",
+    "run/scan_coalescing.sh": "2ee0fbb7c0b029075ee071e3ac1af672e63019af484fcc2a30bcdd03173dfa7d",
+    "run/temp.sh": "31236f54d38944c69f2cb3b3f069a7c3931332e4add8cfd252d091d5621a6a49",
+    "sched/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sched/bin_list_utils.py": "67a9aa91714a797d20f504c33bca796836632c6501d954e971cb1aa5aaa79bb4",
+    "sched/bin_list_utils_old.py": "580d943fd5b2057b4fd624c32d6197a24b56a2c5c36d3be3ceb5924032bc4a9e",
+    "sched/bin_list_utils_unused.py": "2142733db35776d6df1936a8091b59cf57e438dad2e10d316ae0be11110a536a",
+    "sched/bin_ops.py": "361bbc497b182e68304694f791354e9a296e93d5941cef267e9775bb9b47c301",
+    "sched/binpack_config.py": "d10829049efd5502328ca5f14d92dbe26435b219a53f3b4b03c06530ebc43f40",
+    "sched/global_sched.py": "a11a8324def4ca8b8763814e7dc8483a5444bc013e29083fa1b1dbbfbbbe4118",
+    "sched/global_sched_alloc.py": "627300a13b10f98ca4c2c8b08807780578cf1cf923c68b9967ce32dc9af1b2e0",
+    "sched/global_sched_old.py": "cc93f501ce6bf24f92841d8a323fe4d9550fd7e76120be27c539242b5e1df425",
+    "sched/global_sched_repack.py": "2e61f425893e6365d711676c53445cf89bec915c3ee5039c82d84d024dfcfece",
+    "sched/monitor_agent.py": "c748029c18bd6c99ffa0fed57536d5344fbc20ae23fc64b37446b2d973f9d83b",
+    "sched/packing_solver/chain_slack_assign.py": "e564906bc80d9b742e321cd9d0395fe6b03a2b891c35ddb9142e852c9c4d141f",
+    "sched/packing_solver/fit.py": "1b3d0b5296648d4d7403016c67f53be21d34b55c334b8d193f4fc770216e7998",
+    "sched/packing_solver/gurobi_MP_semi2DClst.py": "e56adc1a37dbba39cc3f8d707a955bfc64b3b03f71356084f989946593a02895",
+    "sched/packing_solver/unused/gurobi_semi2Dclst_mapping.py": "4d49d05ab20981eafeb9afe897aa0b952c2ce7d2eaac0880b71fa8131430c522",
+    "sched/packing_solver/unused/gurobi_semi2Dclst_mapping2.py": "9c40c2b4e21edcdb5fc25d51b6ce9479bbb4f8c64e2e3bc577d8e61ebf36e3dc",
+    "sched/placement.py": "008ca6d7c2316064c3fce0b75258e35c77f570b727e483d32a2010f6f7408fdf",
+    "sched/pre_alloc_new.py": "6991b6551a7f0ff3fe94f6b47f4fbe469a4da1ccdbd80e8eaca1bb7749cfbea6",
+    "sched/pre_alloc_new_old.py": "97e11a4df33ebc3b3ff6adaeabaa1b1635f34e9ad059cdbda23eb2f6a0cbd878",
+    "sched/ref_alloc_search.py": "c29243f7134518633c9b3f1631420607adef0ef79d994c0152ef579402c88ca7",
+    "sched/runtime_legacy/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sched/runtime_legacy/sched_fn.py": "cc82e889cb203dd7cb306988050c432b92857c559ccd2ab2bb6c85d2a63c79f7",
+    "sched/runtime_legacy/sched_utils.py": "ecc8414c05eeb9f1b7574142c1da5620d0c7a5e4d1ed6d2ecb2a3442604f2135",
+    "sched/runtime_legacy/scheduler_agent.py": "c0e3d3583f0a86947fa1478cb1d42bb9bbd4ff0727aab2128173b878cbc58cac",
+    "sched/runtime_legacy/state_trans.py": "ab3850e46e89c907fd2ca6a19667427c3e787ce1c5cf52e6fc2d93a7a4edc569",
+    "sched/sched_fn.py": "6ddf24cd84d4001c09bc637719430f60a7580950a1499046a0e6f7a1277026ed",
+    "sched/sched_utils.py": "daddd34bce6031198b5866b90eaa22365ee950b41323d2164c00e2e23b8479e6",
+    "sched/scheduler_agent.py": "cf77c531c15130c4dd3a218a9fd197d3daba242c018e1b222bdd1371e893e4de",
+    "sched/scheduling_table.py": "a7df3b3ed412e6b30b29d9cc533749c59b74c38c88e19ff6dba9858f669aad8c",
+    "sched/scheduling_table_event.py": "a79b101f8648cc12411477321025164d0fb6546fa20f9c9780fccc3b7ff46837",
+    "sched/slack_estim.py": "bda2da01c0bb32873d021dd32efc0debb5017333221baa3bd5cfbf7f17cc39c5",
+    "sched/slack_estim_unused.py": "0dca3dcceabe1e251c93a469c33840165912a9365894377e78f556b35322b3b0",
+    "sched/sort_function.py": "50ef837990c9d6a8dda164fca656852a4f25e640394160058d15326291a6183f",
+    "sched/state_trans.py": "29b77a41fed368421d76f5bf06cd698955990684908afbfc03bf49d1262cc628",
+    "scripts/abla_exp_runner.py": "73ca0bccb065a284f1f078c3a4a4027d9134e972b3bba18a6e26380e61e60864",
+    "scripts/e2e_exp_runner.py": "e1dc1dd1f5803137d12e942df4169e69cb269f0e4a0651f50379bec96a1c7445",
+    "scripts/e2e_hyperparam.py": "579229a5e596f3eac366215af6ec2ad67d862d69f5ca43f05b4a06ed466ee9b8",
+    "scripts/exp_common.py": "6d0e913f0eacdc62b2972ce2ee9c25f459891e92da12f32c4001ac74a0f98274",
+    "scripts/motiv_exp_runner.py": "4592032791d2bcfe532aa01adda9f545b9196545bb0c4e8a0e018358e4eb712a",
+    "scripts/run_abla_exps.sh": "3f8d8a01e366995b7e8d4fb0b492e4c1bb0cbe989da2c061d501f80caca7c366",
+    "scripts/run_motiv_exps.sh": "4238e238d4640f53c19f2705f892be988ad19a50439f8c2d48efd2cd43c36d66",
+    "scripts/test_alloc_lat.py": "fc0bf0ead04d6e71fa32e69003388fc1ae402a2cbeee2f18e6ae167cb16ce552",
+    "scripts/unused/repack_sweep.py": "262dad167ec4fad1c6b2b9fe14c5d941f958cdbb0722198b723c2e76adace213",
+    "sim_main.py": "1d04e4aa038b63bc289834fc350442d9ff2b929faabb42a042deb7803bc86520",
+    "sim_main_old.py": "02aac1cd1af96eec0dbb51393f84cd33c05abaf4b1abf657cb89dd1cd02472cc",
+    "sim_main_unused.py": "4d60418cea08dd26e7dac15e698dce86056f2212a8e519298e9872352577b8e1",
+    "simple_test_collector.py": "b6bff9b527a9941a187d5e89640f5d785791ddd4c69df3a745a1e23a0e127142",
+    "task/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "task/graph_breakdown.py": "486b438fa3325f8d035ef91ca63518649986e21aee74cb761092908c579cdbd1",
+    "task/graph_breakdown_unused.py": "ad0d03b8c4b16bb67f0c8a92e8ccd5f2d03767755135703863cb2649c6582537",
+    "task/graph_scaling.py": "23cd8bd44738144c8a4578875a88bab4d06bef003cf0bdaa958e743ce9c88492",
+    "task/load_cfg/loadA.py": "7f75f58b094573322dce01ca6f2366241fbd82e4891292aee390c0a1d98ad287",
+    "task/spec.py": "66f2eeb5f3c35b9ee92fb0f0a90f0bba4e2cecfb88fd2192f3be7ca931d09022",
+    "task/task_agent.py": "21786d243f70d1e41d5ad43f1d8c22dee13d54f3fab28a84719ad3cbe16f8a2e",
+    "task/task_cfg.py": "6194c815e202c298f7789bb37be929dcc59f19d513a2ebb9a476a2fc3b0ef14b",
+    "task/task_cfg_old.py": "06a38533685502a78a0274edd8d5a460f5baa3579f6adb420b38bcbbca2d0356",
+    "task/throughput_cnt.py": "7df7e2fa30a3f6061fffa210952d211666e1dcd00636d18e80fa29cf61fc15ef",
+    "test_approach_collector.py": "efd7b67e99cd0a970dc1a7998461af5a0795fa239ead43e00eb5e8ce0e6f2d68",
+    "test_approach_package_compat.py": "ca4bac52de6e14174ed93fd56d2c23be16d9457be9f15c93122e6ccf94b02792",
+    "test_binpack_pipeline_contract.py": "144f9f0acc656c687adcdc8099124697888c41a4bb0b78a621f43a938cefb1d9",
+    "test_closure_fix.py": "16c04deae220389724a7c4c28a0bb838399d671a61429ddc84cd5d28c3994165",
+    "test_core_allocation.py": "44fe340a041794584e12a30b99cb9aac1aa9dc3dc5e3a6e82f94c9f3ce428045",
+    "test_deduce_cfg2.py": "9edb5c3de657302137144df2ae7425bf36976e3b20a4b5d10f3580f83e41fddb",
+    "test_duplicate.py": "662f0ed5fd5a76dd59e2b82981377297aba2ac118a6c9a150176f619aa2e2dd2",
+    "test_event_update.py": "68ff45c5ff1f5fad893933722565b034bef2e1831f15c56ce398a5b982d7dc95",
+    "test_legacy_approach_archive.py": "b6dc62122ea09a99cbbddf2cffa52613be3376d7f827518487a977fd2fb96d77",
+    "test_mapping.py": "a32256208595f8b9f451c71d9d9c18a8f4f992d161c1bfa79e048b30cbed5b3f",
+    "test_mem_planner.py": "e171129a2a8519f3de13f8e533e2bd74cba08f076dd9e564945be65a01c87b60",
+    "test_old_task_cfg.py": "88498ed6d99d56a16cbbf610c6bc249e309496e5c8e29855da68666fdf274da8",
+    "test_repack_diagnostic.py": "d11f52e223cb829fb9dd16c401282b58e035df8bcceac3c000a560b63744b83f",
+    "test_scheduling_table.py": "5a44cb64b2e88744a72816784fb70f87b826dae56bd92a00ee07ffd29200bea0",
+    "test_unused_e2e_event_generators.py": "9959f891ba33892a0bcf75e3b0eff5b83259247a65e611b15d7b0f3a735aa496",
+    "test_unused_eq_quantiles.py": "7748d46ee067cf89e9707f6ea367733e0ef06e04b6f7d4074d1900f5ec3db832",
+    "test_unused_global_constants.py": "ac3bbe27146f057fa5fe7fa38ed51296f134a7f7dec76828bb8f63542046191d",
+    "test_unused_hdf5_utils.py": "cdc3fab2f6c53006d42c69c1c01abc9cff7bfeb035a828345ea73ebbd4f86fc6",
+    "test_unused_message_helpers.py": "9970e9fc7186d0b0b2eed52218d7ae25f73531926b5aa496519cde1700a03d4f",
+    "test_unused_path_utils.py": "01e2d7da2298380db15ab323bc102a1b161788af6f5419d4965e1bfebc9a53ac",
+    "test_unused_sim_cache_helpers.py": "1dbf81135d8a2c14aa1a0852fefc4043a0220272eb7cc3d7e060ab257d472d5d",
+    "test_unused_slack_graph_helpers.py": "05567227d3c8af745d6598d7616d97e3b69469a0c36e5ccca37c10e82e8c7c3e",
+    "test_updated_stats.py": "cbd88f4afd5bdb6b8642fe435e386c38fc7856737a5df80909d3734dbaafe91d",
+    "tile_2d_mesh_mapper_fixed.py": "db0d65db81bdb53079bdf02e22da85432bafb5777de9b1e2d676834ef883e003",
+    "unused_fun.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "utils.py": "508f1366fb8bb08f16f1ad5f57e651692be7915c6a3c29e054ce73970dcd4e03",
+    "utils_unused.py": "cadac26936dca668f85f6eb6ceb84186c2be32dd52acae7b56785f760c15b40d",
+    "scripts/e2e_exp_runner_unused.py": "0732eadbbafe6564d107090f07463cdb53c5cca6e0f7a86984ae4734d9ddcf3b",
+    "analyze/stat_num_exec_unused.py": "c48ed4d92f4a3887afe0a4733cc6cee99d04087e7e9d77e6fc70418a80c39349",
+    "test_unused_experiment_helpers.py": "ceb6d8d64fdddced1ed91e6423536dcee66c686b3d28332c1f1ad983d4ab4237"
+  },
+  "before_ledger": {
+    "cleanup/move-ledger.csv": {
+      "bytes": 25708,
+      "sha256": "0e2aad995d765c17cac750de3350915d53c56f3f420472bd415315ceadde0108",
+      "rows": 50,
+      "header": [
+        "decision_id",
+        "source_path",
+        "target_path",
+        "move_policy",
+        "status",
+        "reason",
+        "risk",
+        "evidence",
+        "owner",
+        "archive_ref",
+        "recovery_command",
+        "batch_id",
+        "approved_by",
+        "notes"
+      ]
+    },
+    "cleanup/reachable-files.csv": {
+      "bytes": 74515,
+      "sha256": "3693063ceaff4f749c13bcb2e8b39f817ff6ed5f3141fb5400b58bd4e4720deb",
+      "rows": 271,
+      "header": [
+        "path",
+        "status",
+        "kind",
+        "owner",
+        "reachable_from",
+        "evidence",
+        "risk_level",
+        "archive_ref",
+        "recovery_command",
+        "notes"
+      ]
+    }
+  },
+  "protected_doc_sha256": {
+    "doc/spec/readme.md": "b957c85985e127bdcc3b169966fb7acc5fbe3504c9fdc3b124945ab29caf5071",
+    "doc/spec/test_plan.md": "cafde29eb8e74c9be9b7584cda4aecfd60f57330339e10ae731445bcf451b38e",
+    "doc/spec/e2e_sched_sim_flow.md": "7a38f19dd280c591e2432a96376722ff5c17a9296957531bf7de7c01c2572cf8",
+    "test_mem_planner.py": "e171129a2a8519f3de13f8e533e2bd74cba08f076dd9e564945be65a01c87b60"
+  },
+  "test_plan": {
+    "new_cases": 40,
+    "breakdown": {
+      "old_behavior": 13,
+      "scan_behavior": 7,
+      "sort_behavior": 7,
+      "mutable_default_sequence": 1,
+      "active_mapping": 3,
+      "archive_targets_exist": 1,
+      "original_blocks": 3,
+      "source_remaining_bytes": 1,
+      "full_public_interface": 1,
+      "old_and_new_pickle": 3
+    },
+    "fixture_policy": "Freeze original behavior values in this report; tests pin the canonical baseline SHA and code block/source SHA, not computed expectations from the moved implementation. Run each ordinary behavior case twice; default sequence in separate fresh subprocesses.",
+    "interface_policy": "Full public-name set 107->104 in both fresh import orders; original signatures/annotations/default structure and type-hint identity via imported live classes.",
+    "red": "After reviewer APPROVED, create only new test; run test_archive_targets_exist first and require AssertionError because both archive files are absent, not a collection/import error.",
+    "regression_command": [
+      "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+      "-B",
+      "-m",
+      "pytest",
+      "-q",
+      "-p",
+      "no:cacheprovider",
+      "test_binpack_pipeline_contract.py",
+      "test_approach_package_compat.py",
+      "test_legacy_approach_archive.py",
+      "test_approach_collector.py",
+      "test_unused_hdf5_utils.py",
+      "test_unused_path_utils.py",
+      "test_unused_global_constants.py",
+      "test_unused_eq_quantiles.py",
+      "test_old_task_cfg.py",
+      "test_unused_e2e_event_generators.py",
+      "test_unused_slack_graph_helpers.py",
+      "test_unused_sim_cache_helpers.py",
+      "test_unused_message_helpers.py",
+      "test_unused_experiment_helpers.py",
+      "test_mapper_legacy_helpers.py"
+    ],
+    "expected_full": "15 modules 330=325 passed+same5 collector failures; exact result subject to actual XML, do not skip/xfail/fix.",
+    "additional_gate": "Run main/motiv/abla --help and import test_mem_planner in subprocess; preserve existing NameError, report separately rather than claim whole repository suite is green."
+  },
+  "implementation_plan": [
+    "Obtain genuine APPROVED for exact three functions and MEDIUM old export/pickle retirement before any source or new test edit.",
+    "Create approved new test and observe target-existence RED.",
+    "Delete only three original contiguous def blocks totaling120 lines; add byte-identical blocks in two same-directory archives with listed imports only. Source remaining SHA fixed.",
+    "Keep EOF and all other bytes; any deviation pauses. Request standing authorization only for actual==expected +/-1LF with original SHA, expected SHA and complete-byte assertions; never modify expected bytes.",
+    "Run new40 tests and prior14 modules, selected CLI and protected-test import baseline. All173 nonbatch SHA unchanged with zero exemptions; final177 current code hashes recorded.",
+    "Append move3x14 and reachable3x10 to existing ledgers, preserve original25708/74515-byte prefixes and 8 malformed historical move rows. Do not repair old ledgers.",
+    "Persist four-code-path limited reversible patch with SHA/extract/check/restore commands; reverse --check only, no full-file checkout.",
+    "Update both globals, packet, report and DFS current metadata; submit RESULT and obtain independent ACCEPTED before next source batch. No commit/push."
+  ],
+  "recovery_plan": {
+    "paths": [
+      "mapper/mem_planner.py",
+      "mapper/mem_planner_old.py",
+      "mapper/mem_planner_unused.py",
+      "test_mapper_legacy_helpers.py"
+    ],
+    "method": "Persist zlib+base64 forward patch from exact before bytes for these four code paths; decode SHA check then git apply --reverse --check before any intentional restoration.",
+    "restore_executed": false
+  },
+  "validation_attempt_1": {
+    "log_dir": "/tmp/scheduler-b24-validation-45_shp9_",
+    "bytes": {
+      "path": "mapper/mem_planner.py",
+      "sha256": "482af52853a9ca50ccfef4d940ac6f07bee92b9e4f87e170000031e258e39d10",
+      "expected_matches": true,
+      "eof_lf": true,
+      "correction": {
+        "authorization": "E0094 O5; E0096 retains O5",
+        "before_sha256": "e21c776c43300a9ef2871d61ad1718c3cc326fe75c23e986de63862ef1db520f",
+        "delta": -1
+      },
+      "numstat": "0\t120\tmapper/mem_planner.py\n"
+    },
+    "nonbatch_count": 173,
+    "nonbatch_mismatch": [],
+    "new_tests": {
+      "command": [
+        "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "test_mapper_legacy_helpers.py",
+        "--junitxml=/tmp/scheduler-b24-validation-45_shp9_/new.xml"
+      ],
+      "rc": 1,
+      "log": "/tmp/scheduler-b24-validation-45_shp9_/new.log",
+      "stdout_tail": "....................................F...                                 [100%]\n=================================== FAILURES ===================================\n_____________ test_complete_interface_in_both_fresh_import_orders ______________\n\n    def test_complete_interface_in_both_fresh_import_orders():\n        check = \"\"\"\n    from typing import get_type_hints, get_args\n    from test_mapper_legacy_helpers import BASELINE, TARGETS, signature, canonical\n    assert sorted(n for n in vars(m) if not n.startswith('_')) == sorted(set(BASELINE['public_names']) - set(TARGETS))\n    for name, module in [('stat_overlapping_old', old), ('scan_overlap_1d', unused), ('sort_fn_conflict_s_r', unused)]:\n        assert canonical(signature(getattr(module, name))) == BASELINE['signatures'][name]\n    assert old.Block is m.Block\n    assert old.ContentionGroup is m.ContentionGroup\n    assert old.MemMap is m.MemMap\n    assert unused.Block is m.Block\n    assert unused.CyclicBlock is m.CyclicBlock\n    hints = get_type_hints(old.stat_overlapping_old)\n    assert get_args(hints['block_list'])[0] is m.Block\n    assert get_args(hints['sparse_list'])[0] is m.ContentionGroup\n    assert get_args(get_args(hints['conflict_graph'])[1])[0] is m.Block\n    assert hints['mapper'] is m.MemMap\n    assert get_type_hints(unused.sort_fn_conflict_s_r)['x'] is m.Block\n    \"\"\"\n        for order in [\n            \"from mapper import mem_planner as m\\nfrom mapper import mem_planner_old as old, mem_planner_unused as unused\\n\",\n            \"from mapper import mem_planner_old as old, mem_planner_unused as unused\\nfrom mapper import mem_planner as m\\n\",\n        ]:\n>           fresh(order + check)\n\ntest_mapper_legacy_helpers.py:200: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nscript = \"from mapper import mem_planner as m\\nfrom mapper import mem_planner_old as old, mem_planner_unused as unused\\n\\nfrom ...] is m.Block\\nassert hints['mapper'] is m.MemMap\\nassert get_type_hints(unused.sort_fn_conflict_s_r)['x'] is m.Block\\n\"\n\n    def fresh(script):\n        env = dict(os.environ, PYTHONDONTWRITEBYTECODE=\"1\", MPLBACKEND=\"Agg\")\n        result = subprocess.run(\n            [sys.executable, \"-B\", \"-c\", script],\n            cwd=ROOT, env=env, capture_output=True, text=True, timeout=120,\n        )\n>       assert result.returncode == 0, result.stdout + result.stderr\nE       AssertionError: Traceback (most recent call last):\nE           File \"<string>\", line 18, in <module>\nE         AssertionError\nE         \nE       assert 1 == 0\nE        +  where 1 = CompletedProcess(args=['/home/zhangchg/miniconda3/envs/gurobi/bin/python', '-B', '-c', \"from mapper import mem_planner...e=1, stdout='', stderr='Traceback (most recent call last):\\n  File \"<string>\", line 18, in <module>\\nAssertionError\\n').returncode\n\ntest_mapper_legacy_helpers.py:113: AssertionError\n------ generated xml file: /tmp/scheduler-b24-validation-45_shp9_/new.xml ------\n=========================== short test summary info ============================\nFAILED test_mapper_legacy_helpers.py::test_complete_interface_in_both_fresh_import_orders\n1 failed, 39 passed in 4.55s\n",
+      "stderr_tail": ""
+    },
+    "new_xml": {
+      "tests": 40,
+      "passed": 39,
+      "failed": [
+        {
+          "class": "test_mapper_legacy_helpers",
+          "name": "test_complete_interface_in_both_fresh_import_orders",
+          "message": "AssertionError: Traceback (most recent call last):\n    File \"<string>\", line 18, in <module>\n  AssertionError\n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['/home/zhangchg/miniconda3/envs/gurobi/bin/python', '-B', '-c', \"from mapper import mem_planner...e=1, stdout='', stderr='Traceback (most recent call last):\\n  File \"<string>\", line 18, in <module>\\nAssertionError\\n').returncode"
+        }
+      ],
+      "errors": 0,
+      "skipped": 0,
+      "modules": {
+        "test_mapper_legacy_helpers": 40
+      }
+    },
+    "stage": "PAUSED_AFTER_NEW_TEST_FAILURE",
+    "full_regression_executed": false,
+    "cli_executed": false,
+    "type_hint_investigation": {
+      "original": {
+        "raw_annotation": "MemMap",
+        "hint": "typing.Optional[_b24_original_mem_planner.MemMap]",
+        "is_bare_class": false,
+        "is_optional_of_own_class": true,
+        "origin_is_union": true,
+        "args_match": true,
+        "default_none": true
+      },
+      "archived": {
+        "raw_annotation": "MemMap",
+        "hint": "typing.Optional[mapper.mem_planner.MemMap]",
+        "is_bare_class": false,
+        "is_optional_of_own_class": true,
+        "origin_is_union": true,
+        "args_match": true,
+        "default_none": true
+      },
+      "annotations_equal": true,
+      "stdlib_optional_lines": [
+        "    forward references encoded as string literals, adds Optional[t] if a",
+        "    defaults = _get_defaults(obj)",
+        "        if name in defaults and defaults[name] is None:",
+        "            value = Optional[value]"
+      ],
+      "source_sha256": "482af52853a9ca50ccfef4d940ac6f07bee92b9e4f87e170000031e258e39d10",
+      "unchanged_nonbatch": true
+    },
+    "type_hint_probe_source": "from pathlib import Path\nimport json,hashlib,subprocess,types,sys,typing,inspect\nfrom mapper import mem_planner as live, mem_planner_old as archived\nr=json.loads(Path('cleanup/reports/b24-mapper-legacy-helpers.json').read_text())\noriginal=subprocess.check_output(['git','show','HEAD:mapper/mem_planner.py'])\nassert hashlib.sha256(original).hexdigest()==r['source_sha256']\nbefore=types.ModuleType('_b24_original_mem_planner');sys.modules[before.__name__]=before\nexec(compile(original,'<B24 original HEAD mapper>','exec'),before.__dict__)\nout={}\nfor label,fn,cls in [('original',before.stat_overlapping_old,before.MemMap),('archived',archived.stat_overlapping_old,live.MemMap)]:\n value=typing.get_type_hints(fn)['mapper']\n out[label]={'raw_annotation':fn.__annotations__['mapper'],'hint':str(value),'is_bare_class':value is cls,'is_optional_of_own_class':value==typing.Optional[cls],'origin_is_union':typing.get_origin(value) is typing.Union,'args_match':typing.get_args(value)==(cls,type(None)),'default_none':inspect.signature(fn).parameters['mapper'].default is None}\nout['annotations_equal']=before.stat_overlapping_old.__annotations__==archived.stat_overlapping_old.__annotations__\nout['stdlib_optional_lines']=[line for line in inspect.getsource(typing.get_type_hints).splitlines() if 'defaults' in line or 'Optional[' in line]\nout['source_sha256']=hashlib.sha256(Path('mapper/mem_planner.py').read_bytes()).hexdigest()\nout['unchanged_nonbatch']=all(hashlib.sha256(Path(p).read_bytes()).hexdigest()==h for p,h in r['before_code_sha256'].items() if p!='mapper/mem_planner.py')\nprint('TYPE_PROBE='+json.dumps(out,ensure_ascii=False))",
+    "batch_code_sha256": {
+      "mapper/mem_planner.py": "482af52853a9ca50ccfef4d940ac6f07bee92b9e4f87e170000031e258e39d10",
+      "mapper/mem_planner_old.py": "f34f0e1b6afb85cb57213c6d3931fd75205c560c067390beef343d71c34e11a4",
+      "mapper/mem_planner_unused.py": "d3a710ad09873f920d3da38a84b0ca0fd2dce825ec2efa4c181be996b95db883",
+      "test_mapper_legacy_helpers.py": "0479ad37885b11ec873455e52eee764460df1f095de6ebde114deef9d626d753"
+    },
+    "protected_diff": "",
+    "head": "a1d933b1f26efd4d569eb3d8ffb313447294443b",
+    "index": "",
+    "test_fix_request": {
+      "event": "E0097",
+      "status": "WAITING_REVIEW",
+      "path": "test_mapper_legacy_helpers.py",
+      "changes": [
+        {
+          "old": "from typing import get_type_hints, get_args",
+          "new": "from typing import get_type_hints, get_args, Optional"
+        },
+        {
+          "old": "assert hints['mapper'] is m.MemMap",
+          "new": "assert hints['mapper'] == Optional[m.MemMap]"
+        }
+      ],
+      "reason": "The new test incorrectly assumed a bare class; both original full HEAD module and archive return Optional[their MemMap] in the documented Python3.9 environment. Original annotations and defaults are identical; production code must remain unchanged."
+    }
+  },
+  "readonly_followup": {
+    "source": "model/noc.py",
+    "sha256": "001d30e29ffe3ebc8b9724e151c445e100ef885287fe5abdd00a9bb0048d8f51",
+    "decision": "REVIEW_RETAIN",
+    "source_changes": 0,
+    "import_probe": {
+      "command": [
+        "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+        "-B",
+        "-c",
+        "import model.noc"
+      ],
+      "rc": 1,
+      "log": "/tmp/scheduler-noc-readonly-jvuebw5h/import.log",
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/home/zhangchg/git_repo/scheduler-audit-20260612/model/noc.py\", line 46, in <module>\n    class aggregate_model(NoC_model):\n  File \"/home/zhangchg/git_repo/scheduler-audit-20260612/model/noc.py\", line 47, in aggregate_model\n    def __init__(self, transfer_curve:List[Union(np.ndarray, List), Union(np.ndarray, List)]) -> None:\nTypeError: abstract class\n"
+    },
+    "class_internals_untouched": true
+  },
+  "semantic_audit_complete": false,
+  "reviewer_acceptance": {
+    "event": "E0100",
+    "actor": "reviewer",
+    "status": "ACCEPTED",
+    "request": "REQ-022",
+    "session_id": 11983,
+    "base_head": "a1d933b1f26efd4d569eb3d8ffb313447294443b",
+    "independent_log_dir": "/tmp/b24_review_final",
+    "reviewer_xml": {
+      "b24only.xml": {
+        "tests": 40,
+        "passed": 40,
+        "failed": [],
+        "errors": 0,
+        "skipped": 0,
+        "modules": {
+          "test_mapper_legacy_helpers": 40
+        },
+        "sha256": "2f3f60c2f930945e57b9c271705189d29e6fa2449ddeb8748acde9c92bac9125"
+      },
+      "fifteen.xml": {
+        "tests": 330,
+        "passed": 325,
+        "failed": [
+          {
+            "class": "test_approach_collector",
+            "name": "test_basic_functionality",
+            "message": "AttributeError: 'StatisticsCollector' object has no attribute 'task_realloc_curr'"
+          },
+          {
+            "class": "test_approach_collector",
+            "name": "test_motiv_exp_specific_stats",
+            "message": "ZeroDivisionError: float division by zero"
+          },
+          {
+            "class": "test_approach_collector",
+            "name": "test_summary_generation",
+            "message": "ZeroDivisionError: float division by zero"
+          },
+          {
+            "class": "test_approach_collector",
+            "name": "test_formatted_output",
+            "message": "ZeroDivisionError: division by zero"
+          },
+          {
+            "class": "test_approach_collector",
+            "name": "test_edge_cases",
+            "message": "ZeroDivisionError: division by zero"
+          }
+        ],
+        "errors": 0,
+        "skipped": 0,
+        "modules": {
+          "test_binpack_pipeline_contract": 3,
+          "test_approach_package_compat": 32,
+          "test_legacy_approach_archive": 7,
+          "test_approach_collector": 7,
+          "test_unused_hdf5_utils": 9,
+          "test_unused_path_utils": 19,
+          "test_unused_global_constants": 13,
+          "test_unused_eq_quantiles": 24,
+          "test_old_task_cfg": 18,
+          "test_unused_e2e_event_generators": 25,
+          "test_unused_slack_graph_helpers": 29,
+          "test_unused_sim_cache_helpers": 38,
+          "test_unused_message_helpers": 35,
+          "test_unused_experiment_helpers": 31,
+          "test_mapper_legacy_helpers": 40
+        },
+        "sha256": "a1f3d609cfc4827c91186d041b0531cb1bdd658473f22f37cef35dbe430064b3"
+      }
+    },
+    "supplement_file": "/tmp/b24_review_final/supplement.json",
+    "supplement_sha256": "ac7f5d2bf2fc6f067ab46d4d5b537f083dc2b6d8f9a41d00c23d9d2e00be92da",
+    "supplement": {
+      "before_173": {
+        "checked": 173,
+        "ok": 173,
+        "mismatch": []
+      },
+      "ledger_after": {
+        "cleanup/move-ledger.csv": {
+          "prefix_bytes": 25708,
+          "preserved": true,
+          "prefix_sha_ok": true,
+          "total_rows": 53,
+          "dist": {
+            "14": 45,
+            "15": 3,
+            "16": 4,
+            "17": 1
+          },
+          "historical_outliers": {
+            "15": 3,
+            "16": 4,
+            "17": 1
+          }
+        },
+        "cleanup/reachable-files.csv": {
+          "prefix_bytes": 74515,
+          "preserved": true,
+          "prefix_sha_ok": true,
+          "total_rows": 274,
+          "dist": {
+            "10": 274
+          },
+          "historical_outliers": {}
+        }
+      },
+      "cli": [
+        {
+          "idx": 1,
+          "rc": 0,
+          "stderr_tail": ""
+        },
+        {
+          "idx": 2,
+          "rc": 0,
+          "stderr_tail": ""
+        },
+        {
+          "idx": 3,
+          "rc": 0,
+          "stderr_tail": ""
+        },
+        {
+          "idx": 4,
+          "rc": 1,
+          "stderr_tail": "e 28, in <module>\n    n_p=1, binpack_cfg:Dict=default_binpack_cfg,\nNameError: name 'default_binpack_cfg' is not defined\n"
+        }
+      ],
+      "pickle_protocol4": [
+        {
+          "module": "mapper.mem_planner_old",
+          "name": "stat_overlapping_old",
+          "identity": true
+        },
+        {
+          "module": "mapper.mem_planner_unused",
+          "name": "scan_overlap_1d",
+          "identity": true
+        },
+        {
+          "module": "mapper.mem_planner_unused",
+          "name": "sort_fn_conflict_s_r",
+          "identity": true
+        }
+      ],
+      "fifteen_failed_names": [
+        "test_basic_functionality",
+        "test_edge_cases",
+        "test_formatted_output",
+        "test_motiv_exp_specific_stats",
+        "test_summary_generation"
+      ],
+      "xml_pickle_names": [
+        "test_new_function_pickle_identity[check_max_bin_num]",
+        "test_new_function_pickle_identity[ensure_csv]",
+        "test_new_function_pickle_identity[get_core_num_from_trace_name]",
+        "test_new_function_pickle_identity[msg_filter]",
+        "test_new_function_pickle_identity[msg_read]",
+        "test_new_function_pickle_identity[prepare_induced_env_if_needed]",
+        "test_new_function_pickle_identity[sched/slack_estim.py-build_score_dict_ref_flops]",
+        "test_new_function_pickle_identity[sched/slack_estim.py-get_chains_info]",
+        "test_new_function_pickle_identity[task/graph_breakdown.py-sort_chains_by_ddl_flops]",
+        "test_new_function_reference_pickle_roundtrip[e2e_var_sim]",
+        "test_new_function_reference_pickle_roundtrip[naive_period_event_gen]",
+        "test_old_function_pickle_path_is_retired[msg_filter]",
+        "test_old_function_pickle_path_is_retired[msg_read]",
+        "test_old_function_reference_pickle_is_retired[e2e_var_sim]",
+        "test_old_function_reference_pickle_is_retired[naive_period_event_gen]",
+        "test_original_file_io_and_state[prepare_bad_pickle_masked_error]",
+        "test_original_function_pickle_path_is_retired[check_max_bin_num]",
+        "test_original_function_pickle_path_is_retired[ensure_csv]",
+        "test_original_function_pickle_path_is_retired[get_core_num_from_trace_name]",
+        "test_original_function_pickle_path_is_retired[prepare_induced_env_if_needed]",
+        "test_original_function_pickle_path_is_retired[sched/slack_estim.py-build_score_dict_ref_flops]",
+        "test_original_function_pickle_path_is_retired[sched/slack_estim.py-get_chains_info]",
+        "test_original_function_pickle_path_is_retired[task/graph_breakdown.py-sort_chains_by_ddl_flops]",
+        "test_pickle_boundary[extract_num_cores]",
+        "test_pickle_boundary[round_to_step]",
+        "test_pickle_boundary[scan_overlap_1d]",
+        "test_pickle_boundary[sort_fn_conflict_s_r]",
+        "test_pickle_boundary[stat_overlapping_old]",
+        "test_pre_move_pickle_loads_and_new_pickle_roundtrips[approach_Eq.set_time_unit]",
+        "test_pre_move_pickle_loads_and_new_pickle_roundtrips[approach_collector.StatisticsCollector]",
+        "test_pre_move_pickle_loads_and_new_pickle_roundtrips[approach_def.GlobalEvent_t]",
+        "test_pre_move_pickle_loads_and_new_pickle_roundtrips[approach_def.MyGraph]",
+        "test_pre_move_pickle_loads_and_new_pickle_roundtrips[approach_initiator.initialize_events]",
+        "test_pre_move_pickle_loads_and_new_pickle_roundtrips[approach_sched.PartitionConfig0]",
+        "test_pre_move_pickle_loads_and_new_pickle_roundtrips[approach_sched.PartitionConfig1]",
+        "test_pre_move_pickle_loads_and_new_pickle_roundtrips[approach_setup.setup_benchmark]",
+        "test_pre_move_pickle_loads_and_new_pickle_roundtrips[approach_sim.run_simulation]"
+      ]
+    },
+    "codex_postaccept_verification": {
+      "before_173_mismatch": [],
+      "current_177_mismatch": [],
+      "source_rebuilt_from_original_head": true,
+      "source_bytes": 29334,
+      "ledger": {
+        "cleanup/move-ledger.csv": {
+          "rows": 53,
+          "prefix_unchanged": true,
+          "new_widths": [
+            14,
+            14,
+            14
+          ],
+          "sha256": "724c2039e0f53b8e122a39b43e279881d00afce95b503a4d679a84553a8f0a81"
+        },
+        "cleanup/reachable-files.csv": {
+          "rows": 274,
+          "prefix_unchanged": true,
+          "new_widths": [
+            10,
+            10,
+            10
+          ],
+          "sha256": "b0d4a1688abe13cb3b6c3dd8eeebdf5421a8337f5a1413f9a64de948d02709fd"
+        }
+      },
+      "recovery_reverse_check_rc": 0,
+      "restore_executed": false,
+      "guard_sha256": "15879c4efa377efec7c2e114e6d134b33da570e52916dea0ca0bf858bd44691a",
+      "head": "a1d933b1f26efd4d569eb3d8ffb313447294443b",
+      "index": ""
+    },
+    "clarifications": [
+      "177 after-snapshot matching is separate from 173 before/current invariance; both verified.",
+      "All three new function pickle identities independently checked; module import alone is not proof.",
+      "One old source, two new archives, one new test; B11-B21 plus B23 and B24 are 13 accepted uncommitted source batches; B22 is analysis-only.",
+      "Original E0100 wording is retained as history; current state uses these verified supplement facts."
+    ],
+    "closeout_verification": {
+      "report_status": "CLOSED_ACCEPTED",
+      "dfs_status": "CLOSED_ACCEPTED_E0100",
+      "code_files": 177,
+      "nonbatch_files": 173,
+      "python_ast": 161,
+      "code_mismatch": [],
+      "ledger_mismatch": [],
+      "metadata_baseline_unchanged": true,
+      "reviewer_xml_matches": true,
+      "new_tests": {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "-m",
+          "pytest",
+          "-q",
+          "-p",
+          "no:cacheprovider",
+          "test_mapper_legacy_helpers.py",
+          "--junitxml=/tmp/scheduler-b24-close-9ie44_bp/new.xml"
+        ],
+        "rc": 0,
+        "tests": 40,
+        "passed": 40,
+        "xml": "/tmp/scheduler-b24-close-9ie44_bp/new.xml",
+        "log": "/tmp/scheduler-b24-close-9ie44_bp/new.log"
+      },
+      "head": "a1d933b1f26efd4d569eb3d8ffb313447294443b",
+      "index": "",
+      "protected_diff": "",
+      "diff_check": {
+        "rc": 2,
+        "stdout": "sim_main.py:677: new blank line at EOF.\n"
+      },
+      "protocol": {
+        "expected_next_event": "E0101",
+        "legitimate_writer": "codex",
+        "last": "E0100",
+        "tail_sha256": "6085638d9ef5d4de4d92d7407650e1e5595d7bcc99f840d264b3ad3c55d2de70"
+      },
+      "semantic_audit_complete": false
+    },
+    "source_edits_during_closeout": false,
+    "committed": false,
+    "repository_semantic_audit_complete": false
+  },
+  "validation": {
+    "stage": "EXECUTED_WAITING_REVIEW_E0099",
+    "log_dir": "/tmp/scheduler-b24-validation-b199bqnc",
+    "red": {
+      "command": [
+        "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "test_mapper_legacy_helpers.py",
+        "-k",
+        "test_archive_targets_exist",
+        "--junitxml=/tmp/scheduler-b24-red-svr67gdj/red.xml"
+      ],
+      "rc": 1,
+      "log": "/tmp/scheduler-b24-red-svr67gdj/red.log",
+      "xml": "/tmp/scheduler-b24-red-svr67gdj/red.xml",
+      "tests": 1,
+      "deselected": 39,
+      "failed": 1,
+      "errors": 0,
+      "reason": "test_archive_targets_exist AssertionError: archive file does not exist, before production migration."
+    },
+    "bytes": {
+      "path": "mapper/mem_planner.py",
+      "sha256": "482af52853a9ca50ccfef4d940ac6f07bee92b9e4f87e170000031e258e39d10",
+      "expected_matches": true,
+      "eof_lf": true,
+      "correction": null,
+      "numstat": "0\t120\tmapper/mem_planner.py\n",
+      "correction_during_initial_migration": {
+        "authorization": "E0094 O5; E0096 retains O5",
+        "before_sha256": "e21c776c43300a9ef2871d61ad1718c3cc326fe75c23e986de63862ef1db520f",
+        "delta": -1
+      }
+    },
+    "new_tests": {
+      "command": [
+        "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "test_mapper_legacy_helpers.py",
+        "--junitxml=/tmp/scheduler-b24-validation-b199bqnc/new.xml"
+      ],
+      "rc": 0,
+      "log": "/tmp/scheduler-b24-validation-b199bqnc/new.log"
+    },
+    "new_xml": {
+      "tests": 40,
+      "passed": 40,
+      "failed": [],
+      "errors": 0,
+      "skipped": 0,
+      "modules": {
+        "test_mapper_legacy_helpers": 40
+      }
+    },
+    "regression": {
+      "command": [
+        "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "test_binpack_pipeline_contract.py",
+        "test_approach_package_compat.py",
+        "test_legacy_approach_archive.py",
+        "test_approach_collector.py",
+        "test_unused_hdf5_utils.py",
+        "test_unused_path_utils.py",
+        "test_unused_global_constants.py",
+        "test_unused_eq_quantiles.py",
+        "test_old_task_cfg.py",
+        "test_unused_e2e_event_generators.py",
+        "test_unused_slack_graph_helpers.py",
+        "test_unused_sim_cache_helpers.py",
+        "test_unused_message_helpers.py",
+        "test_unused_experiment_helpers.py",
+        "test_mapper_legacy_helpers.py",
+        "--junitxml=/tmp/scheduler-b24-validation-b199bqnc/regression.xml"
+      ],
+      "rc": 1,
+      "log": "/tmp/scheduler-b24-validation-b199bqnc/regression.log"
+    },
+    "regression_xml": {
+      "tests": 330,
+      "passed": 325,
+      "failed": [
+        {
+          "class": "test_approach_collector",
+          "name": "test_basic_functionality",
+          "message": "AttributeError: 'StatisticsCollector' object has no attribute 'task_realloc_curr'"
+        },
+        {
+          "class": "test_approach_collector",
+          "name": "test_motiv_exp_specific_stats",
+          "message": "ZeroDivisionError: float division by zero"
+        },
+        {
+          "class": "test_approach_collector",
+          "name": "test_summary_generation",
+          "message": "ZeroDivisionError: float division by zero"
+        },
+        {
+          "class": "test_approach_collector",
+          "name": "test_formatted_output",
+          "message": "ZeroDivisionError: division by zero"
+        },
+        {
+          "class": "test_approach_collector",
+          "name": "test_edge_cases",
+          "message": "ZeroDivisionError: division by zero"
+        }
+      ],
+      "errors": 0,
+      "skipped": 0,
+      "modules": {
+        "test_binpack_pipeline_contract": 3,
+        "test_approach_package_compat": 32,
+        "test_legacy_approach_archive": 7,
+        "test_approach_collector": 7,
+        "test_unused_hdf5_utils": 9,
+        "test_unused_path_utils": 19,
+        "test_unused_global_constants": 13,
+        "test_unused_eq_quantiles": 24,
+        "test_old_task_cfg": 18,
+        "test_unused_e2e_event_generators": 25,
+        "test_unused_slack_graph_helpers": 29,
+        "test_unused_sim_cache_helpers": 38,
+        "test_unused_message_helpers": 35,
+        "test_unused_experiment_helpers": 31,
+        "test_mapper_legacy_helpers": 40
+      }
+    },
+    "previous_failures_unchanged": true,
+    "previous_module_counts_unchanged": true,
+    "cli": [
+      {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "main_approach.py",
+          "--help"
+        ],
+        "rc": 0,
+        "log": "/tmp/scheduler-b24-validation-b199bqnc/cli-0.log"
+      },
+      {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "-m",
+          "scripts.motiv_exp_runner",
+          "--help"
+        ],
+        "rc": 0,
+        "log": "/tmp/scheduler-b24-validation-b199bqnc/cli-1.log"
+      },
+      {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "-m",
+          "scripts.abla_exp_runner",
+          "--help"
+        ],
+        "rc": 0,
+        "log": "/tmp/scheduler-b24-validation-b199bqnc/cli-2.log"
+      },
+      {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "-c",
+          "import test_mem_planner"
+        ],
+        "rc": 1,
+        "log": "/tmp/scheduler-b24-validation-b199bqnc/cli-3.log",
+        "stderr_tail": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/home/zhangchg/git_repo/scheduler-audit-20260612/test_mem_planner.py\", line 28, in <module>\n    n_p=1, binpack_cfg:Dict=default_binpack_cfg,\nNameError: name 'default_binpack_cfg' is not defined\n"
+      }
+    ],
+    "nonbatch_count": 173,
+    "nonbatch_mismatch": [],
+    "code_sha256": {
+      "__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "analyze/UE_extract.py": "647236fe7503c80740cca43e08858ccbe436a18ac4ed7d2bc54ad0b9b5d46cad",
+      "analyze/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "analyze/analyze_ctx_switch.py": "d7856b1f2ccb2fbf3652f00ee5552bfb570836953060f2dbfa1265554a67038d",
+      "analyze/analyze_timing.py": "45b94574b8ee2c7014e3ad5814b5348df28691dcaee124c5a7e15102f044ce8c",
+      "analyze/analyze_tp.py": "cd54307337eb3d37408e50b15b31fb7266b90a3c7addba3c5c3e707b400a3d38",
+      "analyze/pattern.py": "75c5a0ca22d710f7b301be118d820a0d3ca833176abd8777d43c104eaf119a46",
+      "analyze/stat_num_exec.py": "0f25b6b6275d0473cedfb669a873b92f81c58ac736d4065aa1225a75fcd405ef",
+      "analyze/stat_num_exec_unused.py": "c48ed4d92f4a3887afe0a4733cc6cee99d04087e7e9d77e6fc70418a80c39349",
+      "analyze/xlsl_e2e_lat_abla.py": "2803dd27f7c4031af44116eae11439e2e80abb5823ef0255285669dadf6ef826",
+      "analyze/xlsl_e2e_latency.py": "db352b4685c6fa76f3c8c5e5940c469af14b1db6297e6df29135e0beae1c0f60",
+      "analyze/xlsl_max_tp.py": "1468390c1e293780e32b81e649cd501542e9d0d1d9b88b37018c7e1ad8f11201",
+      "analyze/xlsl_min_core.py": "90d91b24da0e3015783044713c84a7abd72b70ba82edd8c56f2415719c614f8d",
+      "analyze/xlsl_safe_scalable.py": "d16deee46b74bd34883d39abfab86691c36455b8fe02547cb5f275ad65b6ee55",
+      "approach/__init__.py": "25606592fea79200c3a2512098898d0af5b53b81bf863b221281d3a46328b68c",
+      "approach/approach_Eq.py": "bb2e65224f12fe2555c2f12567276a110d8d409808a180f4d4282b86a289cdc8",
+      "approach/approach_Eq_unused.py": "85092d18e980606c456fb8a8a49fdfcff69f519dc75088aab2f3021431093bf4",
+      "approach/approach_collector.py": "8f42d09dfe455ebdbf931a11266b5f4afccef485029d02affc5e36546754ffd1",
+      "approach/approach_def.py": "3bf4c156262a66c636be06e744da862240ebf619c5926a2b6928bf3f6e6df931",
+      "approach/approach_initiator.py": "4e805f25b057c5f66220ee491f40523587af265d948316f7c7993df3082decc9",
+      "approach/approach_sched.py": "fe9e3ab6bbb45ed4ee11215417b99a8868d7d0dba648949fc92a0f52a59c5a8e",
+      "approach/approach_setup.py": "0e30787994a6a23ea8c048a10ece4c5dc58bb157a311a2c5e8c242cda7c6bbbf",
+      "approach/approach_sim.py": "1d064618107e7888b9e75debc1e983dbc7e56a4e09240be75214d4dc770b2f4e",
+      "approach_Eq.py": "6a869b99f96cf2bd633f27904fe4d2831e39868bb0aa8f14b4efbbce1d21c09e",
+      "approach_collector.py": "e5d2c0a346067a134ed26204a0e367e94aa2131394d6387e60e4a6ab2fcb46e0",
+      "approach_def.py": "65470e4b084aa67d3c1dcb583c9c15cbf3e521c06cffa17855bd0097b7afb501",
+      "approach_initiator.py": "c55558bf6de3422b61a609f300776f68de7a3e27521a2bb8e81566de5a0e12ef",
+      "approach_sched.py": "44ae9baacc4246eb8a0bac53508be8220bb33064f369ee7e654fb6315d538d42",
+      "approach_setup.py": "7cf7d1550204beb4abba7d7cf0c0c52575253fe7296002ad9033109cb8d6506b",
+      "approach_sim.py": "46247bf523cae1a8a0a62e71109ef0aba3c86b4c278754b28493718815e02369",
+      "cleanup/tools/dialogue_guard.py": "15879c4efa377efec7c2e114e6d134b33da570e52916dea0ca0bf858bd44691a",
+      "debug_sink_constraint.py": "91b99637ccbc7472819776419d52e659027e37c97732ab248841fc1cf950959b",
+      "example/bm1.py": "9cb4482dd34b5102c5f9c9257a25bbef15273b8d5c4b94665c3f9f151c0fc57f",
+      "example/bm2.py": "a83603e2af0a4637c768a8f8594617fd9629083de2cd716d209436b043b09dfc",
+      "example/bm3.py": "200cd9bc6935e660d0c7d1f3ad6f25b46cb3492db946b694f8c4b7275c8f6b10",
+      "example/bm4.py": "381bebb8759796b353478cfb9aba4c24bab6c5b108dc3fbc9172710426bca4a2",
+      "global_var.py": "1eae1477f532e916e9829942bc4474bc79604809d85171a14356d99818d769cd",
+      "global_var_unused.py": "2a7b284d0b7bb8c3cad4e0c639839f3d09b616b19c644b95560dd20d5b8cfb2b",
+      "main_approach.py": "e32f1ec431614e4ea30761eaab6278fe65ba2166717b5386bc0148cfad22db3d",
+      "mapper/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mapper/mem_planner.py": "482af52853a9ca50ccfef4d940ac6f07bee92b9e4f87e170000031e258e39d10",
+      "mapper/mem_planner_old.py": "f34f0e1b6afb85cb57213c6d3931fd75205c560c067390beef343d71c34e11a4",
+      "mapper/mem_planner_unused.py": "d3a710ad09873f920d3da38a84b0ca0fd2dce825ec2efa4c181be996b95db883",
+      "model/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "model/barrier_agent.py": "57d2943c3ac1c21423e29affce89f2b7f664d097d2d0cefb0124736545685ab7",
+      "model/buffer.py": "aec736f78d35ba582d8d091cb2078181c53e195f7a97346c9cefb6b09a4576c8",
+      "model/event_gen/e2e_latency.py": "3043c818e36dbdfcee8ee50573c5274a8549fbb1413e4cb55cde07cc0e990a7e",
+      "model/event_gen/e2e_latency_unused.py": "aab12e28ee3d728540d8f4a016285631f2e935e441e15c76b14a688e20c7a5b3",
+      "model/lru.py": "b2be894c685be6c3a5fd48b7b7117d2cc90059a4109c7374c68979f74d4a7013",
+      "model/message/Context_message.py": "c8d4de2ad5e73b2db072f710777d6f846285be1e03d038711aecb46a25247c64",
+      "model/message/data_pipe.py": "544689f0008568d77eeec76ab35ff12d7ce7d5c808dc933e06e76bd6db3b74c0",
+      "model/message/message_handler.py": "7d0c4520760f95b791e1c9f8d0c3220be1959f8ab58aabd8d2328fd8793a0785",
+      "model/message/message_pipe.py": "6d6d8228acca9ff2fd1e2cf02573d35f058845ebafe6dfdae98acba9226fd309",
+      "model/message/msg_dispatcher.py": "0c9df6adcec6cdda83d285d7e865097e74b9103f513eeadb97f2ac4a3ac3fbcd",
+      "model/message/msg_dispatcher_unused.py": "3a70a0228f01c9f8250390293d690511602fdd7c5c512849ded52700647d4164",
+      "model/noc.py": "001d30e29ffe3ebc8b9724e151c445e100ef885287fe5abdd00a9bb0048d8f51",
+      "model/performance.py": "273eabbd6dbc16df28db18758e8f51defe84caba3f6ca3cf40fa22c7b041235a",
+      "model/position_table.py": "fa6615a4b3e54e41304463dda597494be7bc5e672abbae1149e11cfb8f2ecc59",
+      "model/resource_agent.py": "7290b7b496e0a46a0ef74540b1747fcb35e6724443a5f70072562bc7ab8cefd8",
+      "model/streaming_processing/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "model/streaming_processing/wartermark_strategy.py": "5af8e0035e2a360ae5bd6201f57f55b30970d8bebf8d542f08815db34264e596",
+      "model/task_queue_agent.py": "227fcd0bc10129614b6481b94f239a621ea6a460de815ee007e828142cad1c24",
+      "model/trace_example.py": "ff2e00c361a9ba9ca0386704abe57acb3e8ca924b3a9187d6fb1129f0e4cd880",
+      "old/allocator_agent.py": "f7b48b84465c9f1390b9ce44e0bfd463f896fb869e2d1364e3e9fe79ef892582",
+      "old/appoach_plot6.py": "44332d84c5d05f7d520b505c96c80c62a8ec6511c41440db41ca4bc6081d0d81",
+      "old/approach_util33.py": "89ae0ac387bd44484b1a345e5bd3999cc279acc2f5a705cba6ab6fc285701352",
+      "old/pre_alloc.py": "8a2e3724401e442c505cc5af34b22abdf30034a7dd7417526c10865df5ed76c0",
+      "optimizer/delta_ver.py": "da1762a2d66c80ca5fbd9a3de4eff3fb96f3d2d6f3ca16186996c0853cd5c9a3",
+      "optimizer/dist_custom.py": "923e2cafa54bd27646b620d3f13e8ab98386f8a6b93a4ad73c78e6dd69f479f9",
+      "optimizer/ops.py": "41d6ddb143b93e14c51d49dbaea2db60ca6adcd0fdc163c784266e64dcb9595c",
+      "optimizer/ops_test.py": "6584b9cff086fb2492e5131153c23b78225a27ed6ce953aee8a84244bd66e758",
+      "optimizer/scheduler_base.py": "323b0e48b88910f152e8c21a06d4c8a0f9f965aa6f2b09bf3388868737a9c884",
+      "paths.py": "b8aa8a5471c8a6420f9b9532013be1b39ea8a195c2c301bdb42193eccc111170",
+      "ref_tdigest.py": "0e7642c9892553f579b5340d21982b589bdb4a85d4965cbfc70fa35289f9c287",
+      "run/1/all.sh": "05105542d6b66aaf914ad86ccd1338ea4049ed8d2c21a91b2783f9c37a0ff6e4",
+      "run/1/scan_aux.sh": "9d7cb82e0805928fed87f4efb9c727c96d371ae51382ea8fce0192eff92180d3",
+      "run/1/scan_core.sh": "958401b5016d0e19eade15c3f7831b07cf8ad611e627ff6d1f4a06db8d27503a",
+      "run/1/sweep_seed.sh": "dea4922a271e4e318ecc29f39a7ef728de52bd581470c87095b4023c50dcfa8a",
+      "run/2/aba_scalability_scan.sh": "d527b302c374401165e3011cca9d3904710ee4154def52aab5489d725c41f925",
+      "run/2/abla_scalablility.sh": "2f56009e9eb0da9cfa9223737aadb356e444b7e8b2e6212810c2e6385151a498",
+      "run/2/all2.sh": "85638195a489880dc8c26bdba929d3c62a4b0b83c6eaaeb252d040db74824880",
+      "run/3/time_sharing.sh": "b8104f1f3c684290dfbdf781e07b60a70e8feb251bbe9cd80278c3fd9dcfa5ee",
+      "run/aba_scalability_scan copy.sh": "c60b76ec65a851962d4b7235ed76e8450a6e80cbefdd22ce6aaf5530fb348819",
+      "run/abla_chain_sharing.sh": "17943f0885c65567943936abdc82e6c53a5df33340f3a0ef37ff9a2c52e370b3",
+      "run/bin_sharing.sh": "a94cd42eb610e21321b47921c5c2063a4590b0b8322cf57ab8b57a13166287b4",
+      "run/cfg_parser.py": "5d8c3a618d13994aee7dbec18e033d938491a9e46fedeaa75ce712b59f7d9f55",
+      "run/clean.sh": "7d5abeedad2abb698003ac37a594feffa5676334a8f615fcdee6c059a1e4ecbe",
+      "run/max_core_num_scan.py": "79fa47da771d7ac88ef383946e4609c8248212f4b4d7fa6517f27ec34f2f464a",
+      "run/scan_coalescing.sh": "2ee0fbb7c0b029075ee071e3ac1af672e63019af484fcc2a30bcdd03173dfa7d",
+      "run/temp.sh": "31236f54d38944c69f2cb3b3f069a7c3931332e4add8cfd252d091d5621a6a49",
+      "sched/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sched/bin_list_utils.py": "67a9aa91714a797d20f504c33bca796836632c6501d954e971cb1aa5aaa79bb4",
+      "sched/bin_list_utils_old.py": "580d943fd5b2057b4fd624c32d6197a24b56a2c5c36d3be3ceb5924032bc4a9e",
+      "sched/bin_list_utils_unused.py": "2142733db35776d6df1936a8091b59cf57e438dad2e10d316ae0be11110a536a",
+      "sched/bin_ops.py": "361bbc497b182e68304694f791354e9a296e93d5941cef267e9775bb9b47c301",
+      "sched/binpack_config.py": "d10829049efd5502328ca5f14d92dbe26435b219a53f3b4b03c06530ebc43f40",
+      "sched/global_sched.py": "a11a8324def4ca8b8763814e7dc8483a5444bc013e29083fa1b1dbbfbbbe4118",
+      "sched/global_sched_alloc.py": "627300a13b10f98ca4c2c8b08807780578cf1cf923c68b9967ce32dc9af1b2e0",
+      "sched/global_sched_old.py": "cc93f501ce6bf24f92841d8a323fe4d9550fd7e76120be27c539242b5e1df425",
+      "sched/global_sched_repack.py": "2e61f425893e6365d711676c53445cf89bec915c3ee5039c82d84d024dfcfece",
+      "sched/monitor_agent.py": "c748029c18bd6c99ffa0fed57536d5344fbc20ae23fc64b37446b2d973f9d83b",
+      "sched/packing_solver/chain_slack_assign.py": "e564906bc80d9b742e321cd9d0395fe6b03a2b891c35ddb9142e852c9c4d141f",
+      "sched/packing_solver/fit.py": "1b3d0b5296648d4d7403016c67f53be21d34b55c334b8d193f4fc770216e7998",
+      "sched/packing_solver/gurobi_MP_semi2DClst.py": "e56adc1a37dbba39cc3f8d707a955bfc64b3b03f71356084f989946593a02895",
+      "sched/packing_solver/unused/gurobi_semi2Dclst_mapping.py": "4d49d05ab20981eafeb9afe897aa0b952c2ce7d2eaac0880b71fa8131430c522",
+      "sched/packing_solver/unused/gurobi_semi2Dclst_mapping2.py": "9c40c2b4e21edcdb5fc25d51b6ce9479bbb4f8c64e2e3bc577d8e61ebf36e3dc",
+      "sched/placement.py": "008ca6d7c2316064c3fce0b75258e35c77f570b727e483d32a2010f6f7408fdf",
+      "sched/pre_alloc_new.py": "6991b6551a7f0ff3fe94f6b47f4fbe469a4da1ccdbd80e8eaca1bb7749cfbea6",
+      "sched/pre_alloc_new_old.py": "97e11a4df33ebc3b3ff6adaeabaa1b1635f34e9ad059cdbda23eb2f6a0cbd878",
+      "sched/ref_alloc_search.py": "c29243f7134518633c9b3f1631420607adef0ef79d994c0152ef579402c88ca7",
+      "sched/runtime_legacy/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sched/runtime_legacy/sched_fn.py": "cc82e889cb203dd7cb306988050c432b92857c559ccd2ab2bb6c85d2a63c79f7",
+      "sched/runtime_legacy/sched_utils.py": "ecc8414c05eeb9f1b7574142c1da5620d0c7a5e4d1ed6d2ecb2a3442604f2135",
+      "sched/runtime_legacy/scheduler_agent.py": "c0e3d3583f0a86947fa1478cb1d42bb9bbd4ff0727aab2128173b878cbc58cac",
+      "sched/runtime_legacy/state_trans.py": "ab3850e46e89c907fd2ca6a19667427c3e787ce1c5cf52e6fc2d93a7a4edc569",
+      "sched/sched_fn.py": "6ddf24cd84d4001c09bc637719430f60a7580950a1499046a0e6f7a1277026ed",
+      "sched/sched_utils.py": "daddd34bce6031198b5866b90eaa22365ee950b41323d2164c00e2e23b8479e6",
+      "sched/scheduler_agent.py": "cf77c531c15130c4dd3a218a9fd197d3daba242c018e1b222bdd1371e893e4de",
+      "sched/scheduling_table.py": "a7df3b3ed412e6b30b29d9cc533749c59b74c38c88e19ff6dba9858f669aad8c",
+      "sched/scheduling_table_event.py": "a79b101f8648cc12411477321025164d0fb6546fa20f9c9780fccc3b7ff46837",
+      "sched/slack_estim.py": "bda2da01c0bb32873d021dd32efc0debb5017333221baa3bd5cfbf7f17cc39c5",
+      "sched/slack_estim_unused.py": "0dca3dcceabe1e251c93a469c33840165912a9365894377e78f556b35322b3b0",
+      "sched/sort_function.py": "50ef837990c9d6a8dda164fca656852a4f25e640394160058d15326291a6183f",
+      "sched/state_trans.py": "29b77a41fed368421d76f5bf06cd698955990684908afbfc03bf49d1262cc628",
+      "scripts/abla_exp_runner.py": "73ca0bccb065a284f1f078c3a4a4027d9134e972b3bba18a6e26380e61e60864",
+      "scripts/e2e_exp_runner.py": "e1dc1dd1f5803137d12e942df4169e69cb269f0e4a0651f50379bec96a1c7445",
+      "scripts/e2e_exp_runner_unused.py": "0732eadbbafe6564d107090f07463cdb53c5cca6e0f7a86984ae4734d9ddcf3b",
+      "scripts/e2e_hyperparam.py": "579229a5e596f3eac366215af6ec2ad67d862d69f5ca43f05b4a06ed466ee9b8",
+      "scripts/exp_common.py": "6d0e913f0eacdc62b2972ce2ee9c25f459891e92da12f32c4001ac74a0f98274",
+      "scripts/motiv_exp_runner.py": "4592032791d2bcfe532aa01adda9f545b9196545bb0c4e8a0e018358e4eb712a",
+      "scripts/run_abla_exps.sh": "3f8d8a01e366995b7e8d4fb0b492e4c1bb0cbe989da2c061d501f80caca7c366",
+      "scripts/run_motiv_exps.sh": "4238e238d4640f53c19f2705f892be988ad19a50439f8c2d48efd2cd43c36d66",
+      "scripts/test_alloc_lat.py": "fc0bf0ead04d6e71fa32e69003388fc1ae402a2cbeee2f18e6ae167cb16ce552",
+      "scripts/unused/repack_sweep.py": "262dad167ec4fad1c6b2b9fe14c5d941f958cdbb0722198b723c2e76adace213",
+      "sim_main.py": "1d04e4aa038b63bc289834fc350442d9ff2b929faabb42a042deb7803bc86520",
+      "sim_main_old.py": "02aac1cd1af96eec0dbb51393f84cd33c05abaf4b1abf657cb89dd1cd02472cc",
+      "sim_main_unused.py": "4d60418cea08dd26e7dac15e698dce86056f2212a8e519298e9872352577b8e1",
+      "simple_test_collector.py": "b6bff9b527a9941a187d5e89640f5d785791ddd4c69df3a745a1e23a0e127142",
+      "task/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "task/graph_breakdown.py": "486b438fa3325f8d035ef91ca63518649986e21aee74cb761092908c579cdbd1",
+      "task/graph_breakdown_unused.py": "ad0d03b8c4b16bb67f0c8a92e8ccd5f2d03767755135703863cb2649c6582537",
+      "task/graph_scaling.py": "23cd8bd44738144c8a4578875a88bab4d06bef003cf0bdaa958e743ce9c88492",
+      "task/load_cfg/loadA.py": "7f75f58b094573322dce01ca6f2366241fbd82e4891292aee390c0a1d98ad287",
+      "task/spec.py": "66f2eeb5f3c35b9ee92fb0f0a90f0bba4e2cecfb88fd2192f3be7ca931d09022",
+      "task/task_agent.py": "21786d243f70d1e41d5ad43f1d8c22dee13d54f3fab28a84719ad3cbe16f8a2e",
+      "task/task_cfg.py": "6194c815e202c298f7789bb37be929dcc59f19d513a2ebb9a476a2fc3b0ef14b",
+      "task/task_cfg_old.py": "06a38533685502a78a0274edd8d5a460f5baa3579f6adb420b38bcbbca2d0356",
+      "task/throughput_cnt.py": "7df7e2fa30a3f6061fffa210952d211666e1dcd00636d18e80fa29cf61fc15ef",
+      "test_approach_collector.py": "efd7b67e99cd0a970dc1a7998461af5a0795fa239ead43e00eb5e8ce0e6f2d68",
+      "test_approach_package_compat.py": "ca4bac52de6e14174ed93fd56d2c23be16d9457be9f15c93122e6ccf94b02792",
+      "test_binpack_pipeline_contract.py": "144f9f0acc656c687adcdc8099124697888c41a4bb0b78a621f43a938cefb1d9",
+      "test_closure_fix.py": "16c04deae220389724a7c4c28a0bb838399d671a61429ddc84cd5d28c3994165",
+      "test_core_allocation.py": "44fe340a041794584e12a30b99cb9aac1aa9dc3dc5e3a6e82f94c9f3ce428045",
+      "test_deduce_cfg2.py": "9edb5c3de657302137144df2ae7425bf36976e3b20a4b5d10f3580f83e41fddb",
+      "test_duplicate.py": "662f0ed5fd5a76dd59e2b82981377297aba2ac118a6c9a150176f619aa2e2dd2",
+      "test_event_update.py": "68ff45c5ff1f5fad893933722565b034bef2e1831f15c56ce398a5b982d7dc95",
+      "test_legacy_approach_archive.py": "b6dc62122ea09a99cbbddf2cffa52613be3376d7f827518487a977fd2fb96d77",
+      "test_mapper_legacy_helpers.py": "e4c32ca39fb30f5548175c5692732c01c7cec5146be6455f6d4c0326c9851698",
+      "test_mapping.py": "a32256208595f8b9f451c71d9d9c18a8f4f992d161c1bfa79e048b30cbed5b3f",
+      "test_mem_planner.py": "e171129a2a8519f3de13f8e533e2bd74cba08f076dd9e564945be65a01c87b60",
+      "test_old_task_cfg.py": "88498ed6d99d56a16cbbf610c6bc249e309496e5c8e29855da68666fdf274da8",
+      "test_repack_diagnostic.py": "d11f52e223cb829fb9dd16c401282b58e035df8bcceac3c000a560b63744b83f",
+      "test_scheduling_table.py": "5a44cb64b2e88744a72816784fb70f87b826dae56bd92a00ee07ffd29200bea0",
+      "test_unused_e2e_event_generators.py": "9959f891ba33892a0bcf75e3b0eff5b83259247a65e611b15d7b0f3a735aa496",
+      "test_unused_eq_quantiles.py": "7748d46ee067cf89e9707f6ea367733e0ef06e04b6f7d4074d1900f5ec3db832",
+      "test_unused_experiment_helpers.py": "ceb6d8d64fdddced1ed91e6423536dcee66c686b3d28332c1f1ad983d4ab4237",
+      "test_unused_global_constants.py": "ac3bbe27146f057fa5fe7fa38ed51296f134a7f7dec76828bb8f63542046191d",
+      "test_unused_hdf5_utils.py": "cdc3fab2f6c53006d42c69c1c01abc9cff7bfeb035a828345ea73ebbd4f86fc6",
+      "test_unused_message_helpers.py": "9970e9fc7186d0b0b2eed52218d7ae25f73531926b5aa496519cde1700a03d4f",
+      "test_unused_path_utils.py": "01e2d7da2298380db15ab323bc102a1b161788af6f5419d4965e1bfebc9a53ac",
+      "test_unused_sim_cache_helpers.py": "1dbf81135d8a2c14aa1a0852fefc4043a0220272eb7cc3d7e060ab257d472d5d",
+      "test_unused_slack_graph_helpers.py": "05567227d3c8af745d6598d7616d97e3b69469a0c36e5ccca37c10e82e8c7c3e",
+      "test_updated_stats.py": "cbd88f4afd5bdb6b8642fe435e386c38fc7856737a5df80909d3734dbaafe91d",
+      "tile_2d_mesh_mapper_fixed.py": "db0d65db81bdb53079bdf02e22da85432bafb5777de9b1e2d676834ef883e003",
+      "unused_fun.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "utils.py": "508f1366fb8bb08f16f1ad5f57e651692be7915c6a3c29e054ce73970dcd4e03",
+      "utils_unused.py": "cadac26936dca668f85f6eb6ceb84186c2be32dd52acae7b56785f760c15b40d"
+    },
+    "python_ast_parsed": 161,
+    "shell_files": 16,
+    "protected_docs_unchanged": true,
+    "protected_git_diff": "",
+    "head": "a1d933b1f26efd4d569eb3d8ffb313447294443b",
+    "index": "",
+    "diff_check": {
+      "rc": 2,
+      "stdout": "sim_main.py:677: new blank line at EOF.\n",
+      "stderr": "",
+      "log": "/tmp/scheduler-b24-validation-b199bqnc/diff-check.log"
+    },
+    "test_fix_inverse_sha_matches": true,
+    "test_before_fix_sha256": "0479ad37885b11ec873455e52eee764460df1f095de6ebde114deef9d626d753",
+    "test_fix_approval": "E0098",
+    "recovery": {
+      "format": "zlib+base64",
+      "patch_b64": "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",
+      "sha256": "577a283401f7d5a7d033eb63887d9716d568a6ffc9192185e7a5fc683b5d9ebe",
+      "paths": [
+        "mapper/mem_planner.py",
+        "mapper/mem_planner_old.py",
+        "mapper/mem_planner_unused.py",
+        "test_mapper_legacy_helpers.py"
+      ],
+      "file": "/tmp/scheduler-b24-recovery-s82b1pij/b24-code-only.patch",
+      "reverse_check": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": ""
+      },
+      "restore_executed": false,
+      "extract_command": "/home/zhangchg/miniconda3/envs/gurobi/bin/python -B -c 'import json,pathlib,zlib,base64,hashlib; r=json.loads(pathlib.Path(\"cleanup/reports/b24-mapper-legacy-helpers.json\").read_text())[\"validation\"][\"recovery\"]; b=zlib.decompress(base64.b64decode(r[\"patch_b64\"])); assert hashlib.sha256(b).hexdigest()==r[\"sha256\"]; pathlib.Path(\"/tmp/b24-code-only.patch\").write_bytes(b)'",
+      "check_command": "git apply --reverse --check /tmp/b24-code-only.patch",
+      "restore_command": "git apply --reverse /tmp/b24-code-only.patch"
+    },
+    "ledger_after": {
+      "cleanup/move-ledger.csv": {
+        "prefix_bytes": 25708,
+        "prefix_sha256": "0e2aad995d765c17cac750de3350915d53c56f3f420472bd415315ceadde0108",
+        "prefix_unchanged": true,
+        "rows_before": 50,
+        "rows_after": 53,
+        "appended": [
+          [
+            "B24-MOVE-001",
+            "mapper/mem_planner.py",
+            "mapper/mem_planner_old.py",
+            "move-reference",
+            "EXECUTED_WAITING_REVIEW",
+            "Superseded event-sweep helper; original bytes preserved",
+            "MEDIUM",
+            "E0094/E0096; stat_overlapping_old",
+            "codex",
+            "archive/test_pipeline-20260612",
+            "See B24 JSON validation.recovery; extract then git apply -R --check",
+            "B24-MAPPER-LEGACY-HELPERS",
+            "reviewer E0094 and E0096",
+            "Old export and function pickle path retire; classes and all remaining bytes preserved"
+          ],
+          [
+            "B24-MOVE-002",
+            "mapper/mem_planner.py",
+            "mapper/mem_planner_unused.py",
+            "move-reference",
+            "EXECUTED_WAITING_REVIEW",
+            "Independent unused mapper helper; original bytes preserved",
+            "MEDIUM",
+            "E0094/E0096; scan_overlap_1d",
+            "codex",
+            "archive/test_pipeline-20260612",
+            "See B24 JSON validation.recovery; extract then git apply -R --check",
+            "B24-MAPPER-LEGACY-HELPERS",
+            "reviewer E0094 and E0096",
+            "Old export and function pickle path retire; classes and all remaining bytes preserved"
+          ],
+          [
+            "B24-MOVE-003",
+            "mapper/mem_planner.py",
+            "mapper/mem_planner_unused.py",
+            "move-reference",
+            "EXECUTED_WAITING_REVIEW",
+            "Independent unused mapper helper; original bytes preserved",
+            "MEDIUM",
+            "E0094/E0096; sort_fn_conflict_s_r",
+            "codex",
+            "archive/test_pipeline-20260612",
+            "See B24 JSON validation.recovery; extract then git apply -R --check",
+            "B24-MAPPER-LEGACY-HELPERS",
+            "reviewer E0094 and E0096",
+            "Old export and function pickle path retire; classes and all remaining bytes preserved"
+          ]
+        ],
+        "width_distribution": {
+          "14": 45,
+          "15": 3,
+          "16": 4,
+          "17": 1
+        },
+        "current_sha256": "724c2039e0f53b8e122a39b43e279881d00afce95b503a4d679a84553a8f0a81"
+      },
+      "cleanup/reachable-files.csv": {
+        "prefix_bytes": 74515,
+        "prefix_sha256": "3693063ceaff4f749c13bcb2e8b39f817ff6ed5f3141fb5400b58bd4e4720deb",
+        "prefix_unchanged": true,
+        "rows_before": 271,
+        "rows_after": 274,
+        "appended": [
+          [
+            "mapper/mem_planner_old.py",
+            "REUSE_CANDIDATE",
+            "archived-symbols",
+            "codex",
+            "Explicit import of old archive",
+            "E0094/E0096; stat_overlapping_old; 108 original lines",
+            "MEDIUM",
+            "archive/test_pipeline-20260612",
+            "See B24 JSON validation.recovery; extract then git apply -R --check",
+            "Borrowed live classes; mutable defaults and original behavior preserved"
+          ],
+          [
+            "mapper/mem_planner_unused.py",
+            "REUSE_CANDIDATE",
+            "archived-symbols",
+            "codex",
+            "Explicit import of unused archive",
+            "E0094/E0096; scan_overlap_1d and sort_fn_conflict_s_r; 12 original lines",
+            "MEDIUM",
+            "archive/test_pipeline-20260612",
+            "See B24 JSON validation.recovery; extract then git apply -R --check",
+            "No repository caller; old exports/pickle retire; external consumers unknown"
+          ],
+          [
+            "test_mapper_legacy_helpers.py",
+            "KEEP",
+            "regression-test",
+            "codex",
+            "pytest explicit B24 suite",
+            "40 tests; 27 ordinary cases; default sequence; 3 real mapper paths; exact bytes; complete interface; pickle",
+            "LOW",
+            "archive/test_pipeline-20260612",
+            "See B24 JSON validation.recovery; extract then git apply -R --check",
+            "E0098 corrected two new-test Optional annotation lines only; protected tests untouched"
+          ]
+        ],
+        "width_distribution": {
+          "10": 274
+        },
+        "current_sha256": "b0d4a1688abe13cb3b6c3dd8eeebdf5421a8337f5a1413f9a64de948d02709fd"
+      }
+    },
+    "persisted_recovery_verified": {
+      "sha256": "577a283401f7d5a7d033eb63887d9716d568a6ffc9192185e7a5fc683b5d9ebe",
+      "paths": [
+        "mapper/mem_planner.py",
+        "mapper/mem_planner_old.py",
+        "mapper/mem_planner_unused.py",
+        "test_mapper_legacy_helpers.py"
+      ],
+      "extracted_to": "/tmp/b24-code-only.patch",
+      "reverse_check_rc": 0,
+      "restore_executed": false
+    },
+    "all177_postcheck_unchanged": true,
+    "canonical_baseline_matches": true,
+    "ledger_before": {
+      "cleanup/move-ledger.csv": {
+        "bytes": 25708,
+        "sha256": "0e2aad995d765c17cac750de3350915d53c56f3f420472bd415315ceadde0108",
+        "rows": 50,
+        "header": [
+          "decision_id",
+          "source_path",
+          "target_path",
+          "move_policy",
+          "status",
+          "reason",
+          "risk",
+          "evidence",
+          "owner",
+          "archive_ref",
+          "recovery_command",
+          "batch_id",
+          "approved_by",
+          "notes"
+        ]
+      },
+      "cleanup/reachable-files.csv": {
+        "bytes": 74515,
+        "sha256": "3693063ceaff4f749c13bcb2e8b39f817ff6ed5f3141fb5400b58bd4e4720deb",
+        "rows": 271,
+        "header": [
+          "path",
+          "status",
+          "kind",
+          "owner",
+          "reachable_from",
+          "evidence",
+          "risk_level",
+          "archive_ref",
+          "recovery_command",
+          "notes"
+        ]
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # Cleanup status
 
-Last updated: 2026-09-04 (REQ-005 closed at E0027; user authorized the accepted B10/protocol checkpoint commit, then continuation with sequence item 4)
+Last updated: 2026-09-06 (B25 independently accepted E0102; user-authorized audit snapshot commit being prepared)
 
 This is the canonical global status file for the scheduler cleanup work. It supersedes `PHASE1_STATUS_FOR_NEXT_AGENT.md` as the main entry point for future agents.
 
@@ -15,30 +15,153 @@ After every cleanup action, preflight, environment verification, status-maintena
 
 Per-batch packets and ledgers are still required when applicable, but they do not replace these two global records.
 
+用户清理规则（2026-09-06 重申）：主线基准 master，每批另记实际执行前 HEAD；类内先不管，旧 scheduler 类整体分离；默认移动而非删除，不改逻辑或接口，不用换行伪装改写；路径变化可配套改 import。先理解模块，再沿依赖深度优先审查。根目录整文件放 root/old 或 unused，包内整文件放原 package/old 或 unused，符号片段放源文件同目录的 basename_old.py 或 basename_unused.py。old 表示被新版本替代，unused 表示独立但当前未用。
+
+这些规则已同步到 `C:/Users/diyuf/.agents/skills/legacy-prune/SKILL.md` 和 `D:/document/Research/coding/legacy-cleanup-slim/.claude/skills/legacy-prune/SKILL.md`，并在两处 references/cleanup-policy.md 声明优先级。没有整目录覆盖，也未修改原 worktree 或 audit 内受保护的 .claude。备份和恢复命令见 FILE_ADJUSTMENT_RECORD.md。
+
+规则验证：两份legacy-prune用户规则块一致，真实clean reviewer已进行只读场景核对。账本追加先核列结构，被活路径借用的历史组件需单独提案；规则同步动作本身没有改源码。E0037是此前B11收尾记录，当前批次状态以下方协调区为准。没有自动提交授权。
+
+偏好汇总复核（2026-09-06，B15收尾时）：两份legacy-prune的1696字符用户规则块完全一致，两处cleanup-policy均声明这些规则优先。master基准、双全局记录、类内暂留、禁止逻辑/接口改写、移动优先、深度优先和三类归档位置已落实，无需重复写skill。此次只补记核对与已有B15验证，不新增源码批次、不更改已有裁决。当前批次状态以本文件协调区为准。
+
+偏好规则再次核对（2026-09-06，RULE-PREF-CHECK-20260906）：已直接读取上述两份 legacy-prune skill，统一 CRLF/LF 后，1696 字符的用户规则块完全一致，覆盖用户本轮全部要求，无需重复改写 skill。当前状态查本文件，实际动作与恢复说明查 FILE_ADJUSTMENT_RECORD.md；旧 PHASE1 文件不再承载全局状态。本次只核对规则并更新双记录，没有推进或验收在途代码批次，不更改 decision、reviewer 裁决或提交状态。源码修改前仍须取得独立 reviewer 批准，Codex 不自行批准；完全未用的判断本身也不是删除授权。
+
+本轮偏好总结核验（2026-09-06，PREFERENCE-RECAP）：重新读取两份 skill 与两份 cleanup-policy，分别定位规则块后确认 1696 字符完全一致，引用政策均声明用户规则优先。没有重写 skill，也没有启动新批次、运行测试、修改协议或操作 Git；仅更新本段、页首维护说明和 FILE_ADJUSTMENT_RECORD.md。以下批次状态沿用已有记录，不作为本轮重新验收的结论。
+
 ## Peer-review gate
 
 `AGENT_DIALOGUE.md` is the coordination channel between Codex and the peer reviewer. Only one request may be active. Codex must receive proposal approval before changing the requested code and result acceptance before starting the next request.
 
 Current coordination state:
 
-- Request: `REQ-005` (closed; REQ-004 accepted at E0025, REQ-003 remains cancelled)
-- State: `ACCEPTED` (E0027 review-only verdict: `KEEP_AS_IS`; no item-6 implementation follows)
-- Scope: keep the remaining live `SchedulingTableInt` adjuncts and `slack_estim.py` plotting in place. The approximately 90-line dead subset is only a future candidate and has no execution authorization.
-- Next writer: `codex`; user authorized a checkpoint commit on 2026-09-04, followed by a new review request for sequence item 4.
-- Source changes: none for REQ-005. The checkpoint contains B10 tests/audit data, protocol v1.1, the guard, dialogue archive, and global records; production paths remain unchanged.
-- Protocol v1.1: guard state is `last=E0027`, `next_writer=codex`, and the tail hash matches.
+- Request: `REQ-023` / `B25-LEGACY-OPTIMIZER-RUN-AUDIT`：`CLOSED / ACCEPTED`，真实reviewer E0102确认28文件KEEP_AS_IS，补核已落盘。本批没有源码迁移、删除或接口退役授权。
+- Scope: 7Python全文、15shell全文、1shell全文差异，4既有old归档只审边界，NoC沿用B24全文再核。保护文档API、交互测试和类内保留；独立optimizer/旧脚本的不确定项原位REVIEW。
+- Evidence: 已直接读取/tmp/b25_review_final/review.json（SHAa805668c…61cfcf），6条help rc0/0/0/0/0/1，16份bash -n全0，5导入探针原torch/graphviz缺失与NoC TypeError吻合，177代码及双账本/6文档SHA一致。证据持久存入B25报告，不把语法或帮助成功说成实验通过。
+- Erratum: NUL分隔git ls-files恰16份shell，全部存在；此前两个假失败来自reviewer把含空格的run/aba_scalability_scan copy.sh拆开，不是索引缺失。reviewer已补正历史说明，E0102原文不回写；不改index。
+- Safety: 本轮未运行训练、实验、交互绘图、清理主体或pytest，未安装依赖。run/clean.sh及共享/tmp/fd1旧脚本保持未执行。六个旧目标仅记录不在tracked/approved清单，不检查untracked。
+- Followup: 等待期间完整只读fit.py、throughput_cnt.py、scripts/test_alloc_lat.py。前两者待引用/行为审查；后者是保护测试，L2把原始worktree加入sys.path，因此不执行、不改写。此三项不扩展E0102源码授权。
+- Snapshot: 用户明确授权当前audit快照；提交前清单已闭合为97路径（27既有改动、36批准新增代码、33批准审计材料及1快照清单），详见cleanup/reports/snapshot-b11-b25-20260906.json。本次gurobi回归330=325通过+相同5个collector失败，0error/skip。177代码哈希不变；B25六日志严格后缀断言全通过。精确97路径已完整暂存（Git合并两对rename后显示95个变更项），每份blob与工作区一致；两old目标已限定git add -f，忽略规则不变。465条暂存空白提示中461条逐行确认来自原源码，另外4条是已验收EOF空行；不重格式化。准备创建快照，真实hash随后登记；不push、不碰原worktree。
+- Next/protocol: 末尾E0102、next_writer=codex，11983会话保持。全仓语义审查未完成，持续目标当前暂停；本轮只按用户要求建立快照，不开新源码批次、不重开REQ003/005/006/007。
+
+B24 已关闭记录（以下不是当前在途请求）：
+
+- Request: `REQ-022` / `B24-MAPPER-LEGACY-HELPERS`：`CLOSED / ACCEPTED`，真实reviewer E0100及同会话补核已完成，没有在途请求。REQ-003取消，REQ-005/006/007原裁决不变。
+- Scope: mapper/mem_planner.py三个完整顶层函数共120行，原样迁入同目录mem_planner_old.py及mem_planner_unused.py；新增40项测试。7类内部、其余13顶层函数和原imports/EOF不改。旧导出和函数pickle路径退休属已批准MEDIUM兼容变化，仓外消费者未知。
+- Tests: Codex直接解析reviewer的/tmp/b24_review_final/b24only.xml（40通过）和fifteen.xml（330=325通过+同样5项collector失败，0error/skip），全部15模块数量和异常消息与本批回归一致。三help rc0；保护test_mem_planner实际import rc1、原NameError，不修、不删。不是全仓测试全绿。
+- Supplement: reviewer在/tmp/b24_review_final/supplement.json补核迁移前173份SHA、两表原前缀和历史坏行、4条实际CLI命令及三个新位置pickle身份，均符合批准条件。Codex已读取并将结果及文件SHAac7f5d2b…be92da持久化到B24报告。177份迁移后快照核对和173份迁移前后比对是两个独立检查，不互相替代。
+- Integrity: 源纯删120行，29334字节，剩余SHA482af528…e39d10，与原HEAD精确删除批准块的字节重建一致；三个归档原块各一次。O5工具少1LF纠正及首轮39/1新测试错误留档；E0098仅两行Optional测试修正，未改行为golden。当前177代码SHA全部不变，161Python AST有效，保护区/现有测试/依赖/HEAD/index不变。
+- Ledgers/recovery: move50→53追加3×14，reachable271→274追加3×10，原25708/74515字节前缀及8历史坏行保留。B24 JSON validation.recovery保存四代码路径限定patch（1旧源+2归档+1新测试），SHA577a2834…d9ebe；持久解码后reverse--check=0，未执行恢复。diff --check仍只有已知sim_main.py:677尾空行警告。
+- Read-only frontier: mapper路径本轮读完；model/noc.py的3类和两个空包初始化保留。NoC实际导入原TypeError: abstract class列REVIEW，不改注解，不将类内修复混入清理。
+- Protocol/commit: E0100与快照一致，next_writer=codex，11983 reviewer会话保持打开。B11-B21加B23、B24共13个源码批次已验收未提交；B22只分析，不计源码批数。无commit/push授权。
+- Next action: 沿已记录mapper/model依赖顺序继续只读DFS，不确定项保留；任何下一源码动作仍需先提案批准、执行后验收。全仓语义审查尚未完成，持续目标保留。
+- Closeout check: 记录落盘后再次执行新40测试，全过，日志/tmp/scheduler-b24-close-9ie44_bp/new.xml；报告/DFS JSON有效，原行为golden不变，177代码与两账本SHA一致，reviewer两XML与本批回归逐字段一致。协议仍E0100、pre=0，无源码新增或提交。
+
+B23 已关闭记录（以下不是当前在途请求）：
+
+- Request: `REQ-021` / `B23-UNUSED-EXPERIMENT-HELPERS`：`CLOSED / ACCEPTED`，真实 reviewer E0092。没有在途请求；REQ-003 取消，REQ-005/006/007 裁决不变。
+- Scope: round_to_step 完整3行、extract_num_cores 完整7行，原字节迁入各自同目录 _unused；新增31项测试。其余源码、原imports、类内及旧分析链保持不变。不是逻辑重写。
+- Tests: 已直接解析 reviewer 的 /tmp/b23_review_final/b23only.xml（31 passed）与 fourteen.xml（290=285 passed+相同5个collector失败，0 error/skip）；十四模块计数和异常消息逐项匹配 Codex 的实际回归。没有跳过或修复原失败。
+- N3 supplement: reviewer 在同一会话补做169个非本批文件逐键SHA比对，并按 validation.cli 的11条原命令执行：前10条help全0，最后analyze_tp仍以1退出、报原sim_seq AttributeError。CLI结果见 /tmp/b23_review_final/n3-supplement.json；repack_sweep不属于本批范围。此处补足E0092宽泛表述，不改历史事件。
+- Integrity: Codex另独立核对169非本批SHA及全部174当前代码，均无差异；158份Python可解析。两源精确0增/3删、0增/7删，等于HEAD删批准块的全字节重建；两归档原块各一次。原e2e有尾LF/stat无尾LF保持，N5授权的单字节纠正已完成，不改预期。
+- Boundary: 两旧导出及函数pickle路径退休是E0090明确批准的MEDIUM兼容变化，仓外使用未知。两候选不在保护指南API清单；E0088五个exp_common文档API继续保留。保护区、依赖、HEAD与index未变。
+- Ledgers/recovery: move48→50新增2×14，reachable268→271新增3×10；原24806/73533字节前缀与8条历史坏行原样保留。B23 JSON validation.recovery存五代码路径限定patch，SHA3360d780…fa7f7f6，持久解码后reverse --check为0，未执行恢复。git diff --check仍只有E0082接受的sim_main.py:677尾空行警告。
+- Read-only DFS: 五XLSL模块help通过、三个旧直接入口缺analyze包，不修；手工scan选项保留。另完整读取debug_sink_constraint和example/bm1、bm2、bm3：诊断脚本保留，三个样例尚无活调用证据，列REVIEW并保留。mapper/mem_planner只读了1–37行及AST元数据，三项候选仅REVIEW，未改源码。
+- Protocol/commit: E0092与快照一致，next_writer=codex，11983 reviewer会话保持打开。B11–B21加B23共十二个源码批次已验收但未提交；B22是分析批次，不计源码批数。验收不是commit/push授权。
+- Closeout check: B23/DFS JSON完整解析通过；当前协调区、审核包、全局历史与E0092一致；174代码及两账本SHA未变，frontier所记SHA和N3补核文件SHA匹配，守卫pre为0。没有改协议或新增源码批次。
+- Next action: 沿mapper/mem_planner路径继续只读审查完整顶层函数、保护测试和实际调用方，再判断是否提案。任何下一源码动作须先获真实reviewer批准、实施后验收。全仓语义审查未完成，持续目标保留。
+
+B22 已关闭记录（以下不是当前在途请求）：
+
+- Request: `REQ-020` / `B22-RESOURCE-EXP-BOUNDARY-AUDIT`：`CLOSED / ACCEPTED`，真实reviewer E0088裁定`KEEP_AS_IS`。这是分析性请求，不构成源码迁移、删除、导出退休或文档修改授权；当前无在途请求。
+- Request: `REQ-023` / `B25-LEGACY-OPTIMIZER-RUN-AUDIT` — **CLOSED, ACCEPTED (E0102) — 分析性请求，28 文件 KEEP_AS_IS，不构成源码授权**。optimizer/scheduler_base.py（draw_computational_graph 被delta_ver.py:305/340 实际调用+保护指南列出）、ops_test.py（既有交互测试）、optimizer 其余三模块 REVIEW、model/noc.py REVIEW（原 TypeError）、run 脚本 REVIEW/KEEP 原位、old/ 四档 REUSE_CANDIDATE 整体保留。独立复核：6 cli 重放 rc 与声明逐项一致（含 motiv shell -h 原 exit 1）、16 shell bash -n 全 0（【E0102 收尾勘误】首轮 2 FAIL 系 reviewer 检查命令对含空格文件名 `run/aba_scalability_scan copy.sh` 的分词错误——NUL 清单实得恰 16 份全部实存且 bash -n 全 0，Git 索引无缺失，非'index 幽灵条目'）、5 导入探针 rc=1×5 异常类型吻合（缺包如实保留未安装）、双账本+6 保护文档 SHA 全一致、**B24 177 基线独立重hash OK=177 变化 0**。13 个已验收源码批次数不增加；语法/help ≠ 实验通过（clean.sh 递归 rm 未执行）。全仓审查仍未完成，后续沿既有 DFS 检查剩余独立模块。
+- KEEP decision: scripts/exp_common的group_by_key、compute_group_means、setup_dual_axis_plot、save_and_close_figure、add_value_labels虽无仓内可执行引用，仍是保护指南列明的公共API。原五导出及pickle路径保留，不加兼容层，不改指南；未来若要处置须单独提案，并先由用户裁定两份指南API条目的修订。
+- Resource/message review: 本轮完整读取11模块，另核TaskInt/旧Scheduler局部上下文。DDL/RT、Monitor、performance、bin_list_utils、trace_analyser均有实际借用证据；dummy仅有导入不声称实例化。类、自带示例/测试和旧runtime整体保留。
+- Evidence: 171代码SHA在分析后、E0088后均全量核对不变。155Python AST/16shell及保守静态67入口可达只表示当前库存和静态边（含main/TYPE_CHECKING/惰性导入），不是全仓语义审完；初始137Python快照保留。B22 JSON/packet和DFS latest_semantic_review已同步验收状态。
+- Read-only continuation: 等待期间读取两个独立E2E脚本的顶层函数和入口，两个--help实际rc0，日志/tmp/scheduler-e2e-entry-audit-g_vk883k。它们是独立CLI，不因缺少前三入口导入而归档；未运行完整实验或新增pytest。round_to_step只发现定义与历史候选行，暂列REVIEW，未经提案/批准不能移动。
+- Scope: 本轮没有源码/测试/依赖/保护文档/ledger改动；HEAD/index和171代码不变。B21的259=254+原5仅为历史回归背景，未冒充本轮测试。B11-B21共十一源码批次已验收未提交，B22只读分析，不计入源码批次数；无commit/push。
+- Next action: 沿实验工作流继续完成模块和函数判断，再按已记录的孤立模块DFS顺序检查。下一源码动作必须另提案并获真实reviewer批准、实施后验收；不重开REQ003及REQ005/006/007。全仓语义审查尚未完成，持续目标保留。
+- Protocol: 末尾E0088与快照一致，next_writer=codex。B22不再等待E0087反馈；11983 reviewer会话保持打开。
+
+B21 已关闭记录（以下不是当前在途请求）：
+
+- Request: `REQ-019` / `B21-UNUSED-MESSAGE-HELPERS`：`CLOSED / ACCEPTED`，真实reviewer E0086。当前无在途请求，不再等待E0085反馈。
+
+- Scope: msg_dispatcher.py的msg_read/msg_filter完整21行原字节迁到同目录msg_dispatcher_unused.py，新增35项回归测试。MsgDispatcher类、原imports、其余字节及message_handler/scheduling_table_event/MessagePipe旧runtime借用组件保留。
+- Evidence: Codex直接解析reviewer的/tmp/b21_review_final/b21only.xml：35passed；thirteen.xml：259=254passed+5同名同异常collector失败，0error/skip，十三模块计数一致。3help和B13-B21探针本轮日志同目录；Codex自身完整回归/tmp/scheduler-b21-regression-mnj4yb7z。
+- Bytes: 源0增/21删、1717B，SHA0c9df6adcec6cdda83d285d7e865097e74b9103f513eeadb97f2ac4a3ac3fbcd，等于HEAD删两段的完整字节重建。两归档连续块各一次；168非本批SHA无豁免，验收后全171代码SHA再核一致。
+- EOF: 按E0084 M5完整字节断言保护，实际移除了工具多加的一个尾LF并fsync，仍保留原无尾LF；预期不变。B20已验收的唯一git diff --check rc2警告sim_main.py:677原文不变，不消原空白，不虚报全绿。
+- Compatibility: 完整公共集合5→3恰失两名；旧导出和函数pickle路径退休是真实兼容变化、仓外未知，新归档身份往返通过。原Queue/Buffer/Data行为、异常和部分写入保留；其他模块同名msg_filter是参数/局部字典，不是函数引用。
+- Ledger/recovery: 原23862/72773B前缀SHA保留；move46→48新增2×14且8旧坏行原样，reachable266→268新增2×10全10列。B21 JSON validation.recovery存三代码文件限定压缩patch及extract/check/restore命令，持久解码SHA/路径正确、reverse--check0，未恢复。保护区/依赖/HEAD/index不变。
+- Protocol: 末尾E0086与快照一致，next_writer=codex。B11-B21共十一批已验收但未提交推送；验收不等于提交授权。原协议事件不改写，REQ-003取消和REQ-005/006/007暂缓裁决不变。
+- Next action: 返回sim_main尚未完成语义审查的依赖继续只读DFS；任何新源码动作另提案，由真实reviewer先批准、实施后验收。全仓语义审查尚未完成。最初dfs-exploration-inventory-20260906.json保留历史137Python快照，当前明确代码范围155Python+16shell，不把语法覆盖当全仓语义审查完成。
+
+B20 已关闭记录（以下不是当前在途请求）：
+
+- Request: `REQ-018` / `B20-UNUSED-SIM-CACHE-HELPERS`：`CLOSED / ACCEPTED`，真实reviewer E0082；没有在途请求。E0078批准迁移，E0080批准缺LF单字节恢复，均已执行并通过独立验收。
+- Scope: sim_main.py四个完整CSV/缓存助手共74行原样迁入同目录sim_main_unused.py。其余16函数/imports/常量/类内/旧入口及保护区保留；四个旧导出和函数引用pickle路径退休是真实兼容变化，仓外使用未知。
+- Evidence: Codex直接解析reviewer的/tmp/b20_review_final/b20only.xml：38passed，0fail/error/skip；twelve.xml：224=219passed+5同名同异常collector失败，0error/skip，十二模块数量逐项一致。三help与B13-B17+B18探针本轮日志同目录；Codex自身回归日志/tmp/scheduler-b20-regression-lomypf0o。
+- Bytes: 源0增/74删、30583字节，SHA 1d04e4aa038b63bc289834fc350442d9ff2b929faabb42a042deb7803bc86520，与HEAD删四段重建全字节相同。四归档块各连续一次，公共集合121→117恰失四名；旧pickle失败和新pickle身份已测试。166非本批SHA无豁免，全169代码文件验收后再核未变。
+- EOF: 工具丢失的1字节LF已按E0080断言保护恢复。git diff --check仍rc2，唯一sim_main.py:677 new blank line at EOF；原HEAD704/731分隔空行保留后成为现677/678，E0082明确接受此警告，不为消警告改原字节。不是diff-check全绿。
+- Ledger: 原22038/72055字节前缀SHA完整保留；move42→46新增4×14且8历史坏行原样；reachable264→266新增2×10且全表10列。
+- Recovery: B20 JSON validation.recovery保存三个代码文件限定压缩patch、SHA及extract/check/restore命令。持久解码后SHA/路径正确，reverse--check0，未执行恢复。保护区、依赖、HEAD/index未变。
+- Protocol: 末尾E0082与快照一致，next_writer=codex。B11-B20共十批未提交推送，验收不等于提交授权；不要再等待E0081反馈。
+- DFS continuation: B20后继续沿sim_main依赖读了Spec、MsgDispatcher、DataPipe/TriggerPipe与placement。类整体保留，位置映射有旧runtime真实导入/调用；msg_read/msg_filter只列待核候选，须补完整属性/动态/文档引用和原行为证据，不凭初步名字扫描迁移。不重开REQ-003和REQ-005/006/007，不修顺带发现的旧逻辑问题。
+- Next action: 当前B20收尾已完成；后续沿消息组件路径继续只读核查，任何新源码动作另提案并由真实reviewer批准。全仓语义审查尚未完成，持续目标保留。
+
+B19 已关闭记录（以下不是当前在途请求）：
+
+- Request: `REQ-017` / `B19-UNUSED-SLACK-GRAPH-HELPERS`：**CLOSED / ACCEPTED，真实 reviewer E0076**。验收补核已完成，无在途请求。
+- Scope: slack_estim 的 build_score_dict_ref_flops/get_chains_info 共12行、graph_breakdown 的 sort_chains_by_ddl_flops 共2行，原字节迁入各自同目录_unused。原imports、活绘图、图分解、自带测试/main和类内均保留；不是逻辑重写。
+- Evidence: 新增29项全过；完整十一套186=181passed+5同名同异常collector失败，0error/skip。Codex直接解析reviewer的 /tmp/b19_review_junit.xml 与 /tmp/b19_new_only.xml，模块数量和失败逐项一致。reviewer补跑3help及B13-B16探针，日志/tmp/b19_review_probes/。
+- Bytes: 两源纯删12/2行，剩余SHA bda2da01c0bb32873d021dd32efc0debb5017333221baa3bd5cfbf7f17cc39c5 / 486b438fa3325f8d035ef91ca63518649986e21aee74cb761092908c579cdbd1。graph工具补LF确已按E0074授权、完整bytes断言保护truncate还原。162非本批全部原样无guard豁免，本批5文件哈希也再核一致。
+- Compatibility: 公共名slack105→103减2、graph6→5减1；三个旧函数导出和旧函数pickle路径真实退休，新位置身份往返可用。非空排序IndexError、字典部分写入等原行为保留，仓外调用未知。
+- Ledger: move本批20734B前缀保留，39→42行，新增3×14；reachable本批71003B前缀保留，261→264行，新增3×10。8个历史坏行原样保留。E0076原文旧数字以reviewer补核和本节为准，不回改历史事件。
+- Recovery: B19 JSON validation.recovery保存五代码文件限定压缩patch、SHA及extract/check/restore命令；从持久JSON解码再核五路径和SHA，reverse--check0，未恢复。保护区、依赖、HEAD/index不变。
+- Protocol: 末尾E0076及快照一致，next_writer=codex；独立验收已结束，不再等待E0075反馈。B11-B19共九批未提交推送，提交仍需用户指令。
+- Next action: 本轮B19收尾完成；继续从task_cfg/slack/graph返回父调用路径，审查剩余实际依赖，不重开REQ-003取消项和REQ-005/006/007暂缓项。历史入口中不确定的依赖保留；任何新源码动作另提案。全仓语义审查尚未完成。
+
+B18 已关闭记录（以下不是当前在途请求）：
+
+- Request: `REQ-016` / `B18-UNUSED-E2E-EVENT-GENERATORS` — **CLOSED, ACCEPTED (E0072)**。REQ-008~015 已验收关闭；REQ-003 取消、REQ-005/006/007 裁决不变。
+- State 补充（E0072 后全量补核，codex 请求）：B18 新测试单独跑 **25/25**（0 fail/error/skip）；按 JSON regression.command 同款**十套完整执行 157=152 passed+相同 5 collector failed**（0 error/skip，FAILED 名单逐项一致）；恢复补丁解码 SHA 与声明一致、reverse --check rc=0 未执行恢复。
+- Scope: e2e_latency.py仅删除naive_period_event_gen/e2e_var_sim两完整函数26行，原字节归入同目录e2e_latency_unused.py；现用六函数/imports/类内/配置/历史文档与保护区保留。归档明确借用活jitter_gen_biside，不声称导入隔离。
+- Evidence: RED1failed/24deselected原因正确，GREEN25passed；EOF校正后十套157=152passed+5同名同异常collector失败（31.35s），0error/skip；三入口help及B13-B16收益探针通过。81→79完整公共名双导入顺序通过，13组原行为每组双跑，J7旧函数pickle真实字节加载失败、新函数往返identity通过。日志/tmp/scheduler-b18-regression-oq0al2g0。
+- Byte/protocol: 精确0增/26删，剩余SHA3043c818e36dbdfcee8ee50573c5274a8549fbb1413e4cb55cde07cc0e990a7e，含原无EOF换行。工具曾补1字节LF，经E0069暂停/E0070独立批准后限定truncate还原，未修改预期。E0067函数引用pickle勘误维持：退休是真实兼容变化，仓外使用未知。
+- Hash scope: 161基线全量核对，160原样；唯一例外为reviewer自己新增守卫67号白名单，E0068确认独立归因，去该行重建精确回原f7582881...。原基线不重录、不谎称161未变；当前148Python可解析，保护区/requirement零diff，HEAD/index不变。
+- Ledger/recovery: move追加2行14列，39行={14:31,15:3,16:4,17:1}，8旧坏行原样；reachable追加2行10列，261行全10列。原19755/70317字节前缀保留。B18 JSON validation.recovery存三代码文件限定压缩patch、SHA及extract/check/restore命令，持久报告解码reverse--check0，未实际恢复。
+- DFS: 已读任务模型依赖和slack_estim、graph_breakdown、链求解器顶层函数、loadA配置；活用接口与类保留。graph示例/排序助手有原有异常，只记录不修；两个slack顶层函数尚待继续审查，不混入B18。
+- Next action: B18已在E0072验收关闭，新增25/25及完整十套157=152+原5失败、恢复检查补核已由Codex直接读取reviewer XML确认，无在途请求。后续继续沿slack/graph实际依赖审查待定助手和历史入口，不改类内、不重开取消/暂缓项；新源码动作另提案。B11-B18均未提交，提交推送仍等用户指令。
+
+B17 已关闭记录（以下不是当前在途请求）：
+
+- Request: `REQ-015` / `B17-TASK-CFG-LEGACY-GRAPH` — **CLOSED, ACCEPTED (E0064)**。REQ-008~014 已验收关闭；REQ-003 取消、REQ-005/006/007 裁决不变。
+- State: `ACCEPTED`（验收明细存档于 E0064）— I1-I6 经 reviewer 独立复测逐项满足：I1 numstat 0/206、剩余 SHA=6194c815…f14b、**剩余 task_cfg == HEAD 删两片段的字节级重建（True）**、归档两片段连续块各恰 1 次；I2 公共名 119→118 恰失 creat_jobTask_graph、18 新测试 RED→GREEN、11 组基线逐字段；I3 九套合跑 junitxml 132=127+5、FAILED 名单逐项一致、3 入口 rc=0、B13/B14 探针通过（收益不回退）、requirement+保护区零 diff、B11-B16 锚点原样；**I3 补充（E0064 后全量补核）：non_b17_source_sha256 全部 159 条已逐一 sha256 遍历——OK=159/MISMATCH=0/MISSING=0（此前 E0064 正文为 5 锚点抽查，全量补核按 codex 请求完成，结论不变）**；I4 借用者/old_num_hp 更正已落实；I6 csv.reader 双前缀保留（18839/69612）、新行 2×14/2×10、8 历史异常不修。恢复补丁解码+SHA 一致+reverse --check rc=0 未执行。七批（B11-B17）均未提交、未推送（commit 待用户指令）。
+- 原批准明细（存档）：拟将 task/task_cfg.py L24-82（59行注释旧绘图）+ L551-697（147行 creat_jobTask_graph 含 return 后历史说明）共 206 行原字节迁入同目录 task_cfg_old.py；现用 vis_task_static_timeline/creat_physical_graph/load_taskint/redist_ert_dll/plot_workflow_g 与 imports 全保留。**E0062 更正**：load_taskint/redist_ert_dll 的借用者确为 `old/allocator_agent.py`（L561/563 import + L577/580 调用，sed 直读核实）——E0061 (a) 的"零借用"表述作废，保留裁定不变且依据更充分；old_num_hp 实位于 approach_initiator.py:20（REVIEW 不混入）。**工具教训（binding）**：本环境 grep=ugrep 7.8.4，带 `--include` 的递归查询返回假阴性；B13-B16 已用 python os.walk 全量（318 文件）补验 import 级引用全为 0（B15 的 3 条为子串误报），各批结论维持；零引用核查权威口径 = git ls-files 过滤工作树不存在条目（B12 已删根文件 appoach_plot6.py/approach_util33.py 为 index 幽灵条目，须剔除）+ B11-B18 已批准新目标 = **164 份源码/脚本**；318 文件 os.walk 含无关 untracked，降为保守旁证不作验收范围）——已按权威口径复核 B13-B16：命中恰在各批归档定义文件与配套测试内，活区与非本批归档零引用，各批结论维持；禁用带 --include 的递归 grep 作为唯一依据。RESULT 验收 = I1 纯删除 206 行+剩余 SHA=6194c815…f14b / I2 RED→GREEN+11 组基线+完整集合 119→118 恰失一名 / I3 八套合跑 114=109+5 名单不变、159 份非 B17 SHA 不变 / I4 退休边界+两处精确化固化 / I5 异常即暂停 / I6 csv.reader 账本（前缀 18839/69612 保留、8 历史坏行不修）。恢复：仅反向 206 行+移除归档/测试，补丁 reverse --check，禁整文件 checkout。
+- Scope: task/task_cfg.py的59行旧绘图注释与147行完整creat_jobTask_graph已原样迁入同目录task_cfg_old.py，共206行。现用图生成、绘图函数、imports、旧allocator借用函数和保护区全保留；old_num_hp仅REVIEW，不入本批。新test_old_task_cfg.py覆盖18项，原函数注解/defaults与历史异常保持。
+- Evidence: 新18项全过，联合132=127passed+5相同collector失败（25.35s），0error/skip；3help均rc0，B13/B14行为探针通过。完整公共名119→118恰失旧函数，11组原图/PDF/异常与原注解一致。源精确0增/206删，剩余SHA6194c815...f14b；归档SHA06a38533...0356。159非本批SHA不变，146Python AST可解析，保护区/依赖零diff。日志/tmp/scheduler-b17-regression-_sfebunx。
+- Ledger/recovery: move追加2行14列、reachable追加2行10列，18839/69612原字节前缀完整保留；当前move={14:29,15:3,16:4,17:1}仅8历史异常，reachable={10:259}。JSON validation.recovery持久化压缩限定补丁及提取/检查/恢复命令；解码SHA核对及reverse --check通过，未实际回退。
+- Next action: REQ-015已在E0064验收关闭，无在途请求。继续沿task_cfg的任务模型/队列、slack_estim、load_cfg依赖只读审查，新的源码动作另提案；旧取消/暂缓项不重开。B11-B17均未提交推送，提交仍等用户指令。
+
+B16已关闭记录（以下不是当前在途请求）：
+
+- Request: `REQ-014` / `B16-UNUSED-EQ-QUANTILES` — **CLOSED, ACCEPTED (E0059)**。REQ-008~013 已验收关闭；REQ-003 取消、REQ-005/006/007 裁决不变。
+- State: `ACCEPTED` — H1-H6 经 reviewer 独立复测逐项满足：H1 剩余 approach_Eq SHA=bb2e6522…dc8（**64 位正确值；E0057 的 65 位串系 reviewer 记录笔误，本事件正式勘误，以 64 位+精确 9 行纯删除为准**）+ 决定性字节证明（剩余 Eq == HEAD 删 9 行的字节级重建，True）+ 归档两片段连续块各恰 1 次；H2 24 新测试 RED→GREEN、18 行为样本逐字段、fresh 双导入顺序恰失两名且集合一致（口径注【E0059 后经 codex 澄清、reviewer 独立复核更正】：not startswith('_')=45→43、not startswith('__')=49→47；两口径差集恰为 4 个私有 SciPy 别名 _scipy_expon/_scipy_norm/_scipy_truncexpon/_scipy_truncnorm——E0059 原注猜测的 math/find_legal 实为 public、Eq 无 annotations 名，猜测作废）；H3 八套合跑 junitxml 114=109+5、FAILED 名单逐项一致、3 入口 rc=0、ref_alloc stdout 逐字节一致、157 份非 B16 SHA 原样、B13/B14 收益不回退；H4 两旧名与旧 pickle 退休边界固化；H6 csv.reader 前缀 18287/68910 保留、新行 1×14/2×10、8 历史异常不修。**验证器纠错披露确认**：SequenceMatcher auto-junk 误报仅影响临时验证器（发生在功能验证全过之后），禁用启发式+精确重建后重跑通过，无源码/测试为过验证而修改。六批（B11-B16）均未提交、未推送（commit 待用户指令）。
+- Next writer: `codex`。REQ-014已验收关闭；本轮不开始下一源码批次。持续目标后续回到approach_sched顶层函数及动态绑定继续只读审查，新源码动作须单独提案获批；提交另等用户指令。
+- B13 实施进度：utils纯删除41行且剩余SHA与预期完全一致，原40行簇完整保留。9项新测试通过；五套联合回归53 passed/5原有failed，三入口help通过；152份非B13源码/脚本和requirement.txt原样。fresh process验证utils不加载h5py，显式归档导入仍可用。未提交、未推送。
+- B12 实施进度：两份完整文件已归入 old/，仅脚本一行 import 更新；新7项测试通过，B10/B11/collector为37 passed及相同5个既有失败，三入口正常，150份非B12源码/脚本原样。根旧模块名不复用，旧根模块名pickle不承诺兼容；新入口为 python -m old.appoach_plot6。
+- Source changes: B16包内Eq仅移出norm_inv_cdf/exp_quantile两完整函数共9行，原实现剩余SHA bb2e65224f12fe2555c2f12567276a110d8d409808a180f4d4282b86a289cdc8。新归档SHA85092d18...3bf4，新测试24项全过；其余43公共导出及根/包身份、原imports、类内代码、全部既有测试保留。旧双路径函数名及旧函数pickle引用退休，仓外兼容不承诺。B11-B16未提交推送。
+- Protocol v1.1: E0057批准→Codex实施→E0058 RESULT→真实reviewer E0059 ACCEPTED，H1正式勘误已补齐。H2口径也经双方核对：公共名45→43；非双下划线49→47，多出的只是四个私有SciPy别名。八套114项=109passed+5原有collector失败，3help/ref自测通过；157非本批SHA原样，144Python AST可解析。末尾E0059及快照一致，没有新请求或越权事件。
 - Workspace note (2026-09-03): per user instruction, closed events E0001–E0014 (REQ-001 protocol bootstrap, REQ-002 B9) archived verbatim to `AGENT_DIALOGUE_archive.md`; main dialogue keeps protocol body, event numbering continues globally from E0015
-- Ledger result: `B9-MAINOUT` is one 14-field LF-terminated addition; every non-B9 byte remains identical to HEAD
+- Ledger result: B16追加move 1行14列/reachable 2行10列，原18287/68910字节前缀完整保留；csv.reader当前move={14:27,15:3,16:4,17:1}仅8历史异常，reachable={10:257}无异常，旧行不修。B16 JSON存三个准确代码文件的限定恢复补丁，Git最小差分确认源0增/9删，reverse --check通过但未执行；无整文件checkout。
 
 `E0014` closes REQ-002. The moved demo preserves the reviewed behavior, and the final ledger diff contains no unrelated rewrite. Monitoring remains active because the previously agreed refactor discussion still has further candidates; completing this one request is not the global termination condition.
 
 Background monitoring:
 
-- Hidden local watcher: Windows PID `35404`, following only `AGENT_DIALOGUE.md`.
-- Watch log: `C:\Users\diyuf\.codex\state\scheduler-agent-dialogue\watch.log`.
-- Codex heartbeat: `scheduler-agent`, active every 5 minutes to wake this review task.
-- The shell watcher is runtime-only and may stop after Windows/WSL restart; the heartbeat remains the wake mechanism.
-- Termination: after all collaboration requests are closed and there is no pending or agreed next refactor, stop PID `35404` if present and delete the `scheduler-agent` heartbeat. A single batch completing is not sufficient.
+- The former Windows watcher PID `35404` is no longer running. Its log at `C:\Users\diyuf\.codex\state\scheduler-agent-dialogue\watch.log` was last updated on 2026-09-03 09:44.
+- No `scheduler-agent` automation configuration exists under the current `$CODEX_HOME/automations` directory. Earlier claims that a five-minute heartbeat remained active are stale.
+- 2026-09-06 起，用户授权 Codex 直接唤醒 WSL 的 `clean` reviewer，并要求保持一个交互进程。首次 resume 仅做无工具的历史核验：会话 ID `cb4d63c6-e3a3-429c-8dd8-a00f301fda43`，角色、审计 worktree、E0027/E0029/E0031 和 HEAD 均与磁盘及用户提供的历史一致。
+- 当前持续交互通道为 Codex terminal session `11983`，由已核验的 session ID 恢复；后续提案/结果复用它输入并接收反馈。原有 PID 1399 的界面观测为 idle，本轮不往该旧界面另发消息。此通道不是定时任务，也不等于永久后台唤醒服务；断线后须重新核对进程与历史，不能声称仍在监控。
+- 启动目录 `/home/zhangchg/git_repo/scheduler` 仅用于用户明确授权的会话恢复，所有仓库读写、测试和日志仍限定在 audit worktree。Codex 只写 codex 槽位，reviewer 自行写自己的裁决。
 
 ## Scope
 
@@ -52,7 +175,7 @@ Background monitoring:
 
 Rules still in force:
 
-- Do not operate directly on `/home/zhangchg/git_repo/scheduler`.
+- Do not operate directly on `/home/zhangchg/git_repo/scheduler`; the 2026-09-06 user exception permits launching/resuming the existing `clean` reviewer there, not repository reads/edits or Git operations.
 - Work only in audit/integration worktrees.
 - Ignore untracked files unless the user explicitly brings them into scope.
 - Focus on git tracked / git cache state.
@@ -62,7 +185,9 @@ Rules still in force:
 
 The B0 source changes, Phase 1 analysis artifacts (`cleanup/`), review packets, and the two global status files were committed to the audit branch on 2026-06-16 (first commit beyond `test_pipeline`; see `FILE_ADJUSTMENT_RECORD.md`).
 
-Current audit-worktree state after B10 acceptance and the REQ-005 verdict:
+Current committed checkpoint after B10 acceptance and the REQ-005 verdict:
+
+- Commit: `a1d933b` (`test: checkpoint binpack baseline and review protocol`), 8 reviewed files; worktree clean immediately after commit.
 
 - B8 source change: `approach_setup.py` step 4-6 now uses `sim_main.py::init_sched_components(...)` to create the shared global_sched component context and run `perform_bin_packing` through a small pack handle.
 - B8 status docs: `REVIEW_PACKET_BATCH_B8-INIT-SCHED-COMPONENTS.md`, `CLEANUP_STATUS.md`, `FILE_ADJUSTMENT_RECORD.md`, and the Gurobi troubleshooting row in `CLAUDE.md`.
@@ -82,11 +207,15 @@ Current refactor-sequence progress:
 1. Behavior baseline: COMPLETE and reviewer-accepted (`B10`, E0025).
 2. Binpack initialization context: COMPLETE in `B8`; B10 now protects its forwarding contract.
 3. Narrow `perform_bin_packing`: NOT STARTED; earlier move proposal REQ-003 was cancelled by user.
-4. Separate Repack event/queue advancement from decisions: NOT STARTED.
-5. Split `pre_alloc_new.py` planning from mutation: NOT STARTED.
+4. Separate Repack event/queue advancement from decisions: RESOLVED — DEFER_KEEP_AS_IS (REQ-006, reviewer verdict E0029). The primary guided Repack path bypasses greedy packing under `USE_FIXCORE_REPACK=True`; the module remains reachable via `Bp_scratch.json` (Phase-1 KEEP, documented alternate) and the disabled legacy fallback. KNOWN ISSUE (recorded, not fixed): scratch smoke rc=0 but 0 PIDs placed / 10 bins / `No more bin can be created` (pre_alloc_new.py:243) / hardcoded `repack_success=True` — rc=0 is NOT evidence of scratch correctness. Re-evaluate scratch within the future user-initiated repack rehabilitation design (shares push_task_into_bins_new).
+5. pre_alloc_new compute-vs-write split: RESOLVED — DEFER_WITH_REPACK (REQ-007, reviewer verdict E0031). Split decision folded into the future user-initiated repack rehabilitation design (with E0029 K3 scratch clause); characterization tests = mandatory FIRST phase of that rehab (baseline-before-fix), NOT now. ROOT CAUSE recorded (independently verified): bin_ops.py manual_defined_reservation/all_isolation/static_1_bin exhaust the generator via list() then return it; pre_alloc_new.py:240 next() -> StopIteration -> 'No more bin can be created' (:243) — this is REQ-006's scratch 0-PID root cause. Blast radius: scratch chain + disabled greedy fallback ONLY (live path imports glb_alloc_new2 at global_sched_alloc.py:32 but never calls it; coleasing uses fresh bin_iter_list at :335; B10 goldens green).
 6. Scheduling-table adjunct split: CLOSED with `KEEP_AS_IS` (E0027). Event handling and the debug entry were already moved in B6/B9; the remaining live bin helpers and `slack_estim.py` plotting stay in place.
-7. Move `approach_*` into a package with compatibility exports: NOT STARTED.
-8. Historical filenames and naming cleanup: NOT STARTED.
+7. Move `approach_*` into a package with compatibility exports: COMPLETE / ACCEPTED（reviewer E0037），未提交。七个活跃实现已归入 approach/，5,181 行原样保留，根入口兼容。reviewer 独立合跑37 passed/5 failed（29.45秒）：新增32项与B10 3项全过，collector 原有5 failed/2 passed不变。approach_util33.py留待历史文件批次。KNOWN BOUNDARY（C3）：旧 pickle 可在迁移后的 audit 读取；新 approach.* pickle 不保证被未迁移的 test_pipeline 读取。
+8. Historical filenames and naming cleanup: ACCEPTED（B12，E0041）。旧 approach 双文件已完整归档；五份 *_old.py / *_unused.py 为已核对的符号片段，按用户规则留在源目录；空 unused_fun.py 暂留。本轮可执行项已收尾，REQ-003取消与Repack暂缓项不被当作完成；按持续目标进入后续只读探索。
+
+后续探索：初始dfs-exploration-inventory-20260906.json仍是B13前137Python/519顶层符号/三入口保守72文件的历史快照。当前明确范围144Python及16shell，语法覆盖不代表全仓语义审查完成。utils→global_var→Eq→ref_alloc_search已完成本轮分离/保留判断，B16在E0059验收。approach_def九个顶层函数已阅读并追踪；set_miss_disabled虽无AST裸名调用，B11通过字符串参数实际测试；get_miss_disabled/get_realloc_disabled依赖模块可变状态，简单复制到归档会读到旧布尔值，实测证实，暂留。五个类按用户规则不拆内部方法。下一步返回父approach_sched的顶层调度函数和动态绑定路径。
+
+当前目标继续有效：本轮B16实现、测试与独立验收已完成，属于实际进展；全项目模块审查仍未完成。不确定内容保持原样，新的源码动作先提案、实施后验收。reviewer11983仍为同一打开会话，未新建会话/定时任务，没有提交推送。
 
 No changes were made to `/home/zhangchg/git_repo/scheduler` or `test_pipeline`.
 
@@ -402,7 +531,9 @@ System `python3` outside this environment is not valid for this repo.
 
 ## Recommended next action
 
-**Coordination gate: `REQ-004` was accepted at E0025 and `REQ-005` closed at E0027 with `KEEP_AS_IS`.** The user authorized committing this accepted checkpoint on 2026-09-04.
+2026-09-06当前行动以顶部协调区为准：B17已在E0064独立验收关闭，159非本批SHA也由reviewer补齐全量核对。approach_sched六个顶层函数及五策略动态绑定保留；collector/ref_tdigest保留完整类与测试入口；initiator五函数保留，old_num_hp仅REVIEW。task_cfg只是定向审查，不能宣称全模块或全仓完成。graph_scaling两种图表示不合并；已读task_agent顶层边界/独立加载入口及TaskQueue，类内不清理。下一步沿任务模型实际依赖继续，未明确用途的旧加载入口暂REVIEW，不提前判废。以下旧批次建议仅作历史参考，不能覆盖当前裁决。
+
+**Coordination gate: checkpoint `a1d933b` is committed. `REQ-006` closed with `DEFER_KEEP_AS_IS`; `REQ-007` is a review-only classification of sequence item 5.** It authorizes no production changes.
 
 **B10-BINPACK-BEHAVIOR-BASELINE IMPLEMENTED AND VERIFIED.** The two golden signatures now cover final task timing, so the Repack case can detect a broken ratioB deadline-window recalculation even when fixcore retains the Phase-1 bin layout.
 
@@ -415,9 +546,9 @@ B8 result:
 - Gurobi diagnosis corrected: the PyCapsule failure was from WSL HostID mismatch, not license expiry. `gurobi-wsl-fix`/manual `gurobi_fix` creates bond0 with MAC `00:15:5d:80:30:e7`.
 
 Next:
-1. Commit the accepted B10/protocol/REQ-005 checkpoint without touching the original worktree.
-2. Skip cancelled sequence item 3 and open a separate review request for item 4: separate Repack event/queue advancement from decision logic.
-3. Use B10 as the regression gate; do not modify item 4 production code before reviewer approval.
+1. Wait for the reviewer to choose `DEFER_WITH_REPACK`, `CHARACTERIZE_BOUNDARY_FIRST`, or `DESIGN_SPLIT_NOW` for item 5.
+2. Do not describe the split as behavior-preserving without executable coverage: `pre_alloc_new.py` has no tracked direct test, and its only live caller is the known-broken scratch/legacy Repack chain.
+3. Any test addition, design document, repair, or refactor requires a later explicit proposal; production changes also require the user's design approval.
 
 Do not start cleanup execution from old `P1-REMOVE-*` or `P1-CACHE-*` decisions.
 

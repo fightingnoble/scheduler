@@ -1,0 +1,1940 @@
+{
+  "request": "REQ-019",
+  "batch_id": "B21-UNUSED-MESSAGE-HELPERS",
+  "mainline": "master",
+  "archive_ref": "archive/test_pipeline-20260612",
+  "source_path": "model/message/msg_dispatcher.py",
+  "archive_path": "model/message/msg_dispatcher_unused.py",
+  "test_path": "test_unused_message_helpers.py",
+  "status": "CLOSED_ACCEPTED",
+  "base_head": "a1d933b1f26efd4d569eb3d8ffb313447294443b",
+  "source_sha256": "1021025fd86f50c8f82799bea77911e05564531fc93fcba886639da1a430a3e3",
+  "source_ends_lf": false,
+  "remaining_sha256": "0c9df6adcec6cdda83d285d7e865097e74b9103f513eeadb97f2ac4a3ac3fbcd",
+  "remaining_ends_lf": false,
+  "source_tail_hex": "20202020746573745f6d73675f6469737061746368657228290a20202020",
+  "remaining_bytes": 1717,
+  "removed_lines": 21,
+  "slices": [
+    {
+      "name": "msg_read",
+      "start": 30,
+      "end": 48,
+      "text": "def msg_read(msg_queue, curr_t, glb_name_p_dict, process_dict, buffer, bin_name, bin_event_flg):\n    msg_list = []\n    # read out all message and clear the message pipe\n    while not msg_queue.empty():\n        msg_list.append(msg_queue.get())\n    if msg_list:\n        for _p in process_dict.values():\n            for key, attr in _p.pred_data.items():\n                # if msg_pipe.filter(key):\n                if msg_filter(msg_list, key):\n                    attr[\"valid\"] = True\n                    attr[\"time\"] = curr_t\n                    # TODO: fix the event time as the actual time\n                    if bin_name and not bin_event_flg:\n                        bin_event_flg = True\n                        print(f\"({bin_name})\")\n                    print(f\"\t\t{_p.task.name} received event {key:s} @ {curr_t:.6f}\")\n                    buffer.put(Data(glb_name_p_dict[key].pid, glb_name_p_dict[key].io_time, (0,), \"output\", curr_t, 1/glb_name_p_dict[key].task.freq, glb_name_p_dict[key].task.period))\n    return bin_event_flg\n",
+      "sha256": "81a5a601c09558956ec3d575aa66b6ff01abb0722b1ae185d5898ae8cafd6f78"
+    },
+    {
+      "name": "msg_filter",
+      "start": 50,
+      "end": 51,
+      "text": "def msg_filter(msg_list:list, keyword:str):\n    return [msg for msg in msg_list if keyword in msg]\n",
+      "sha256": "4975c2c00565ecdac7f9825dc6b73d2bd3cc8f11664d8d45f33f8a7924b0e05f"
+    }
+  ],
+  "non_batch_source_sha256": {
+    "__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "analyze/UE_extract.py": "647236fe7503c80740cca43e08858ccbe436a18ac4ed7d2bc54ad0b9b5d46cad",
+    "analyze/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "analyze/analyze_ctx_switch.py": "d7856b1f2ccb2fbf3652f00ee5552bfb570836953060f2dbfa1265554a67038d",
+    "analyze/analyze_timing.py": "45b94574b8ee2c7014e3ad5814b5348df28691dcaee124c5a7e15102f044ce8c",
+    "analyze/analyze_tp.py": "cd54307337eb3d37408e50b15b31fb7266b90a3c7addba3c5c3e707b400a3d38",
+    "analyze/pattern.py": "75c5a0ca22d710f7b301be118d820a0d3ca833176abd8777d43c104eaf119a46",
+    "analyze/stat_num_exec.py": "d830debb487d25b50f79384b2580e5d52a853e61e7fd3c2c01651e106b71cafe",
+    "analyze/xlsl_e2e_lat_abla.py": "2803dd27f7c4031af44116eae11439e2e80abb5823ef0255285669dadf6ef826",
+    "analyze/xlsl_e2e_latency.py": "db352b4685c6fa76f3c8c5e5940c469af14b1db6297e6df29135e0beae1c0f60",
+    "analyze/xlsl_max_tp.py": "1468390c1e293780e32b81e649cd501542e9d0d1d9b88b37018c7e1ad8f11201",
+    "analyze/xlsl_min_core.py": "90d91b24da0e3015783044713c84a7abd72b70ba82edd8c56f2415719c614f8d",
+    "analyze/xlsl_safe_scalable.py": "d16deee46b74bd34883d39abfab86691c36455b8fe02547cb5f275ad65b6ee55",
+    "approach/__init__.py": "25606592fea79200c3a2512098898d0af5b53b81bf863b221281d3a46328b68c",
+    "approach/approach_Eq.py": "bb2e65224f12fe2555c2f12567276a110d8d409808a180f4d4282b86a289cdc8",
+    "approach/approach_Eq_unused.py": "85092d18e980606c456fb8a8a49fdfcff69f519dc75088aab2f3021431093bf4",
+    "approach/approach_collector.py": "8f42d09dfe455ebdbf931a11266b5f4afccef485029d02affc5e36546754ffd1",
+    "approach/approach_def.py": "3bf4c156262a66c636be06e744da862240ebf619c5926a2b6928bf3f6e6df931",
+    "approach/approach_initiator.py": "4e805f25b057c5f66220ee491f40523587af265d948316f7c7993df3082decc9",
+    "approach/approach_sched.py": "fe9e3ab6bbb45ed4ee11215417b99a8868d7d0dba648949fc92a0f52a59c5a8e",
+    "approach/approach_setup.py": "0e30787994a6a23ea8c048a10ece4c5dc58bb157a311a2c5e8c242cda7c6bbbf",
+    "approach/approach_sim.py": "1d064618107e7888b9e75debc1e983dbc7e56a4e09240be75214d4dc770b2f4e",
+    "approach_Eq.py": "6a869b99f96cf2bd633f27904fe4d2831e39868bb0aa8f14b4efbbce1d21c09e",
+    "approach_collector.py": "e5d2c0a346067a134ed26204a0e367e94aa2131394d6387e60e4a6ab2fcb46e0",
+    "approach_def.py": "65470e4b084aa67d3c1dcb583c9c15cbf3e521c06cffa17855bd0097b7afb501",
+    "approach_initiator.py": "c55558bf6de3422b61a609f300776f68de7a3e27521a2bb8e81566de5a0e12ef",
+    "approach_sched.py": "44ae9baacc4246eb8a0bac53508be8220bb33064f369ee7e654fb6315d538d42",
+    "approach_setup.py": "7cf7d1550204beb4abba7d7cf0c0c52575253fe7296002ad9033109cb8d6506b",
+    "approach_sim.py": "46247bf523cae1a8a0a62e71109ef0aba3c86b4c278754b28493718815e02369",
+    "cleanup/tools/dialogue_guard.py": "15879c4efa377efec7c2e114e6d134b33da570e52916dea0ca0bf858bd44691a",
+    "debug_sink_constraint.py": "91b99637ccbc7472819776419d52e659027e37c97732ab248841fc1cf950959b",
+    "example/bm1.py": "9cb4482dd34b5102c5f9c9257a25bbef15273b8d5c4b94665c3f9f151c0fc57f",
+    "example/bm2.py": "a83603e2af0a4637c768a8f8594617fd9629083de2cd716d209436b043b09dfc",
+    "example/bm3.py": "200cd9bc6935e660d0c7d1f3ad6f25b46cb3492db946b694f8c4b7275c8f6b10",
+    "example/bm4.py": "381bebb8759796b353478cfb9aba4c24bab6c5b108dc3fbc9172710426bca4a2",
+    "global_var.py": "1eae1477f532e916e9829942bc4474bc79604809d85171a14356d99818d769cd",
+    "global_var_unused.py": "2a7b284d0b7bb8c3cad4e0c639839f3d09b616b19c644b95560dd20d5b8cfb2b",
+    "main_approach.py": "e32f1ec431614e4ea30761eaab6278fe65ba2166717b5386bc0148cfad22db3d",
+    "mapper/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "mapper/mem_planner.py": "6d5bb9291bac221b6da31b9671933aec22b5b0e780ac334a32e7e60030fe947e",
+    "model/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model/barrier_agent.py": "57d2943c3ac1c21423e29affce89f2b7f664d097d2d0cefb0124736545685ab7",
+    "model/buffer.py": "aec736f78d35ba582d8d091cb2078181c53e195f7a97346c9cefb6b09a4576c8",
+    "model/event_gen/e2e_latency.py": "3043c818e36dbdfcee8ee50573c5274a8549fbb1413e4cb55cde07cc0e990a7e",
+    "model/event_gen/e2e_latency_unused.py": "aab12e28ee3d728540d8f4a016285631f2e935e441e15c76b14a688e20c7a5b3",
+    "model/lru.py": "b2be894c685be6c3a5fd48b7b7117d2cc90059a4109c7374c68979f74d4a7013",
+    "model/message/Context_message.py": "c8d4de2ad5e73b2db072f710777d6f846285be1e03d038711aecb46a25247c64",
+    "model/message/data_pipe.py": "544689f0008568d77eeec76ab35ff12d7ce7d5c808dc933e06e76bd6db3b74c0",
+    "model/message/message_handler.py": "7d0c4520760f95b791e1c9f8d0c3220be1959f8ab58aabd8d2328fd8793a0785",
+    "model/message/message_pipe.py": "6d6d8228acca9ff2fd1e2cf02573d35f058845ebafe6dfdae98acba9226fd309",
+    "model/noc.py": "001d30e29ffe3ebc8b9724e151c445e100ef885287fe5abdd00a9bb0048d8f51",
+    "model/performance.py": "273eabbd6dbc16df28db18758e8f51defe84caba3f6ca3cf40fa22c7b041235a",
+    "model/position_table.py": "fa6615a4b3e54e41304463dda597494be7bc5e672abbae1149e11cfb8f2ecc59",
+    "model/resource_agent.py": "7290b7b496e0a46a0ef74540b1747fcb35e6724443a5f70072562bc7ab8cefd8",
+    "model/streaming_processing/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model/streaming_processing/wartermark_strategy.py": "5af8e0035e2a360ae5bd6201f57f55b30970d8bebf8d542f08815db34264e596",
+    "model/task_queue_agent.py": "227fcd0bc10129614b6481b94f239a621ea6a460de815ee007e828142cad1c24",
+    "model/trace_example.py": "ff2e00c361a9ba9ca0386704abe57acb3e8ca924b3a9187d6fb1129f0e4cd880",
+    "old/allocator_agent.py": "f7b48b84465c9f1390b9ce44e0bfd463f896fb869e2d1364e3e9fe79ef892582",
+    "old/appoach_plot6.py": "44332d84c5d05f7d520b505c96c80c62a8ec6511c41440db41ca4bc6081d0d81",
+    "old/approach_util33.py": "89ae0ac387bd44484b1a345e5bd3999cc279acc2f5a705cba6ab6fc285701352",
+    "old/pre_alloc.py": "8a2e3724401e442c505cc5af34b22abdf30034a7dd7417526c10865df5ed76c0",
+    "optimizer/delta_ver.py": "da1762a2d66c80ca5fbd9a3de4eff3fb96f3d2d6f3ca16186996c0853cd5c9a3",
+    "optimizer/dist_custom.py": "923e2cafa54bd27646b620d3f13e8ab98386f8a6b93a4ad73c78e6dd69f479f9",
+    "optimizer/ops.py": "41d6ddb143b93e14c51d49dbaea2db60ca6adcd0fdc163c784266e64dcb9595c",
+    "optimizer/ops_test.py": "6584b9cff086fb2492e5131153c23b78225a27ed6ce953aee8a84244bd66e758",
+    "optimizer/scheduler_base.py": "323b0e48b88910f152e8c21a06d4c8a0f9f965aa6f2b09bf3388868737a9c884",
+    "paths.py": "b8aa8a5471c8a6420f9b9532013be1b39ea8a195c2c301bdb42193eccc111170",
+    "ref_tdigest.py": "0e7642c9892553f579b5340d21982b589bdb4a85d4965cbfc70fa35289f9c287",
+    "run/1/all.sh": "05105542d6b66aaf914ad86ccd1338ea4049ed8d2c21a91b2783f9c37a0ff6e4",
+    "run/1/scan_aux.sh": "9d7cb82e0805928fed87f4efb9c727c96d371ae51382ea8fce0192eff92180d3",
+    "run/1/scan_core.sh": "958401b5016d0e19eade15c3f7831b07cf8ad611e627ff6d1f4a06db8d27503a",
+    "run/1/sweep_seed.sh": "dea4922a271e4e318ecc29f39a7ef728de52bd581470c87095b4023c50dcfa8a",
+    "run/2/aba_scalability_scan.sh": "d527b302c374401165e3011cca9d3904710ee4154def52aab5489d725c41f925",
+    "run/2/abla_scalablility.sh": "2f56009e9eb0da9cfa9223737aadb356e444b7e8b2e6212810c2e6385151a498",
+    "run/2/all2.sh": "85638195a489880dc8c26bdba929d3c62a4b0b83c6eaaeb252d040db74824880",
+    "run/3/time_sharing.sh": "b8104f1f3c684290dfbdf781e07b60a70e8feb251bbe9cd80278c3fd9dcfa5ee",
+    "run/aba_scalability_scan copy.sh": "c60b76ec65a851962d4b7235ed76e8450a6e80cbefdd22ce6aaf5530fb348819",
+    "run/abla_chain_sharing.sh": "17943f0885c65567943936abdc82e6c53a5df33340f3a0ef37ff9a2c52e370b3",
+    "run/bin_sharing.sh": "a94cd42eb610e21321b47921c5c2063a4590b0b8322cf57ab8b57a13166287b4",
+    "run/cfg_parser.py": "5d8c3a618d13994aee7dbec18e033d938491a9e46fedeaa75ce712b59f7d9f55",
+    "run/clean.sh": "7d5abeedad2abb698003ac37a594feffa5676334a8f615fcdee6c059a1e4ecbe",
+    "run/max_core_num_scan.py": "79fa47da771d7ac88ef383946e4609c8248212f4b4d7fa6517f27ec34f2f464a",
+    "run/scan_coalescing.sh": "2ee0fbb7c0b029075ee071e3ac1af672e63019af484fcc2a30bcdd03173dfa7d",
+    "run/temp.sh": "31236f54d38944c69f2cb3b3f069a7c3931332e4add8cfd252d091d5621a6a49",
+    "sched/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sched/bin_list_utils.py": "67a9aa91714a797d20f504c33bca796836632c6501d954e971cb1aa5aaa79bb4",
+    "sched/bin_list_utils_old.py": "580d943fd5b2057b4fd624c32d6197a24b56a2c5c36d3be3ceb5924032bc4a9e",
+    "sched/bin_list_utils_unused.py": "2142733db35776d6df1936a8091b59cf57e438dad2e10d316ae0be11110a536a",
+    "sched/bin_ops.py": "361bbc497b182e68304694f791354e9a296e93d5941cef267e9775bb9b47c301",
+    "sched/binpack_config.py": "d10829049efd5502328ca5f14d92dbe26435b219a53f3b4b03c06530ebc43f40",
+    "sched/global_sched.py": "a11a8324def4ca8b8763814e7dc8483a5444bc013e29083fa1b1dbbfbbbe4118",
+    "sched/global_sched_alloc.py": "627300a13b10f98ca4c2c8b08807780578cf1cf923c68b9967ce32dc9af1b2e0",
+    "sched/global_sched_old.py": "cc93f501ce6bf24f92841d8a323fe4d9550fd7e76120be27c539242b5e1df425",
+    "sched/global_sched_repack.py": "2e61f425893e6365d711676c53445cf89bec915c3ee5039c82d84d024dfcfece",
+    "sched/monitor_agent.py": "c748029c18bd6c99ffa0fed57536d5344fbc20ae23fc64b37446b2d973f9d83b",
+    "sched/packing_solver/chain_slack_assign.py": "e564906bc80d9b742e321cd9d0395fe6b03a2b891c35ddb9142e852c9c4d141f",
+    "sched/packing_solver/fit.py": "1b3d0b5296648d4d7403016c67f53be21d34b55c334b8d193f4fc770216e7998",
+    "sched/packing_solver/gurobi_MP_semi2DClst.py": "e56adc1a37dbba39cc3f8d707a955bfc64b3b03f71356084f989946593a02895",
+    "sched/packing_solver/unused/gurobi_semi2Dclst_mapping.py": "4d49d05ab20981eafeb9afe897aa0b952c2ce7d2eaac0880b71fa8131430c522",
+    "sched/packing_solver/unused/gurobi_semi2Dclst_mapping2.py": "9c40c2b4e21edcdb5fc25d51b6ce9479bbb4f8c64e2e3bc577d8e61ebf36e3dc",
+    "sched/placement.py": "008ca6d7c2316064c3fce0b75258e35c77f570b727e483d32a2010f6f7408fdf",
+    "sched/pre_alloc_new.py": "6991b6551a7f0ff3fe94f6b47f4fbe469a4da1ccdbd80e8eaca1bb7749cfbea6",
+    "sched/pre_alloc_new_old.py": "97e11a4df33ebc3b3ff6adaeabaa1b1635f34e9ad059cdbda23eb2f6a0cbd878",
+    "sched/ref_alloc_search.py": "c29243f7134518633c9b3f1631420607adef0ef79d994c0152ef579402c88ca7",
+    "sched/runtime_legacy/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sched/runtime_legacy/sched_fn.py": "cc82e889cb203dd7cb306988050c432b92857c559ccd2ab2bb6c85d2a63c79f7",
+    "sched/runtime_legacy/sched_utils.py": "ecc8414c05eeb9f1b7574142c1da5620d0c7a5e4d1ed6d2ecb2a3442604f2135",
+    "sched/runtime_legacy/scheduler_agent.py": "c0e3d3583f0a86947fa1478cb1d42bb9bbd4ff0727aab2128173b878cbc58cac",
+    "sched/runtime_legacy/state_trans.py": "ab3850e46e89c907fd2ca6a19667427c3e787ce1c5cf52e6fc2d93a7a4edc569",
+    "sched/sched_fn.py": "6ddf24cd84d4001c09bc637719430f60a7580950a1499046a0e6f7a1277026ed",
+    "sched/sched_utils.py": "daddd34bce6031198b5866b90eaa22365ee950b41323d2164c00e2e23b8479e6",
+    "sched/scheduler_agent.py": "cf77c531c15130c4dd3a218a9fd197d3daba242c018e1b222bdd1371e893e4de",
+    "sched/scheduling_table.py": "a7df3b3ed412e6b30b29d9cc533749c59b74c38c88e19ff6dba9858f669aad8c",
+    "sched/scheduling_table_event.py": "a79b101f8648cc12411477321025164d0fb6546fa20f9c9780fccc3b7ff46837",
+    "sched/slack_estim.py": "bda2da01c0bb32873d021dd32efc0debb5017333221baa3bd5cfbf7f17cc39c5",
+    "sched/slack_estim_unused.py": "0dca3dcceabe1e251c93a469c33840165912a9365894377e78f556b35322b3b0",
+    "sched/sort_function.py": "50ef837990c9d6a8dda164fca656852a4f25e640394160058d15326291a6183f",
+    "sched/state_trans.py": "29b77a41fed368421d76f5bf06cd698955990684908afbfc03bf49d1262cc628",
+    "scripts/abla_exp_runner.py": "73ca0bccb065a284f1f078c3a4a4027d9134e972b3bba18a6e26380e61e60864",
+    "scripts/e2e_exp_runner.py": "4e64059930d47287f6827beb5043dc382947d6128ae5ef854d0ded49f2ef1286",
+    "scripts/e2e_hyperparam.py": "579229a5e596f3eac366215af6ec2ad67d862d69f5ca43f05b4a06ed466ee9b8",
+    "scripts/exp_common.py": "6d0e913f0eacdc62b2972ce2ee9c25f459891e92da12f32c4001ac74a0f98274",
+    "scripts/motiv_exp_runner.py": "4592032791d2bcfe532aa01adda9f545b9196545bb0c4e8a0e018358e4eb712a",
+    "scripts/run_abla_exps.sh": "3f8d8a01e366995b7e8d4fb0b492e4c1bb0cbe989da2c061d501f80caca7c366",
+    "scripts/run_motiv_exps.sh": "4238e238d4640f53c19f2705f892be988ad19a50439f8c2d48efd2cd43c36d66",
+    "scripts/test_alloc_lat.py": "fc0bf0ead04d6e71fa32e69003388fc1ae402a2cbeee2f18e6ae167cb16ce552",
+    "scripts/unused/repack_sweep.py": "262dad167ec4fad1c6b2b9fe14c5d941f958cdbb0722198b723c2e76adace213",
+    "sim_main.py": "1d04e4aa038b63bc289834fc350442d9ff2b929faabb42a042deb7803bc86520",
+    "sim_main_old.py": "02aac1cd1af96eec0dbb51393f84cd33c05abaf4b1abf657cb89dd1cd02472cc",
+    "sim_main_unused.py": "4d60418cea08dd26e7dac15e698dce86056f2212a8e519298e9872352577b8e1",
+    "simple_test_collector.py": "b6bff9b527a9941a187d5e89640f5d785791ddd4c69df3a745a1e23a0e127142",
+    "task/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "task/graph_breakdown.py": "486b438fa3325f8d035ef91ca63518649986e21aee74cb761092908c579cdbd1",
+    "task/graph_breakdown_unused.py": "ad0d03b8c4b16bb67f0c8a92e8ccd5f2d03767755135703863cb2649c6582537",
+    "task/graph_scaling.py": "23cd8bd44738144c8a4578875a88bab4d06bef003cf0bdaa958e743ce9c88492",
+    "task/load_cfg/loadA.py": "7f75f58b094573322dce01ca6f2366241fbd82e4891292aee390c0a1d98ad287",
+    "task/spec.py": "66f2eeb5f3c35b9ee92fb0f0a90f0bba4e2cecfb88fd2192f3be7ca931d09022",
+    "task/task_agent.py": "21786d243f70d1e41d5ad43f1d8c22dee13d54f3fab28a84719ad3cbe16f8a2e",
+    "task/task_cfg.py": "6194c815e202c298f7789bb37be929dcc59f19d513a2ebb9a476a2fc3b0ef14b",
+    "task/task_cfg_old.py": "06a38533685502a78a0274edd8d5a460f5baa3579f6adb420b38bcbbca2d0356",
+    "task/throughput_cnt.py": "7df7e2fa30a3f6061fffa210952d211666e1dcd00636d18e80fa29cf61fc15ef",
+    "test_approach_collector.py": "efd7b67e99cd0a970dc1a7998461af5a0795fa239ead43e00eb5e8ce0e6f2d68",
+    "test_approach_package_compat.py": "ca4bac52de6e14174ed93fd56d2c23be16d9457be9f15c93122e6ccf94b02792",
+    "test_binpack_pipeline_contract.py": "144f9f0acc656c687adcdc8099124697888c41a4bb0b78a621f43a938cefb1d9",
+    "test_closure_fix.py": "16c04deae220389724a7c4c28a0bb838399d671a61429ddc84cd5d28c3994165",
+    "test_core_allocation.py": "44fe340a041794584e12a30b99cb9aac1aa9dc3dc5e3a6e82f94c9f3ce428045",
+    "test_deduce_cfg2.py": "9edb5c3de657302137144df2ae7425bf36976e3b20a4b5d10f3580f83e41fddb",
+    "test_duplicate.py": "662f0ed5fd5a76dd59e2b82981377297aba2ac118a6c9a150176f619aa2e2dd2",
+    "test_event_update.py": "68ff45c5ff1f5fad893933722565b034bef2e1831f15c56ce398a5b982d7dc95",
+    "test_legacy_approach_archive.py": "b6dc62122ea09a99cbbddf2cffa52613be3376d7f827518487a977fd2fb96d77",
+    "test_mapping.py": "a32256208595f8b9f451c71d9d9c18a8f4f992d161c1bfa79e048b30cbed5b3f",
+    "test_mem_planner.py": "e171129a2a8519f3de13f8e533e2bd74cba08f076dd9e564945be65a01c87b60",
+    "test_old_task_cfg.py": "88498ed6d99d56a16cbbf610c6bc249e309496e5c8e29855da68666fdf274da8",
+    "test_repack_diagnostic.py": "d11f52e223cb829fb9dd16c401282b58e035df8bcceac3c000a560b63744b83f",
+    "test_scheduling_table.py": "5a44cb64b2e88744a72816784fb70f87b826dae56bd92a00ee07ffd29200bea0",
+    "test_unused_e2e_event_generators.py": "9959f891ba33892a0bcf75e3b0eff5b83259247a65e611b15d7b0f3a735aa496",
+    "test_unused_eq_quantiles.py": "7748d46ee067cf89e9707f6ea367733e0ef06e04b6f7d4074d1900f5ec3db832",
+    "test_unused_global_constants.py": "ac3bbe27146f057fa5fe7fa38ed51296f134a7f7dec76828bb8f63542046191d",
+    "test_unused_hdf5_utils.py": "cdc3fab2f6c53006d42c69c1c01abc9cff7bfeb035a828345ea73ebbd4f86fc6",
+    "test_unused_path_utils.py": "01e2d7da2298380db15ab323bc102a1b161788af6f5419d4965e1bfebc9a53ac",
+    "test_unused_sim_cache_helpers.py": "1dbf81135d8a2c14aa1a0852fefc4043a0220272eb7cc3d7e060ab257d472d5d",
+    "test_unused_slack_graph_helpers.py": "05567227d3c8af745d6598d7616d97e3b69469a0c36e5ccca37c10e82e8c7c3e",
+    "test_updated_stats.py": "cbd88f4afd5bdb6b8642fe435e386c38fc7856737a5df80909d3734dbaafe91d",
+    "tile_2d_mesh_mapper_fixed.py": "db0d65db81bdb53079bdf02e22da85432bafb5777de9b1e2d676834ef883e003",
+    "unused_fun.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "utils.py": "508f1366fb8bb08f16f1ad5f57e651692be7915c6a3c29e054ce73970dcd4e03",
+    "utils_unused.py": "cadac26936dca668f85f6eb6ceb84186c2be32dd52acae7b56785f760c15b40d"
+  },
+  "public_exports": {
+    "Queue": {
+      "type": "type",
+      "module": "queue",
+      "qualname": "Queue"
+    },
+    "Data": {
+      "type": "type",
+      "module": "model.buffer",
+      "qualname": "Data"
+    },
+    "MsgDispatcher": {
+      "type": "type",
+      "module": "model.message.msg_dispatcher",
+      "qualname": "MsgDispatcher"
+    },
+    "msg_read": {
+      "type": "function",
+      "module": "model.message.msg_dispatcher",
+      "qualname": "msg_read"
+    },
+    "msg_filter": {
+      "type": "function",
+      "module": "model.message.msg_dispatcher",
+      "qualname": "msg_filter"
+    }
+  },
+  "signatures": {
+    "msg_read": "(msg_queue, curr_t, glb_name_p_dict, process_dict, buffer, bin_name, bin_event_flg)",
+    "msg_filter": "(msg_list: list, keyword: str)"
+  },
+  "pickle_original": {
+    "msg_read": "gASVLQAAAAAAAACMHG1vZGVsLm1lc3NhZ2UubXNnX2Rpc3BhdGNoZXKUjAhtc2dfcmVhZJSTlC4=",
+    "msg_filter": "gASVLwAAAAAAAACMHG1vZGVsLm1lc3NhZ2UubXNnX2Rpc3BhdGNoZXKUjAptc2dfZmlsdGVylJOULg=="
+  },
+  "cases": [
+    {
+      "name": "filter_empty",
+      "kind": "filter",
+      "messages": [],
+      "keyword": "a",
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": []
+        },
+        "stdout": "",
+        "before": [],
+        "after": [],
+        "identity_membership": []
+      }
+    },
+    {
+      "name": "filter_substrings_duplicates",
+      "kind": "filter",
+      "messages": [
+        "abc",
+        "other",
+        "ab",
+        "abc"
+      ],
+      "keyword": "ab",
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": [
+            "abc",
+            "ab",
+            "abc"
+          ]
+        },
+        "stdout": "",
+        "before": [
+          "abc",
+          "other",
+          "ab",
+          "abc"
+        ],
+        "after": [
+          "abc",
+          "other",
+          "ab",
+          "abc"
+        ],
+        "identity_membership": [
+          true,
+          true,
+          true
+        ]
+      }
+    },
+    {
+      "name": "filter_empty_keyword",
+      "kind": "filter",
+      "messages": [
+        "",
+        "a",
+        "b"
+      ],
+      "keyword": "",
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": [
+            "",
+            "a",
+            "b"
+          ]
+        },
+        "stdout": "",
+        "before": [
+          "",
+          "a",
+          "b"
+        ],
+        "after": [
+          "",
+          "a",
+          "b"
+        ],
+        "identity_membership": [
+          true,
+          true,
+          true
+        ]
+      }
+    },
+    {
+      "name": "filter_container_membership",
+      "kind": "filter",
+      "messages": [
+        [
+          "a",
+          "b"
+        ],
+        {
+          "a": 1
+        },
+        [
+          "x"
+        ]
+      ],
+      "keyword": "a",
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": [
+            [
+              "a",
+              "b"
+            ],
+            {
+              "a": 1
+            }
+          ]
+        },
+        "stdout": "",
+        "before": [
+          [
+            "a",
+            "b"
+          ],
+          {
+            "a": 1
+          },
+          [
+            "x"
+          ]
+        ],
+        "after": [
+          [
+            "a",
+            "b"
+          ],
+          {
+            "a": 1
+          },
+          [
+            "x"
+          ]
+        ],
+        "identity_membership": [
+          true,
+          true
+        ]
+      }
+    },
+    {
+      "name": "filter_noniterable_message",
+      "kind": "filter",
+      "messages": [
+        "a",
+        1
+      ],
+      "keyword": "a",
+      "expected": {
+        "result": {
+          "kind": "exception",
+          "type": "TypeError",
+          "message": "argument of type 'int' is not iterable"
+        },
+        "stdout": "",
+        "before": [
+          "a",
+          1
+        ],
+        "after": [
+          "a",
+          1
+        ],
+        "identity_membership": null
+      }
+    },
+    {
+      "name": "filter_invalid_keyword",
+      "kind": "filter",
+      "messages": [
+        "abc"
+      ],
+      "keyword": 1,
+      "expected": {
+        "result": {
+          "kind": "exception",
+          "type": "TypeError",
+          "message": "'in <string>' requires string as left operand, not int"
+        },
+        "stdout": "",
+        "before": [
+          "abc"
+        ],
+        "after": [
+          "abc"
+        ],
+        "identity_membership": null
+      }
+    },
+    {
+      "name": "read_empty_false",
+      "kind": "read",
+      "messages": [],
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": false
+        },
+        "stdout": "",
+        "before": {
+          "queue": [],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": false,
+                "time": -1,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -1,
+          "outputs": {}
+        },
+        "after": {
+          "queue": [],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": false,
+                "time": -1,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -1,
+          "outputs": {}
+        }
+      }
+    },
+    {
+      "name": "read_empty_true",
+      "kind": "read",
+      "messages": [],
+      "flag": true,
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": true
+        },
+        "stdout": "",
+        "before": {
+          "queue": [],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": false,
+                "time": -1,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -1,
+          "outputs": {}
+        },
+        "after": {
+          "queue": [],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": false,
+                "time": -1,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -1,
+          "outputs": {}
+        }
+      }
+    },
+    {
+      "name": "read_unmatched_drains",
+      "kind": "read",
+      "messages": [
+        "other"
+      ],
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": false
+        },
+        "stdout": "",
+        "before": {
+          "queue": [
+            "other"
+          ],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": false,
+                "time": -1,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -1,
+          "outputs": {}
+        },
+        "after": {
+          "queue": [],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": false,
+                "time": -1,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -1,
+          "outputs": {}
+        }
+      }
+    },
+    {
+      "name": "read_no_processes_drains",
+      "kind": "read",
+      "messages": [
+        "source"
+      ],
+      "process_count": 0,
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": false
+        },
+        "stdout": "",
+        "before": {
+          "queue": [
+            "source"
+          ],
+          "pred_data": {},
+          "capacity": -1,
+          "remain_cap": -1,
+          "outputs": {}
+        },
+        "after": {
+          "queue": [],
+          "pred_data": {},
+          "capacity": -1,
+          "remain_cap": -1,
+          "outputs": {}
+        }
+      }
+    },
+    {
+      "name": "read_match_header",
+      "kind": "read",
+      "messages": [
+        "source"
+      ],
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": true
+        },
+        "stdout": "(B0)\n\t\tsink0 received event source @ 0.250000\n",
+        "before": {
+          "queue": [
+            "source"
+          ],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": false,
+                "time": -1,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -1,
+          "outputs": {}
+        },
+        "after": {
+          "queue": [],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": true,
+                "time": 0.25,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -4,
+          "outputs": {
+            "10": [
+              {
+                "pid": 10,
+                "size": 3,
+                "data_id": [
+                  0
+                ],
+                "data_type": "output",
+                "valid": false,
+                "waitTime": 0,
+                "io_time": null,
+                "processed_done_time": 0.25,
+                "event_time": 0,
+                "life_time": 0.1,
+                "ctx": null,
+                "ref_pid": [],
+                "period": 0.1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "read_match_existing_flag",
+      "kind": "read",
+      "messages": [
+        "source"
+      ],
+      "flag": true,
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": true
+        },
+        "stdout": "\t\tsink0 received event source @ 0.250000\n",
+        "before": {
+          "queue": [
+            "source"
+          ],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": false,
+                "time": -1,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -1,
+          "outputs": {}
+        },
+        "after": {
+          "queue": [],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": true,
+                "time": 0.25,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -4,
+          "outputs": {
+            "10": [
+              {
+                "pid": 10,
+                "size": 3,
+                "data_id": [
+                  0
+                ],
+                "data_type": "output",
+                "valid": false,
+                "waitTime": 0,
+                "io_time": null,
+                "processed_done_time": 0.25,
+                "event_time": 0,
+                "life_time": 0.1,
+                "ctx": null,
+                "ref_pid": [],
+                "period": 0.1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "read_match_empty_bin_name",
+      "kind": "read",
+      "messages": [
+        "source"
+      ],
+      "bin_name": "",
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": false
+        },
+        "stdout": "\t\tsink0 received event source @ 0.250000\n",
+        "before": {
+          "queue": [
+            "source"
+          ],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": false,
+                "time": -1,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -1,
+          "outputs": {}
+        },
+        "after": {
+          "queue": [],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": true,
+                "time": 0.25,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -4,
+          "outputs": {
+            "10": [
+              {
+                "pid": 10,
+                "size": 3,
+                "data_id": [
+                  0
+                ],
+                "data_type": "output",
+                "valid": false,
+                "waitTime": 0,
+                "io_time": null,
+                "processed_done_time": 0.25,
+                "event_time": 0,
+                "life_time": 0.1,
+                "ctx": null,
+                "ref_pid": [],
+                "period": 0.1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "read_duplicate_messages_once_per_pred",
+      "kind": "read",
+      "messages": [
+        "source",
+        "source"
+      ],
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": true
+        },
+        "stdout": "(B0)\n\t\tsink0 received event source @ 0.250000\n",
+        "before": {
+          "queue": [
+            "source",
+            "source"
+          ],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": false,
+                "time": -1,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -1,
+          "outputs": {}
+        },
+        "after": {
+          "queue": [],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": true,
+                "time": 0.25,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -4,
+          "outputs": {
+            "10": [
+              {
+                "pid": 10,
+                "size": 3,
+                "data_id": [
+                  0
+                ],
+                "data_type": "output",
+                "valid": false,
+                "waitTime": 0,
+                "io_time": null,
+                "processed_done_time": 0.25,
+                "event_time": 0,
+                "life_time": 0.1,
+                "ctx": null,
+                "ref_pid": [],
+                "period": 0.1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "read_two_processes",
+      "kind": "read",
+      "messages": [
+        "source"
+      ],
+      "process_count": 2,
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": true
+        },
+        "stdout": "(B0)\n\t\tsink0 received event source @ 0.250000\n\t\tsink1 received event source @ 0.250000\n",
+        "before": {
+          "queue": [
+            "source"
+          ],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": false,
+                "time": -1,
+                "other": 7
+              }
+            },
+            "1": {
+              "source": {
+                "valid": false,
+                "time": -1,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -1,
+          "outputs": {}
+        },
+        "after": {
+          "queue": [],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": true,
+                "time": 0.25,
+                "other": 7
+              }
+            },
+            "1": {
+              "source": {
+                "valid": true,
+                "time": 0.25,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -7,
+          "outputs": {
+            "10": [
+              {
+                "pid": 10,
+                "size": 3,
+                "data_id": [
+                  0
+                ],
+                "data_type": "output",
+                "valid": false,
+                "waitTime": 0,
+                "io_time": null,
+                "processed_done_time": 0.25,
+                "event_time": 0,
+                "life_time": 0.1,
+                "ctx": null,
+                "ref_pid": [],
+                "period": 0.1
+              },
+              {
+                "pid": 10,
+                "size": 3,
+                "data_id": [
+                  0
+                ],
+                "data_type": "output",
+                "valid": false,
+                "waitTime": 0,
+                "io_time": null,
+                "processed_done_time": 0.25,
+                "event_time": 0,
+                "life_time": 0.1,
+                "ctx": null,
+                "ref_pid": [],
+                "period": 0.1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "read_substring_two_pred",
+      "kind": "read",
+      "messages": [
+        "source"
+      ],
+      "preds": [
+        "source",
+        "s"
+      ],
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": true
+        },
+        "stdout": "(B0)\n\t\tsink0 received event source @ 0.250000\n\t\tsink0 received event s @ 0.250000\n",
+        "before": {
+          "queue": [
+            "source"
+          ],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": false,
+                "time": -1,
+                "other": 7
+              },
+              "s": {
+                "valid": false,
+                "time": -1,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -1,
+          "outputs": {}
+        },
+        "after": {
+          "queue": [],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": true,
+                "time": 0.25,
+                "other": 7
+              },
+              "s": {
+                "valid": true,
+                "time": 0.25,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -7,
+          "outputs": {
+            "10": [
+              {
+                "pid": 10,
+                "size": 3,
+                "data_id": [
+                  0
+                ],
+                "data_type": "output",
+                "valid": false,
+                "waitTime": 0,
+                "io_time": null,
+                "processed_done_time": 0.25,
+                "event_time": 0,
+                "life_time": 0.1,
+                "ctx": null,
+                "ref_pid": [],
+                "period": 0.1
+              }
+            ],
+            "11": [
+              {
+                "pid": 11,
+                "size": 3,
+                "data_id": [
+                  0
+                ],
+                "data_type": "output",
+                "valid": false,
+                "waitTime": 0,
+                "io_time": null,
+                "processed_done_time": 0.25,
+                "event_time": 0,
+                "life_time": 0.1,
+                "ctx": null,
+                "ref_pid": [],
+                "period": 0.1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "read_zero_frequency_partial_state",
+      "kind": "read",
+      "messages": [
+        "source"
+      ],
+      "freq": 0,
+      "expected": {
+        "result": {
+          "kind": "exception",
+          "type": "ZeroDivisionError",
+          "message": "division by zero"
+        },
+        "stdout": "(B0)\n\t\tsink0 received event source @ 0.250000\n",
+        "before": {
+          "queue": [
+            "source"
+          ],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": false,
+                "time": -1,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -1,
+          "outputs": {}
+        },
+        "after": {
+          "queue": [],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": true,
+                "time": 0.25,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -1,
+          "outputs": {}
+        }
+      }
+    },
+    {
+      "name": "read_missing_source_partial_state",
+      "kind": "read",
+      "messages": [
+        "missing"
+      ],
+      "preds": [
+        "missing"
+      ],
+      "expected": {
+        "result": {
+          "kind": "exception",
+          "type": "KeyError",
+          "message": "'missing'"
+        },
+        "stdout": "(B0)\n\t\tsink0 received event missing @ 0.250000\n",
+        "before": {
+          "queue": [
+            "missing"
+          ],
+          "pred_data": {
+            "0": {
+              "missing": {
+                "valid": false,
+                "time": -1,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -1,
+          "outputs": {}
+        },
+        "after": {
+          "queue": [],
+          "pred_data": {
+            "0": {
+              "missing": {
+                "valid": true,
+                "time": 0.25,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -1,
+          "outputs": {}
+        }
+      }
+    },
+    {
+      "name": "read_capacity_rejection_ignored",
+      "kind": "read",
+      "messages": [
+        "source"
+      ],
+      "capacity": 3,
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": true
+        },
+        "stdout": "(B0)\n\t\tsink0 received event source @ 0.250000\n",
+        "before": {
+          "queue": [
+            "source"
+          ],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": false,
+                "time": -1,
+                "other": 7
+              }
+            }
+          },
+          "capacity": 3,
+          "remain_cap": 3,
+          "outputs": {}
+        },
+        "after": {
+          "queue": [],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": true,
+                "time": 0.25,
+                "other": 7
+              }
+            }
+          },
+          "capacity": 3,
+          "remain_cap": 3,
+          "outputs": {}
+        }
+      }
+    },
+    {
+      "name": "read_second_source_missing_after_put",
+      "kind": "read",
+      "messages": [
+        "source missing"
+      ],
+      "preds": [
+        "source",
+        "missing"
+      ],
+      "expected": {
+        "result": {
+          "kind": "exception",
+          "type": "KeyError",
+          "message": "'missing'"
+        },
+        "stdout": "(B0)\n\t\tsink0 received event source @ 0.250000\n\t\tsink0 received event missing @ 0.250000\n",
+        "before": {
+          "queue": [
+            "source missing"
+          ],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": false,
+                "time": -1,
+                "other": 7
+              },
+              "missing": {
+                "valid": false,
+                "time": -1,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -1,
+          "outputs": {}
+        },
+        "after": {
+          "queue": [],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": true,
+                "time": 0.25,
+                "other": 7
+              },
+              "missing": {
+                "valid": true,
+                "time": 0.25,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -4,
+          "outputs": {
+            "10": [
+              {
+                "pid": 10,
+                "size": 3,
+                "data_id": [
+                  0
+                ],
+                "data_type": "output",
+                "valid": false,
+                "waitTime": 0,
+                "io_time": null,
+                "processed_done_time": 0.25,
+                "event_time": 0,
+                "life_time": 0.1,
+                "ctx": null,
+                "ref_pid": [],
+                "period": 0.1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "read_noniterable_message_after_drain",
+      "kind": "read",
+      "messages": [
+        1,
+        "source"
+      ],
+      "expected": {
+        "result": {
+          "kind": "exception",
+          "type": "TypeError",
+          "message": "argument of type 'int' is not iterable"
+        },
+        "stdout": "",
+        "before": {
+          "queue": [
+            1,
+            "source"
+          ],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": false,
+                "time": -1,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -1,
+          "outputs": {}
+        },
+        "after": {
+          "queue": [],
+          "pred_data": {
+            "0": {
+              "source": {
+                "valid": false,
+                "time": -1,
+                "other": 7
+              }
+            }
+          },
+          "capacity": -1,
+          "remain_cap": -1,
+          "outputs": {}
+        }
+      }
+    }
+  ],
+  "preflight_regression": {
+    "command": [
+      "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+      "-B",
+      "-m",
+      "pytest",
+      "-q",
+      "-p",
+      "no:cacheprovider",
+      "test_binpack_pipeline_contract.py",
+      "test_approach_package_compat.py",
+      "test_legacy_approach_archive.py",
+      "test_approach_collector.py",
+      "test_unused_hdf5_utils.py",
+      "test_unused_path_utils.py",
+      "test_unused_global_constants.py",
+      "test_unused_eq_quantiles.py",
+      "test_old_task_cfg.py",
+      "test_unused_e2e_event_generators.py",
+      "test_unused_slack_graph_helpers.py",
+      "test_unused_sim_cache_helpers.py",
+      "--junitxml=/tmp/scheduler-b21-preflight-406edjxl/pytest.xml"
+    ],
+    "suite": [
+      "test_binpack_pipeline_contract.py",
+      "test_approach_package_compat.py",
+      "test_legacy_approach_archive.py",
+      "test_approach_collector.py",
+      "test_unused_hdf5_utils.py",
+      "test_unused_path_utils.py",
+      "test_unused_global_constants.py",
+      "test_unused_eq_quantiles.py",
+      "test_old_task_cfg.py",
+      "test_unused_e2e_event_generators.py",
+      "test_unused_slack_graph_helpers.py",
+      "test_unused_sim_cache_helpers.py"
+    ],
+    "rc": 1,
+    "tests": 224,
+    "failed": [
+      {
+        "name": "test_basic_functionality",
+        "message": "AttributeError: 'StatisticsCollector' object has no attribute 'task_realloc_curr'"
+      },
+      {
+        "name": "test_motiv_exp_specific_stats",
+        "message": "ZeroDivisionError: float division by zero"
+      },
+      {
+        "name": "test_summary_generation",
+        "message": "ZeroDivisionError: float division by zero"
+      },
+      {
+        "name": "test_formatted_output",
+        "message": "ZeroDivisionError: division by zero"
+      },
+      {
+        "name": "test_edge_cases",
+        "message": "ZeroDivisionError: division by zero"
+      }
+    ],
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 36.33,
+    "log_dir": "/tmp/scheduler-b21-preflight-406edjxl"
+  },
+  "ledger_prefixes": {
+    "cleanup/move-ledger.csv": {
+      "bytes": 23862,
+      "sha256": "0df473d5501bf539642d223ea11064105bc437e66807132ad74ea22f8e23b7c2",
+      "rows": 46,
+      "widths": {
+        "14": 38,
+        "15": 3,
+        "16": 4,
+        "17": 1
+      }
+    },
+    "cleanup/reachable-files.csv": {
+      "bytes": 72773,
+      "sha256": "472e0e715fe6f09cff82327298dbfa0db987f0ee613faac6a72e0fb0b8d55cd4",
+      "rows": 266,
+      "widths": {
+        "10": 266
+      }
+    }
+  },
+  "new_paths_exist": {
+    "model/message/msg_dispatcher_unused.py": false,
+    "test_unused_message_helpers.py": false
+  },
+  "approval": {
+    "event": "E0084",
+    "reviewer": "independent clean reviewer",
+    "state": "APPROVED",
+    "conditions": "M1-M6",
+    "result_acceptance": {
+      "event": "E0086",
+      "actor": "reviewer",
+      "state": "ACCEPTED",
+      "verified_by_codex": true,
+      "logs_directory": "/tmp/b21_review_final",
+      "new_tests": {
+        "tests": 35,
+        "passed": 35,
+        "failed": [],
+        "errors": 0,
+        "skipped": 0
+      },
+      "full_regression": {
+        "tests": 259,
+        "passed": 254,
+        "failed": [
+          {
+            "name": "test_basic_functionality",
+            "message": "AttributeError: 'StatisticsCollector' object has no attribute 'task_realloc_curr'"
+          },
+          {
+            "name": "test_motiv_exp_specific_stats",
+            "message": "ZeroDivisionError: float division by zero"
+          },
+          {
+            "name": "test_summary_generation",
+            "message": "ZeroDivisionError: float division by zero"
+          },
+          {
+            "name": "test_formatted_output",
+            "message": "ZeroDivisionError: division by zero"
+          },
+          {
+            "name": "test_edge_cases",
+            "message": "ZeroDivisionError: division by zero"
+          }
+        ],
+        "errors": 0,
+        "skipped": 0
+      },
+      "entrypoint_and_probe_logs": {
+        "help_main.out": {
+          "sha256": "29051589d2027b2f9176069404e35679b07ab324a0ad0a2548cc2391018838f3"
+        },
+        "help_motiv.out": {
+          "sha256": "519c9d18a0ba134a2fa7e59aa8822799f185b3ce5e5d0ac4c321b912574c4334"
+        },
+        "help_abla.out": {
+          "sha256": "23f0e608ff7bd9bf7ca40fc6dcee4cebff97c3c7b70917b8ba64975b2addbf58"
+        },
+        "probes.out": {
+          "sha256": "738d4a0afaffc0f93b6cae8045b76610314c156798b6e089a4aaf573fb49d59d"
+        }
+      },
+      "all_171_sha_unchanged_after_review": true,
+      "non_batch_full_count": 168,
+      "source_change": "0 added / 21 removed; original blocks archived byte-identically",
+      "recovery_checked_not_executed": true,
+      "notes": "Genuine existing session 11983; no Codex-authored reviewer event. Existing sim_main.py:677 EOF warning remains exactly as E0082 accepted."
+    }
+  },
+  "validation": {
+    "stage": "ACCEPTED_E0086",
+    "red": {
+      "rc": 1,
+      "failed": 1,
+      "deselected": 34,
+      "log": "/tmp/scheduler-b21-red.log",
+      "expected_failure": "archive file does not exist"
+    },
+    "green": {
+      "command": [
+        "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "test_unused_message_helpers.py",
+        "--junitxml=/tmp/scheduler-b21-green.xml"
+      ],
+      "rc": 0,
+      "seconds": 3.26,
+      "xml": "/tmp/scheduler-b21-green.xml",
+      "log": "/tmp/scheduler-b21-green.log",
+      "output": "...................................                                      [100%]\n--------------- generated xml file: /tmp/scheduler-b21-green.xml ---------------\n35 passed in 2.99s\n"
+    },
+    "source_bytes": {
+      "source_sha256": "0c9df6adcec6cdda83d285d7e865097e74b9103f513eeadb97f2ac4a3ac3fbcd",
+      "bytes": 1717,
+      "numstat": "0\t21\tmodel/message/msg_dispatcher.py",
+      "correction": "E0084 M5: truncate exactly one tool-added LF",
+      "before_sha256": "9ebad2833964660d376c2312e83c6296f469f85104911c5e6b832cec5e89960e",
+      "original_ends_lf": false,
+      "after_ends_lf": false,
+      "original_blocks_exact": true
+    },
+    "eof_correction_used": true,
+    "temp_dir": "/tmp/scheduler-b21-regression-mnj4yb7z",
+    "regression": {
+      "command": [
+        "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "test_binpack_pipeline_contract.py",
+        "test_approach_package_compat.py",
+        "test_legacy_approach_archive.py",
+        "test_approach_collector.py",
+        "test_unused_hdf5_utils.py",
+        "test_unused_path_utils.py",
+        "test_unused_global_constants.py",
+        "test_unused_eq_quantiles.py",
+        "test_old_task_cfg.py",
+        "test_unused_e2e_event_generators.py",
+        "test_unused_slack_graph_helpers.py",
+        "test_unused_sim_cache_helpers.py",
+        "test_unused_message_helpers.py",
+        "--junitxml=/tmp/scheduler-b21-regression-mnj4yb7z/pytest.xml"
+      ],
+      "rc": 1,
+      "seconds": 38.93,
+      "tests": 259,
+      "failed": [
+        {
+          "name": "test_basic_functionality",
+          "message": "AttributeError: 'StatisticsCollector' object has no attribute 'task_realloc_curr'"
+        },
+        {
+          "name": "test_motiv_exp_specific_stats",
+          "message": "ZeroDivisionError: float division by zero"
+        },
+        {
+          "name": "test_summary_generation",
+          "message": "ZeroDivisionError: float division by zero"
+        },
+        {
+          "name": "test_formatted_output",
+          "message": "ZeroDivisionError: division by zero"
+        },
+        {
+          "name": "test_edge_cases",
+          "message": "ZeroDivisionError: division by zero"
+        }
+      ],
+      "errors": 0,
+      "skipped": 0,
+      "module_counts": {
+        "test_binpack_pipeline_contract": 3,
+        "test_approach_package_compat": 32,
+        "test_legacy_approach_archive": 7,
+        "test_approach_collector": 7,
+        "test_unused_hdf5_utils": 9,
+        "test_unused_path_utils": 19,
+        "test_unused_global_constants": 13,
+        "test_unused_eq_quantiles": 24,
+        "test_old_task_cfg": 18,
+        "test_unused_e2e_event_generators": 25,
+        "test_unused_slack_graph_helpers": 29,
+        "test_unused_sim_cache_helpers": 38,
+        "test_unused_message_helpers": 35
+      }
+    },
+    "helps": [
+      {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "main_approach.py",
+          "--help"
+        ],
+        "rc": 0
+      },
+      {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "scripts/motiv_exp_runner.py",
+          "--help"
+        ],
+        "rc": 0
+      },
+      {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "scripts/abla_exp_runner.py",
+          "--help"
+        ],
+        "rc": 0
+      }
+    ],
+    "benefits_probe": "passed",
+    "non_batch_compared": 168,
+    "non_batch_unchanged": 168,
+    "sources": {
+      "model/message/msg_dispatcher.py": {
+        "exact_reconstruction": true,
+        "numstat": "0\t21\tmodel/message/msg_dispatcher.py",
+        "ends_lf": false
+      }
+    },
+    "python_ast_parsed": 155,
+    "sha256": {
+      "model/message/msg_dispatcher.py": "0c9df6adcec6cdda83d285d7e865097e74b9103f513eeadb97f2ac4a3ac3fbcd",
+      "model/message/msg_dispatcher_unused.py": "3a70a0228f01c9f8250390293d690511602fdd7c5c512849ded52700647d4164",
+      "test_unused_message_helpers.py": "9970e9fc7186d0b0b2eed52218d7ae25f73531926b5aa496519cde1700a03d4f"
+    },
+    "recovery": {
+      "forward_patch_zlib_base64": "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",
+      "forward_patch_sha256": "5315ace77f112cef6715cfb760ff8f00a9da844cc6017a508e8bdaee6025b1f9",
+      "check_rc": 0,
+      "scoped_paths": [
+        "model/message/msg_dispatcher.py",
+        "model/message/msg_dispatcher_unused.py",
+        "test_unused_message_helpers.py"
+      ],
+      "generated_patch": "/tmp/scheduler-b21-regression-mnj4yb7z/b21-recovery.patch",
+      "extract_command": "/home/zhangchg/miniconda3/envs/gurobi/bin/python -B -c \"import json,zlib,base64,hashlib,pathlib; r=json.loads(pathlib.Path('cleanup/reports/b21-unused-message-helpers-baseline.json').read_text())['validation']['recovery']; p=zlib.decompress(base64.b64decode(r['forward_patch_zlib_base64'])); assert hashlib.sha256(p).hexdigest()==r['forward_patch_sha256']; pathlib.Path('/tmp/scheduler-b21-recovery.patch').write_bytes(p)\"",
+      "check_command": "git apply -R --check /tmp/scheduler-b21-recovery.patch",
+      "restore_command": "git apply -R /tmp/scheduler-b21-recovery.patch",
+      "cwd": "/home/zhangchg/git_repo/scheduler-audit-20260612",
+      "warning": "Only after checking no later edits conflict; never whole-file checkout; restore_command documented but not executed."
+    },
+    "ledger": {
+      "cleanup/move-ledger.csv": {
+        "row_count": 46,
+        "widths": {
+          "14": 38,
+          "15": 3,
+          "16": 4,
+          "17": 1
+        },
+        "historical_bad_rows": 8,
+        "last_line": "B20-MOVE-004,sim_main.py,sim_main_unused.py,move-reference,EXECUTED_WAITING_REVIEW,Independent unused CSV/cache helper; complete original bytes preserved,MEDIUM,E0078/E0080; check_max_bin_num,codex,archive/test_pipeline-20260612,See B20 baseline JSON validation.recovery; extract then git apply -R --check,B20-UNUSED-SIM-CACHE-HELPERS,reviewer E0078 and E0080,Old export and function pickle path retire; original exceptions and state changes preserved"
+      },
+      "cleanup/reachable-files.csv": {
+        "row_count": 266,
+        "widths": {
+          "10": 266
+        },
+        "historical_bad_rows": 0,
+        "last_line": "test_unused_sim_cache_helpers.py,KEEP,regression-test,codex,pytest explicit B20 suite,38 tests:18 double-run real I/O cases; exact blocks; signatures; full exports; pickle,LOW,archive/test_pipeline-20260612,See B20 baseline JSON validation.recovery; extract then git apply -R --check,Approved new tests; original exception and partial-state behavior retained"
+      }
+    },
+    "head_index_unchanged": true,
+    "protected_diff_empty": true,
+    "diff_check": {
+      "rc": 2,
+      "stdout": "sim_main.py:677: new blank line at EOF.\n",
+      "stderr": ""
+    },
+    "ledger_after": {
+      "cleanup/move-ledger.csv": {
+        "rows": 48,
+        "before_rows": 46,
+        "new_rows": 2,
+        "width": 14,
+        "prefix_bytes": 23862,
+        "prefix_sha256": "0df473d5501bf539642d223ea11064105bc437e66807132ad74ea22f8e23b7c2",
+        "prefix_unchanged": true,
+        "historical_bad_rows": 8,
+        "current_sha256": "63b78f0a7836101a4873d693ff8332c79ff805145d3fc6ef994257acacd8c9b7"
+      },
+      "cleanup/reachable-files.csv": {
+        "rows": 268,
+        "before_rows": 266,
+        "new_rows": 2,
+        "width": 10,
+        "prefix_bytes": 72773,
+        "prefix_sha256": "472e0e715fe6f09cff82327298dbfa0db987f0ee613faac6a72e0fb0b8d55cd4",
+        "prefix_unchanged": true,
+        "historical_bad_rows": 0,
+        "current_sha256": "076f4cc0bb2aa80a8d87e5f3886313bf33bdf55f0c65d67612ccd71c1372c9d9"
+      }
+    },
+    "persistent_recovery_check_rc": 0,
+    "all_171_sha_unchanged_after_writes": true
+  },
+  "dispatcher_behavior": {
+    "False": {
+      "stdout": "#Broadcasting message: hello\n!Sending message to queue 1: direct\n",
+      "queues": [
+        [
+          "hello"
+        ],
+        [
+          "hello",
+          "direct"
+        ]
+      ],
+      "num_processes": 2,
+      "provided_identity": null
+    },
+    "True": {
+      "stdout": "#Broadcasting message: hello\n!Sending message to queue 1: direct\n",
+      "queues": [
+        [
+          "hello"
+        ],
+        [
+          "hello",
+          "direct"
+        ]
+      ],
+      "num_processes": 2,
+      "provided_identity": true
+    }
+  },
+  "diff_check_baseline": {
+    "rc": 2,
+    "stdout": "sim_main.py:677: new blank line at EOF.\n",
+    "stderr": ""
+  },
+  "reference_evidence": {
+    "source_scope": 169,
+    "tracked_existing_files": 322,
+    "policy": "git tracked existing text plus explicitly approved source targets; no untracked repository recursion",
+    "symbol_hits": [
+      [
+        "CLEANUP_STATUS.md",
+        42,
+        "- DFS continuation: B20后继续沿sim_main依赖读了Spec、MsgDispatcher、DataPipe/TriggerPipe与placement。类整体保留，位置映射有旧runtime真实导入/调用；msg_read/msg_filter只列待核候选，须补完整属性/动态/文档引用和原行为证据，不凭初步名字扫描迁移。不重开REQ-003和REQ-005/006/007，不修顺带发现的旧逻辑问题。"
+      ],
+      [
+        "FILE_ADJUSTMENT_RECORD.md",
+        2366,
+        "- msg_read未发现直接Name调用，msg_filter在其内部调用，sched/scheduling_table_event.py的同名变量是局部消息过滤字典，不是已证实的函数调用。该扫描尚不足以排除属性/动态/文档引用，两个助手仅列REVIEW待核；未批准或执行迁移。Spec类内的小写spec引用、core_mapping_1d的start未推进是静态疑点，未运行故障复现，不在清理中修复。"
+      ],
+      [
+        "cleanup/symbol-candidates.csv",
+        411,
+        "model/message/msg_dispatcher.py,msg_read,function,30,record-only,SYMBOL_CANDIDATE"
+      ],
+      [
+        "cleanup/symbol-candidates.csv",
+        412,
+        "model/message/msg_dispatcher.py,msg_filter,function,50,record-only,SYMBOL_CANDIDATE"
+      ],
+      [
+        "model/message/msg_dispatcher.py",
+        30,
+        "def msg_read(msg_queue, curr_t, glb_name_p_dict, process_dict, buffer, bin_name, bin_event_flg):"
+      ],
+      [
+        "model/message/msg_dispatcher.py",
+        39,
+        "                if msg_filter(msg_list, key):"
+      ],
+      [
+        "model/message/msg_dispatcher.py",
+        50,
+        "def msg_filter(msg_list:list, keyword:str):"
+      ],
+      [
+        "sched/runtime_legacy/sched_fn.py",
+        166,
+        "                                msg_filter={\"event_type\": \"migrate_from\"})"
+      ],
+      [
+        "sched/runtime_legacy/sched_fn.py",
+        464,
+        "                                msg_filter={\"event_type\": \"migrate_to\"})"
+      ],
+      [
+        "sched/runtime_legacy/sched_fn.py",
+        844,
+        "                          msg_filter={\"event_type\": \"migrate_to\"})"
+      ],
+      [
+        "sched/runtime_legacy/sched_fn.py",
+        862,
+        "                          msg_filter={\"event_type\": \"migrate_from\"})"
+      ],
+      [
+        "sched/scheduling_table_event.py",
+        67,
+        "def filter_msg(tab_event_msg:str, msg_filter:Optional[Union[None, Dict[str, str]]]): "
+      ],
+      [
+        "sched/scheduling_table_event.py",
+        73,
+        "    for k,v in msg_filter.items(): "
+      ],
+      [
+        "sched/scheduling_table_event.py",
+        79,
+        "                      msg_filter:Optional[Union[None, Dict[str, str]]]):"
+      ],
+      [
+        "sched/scheduling_table_event.py",
+        104,
+        "        match, results = filter_msg(msg, msg_filter) "
+      ]
+    ],
+    "module_importers": [
+      [
+        "old/allocator_agent.py",
+        7,
+        "from model.message.msg_dispatcher import MsgDispatcher"
+      ],
+      [
+        "old/allocator_agent.py",
+        97,
+        "from model.message.msg_dispatcher import MsgDispatcher"
+      ],
+      [
+        "sched/global_sched_alloc.py",
+        22,
+        "from model.message.msg_dispatcher import MsgDispatcher"
+      ],
+      [
+        "sched/global_sched_old.py",
+        20,
+        "from model.message.msg_dispatcher import MsgDispatcher"
+      ],
+      [
+        "sched/global_sched_repack.py",
+        21,
+        "from model.message.msg_dispatcher import MsgDispatcher"
+      ],
+      [
+        "sched/runtime_legacy/sched_fn.py",
+        19,
+        "from model.message.msg_dispatcher import MsgDispatcher"
+      ],
+      [
+        "sched/runtime_legacy/scheduler_agent.py",
+        12,
+        "from model.message.msg_dispatcher import MsgDispatcher"
+      ],
+      [
+        "sched/runtime_legacy/state_trans.py",
+        15,
+        "from model.message.msg_dispatcher import MsgDispatcher"
+      ],
+      [
+        "sim_main.py",
+        9,
+        "from model.message.msg_dispatcher import MsgDispatcher"
+      ],
+      [
+        "sim_main_old.py",
+        15,
+        "from model.message.msg_dispatcher import MsgDispatcher"
+      ],
+      [
+        "test_mem_planner.py",
+        14,
+        "from model.message.msg_dispatcher import MsgDispatcher"
+      ]
+    ],
+    "external_executable_callers": [],
+    "internal_call": "msg_read -> msg_filter",
+    "false_positive": "sched/runtime_legacy/sched_fn.py passes msg_filter as a keyword dict to process_tab_event; scheduling_table_event.py uses a local filter dict. Neither refers to this module's msg_filter function.",
+    "dynamic_review": "Explicit169 source set: inspected getattr/import_module/__import__/eval/exec/globals/sys.modules/__dict__ sites; production sites are object attributes, approach compatibility aliases, or task JSON serialization; remaining dynamic sites are scoped tests. No dispatcher helper dynamic path found. External consumers unknown.",
+    "keep_neighbors": {
+      "message_handler": "All four helpers directly or transitively borrowed by old/allocator_agent and global_sched_repack; keep without reopening deferred Repack.",
+      "scheduling_table_event": "All seven helpers transitively used by runtime_legacy; keep.",
+      "message_pipe": "old/allocator_agent.py:8 imports MessagePipe, and its module has standalone example; keep class/file."
+    }
+  },
+  "archive_design": "Same-package symbol slices -> model/message/msg_dispatcher_unused.py. Imports only model.buffer.Data; msg_read resolves msg_filter internally. Original MsgDispatcher/Queue/Data imports, all comments and remaining whitespace unchanged.",
+  "compatibility_boundary": "Retire old msg_read/msg_filter exports and pre-move function-reference pickle paths; preserve new archive identity roundtrip. Public set5->3 exactly these two names removed. No old-name forwarding; external callers unknown.",
+  "verification_plan": [
+    "35 new tests:21 double-run original behavior cases;2 exact blocks;2 signatures;2 old pickle failures;2 new pickle identities;2 fresh import-order complete public sets;1 archive presence;1 internal Data/msg_filter binding;2 actual MsgDispatcher queue/broadcast preservation cases.",
+    "Baseline224=219+5 plus35 new =>259=254+same5,0errors/skips. All3 help and retained B13-B20 probes rerun, with logs.",
+    "Source0added/21deleted, remaining SHA0c9df6adcec6cdda83d285d7e865097e74b9103f513eeadb97f2ac4a3ac3fbcd; source originally noLF. All168 non-batch source hashes including currentguard unchanged.",
+    "Tool EOF normalization only: if actual==expected+LF, guarded one-byte truncate; if actual+LF==expected, guarded r+b one-byte append flush/fsync. Always assert originalSHA, expectedSHA, complete byte relation and re-read exact match; any other difference pauses. No other formatting changes.",
+    "Inherited E0082 Git warning sim_main.py:677 rc2 must remain exactly equal to preflight raw result, not rewritten or treated as new failure; any additional warning pauses.",
+    "CSV append2 move rows14cols and2 reachable rows10cols; preserve current23862/72773 byte prefixes and8 historical bad rows; persist scoped3-code-file recovery patch + reverse--check."
+  ],
+  "test_fixture_note": "Real queue.Queue, model.buffer.Buffer and Data are exercised; process/task input records are SimpleNamespace fixtures with precisely consumed attributes, not monkeypatched buffer or Data implementations. Baseline JSON normalizes tuple data_id to list for exact comparison.",
+  "dfs_review": {
+    "parent": "approach_setup -> sim_main -> model/message/msg_dispatcher",
+    "read_modules": [
+      "model/message/msg_dispatcher.py",
+      "model/message/message_handler.py",
+      "model/message/message_pipe.py",
+      "sched/scheduling_table_event.py",
+      "model/buffer.py"
+    ],
+    "keep_classes": [
+      "MsgDispatcher",
+      "MessagePipe",
+      "Data",
+      "Buffer",
+      "LifeTimeModel",
+      "EventCache",
+      "TriggerCache"
+    ],
+    "cancelled_deferred": "REQ-003 and REQ-005/006/007 not reopened",
+    "whole_repo_semantic_audit_complete": false,
+    "outcome": "B21 two unused top-level helpers relocated and independently accepted E0086; neighboring legacy borrowers and classes kept intact.",
+    "next_action": "Return to remaining sim_main dependency paths for read-only DFS; any new source action requires a separate genuine reviewer-approved proposal."
+  }
+}

@@ -62,13 +62,6 @@ def extract_num_exec(profiling_filename, aux_scale_factor, n_p, warmup_dis, mode
         return num_exec
 
 # extract number of cores
-def extract_num_cores(filename):
-    pattern = r'(?P<num_cores>\d+)'
-    match = re.search(pattern, filename)
-    if match:
-        return int(match.group('num_cores'))
-    else:
-        return -1
 
 def count_miss_comp(folder, output, 
                     log_pattern, log_pattern_keys, log_pattern_type,

@@ -1,0 +1,1771 @@
+{
+  "request": "REQ-016",
+  "batch_id": "B18-UNUSED-E2E-EVENT-GENERATORS",
+  "status": "ACCEPTED_E0072",
+  "mainline": "master",
+  "archive_ref": "archive/test_pipeline-20260612",
+  "source_path": "model/event_gen/e2e_latency.py",
+  "archive_path": "model/event_gen/e2e_latency_unused.py",
+  "test_path": "test_unused_e2e_event_generators.py",
+  "base_head": "a1d933b1f26efd4d569eb3d8ffb313447294443b",
+  "source_sha256": "7c460e9258b1b7384ffb4605167e4ccc69b026fc83eb0161429bd9f60b994248",
+  "remaining_sha256": "3043c818e36dbdfcee8ee50573c5274a8549fbb1413e4cb55cde07cc0e990a7e",
+  "slices": [
+    {
+      "name": "naive_period_event_gen",
+      "start": 7,
+      "end": 11,
+      "lines": 5,
+      "sha256": "31045d948a1493a4819c7adf756b0a0d61035d00454e14b1a350a185c9adaba1"
+    },
+    {
+      "name": "e2e_var_sim",
+      "start": 14,
+      "end": 34,
+      "lines": 21,
+      "sha256": "4f8896f647a8217a9c113656b35f4e251a39c4675fa016b3ad67ae8062481e79"
+    }
+  ],
+  "removed_lines": 26,
+  "non_batch_source_sha256": {
+    "__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "analyze/UE_extract.py": "647236fe7503c80740cca43e08858ccbe436a18ac4ed7d2bc54ad0b9b5d46cad",
+    "analyze/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "analyze/analyze_ctx_switch.py": "d7856b1f2ccb2fbf3652f00ee5552bfb570836953060f2dbfa1265554a67038d",
+    "analyze/analyze_timing.py": "45b94574b8ee2c7014e3ad5814b5348df28691dcaee124c5a7e15102f044ce8c",
+    "analyze/analyze_tp.py": "cd54307337eb3d37408e50b15b31fb7266b90a3c7addba3c5c3e707b400a3d38",
+    "analyze/pattern.py": "75c5a0ca22d710f7b301be118d820a0d3ca833176abd8777d43c104eaf119a46",
+    "analyze/stat_num_exec.py": "d830debb487d25b50f79384b2580e5d52a853e61e7fd3c2c01651e106b71cafe",
+    "analyze/xlsl_e2e_lat_abla.py": "2803dd27f7c4031af44116eae11439e2e80abb5823ef0255285669dadf6ef826",
+    "analyze/xlsl_e2e_latency.py": "db352b4685c6fa76f3c8c5e5940c469af14b1db6297e6df29135e0beae1c0f60",
+    "analyze/xlsl_max_tp.py": "1468390c1e293780e32b81e649cd501542e9d0d1d9b88b37018c7e1ad8f11201",
+    "analyze/xlsl_min_core.py": "90d91b24da0e3015783044713c84a7abd72b70ba82edd8c56f2415719c614f8d",
+    "analyze/xlsl_safe_scalable.py": "d16deee46b74bd34883d39abfab86691c36455b8fe02547cb5f275ad65b6ee55",
+    "approach/__init__.py": "25606592fea79200c3a2512098898d0af5b53b81bf863b221281d3a46328b68c",
+    "approach/approach_Eq.py": "bb2e65224f12fe2555c2f12567276a110d8d409808a180f4d4282b86a289cdc8",
+    "approach/approach_Eq_unused.py": "85092d18e980606c456fb8a8a49fdfcff69f519dc75088aab2f3021431093bf4",
+    "approach/approach_collector.py": "8f42d09dfe455ebdbf931a11266b5f4afccef485029d02affc5e36546754ffd1",
+    "approach/approach_def.py": "3bf4c156262a66c636be06e744da862240ebf619c5926a2b6928bf3f6e6df931",
+    "approach/approach_initiator.py": "4e805f25b057c5f66220ee491f40523587af265d948316f7c7993df3082decc9",
+    "approach/approach_sched.py": "fe9e3ab6bbb45ed4ee11215417b99a8868d7d0dba648949fc92a0f52a59c5a8e",
+    "approach/approach_setup.py": "0e30787994a6a23ea8c048a10ece4c5dc58bb157a311a2c5e8c242cda7c6bbbf",
+    "approach/approach_sim.py": "1d064618107e7888b9e75debc1e983dbc7e56a4e09240be75214d4dc770b2f4e",
+    "approach_Eq.py": "6a869b99f96cf2bd633f27904fe4d2831e39868bb0aa8f14b4efbbce1d21c09e",
+    "approach_collector.py": "e5d2c0a346067a134ed26204a0e367e94aa2131394d6387e60e4a6ab2fcb46e0",
+    "approach_def.py": "65470e4b084aa67d3c1dcb583c9c15cbf3e521c06cffa17855bd0097b7afb501",
+    "approach_initiator.py": "c55558bf6de3422b61a609f300776f68de7a3e27521a2bb8e81566de5a0e12ef",
+    "approach_sched.py": "44ae9baacc4246eb8a0bac53508be8220bb33064f369ee7e654fb6315d538d42",
+    "approach_setup.py": "7cf7d1550204beb4abba7d7cf0c0c52575253fe7296002ad9033109cb8d6506b",
+    "approach_sim.py": "46247bf523cae1a8a0a62e71109ef0aba3c86b4c278754b28493718815e02369",
+    "cleanup/tools/dialogue_guard.py": "f758288168b13d1f13400d0f84665b6f2323e030707cae190b259401a3fa1a10",
+    "debug_sink_constraint.py": "91b99637ccbc7472819776419d52e659027e37c97732ab248841fc1cf950959b",
+    "example/bm1.py": "9cb4482dd34b5102c5f9c9257a25bbef15273b8d5c4b94665c3f9f151c0fc57f",
+    "example/bm2.py": "a83603e2af0a4637c768a8f8594617fd9629083de2cd716d209436b043b09dfc",
+    "example/bm3.py": "200cd9bc6935e660d0c7d1f3ad6f25b46cb3492db946b694f8c4b7275c8f6b10",
+    "example/bm4.py": "381bebb8759796b353478cfb9aba4c24bab6c5b108dc3fbc9172710426bca4a2",
+    "global_var.py": "1eae1477f532e916e9829942bc4474bc79604809d85171a14356d99818d769cd",
+    "global_var_unused.py": "2a7b284d0b7bb8c3cad4e0c639839f3d09b616b19c644b95560dd20d5b8cfb2b",
+    "main_approach.py": "e32f1ec431614e4ea30761eaab6278fe65ba2166717b5386bc0148cfad22db3d",
+    "mapper/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "mapper/mem_planner.py": "6d5bb9291bac221b6da31b9671933aec22b5b0e780ac334a32e7e60030fe947e",
+    "model/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model/barrier_agent.py": "57d2943c3ac1c21423e29affce89f2b7f664d097d2d0cefb0124736545685ab7",
+    "model/buffer.py": "aec736f78d35ba582d8d091cb2078181c53e195f7a97346c9cefb6b09a4576c8",
+    "model/lru.py": "b2be894c685be6c3a5fd48b7b7117d2cc90059a4109c7374c68979f74d4a7013",
+    "model/message/Context_message.py": "c8d4de2ad5e73b2db072f710777d6f846285be1e03d038711aecb46a25247c64",
+    "model/message/data_pipe.py": "544689f0008568d77eeec76ab35ff12d7ce7d5c808dc933e06e76bd6db3b74c0",
+    "model/message/message_handler.py": "7d0c4520760f95b791e1c9f8d0c3220be1959f8ab58aabd8d2328fd8793a0785",
+    "model/message/message_pipe.py": "6d6d8228acca9ff2fd1e2cf02573d35f058845ebafe6dfdae98acba9226fd309",
+    "model/message/msg_dispatcher.py": "1021025fd86f50c8f82799bea77911e05564531fc93fcba886639da1a430a3e3",
+    "model/noc.py": "001d30e29ffe3ebc8b9724e151c445e100ef885287fe5abdd00a9bb0048d8f51",
+    "model/performance.py": "273eabbd6dbc16df28db18758e8f51defe84caba3f6ca3cf40fa22c7b041235a",
+    "model/position_table.py": "fa6615a4b3e54e41304463dda597494be7bc5e672abbae1149e11cfb8f2ecc59",
+    "model/resource_agent.py": "7290b7b496e0a46a0ef74540b1747fcb35e6724443a5f70072562bc7ab8cefd8",
+    "model/streaming_processing/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model/streaming_processing/wartermark_strategy.py": "5af8e0035e2a360ae5bd6201f57f55b30970d8bebf8d542f08815db34264e596",
+    "model/task_queue_agent.py": "227fcd0bc10129614b6481b94f239a621ea6a460de815ee007e828142cad1c24",
+    "model/trace_example.py": "ff2e00c361a9ba9ca0386704abe57acb3e8ca924b3a9187d6fb1129f0e4cd880",
+    "old/allocator_agent.py": "f7b48b84465c9f1390b9ce44e0bfd463f896fb869e2d1364e3e9fe79ef892582",
+    "old/appoach_plot6.py": "44332d84c5d05f7d520b505c96c80c62a8ec6511c41440db41ca4bc6081d0d81",
+    "old/approach_util33.py": "89ae0ac387bd44484b1a345e5bd3999cc279acc2f5a705cba6ab6fc285701352",
+    "old/pre_alloc.py": "8a2e3724401e442c505cc5af34b22abdf30034a7dd7417526c10865df5ed76c0",
+    "optimizer/delta_ver.py": "da1762a2d66c80ca5fbd9a3de4eff3fb96f3d2d6f3ca16186996c0853cd5c9a3",
+    "optimizer/dist_custom.py": "923e2cafa54bd27646b620d3f13e8ab98386f8a6b93a4ad73c78e6dd69f479f9",
+    "optimizer/ops.py": "41d6ddb143b93e14c51d49dbaea2db60ca6adcd0fdc163c784266e64dcb9595c",
+    "optimizer/ops_test.py": "6584b9cff086fb2492e5131153c23b78225a27ed6ce953aee8a84244bd66e758",
+    "optimizer/scheduler_base.py": "323b0e48b88910f152e8c21a06d4c8a0f9f965aa6f2b09bf3388868737a9c884",
+    "paths.py": "b8aa8a5471c8a6420f9b9532013be1b39ea8a195c2c301bdb42193eccc111170",
+    "ref_tdigest.py": "0e7642c9892553f579b5340d21982b589bdb4a85d4965cbfc70fa35289f9c287",
+    "run/1/all.sh": "05105542d6b66aaf914ad86ccd1338ea4049ed8d2c21a91b2783f9c37a0ff6e4",
+    "run/1/scan_aux.sh": "9d7cb82e0805928fed87f4efb9c727c96d371ae51382ea8fce0192eff92180d3",
+    "run/1/scan_core.sh": "958401b5016d0e19eade15c3f7831b07cf8ad611e627ff6d1f4a06db8d27503a",
+    "run/1/sweep_seed.sh": "dea4922a271e4e318ecc29f39a7ef728de52bd581470c87095b4023c50dcfa8a",
+    "run/2/aba_scalability_scan.sh": "d527b302c374401165e3011cca9d3904710ee4154def52aab5489d725c41f925",
+    "run/2/abla_scalablility.sh": "2f56009e9eb0da9cfa9223737aadb356e444b7e8b2e6212810c2e6385151a498",
+    "run/2/all2.sh": "85638195a489880dc8c26bdba929d3c62a4b0b83c6eaaeb252d040db74824880",
+    "run/3/time_sharing.sh": "b8104f1f3c684290dfbdf781e07b60a70e8feb251bbe9cd80278c3fd9dcfa5ee",
+    "run/aba_scalability_scan copy.sh": "c60b76ec65a851962d4b7235ed76e8450a6e80cbefdd22ce6aaf5530fb348819",
+    "run/abla_chain_sharing.sh": "17943f0885c65567943936abdc82e6c53a5df33340f3a0ef37ff9a2c52e370b3",
+    "run/bin_sharing.sh": "a94cd42eb610e21321b47921c5c2063a4590b0b8322cf57ab8b57a13166287b4",
+    "run/cfg_parser.py": "5d8c3a618d13994aee7dbec18e033d938491a9e46fedeaa75ce712b59f7d9f55",
+    "run/clean.sh": "7d5abeedad2abb698003ac37a594feffa5676334a8f615fcdee6c059a1e4ecbe",
+    "run/max_core_num_scan.py": "79fa47da771d7ac88ef383946e4609c8248212f4b4d7fa6517f27ec34f2f464a",
+    "run/scan_coalescing.sh": "2ee0fbb7c0b029075ee071e3ac1af672e63019af484fcc2a30bcdd03173dfa7d",
+    "run/temp.sh": "31236f54d38944c69f2cb3b3f069a7c3931332e4add8cfd252d091d5621a6a49",
+    "sched/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sched/bin_list_utils.py": "67a9aa91714a797d20f504c33bca796836632c6501d954e971cb1aa5aaa79bb4",
+    "sched/bin_list_utils_old.py": "580d943fd5b2057b4fd624c32d6197a24b56a2c5c36d3be3ceb5924032bc4a9e",
+    "sched/bin_list_utils_unused.py": "2142733db35776d6df1936a8091b59cf57e438dad2e10d316ae0be11110a536a",
+    "sched/bin_ops.py": "361bbc497b182e68304694f791354e9a296e93d5941cef267e9775bb9b47c301",
+    "sched/binpack_config.py": "d10829049efd5502328ca5f14d92dbe26435b219a53f3b4b03c06530ebc43f40",
+    "sched/global_sched.py": "a11a8324def4ca8b8763814e7dc8483a5444bc013e29083fa1b1dbbfbbbe4118",
+    "sched/global_sched_alloc.py": "627300a13b10f98ca4c2c8b08807780578cf1cf923c68b9967ce32dc9af1b2e0",
+    "sched/global_sched_old.py": "cc93f501ce6bf24f92841d8a323fe4d9550fd7e76120be27c539242b5e1df425",
+    "sched/global_sched_repack.py": "2e61f425893e6365d711676c53445cf89bec915c3ee5039c82d84d024dfcfece",
+    "sched/monitor_agent.py": "c748029c18bd6c99ffa0fed57536d5344fbc20ae23fc64b37446b2d973f9d83b",
+    "sched/packing_solver/chain_slack_assign.py": "e564906bc80d9b742e321cd9d0395fe6b03a2b891c35ddb9142e852c9c4d141f",
+    "sched/packing_solver/fit.py": "1b3d0b5296648d4d7403016c67f53be21d34b55c334b8d193f4fc770216e7998",
+    "sched/packing_solver/gurobi_MP_semi2DClst.py": "e56adc1a37dbba39cc3f8d707a955bfc64b3b03f71356084f989946593a02895",
+    "sched/packing_solver/unused/gurobi_semi2Dclst_mapping.py": "4d49d05ab20981eafeb9afe897aa0b952c2ce7d2eaac0880b71fa8131430c522",
+    "sched/packing_solver/unused/gurobi_semi2Dclst_mapping2.py": "9c40c2b4e21edcdb5fc25d51b6ce9479bbb4f8c64e2e3bc577d8e61ebf36e3dc",
+    "sched/placement.py": "008ca6d7c2316064c3fce0b75258e35c77f570b727e483d32a2010f6f7408fdf",
+    "sched/pre_alloc_new.py": "6991b6551a7f0ff3fe94f6b47f4fbe469a4da1ccdbd80e8eaca1bb7749cfbea6",
+    "sched/pre_alloc_new_old.py": "97e11a4df33ebc3b3ff6adaeabaa1b1635f34e9ad059cdbda23eb2f6a0cbd878",
+    "sched/ref_alloc_search.py": "c29243f7134518633c9b3f1631420607adef0ef79d994c0152ef579402c88ca7",
+    "sched/runtime_legacy/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sched/runtime_legacy/sched_fn.py": "cc82e889cb203dd7cb306988050c432b92857c559ccd2ab2bb6c85d2a63c79f7",
+    "sched/runtime_legacy/sched_utils.py": "ecc8414c05eeb9f1b7574142c1da5620d0c7a5e4d1ed6d2ecb2a3442604f2135",
+    "sched/runtime_legacy/scheduler_agent.py": "c0e3d3583f0a86947fa1478cb1d42bb9bbd4ff0727aab2128173b878cbc58cac",
+    "sched/runtime_legacy/state_trans.py": "ab3850e46e89c907fd2ca6a19667427c3e787ce1c5cf52e6fc2d93a7a4edc569",
+    "sched/sched_fn.py": "6ddf24cd84d4001c09bc637719430f60a7580950a1499046a0e6f7a1277026ed",
+    "sched/sched_utils.py": "daddd34bce6031198b5866b90eaa22365ee950b41323d2164c00e2e23b8479e6",
+    "sched/scheduler_agent.py": "cf77c531c15130c4dd3a218a9fd197d3daba242c018e1b222bdd1371e893e4de",
+    "sched/scheduling_table.py": "a7df3b3ed412e6b30b29d9cc533749c59b74c38c88e19ff6dba9858f669aad8c",
+    "sched/scheduling_table_event.py": "a79b101f8648cc12411477321025164d0fb6546fa20f9c9780fccc3b7ff46837",
+    "sched/slack_estim.py": "f5389ec5c6f83cf9fc35e07917e66566145a8b2fad7f54a635761e04c69c13d4",
+    "sched/sort_function.py": "50ef837990c9d6a8dda164fca656852a4f25e640394160058d15326291a6183f",
+    "sched/state_trans.py": "29b77a41fed368421d76f5bf06cd698955990684908afbfc03bf49d1262cc628",
+    "scripts/abla_exp_runner.py": "73ca0bccb065a284f1f078c3a4a4027d9134e972b3bba18a6e26380e61e60864",
+    "scripts/e2e_exp_runner.py": "4e64059930d47287f6827beb5043dc382947d6128ae5ef854d0ded49f2ef1286",
+    "scripts/e2e_hyperparam.py": "579229a5e596f3eac366215af6ec2ad67d862d69f5ca43f05b4a06ed466ee9b8",
+    "scripts/exp_common.py": "6d0e913f0eacdc62b2972ce2ee9c25f459891e92da12f32c4001ac74a0f98274",
+    "scripts/motiv_exp_runner.py": "4592032791d2bcfe532aa01adda9f545b9196545bb0c4e8a0e018358e4eb712a",
+    "scripts/run_abla_exps.sh": "3f8d8a01e366995b7e8d4fb0b492e4c1bb0cbe989da2c061d501f80caca7c366",
+    "scripts/run_motiv_exps.sh": "4238e238d4640f53c19f2705f892be988ad19a50439f8c2d48efd2cd43c36d66",
+    "scripts/test_alloc_lat.py": "fc0bf0ead04d6e71fa32e69003388fc1ae402a2cbeee2f18e6ae167cb16ce552",
+    "scripts/unused/repack_sweep.py": "262dad167ec4fad1c6b2b9fe14c5d941f958cdbb0722198b723c2e76adace213",
+    "sim_main.py": "0a16f4cf6c0ebeb1a57079216f4046ab55db8f6bfdbf53b17c537a3488334f5d",
+    "sim_main_old.py": "02aac1cd1af96eec0dbb51393f84cd33c05abaf4b1abf657cb89dd1cd02472cc",
+    "simple_test_collector.py": "b6bff9b527a9941a187d5e89640f5d785791ddd4c69df3a745a1e23a0e127142",
+    "task/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "task/graph_breakdown.py": "5d67c52d35f0ffb2be250b1d1f3a002bd574db50a34cda5b2df832bf88d28933",
+    "task/graph_scaling.py": "23cd8bd44738144c8a4578875a88bab4d06bef003cf0bdaa958e743ce9c88492",
+    "task/load_cfg/loadA.py": "7f75f58b094573322dce01ca6f2366241fbd82e4891292aee390c0a1d98ad287",
+    "task/spec.py": "66f2eeb5f3c35b9ee92fb0f0a90f0bba4e2cecfb88fd2192f3be7ca931d09022",
+    "task/task_agent.py": "21786d243f70d1e41d5ad43f1d8c22dee13d54f3fab28a84719ad3cbe16f8a2e",
+    "task/task_cfg.py": "6194c815e202c298f7789bb37be929dcc59f19d513a2ebb9a476a2fc3b0ef14b",
+    "task/task_cfg_old.py": "06a38533685502a78a0274edd8d5a460f5baa3579f6adb420b38bcbbca2d0356",
+    "task/throughput_cnt.py": "7df7e2fa30a3f6061fffa210952d211666e1dcd00636d18e80fa29cf61fc15ef",
+    "test_approach_collector.py": "efd7b67e99cd0a970dc1a7998461af5a0795fa239ead43e00eb5e8ce0e6f2d68",
+    "test_approach_package_compat.py": "ca4bac52de6e14174ed93fd56d2c23be16d9457be9f15c93122e6ccf94b02792",
+    "test_binpack_pipeline_contract.py": "144f9f0acc656c687adcdc8099124697888c41a4bb0b78a621f43a938cefb1d9",
+    "test_closure_fix.py": "16c04deae220389724a7c4c28a0bb838399d671a61429ddc84cd5d28c3994165",
+    "test_core_allocation.py": "44fe340a041794584e12a30b99cb9aac1aa9dc3dc5e3a6e82f94c9f3ce428045",
+    "test_deduce_cfg2.py": "9edb5c3de657302137144df2ae7425bf36976e3b20a4b5d10f3580f83e41fddb",
+    "test_duplicate.py": "662f0ed5fd5a76dd59e2b82981377297aba2ac118a6c9a150176f619aa2e2dd2",
+    "test_event_update.py": "68ff45c5ff1f5fad893933722565b034bef2e1831f15c56ce398a5b982d7dc95",
+    "test_legacy_approach_archive.py": "b6dc62122ea09a99cbbddf2cffa52613be3376d7f827518487a977fd2fb96d77",
+    "test_mapping.py": "a32256208595f8b9f451c71d9d9c18a8f4f992d161c1bfa79e048b30cbed5b3f",
+    "test_mem_planner.py": "e171129a2a8519f3de13f8e533e2bd74cba08f076dd9e564945be65a01c87b60",
+    "test_old_task_cfg.py": "88498ed6d99d56a16cbbf610c6bc249e309496e5c8e29855da68666fdf274da8",
+    "test_repack_diagnostic.py": "d11f52e223cb829fb9dd16c401282b58e035df8bcceac3c000a560b63744b83f",
+    "test_scheduling_table.py": "5a44cb64b2e88744a72816784fb70f87b826dae56bd92a00ee07ffd29200bea0",
+    "test_unused_eq_quantiles.py": "7748d46ee067cf89e9707f6ea367733e0ef06e04b6f7d4074d1900f5ec3db832",
+    "test_unused_global_constants.py": "ac3bbe27146f057fa5fe7fa38ed51296f134a7f7dec76828bb8f63542046191d",
+    "test_unused_hdf5_utils.py": "cdc3fab2f6c53006d42c69c1c01abc9cff7bfeb035a828345ea73ebbd4f86fc6",
+    "test_unused_path_utils.py": "01e2d7da2298380db15ab323bc102a1b161788af6f5419d4965e1bfebc9a53ac",
+    "test_updated_stats.py": "cbd88f4afd5bdb6b8642fe435e386c38fc7856737a5df80909d3734dbaafe91d",
+    "tile_2d_mesh_mapper_fixed.py": "db0d65db81bdb53079bdf02e22da85432bafb5777de9b1e2d676834ef883e003",
+    "unused_fun.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "utils.py": "508f1366fb8bb08f16f1ad5f57e651692be7915c6a3c29e054ce73970dcd4e03",
+    "utils_unused.py": "cadac26936dca668f85f6eb6ceb84186c2be32dd52acae7b56785f760c15b40d"
+  },
+  "ledger_prefixes": {
+    "cleanup/move-ledger.csv": {
+      "bytes": 19755,
+      "sha256": "95cf9f44c732b1198c8c600ca8d83aeddd8d99a476f01b367d131958d76260b3"
+    },
+    "cleanup/reachable-files.csv": {
+      "bytes": 70317,
+      "sha256": "2660d87b9696073175ea677ca1ecaa2d562f8d49e1465735155a6a05df5bf477"
+    }
+  },
+  "public_exports": {
+    "annotations": {
+      "type": "_Feature",
+      "module": "__future__",
+      "qualname": null
+    },
+    "List": {
+      "type": "_SpecialGenericAlias",
+      "module": "typing",
+      "qualname": null
+    },
+    "Dict": {
+      "type": "_SpecialGenericAlias",
+      "module": "typing",
+      "qualname": null
+    },
+    "Union": {
+      "type": "_SpecialForm",
+      "module": "typing",
+      "qualname": null
+    },
+    "Callable": {
+      "type": "_CallableType",
+      "module": "typing",
+      "qualname": null
+    },
+    "math": {
+      "type": "module",
+      "module": null,
+      "qualname": null
+    },
+    "os": {
+      "type": "module",
+      "module": null,
+      "qualname": null
+    },
+    "FLOPS_PER_CORE": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "trace_file": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "trace_list": {
+      "type": "list",
+      "module": null,
+      "qualname": null
+    },
+    "numerical_error_tol_abs": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "numerical_tol_bit": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "numerical_error_tol_rel": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "elim_nume_error": {
+      "type": "function",
+      "module": "global_var",
+      "qualname": "<lambda>"
+    },
+    "elim_error": {
+      "type": "function",
+      "module": "global_var",
+      "qualname": "elim_error"
+    },
+    "flop1u_error_tol_abs": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "flop1n_error_tol_abs": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "flop1u_error_tol_bit": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "flop1n_error_tol_bit": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "time1u_error_tol_abs": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "time1n_error_tol_abs": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "time1u_error_tol_bit": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "time1n_error_tol_bit": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "fork_pid_base": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "max_fork_candi_num": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "max_fork_pid": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "GLB_BUFFER_SIZE_PER_CORE": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "BW_DRAM": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "LAT_PER_HOP": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "AVG_HOP_NUM": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "AVG_HEAD_LAT": {
+      "type": "float",
+      "module": null,
+      "qualname": null
+    },
+    "BROADCAST_SCALER": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "cfg_dir": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "log_dir": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "plot_dir": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "trace_dir": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "cache_dir": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "csv_dir": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "ld_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "cfg_root_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "cache_root_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "plot_root_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "trace_root_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "log_root_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "cfg_root_dir_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "csv_root_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "bin_fn_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "routing_table_fn_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "bin_save_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "routing_table_save_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "plt_fn_w_seed_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "plt_fn_wo_seed_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "trace_fn_wo_seed_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "trace_fn_w_seed_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "core_stat_fn_fmt": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_bp": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_glb": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_dyn": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_cyc": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_fifo": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_pglb": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_suffix_N_barrier": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_bp_input": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_glb_input": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "one_stage_case_coll": {
+      "type": "list",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_dyn_input": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_cyc_input": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_fifo_input": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "case_name_pglb_input": {
+      "type": "str",
+      "module": null,
+      "qualname": null
+    },
+    "two_stage_case_coll": {
+      "type": "list",
+      "module": null,
+      "qualname": null
+    },
+    "init_packing_algo_required": {
+      "type": "list",
+      "module": null,
+      "qualname": null
+    },
+    "partition_max": {
+      "type": "int",
+      "module": null,
+      "qualname": null
+    },
+    "np": {
+      "type": "module",
+      "module": null,
+      "qualname": null
+    },
+    "naive_period_event_gen": {
+      "type": "function",
+      "module": "model.event_gen.e2e_latency",
+      "qualname": "naive_period_event_gen"
+    },
+    "e2e_var_sim": {
+      "type": "function",
+      "module": "model.event_gen.e2e_latency",
+      "qualname": "e2e_var_sim"
+    },
+    "discrete_event_sim": {
+      "type": "function",
+      "module": "model.event_gen.e2e_latency",
+      "qualname": "discrete_event_sim"
+    },
+    "jitter_gen_biside": {
+      "type": "function",
+      "module": "model.event_gen.e2e_latency",
+      "qualname": "jitter_gen_biside"
+    },
+    "get_truncnorm_para": {
+      "type": "function",
+      "module": "model.event_gen.e2e_latency",
+      "qualname": "get_truncnorm_para"
+    },
+    "exp_jitter": {
+      "type": "function",
+      "module": "model.event_gen.e2e_latency",
+      "qualname": "exp_jitter"
+    },
+    "get_truncexpon_param": {
+      "type": "function",
+      "module": "model.event_gen.e2e_latency",
+      "qualname": "get_truncexpon_param"
+    },
+    "get_intger_gen": {
+      "type": "function",
+      "module": "model.event_gen.e2e_latency",
+      "qualname": "get_intger_gen"
+    }
+  },
+  "candidate_signatures": {
+    "e2e_var_sim": "(e2e_latency, jitter_sim_para: 'Dict', size=1, period: 'float' = 1, event_range: 'float' = inf, seed: 'Union[None, int, np.random.Generator, np.random.RandomState]' = None)",
+    "naive_period_event_gen": "(period, curr_t, timestep)"
+  },
+  "cases": [
+    {
+      "name": "period_offset_ignored",
+      "function": "naive_period_event_gen",
+      "args": [
+        0.25,
+        99,
+        0.001
+      ],
+      "kwargs": {},
+      "limit": 4,
+      "expected": {
+        "yields": [
+          {
+            "type": "float",
+            "value": 0.25
+          },
+          {
+            "type": "float",
+            "value": 0.5
+          },
+          {
+            "type": "float",
+            "value": 0.75
+          },
+          {
+            "type": "float",
+            "value": 1
+          }
+        ],
+        "ending": {
+          "kind": "bounded"
+        }
+      }
+    },
+    {
+      "name": "period_zero",
+      "function": "naive_period_event_gen",
+      "args": [
+        0,
+        12,
+        8
+      ],
+      "kwargs": {},
+      "limit": 4,
+      "expected": {
+        "yields": [
+          {
+            "type": "int",
+            "value": 0
+          },
+          {
+            "type": "int",
+            "value": 0
+          },
+          {
+            "type": "int",
+            "value": 0
+          },
+          {
+            "type": "int",
+            "value": 0
+          }
+        ],
+        "ending": {
+          "kind": "bounded"
+        }
+      }
+    },
+    {
+      "name": "period_negative",
+      "function": "naive_period_event_gen",
+      "args": [
+        -2,
+        100,
+        0.1
+      ],
+      "kwargs": {},
+      "limit": 3,
+      "expected": {
+        "yields": [
+          {
+            "type": "int",
+            "value": -2
+          },
+          {
+            "type": "int",
+            "value": -4
+          },
+          {
+            "type": "int",
+            "value": -6
+          }
+        ],
+        "ending": {
+          "kind": "bounded"
+        }
+      }
+    },
+    {
+      "name": "wc_scalar",
+      "function": "e2e_var_sim",
+      "args": [
+        0.1,
+        {
+          "scale": 0.2,
+          "enforce_wc": true
+        }
+      ],
+      "kwargs": {
+        "period": 0.5,
+        "event_range": 1,
+        "seed": 42
+      },
+      "limit": 10,
+      "expected": {
+        "yields": [
+          [
+            {
+              "type": "int",
+              "value": 0
+            },
+            {
+              "type": "int",
+              "value": 0
+            }
+          ],
+          [
+            {
+              "type": "float",
+              "value": 0.5
+            },
+            {
+              "type": "float64",
+              "value": 0.020000000000000004
+            }
+          ],
+          [
+            {
+              "type": "float",
+              "value": 1
+            },
+            {
+              "type": "float64",
+              "value": 0.020000000000000004
+            }
+          ],
+          [
+            {
+              "type": "float",
+              "value": "inf"
+            },
+            {
+              "type": "int",
+              "value": 0
+            }
+          ]
+        ],
+        "ending": {
+          "kind": "return",
+          "value": {
+            "type": "int",
+            "value": 3
+          }
+        }
+      }
+    },
+    {
+      "name": "wc_vector",
+      "function": "e2e_var_sim",
+      "args": [
+        0.1,
+        {
+          "scale": 0.2,
+          "enforce_wc": true
+        }
+      ],
+      "kwargs": {
+        "size": 3,
+        "period": 0.5,
+        "event_range": 1,
+        "seed": 42
+      },
+      "limit": 10,
+      "expected": {
+        "yields": [
+          [
+            {
+              "type": "int",
+              "value": 0
+            },
+            {
+              "type": "int",
+              "value": 0
+            }
+          ],
+          [
+            {
+              "type": "float",
+              "value": 0.5
+            },
+            {
+              "type": "ndarray",
+              "dtype": "float64",
+              "shape": [
+                3
+              ],
+              "value": [
+                0.020000000000000004,
+                0.020000000000000004,
+                0.020000000000000004
+              ]
+            }
+          ],
+          [
+            {
+              "type": "float",
+              "value": 1
+            },
+            {
+              "type": "ndarray",
+              "dtype": "float64",
+              "shape": [
+                3
+              ],
+              "value": [
+                0.020000000000000004,
+                0.020000000000000004,
+                0.020000000000000004
+              ]
+            }
+          ],
+          [
+            {
+              "type": "float",
+              "value": "inf"
+            },
+            {
+              "type": "int",
+              "value": 0
+            }
+          ]
+        ],
+        "ending": {
+          "kind": "return",
+          "value": {
+            "type": "int",
+            "value": 3
+          }
+        }
+      }
+    },
+    {
+      "name": "seed_scalar",
+      "function": "e2e_var_sim",
+      "args": [
+        0.1,
+        {
+          "scale": 0.2
+        }
+      ],
+      "kwargs": {
+        "period": 0.5,
+        "event_range": 2,
+        "seed": 17
+      },
+      "limit": 10,
+      "expected": {
+        "yields": [
+          [
+            {
+              "type": "int",
+              "value": 0
+            },
+            {
+              "type": "int",
+              "value": 0
+            }
+          ],
+          [
+            {
+              "type": "float",
+              "value": 0.5
+            },
+            {
+              "type": "float64",
+              "value": 0.006744218380526859
+            }
+          ],
+          [
+            {
+              "type": "float",
+              "value": 1
+            },
+            {
+              "type": "float64",
+              "value": -0.006578175930778641
+            }
+          ],
+          [
+            {
+              "type": "float",
+              "value": 1.5
+            },
+            {
+              "type": "float64",
+              "value": 0.0009657224102650587
+            }
+          ],
+          [
+            {
+              "type": "float",
+              "value": 2
+            },
+            {
+              "type": "float64",
+              "value": -0.0022399882298915035
+            }
+          ],
+          [
+            {
+              "type": "float",
+              "value": "inf"
+            },
+            {
+              "type": "int",
+              "value": 0
+            }
+          ]
+        ],
+        "ending": {
+          "kind": "return",
+          "value": {
+            "type": "int",
+            "value": 5
+          }
+        }
+      }
+    },
+    {
+      "name": "seed_vector",
+      "function": "e2e_var_sim",
+      "args": [
+        0.1,
+        {
+          "scale": 0.2
+        }
+      ],
+      "kwargs": {
+        "size": 4,
+        "period": 0.5,
+        "event_range": 1,
+        "seed": 17
+      },
+      "limit": 10,
+      "expected": {
+        "yields": [
+          [
+            {
+              "type": "int",
+              "value": 0
+            },
+            {
+              "type": "int",
+              "value": 0
+            }
+          ],
+          [
+            {
+              "type": "float",
+              "value": 0.5
+            },
+            {
+              "type": "ndarray",
+              "dtype": "float64",
+              "shape": [
+                4
+              ],
+              "value": [
+                0.006744218380526859,
+                -0.006578175930778641,
+                0.0009657224102650587,
+                -0.0022399882298915035
+              ]
+            }
+          ],
+          [
+            {
+              "type": "float",
+              "value": 1
+            },
+            {
+              "type": "ndarray",
+              "dtype": "float64",
+              "shape": [
+                4
+              ],
+              "value": [
+                -0.005245058114843401,
+                -0.001929426701013716,
+                -0.001203699995286301,
+                0.0018802479635161352
+              ]
+            }
+          ],
+          [
+            {
+              "type": "float",
+              "value": "inf"
+            },
+            {
+              "type": "int",
+              "value": 0
+            }
+          ]
+        ],
+        "ending": {
+          "kind": "return",
+          "value": {
+            "type": "int",
+            "value": 3
+          }
+        }
+      }
+    },
+    {
+      "name": "range_zero",
+      "function": "e2e_var_sim",
+      "args": [
+        0.1,
+        {
+          "scale": 0.2
+        }
+      ],
+      "kwargs": {
+        "period": 1,
+        "event_range": 0,
+        "seed": 1
+      },
+      "limit": 10,
+      "expected": {
+        "yields": [
+          [
+            {
+              "type": "int",
+              "value": 0
+            },
+            {
+              "type": "int",
+              "value": 0
+            }
+          ],
+          [
+            {
+              "type": "float",
+              "value": "inf"
+            },
+            {
+              "type": "int",
+              "value": 0
+            }
+          ]
+        ],
+        "ending": {
+          "kind": "return",
+          "value": {
+            "type": "int",
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "range_negative",
+      "function": "e2e_var_sim",
+      "args": [
+        0.1,
+        {
+          "scale": 0.2
+        }
+      ],
+      "kwargs": {
+        "period": 1,
+        "event_range": -1,
+        "seed": 1
+      },
+      "limit": 10,
+      "expected": {
+        "yields": [
+          [
+            {
+              "type": "int",
+              "value": 0
+            },
+            {
+              "type": "int",
+              "value": 0
+            }
+          ],
+          [
+            {
+              "type": "float",
+              "value": "inf"
+            },
+            {
+              "type": "int",
+              "value": 0
+            }
+          ]
+        ],
+        "ending": {
+          "kind": "return",
+          "value": {
+            "type": "int",
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "event_period_zero",
+      "function": "e2e_var_sim",
+      "args": [
+        0.1,
+        {
+          "scale": 0.2
+        }
+      ],
+      "kwargs": {
+        "period": 0,
+        "event_range": 1,
+        "seed": 1
+      },
+      "limit": 4,
+      "expected": {
+        "yields": [
+          [
+            {
+              "type": "int",
+              "value": 0
+            },
+            {
+              "type": "int",
+              "value": 0
+            }
+          ],
+          [
+            {
+              "type": "int",
+              "value": 0
+            },
+            {
+              "type": "int",
+              "value": 0
+            }
+          ],
+          [
+            {
+              "type": "int",
+              "value": 0
+            },
+            {
+              "type": "int",
+              "value": 0
+            }
+          ],
+          [
+            {
+              "type": "int",
+              "value": 0
+            },
+            {
+              "type": "int",
+              "value": 0
+            }
+          ]
+        ],
+        "ending": {
+          "kind": "bounded"
+        }
+      }
+    },
+    {
+      "name": "event_period_negative",
+      "function": "e2e_var_sim",
+      "args": [
+        0.1,
+        {
+          "scale": 0.2,
+          "enforce_wc": true
+        }
+      ],
+      "kwargs": {
+        "period": -1,
+        "event_range": 1
+      },
+      "limit": 4,
+      "expected": {
+        "yields": [
+          [
+            {
+              "type": "int",
+              "value": 0
+            },
+            {
+              "type": "int",
+              "value": 0
+            }
+          ],
+          [
+            {
+              "type": "int",
+              "value": -1
+            },
+            {
+              "type": "float64",
+              "value": 0.020000000000000004
+            }
+          ],
+          [
+            {
+              "type": "int",
+              "value": -2
+            },
+            {
+              "type": "float64",
+              "value": 0.020000000000000004
+            }
+          ],
+          [
+            {
+              "type": "int",
+              "value": -3
+            },
+            {
+              "type": "float64",
+              "value": 0.020000000000000004
+            }
+          ]
+        ],
+        "ending": {
+          "kind": "bounded"
+        }
+      }
+    },
+    {
+      "name": "missing_scale",
+      "function": "e2e_var_sim",
+      "args": [
+        0.1,
+        {}
+      ],
+      "kwargs": {},
+      "limit": 2,
+      "expected": {
+        "yields": [],
+        "ending": {
+          "kind": "exception",
+          "type": "KeyError",
+          "message": "'scale'"
+        }
+      }
+    },
+    {
+      "name": "zero_scale",
+      "function": "e2e_var_sim",
+      "args": [
+        0.1,
+        {
+          "scale": 0
+        }
+      ],
+      "kwargs": {
+        "event_range": 1,
+        "seed": 1
+      },
+      "limit": 10,
+      "expected": {
+        "yields": [
+          [
+            {
+              "type": "int",
+              "value": 0
+            },
+            {
+              "type": "int",
+              "value": 0
+            }
+          ],
+          [
+            {
+              "type": "int",
+              "value": 1
+            },
+            {
+              "type": "float64",
+              "value": 0
+            }
+          ],
+          [
+            {
+              "type": "float",
+              "value": "inf"
+            },
+            {
+              "type": "int",
+              "value": 0
+            }
+          ]
+        ],
+        "ending": {
+          "kind": "return",
+          "value": {
+            "type": "int",
+            "value": 2
+          }
+        }
+      }
+    }
+  ],
+  "new_paths_exist": {
+    "model/event_gen/e2e_latency_unused.py": false,
+    "test_unused_e2e_event_generators.py": false
+  },
+  "preflight_regression": {
+    "suite": [
+      "test_binpack_pipeline_contract.py",
+      "test_approach_package_compat.py",
+      "test_legacy_approach_archive.py",
+      "test_approach_collector.py",
+      "test_unused_hdf5_utils.py",
+      "test_unused_path_utils.py",
+      "test_unused_global_constants.py",
+      "test_unused_eq_quantiles.py",
+      "test_old_task_cfg.py"
+    ],
+    "rc": 1,
+    "seconds": 30.92,
+    "log_dir": "/tmp/scheduler-b18-preflight-dkteud1z",
+    "tests": 132,
+    "failed": [
+      {
+        "name": "test_basic_functionality",
+        "message": "AttributeError: 'StatisticsCollector' object has no attribute 'task_realloc_curr'"
+      },
+      {
+        "name": "test_motiv_exp_specific_stats",
+        "message": "ZeroDivisionError: float division by zero"
+      },
+      {
+        "name": "test_summary_generation",
+        "message": "ZeroDivisionError: float division by zero"
+      },
+      {
+        "name": "test_formatted_output",
+        "message": "ZeroDivisionError: division by zero"
+      },
+      {
+        "name": "test_edge_cases",
+        "message": "ZeroDivisionError: division by zero"
+      }
+    ],
+    "errors": 0,
+    "skipped": 0
+  },
+  "index_diff_empty": true,
+  "dfs_path": [
+    "main_approach.py",
+    "approach/approach_setup.py",
+    "task/task_cfg.py",
+    "task/task_agent.py",
+    "model/resource_agent.py",
+    "model/event_gen/e2e_latency.py"
+  ],
+  "reference_evidence": {
+    "scope": "git tracked/index plus explicitly approved new source targets; 146 Python +16 shell before B18",
+    "candidate_ast_uses": {
+      "naive_period_event_gen": [],
+      "e2e_var_sim": []
+    },
+    "imports": [
+      {
+        "path": "model/message/data_pipe.py",
+        "line": 23,
+        "module": "model.event_gen.e2e_latency",
+        "names": [
+          [
+            "exp_jitter",
+            null
+          ]
+        ]
+      },
+      {
+        "path": "model/resource_agent.py",
+        "line": 11,
+        "module": "model.event_gen.e2e_latency",
+        "names": [
+          [
+            "exp_jitter",
+            null
+          ]
+        ]
+      },
+      {
+        "path": "optimizer/delta_ver.py",
+        "line": 18,
+        "module": "model.event_gen.e2e_latency",
+        "names": [
+          [
+            "get_truncexpon_param",
+            null
+          ],
+          [
+            "get_truncnorm_para",
+            null
+          ]
+        ]
+      },
+      {
+        "path": "optimizer/scheduler_base.py",
+        "line": 8,
+        "module": "model.event_gen.e2e_latency",
+        "names": [
+          [
+            "get_truncnorm_para",
+            null
+          ]
+        ]
+      },
+      {
+        "path": "sched/runtime_legacy/scheduler_agent.py",
+        "line": 8,
+        "module": "model.event_gen.e2e_latency",
+        "names": [
+          [
+            "jitter_gen_biside",
+            null
+          ]
+        ]
+      },
+      {
+        "path": "sim_main_old.py",
+        "line": 24,
+        "module": "model.event_gen.e2e_latency",
+        "names": [
+          [
+            "discrete_event_sim",
+            null
+          ]
+        ]
+      },
+      {
+        "path": "task/task_agent.py",
+        "line": 19,
+        "module": "model.event_gen.e2e_latency",
+        "names": [
+          [
+            "jitter_gen_biside",
+            null
+          ]
+        ]
+      }
+    ],
+    "historical_docs": [
+      "doc/dev/change_log_2023.md:676 records e2e_var_sim usage on 2023-07-06; preserved, not executable evidence",
+      "doc/assumptions.md and utils CLI refer to e2e_var_sim_en/para, distinct configuration names, preserved"
+    ],
+    "retained_callers": [
+      "sim_main_old.py:174,180 calls discrete_event_sim; do not archive discrete_event_sim or get_intger_gen",
+      "Resource_model_int + data_pipe borrow exp_jitter",
+      "TaskBase + legacy Scheduler borrow jitter_gen_biside",
+      "optimizer borrows get_truncnorm_para; all parameter helpers retained"
+    ]
+  },
+  "archive_design": "Same-directory e2e_latency_unused.py, exact two complete function blocks, future annotations + Dict/Union/numpy declarations, and from model.event_gen.e2e_latency import jitter_gen_biside. Existing live imports and six retained functions unchanged. Archive intentionally imports the live shared jitter helper; no copied numerical implementation.",
+  "compatibility_boundary": "Old module names naive_period_event_gen/e2e_var_sim and old function-reference pickle paths retire; new explicit archive path. Signatures/defaults/body unchanged; external consumers and monkeypatch of old module exports are not promised. Do not alter historical docs/config flags or add live re-export.",
+  "verification_plan": [
+    "13 original behavior cases, sampled twice pre-move; persist values/types/shapes/termination/exception and compare post-move",
+    "RED archive existence assertion before source; then behavior/byte/signature/import-order tests GREEN",
+    "81 live public exports ->79 exact names/descriptors; all other public exports retained; both fresh import orders",
+    "Nine existing suites 132=127 passed +5 same failures; add new suite; three help entrypoints",
+    "All161 non-batch source/script SHA unchanged, minimal source diff0/26, exact HEAD-minus-block reconstruction, protected paths and requirement untouched",
+    "CSV append-only with schema checks and old byte prefixes; scoped three-code-file recovery patch persisted and reverse --check only"
+  ],
+  "recovery_policy": "Only reverse this batch's source deletions and two approved new files through a scoped patch; never whole-file checkout/reset/clean. Preserve shared records by corrective append or exact scoped reversal. No commit/push.",
+  "approval": {"events": ["E0066", "E0067"], "binding": "J1-J7", "pickle_erratum": "Function references ARE picklable; retiring their old module paths is a real compatibility change. Only generator instances are not picklable."},
+  "pickle_factory_baseline": {
+    "naive_period_event_gen": {
+      "factory_pickle_base64": "gASVOgAAAAAAAACMG21vZGVsLmV2ZW50X2dlbi5lMmVfbGF0ZW5jeZSMFm5haXZlX3BlcmlvZF9ldmVudF9nZW6Uk5Qu",
+      "factory_roundtrip_identity": true,
+      "generator_object_error": {
+        "type": "TypeError",
+        "message": "cannot pickle 'generator' object"
+      }
+    },
+    "e2e_var_sim": {
+      "factory_pickle_base64": "gASVLwAAAAAAAACMG21vZGVsLmV2ZW50X2dlbi5lMmVfbGF0ZW5jeZSMC2UyZV92YXJfc2ltlJOULg==",
+      "factory_roundtrip_identity": true,
+      "generator_object_error": {
+        "type": "TypeError",
+        "message": "cannot pickle 'generator' object"
+      }
+    }
+  },
+  "validation": {
+    "red": "1 failed, 24 deselected because archive missing; source still original",
+    "green": "25 passed in 1.20s before EOF correction; all25 passed again in full157 run after correction",
+    "temp_dir": "/tmp/scheduler-b18-regression-oq0al2g0",
+    "regression": {
+      "command": [
+        "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "test_binpack_pipeline_contract.py",
+        "test_approach_package_compat.py",
+        "test_legacy_approach_archive.py",
+        "test_approach_collector.py",
+        "test_unused_hdf5_utils.py",
+        "test_unused_path_utils.py",
+        "test_unused_global_constants.py",
+        "test_unused_eq_quantiles.py",
+        "test_old_task_cfg.py",
+        "test_unused_e2e_event_generators.py",
+        "--junitxml=/tmp/scheduler-b18-regression-oq0al2g0/pytest.xml"
+      ],
+      "rc": 1,
+      "seconds": 31.35,
+      "tests": 157,
+      "failed": [
+        {
+          "name": "test_basic_functionality",
+          "message": "AttributeError: 'StatisticsCollector' object has no attribute 'task_realloc_curr'"
+        },
+        {
+          "name": "test_motiv_exp_specific_stats",
+          "message": "ZeroDivisionError: float division by zero"
+        },
+        {
+          "name": "test_summary_generation",
+          "message": "ZeroDivisionError: float division by zero"
+        },
+        {
+          "name": "test_formatted_output",
+          "message": "ZeroDivisionError: division by zero"
+        },
+        {
+          "name": "test_edge_cases",
+          "message": "ZeroDivisionError: division by zero"
+        }
+      ],
+      "errors": 0,
+      "skipped": 0
+    },
+    "helps": [
+      {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "main_approach.py",
+          "--help"
+        ],
+        "rc": 0
+      },
+      {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "scripts/motiv_exp_runner.py",
+          "--help"
+        ],
+        "rc": 0
+      },
+      {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "scripts/abla_exp_runner.py",
+          "--help"
+        ],
+        "rc": 0
+      }
+    ],
+    "benefits_probe": "passed",
+    "non_batch_compared": 161,
+    "non_batch_unchanged": 160,
+    "reviewer_guard_exception": {
+      "path": "cleanup/tools/dialogue_guard.py",
+      "before_sha256": "f758288168b13d1f13400d0f84665b6f2323e030707cae190b259401a3fa1a10",
+      "after_sha256": "15879c4efa377efec7c2e114e6d134b33da570e52916dea0ca0bf858bd44691a",
+      "new_lines": [
+        "    (67, \"reviewer\"): \"E0067 typed REVIEW but is an in-request pickle-boundary erratum following E0066 approval (precedent: E0034/E0035 pattern); content valid\",\n"
+      ],
+      "without_new_line_matches_baseline": true
+    },
+    "numstat": "0\t26\tmodel/event_gen/e2e_latency.py",
+    "python_ast_parsed": 148,
+    "exact_source_reconstruction": true,
+    "sha256": {
+      "model/event_gen/e2e_latency.py": "3043c818e36dbdfcee8ee50573c5274a8549fbb1413e4cb55cde07cc0e990a7e",
+      "model/event_gen/e2e_latency_unused.py": "aab12e28ee3d728540d8f4a016285631f2e935e441e15c76b14a688e20c7a5b3",
+      "test_unused_e2e_event_generators.py": "9959f891ba33892a0bcf75e3b0eff5b83259247a65e611b15d7b0f3a735aa496"
+    },
+    "recovery": {
+      "forward_patch_zlib_base64": "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",
+      "forward_patch_sha256": "f242397b7d41d916e55457be5f51356a99060228147d110bbc5de19cfc0ec4bd",
+      "check_rc": 0,
+      "scoped_paths": [
+        "model/event_gen/e2e_latency.py",
+        "model/event_gen/e2e_latency_unused.py",
+        "test_unused_e2e_event_generators.py"
+      ],
+      "generated_patch": "/tmp/scheduler-b18-regression-oq0al2g0/b18-recovery.patch",
+      "working_directory": "/home/zhangchg/git_repo/scheduler-audit-20260612",
+      "encoding": "zlib+base64",
+      "extract_command": "/home/zhangchg/miniconda3/envs/gurobi/bin/python -B -c \"import base64,hashlib,json,pathlib,zlib; r=json.loads(pathlib.Path('cleanup/reports/b18-unused-e2e-event-generators-baseline.json').read_text())['validation']['recovery']; b=zlib.decompress(base64.b64decode(r['forward_patch_zlib_base64'])); assert hashlib.sha256(b).hexdigest()==r['forward_patch_sha256']; pathlib.Path('/tmp/scheduler-b18-recovery.patch').write_bytes(b)\"",
+      "check_command": "git apply -R --check /tmp/scheduler-b18-recovery.patch",
+      "restore_command": "git apply -R /tmp/scheduler-b18-recovery.patch",
+      "restore_executed": false
+    },
+    "ledger_before_append": {
+      "cleanup/move-ledger.csv": {
+        "row_count": 37,
+        "widths": {
+          "14": 29,
+          "15": 3,
+          "16": 4,
+          "17": 1
+        },
+        "historical_bad_rows": 8,
+        "last_line": "B17-MOVE-002,task/task_cfg.py,task/task_cfg_old.py,move-reference,EXECUTED_WAITING_REVIEW,Superseded graph/timeline implementation; preserve original bytes,MEDIUM,E0061/E0062; creat_jobTask_graph; 147 lines,codex,archive/test_pipeline-20260612,See b17 baseline JSON validation.recovery; extract patch then git apply -R --check,B17-TASK-CFG-LEGACY-GRAPH,reviewer E0061/E0062,No body/import rewrite in live source; tests and borrowed functions retained"
+      },
+      "cleanup/reachable-files.csv": {
+        "row_count": 259,
+        "widths": {
+          "10": 259
+        },
+        "historical_bad_rows": 0,
+        "last_line": "test_old_task_cfg.py,KEEP,regression-test,codex,pytest explicit B17 suite,\"18 new tests: 11 behavior cases, bytes, exports, annotations, isolated import\",LOW,archive/test_pipeline-20260612,See b17 baseline JSON validation.recovery; extract patch then git apply -R --check,New approved tests; existing tests untouched"
+      }
+    },
+    "head_index_unchanged": true,
+    "protected_diff_empty": true,
+    "diff_check": 0,
+    "eof_anomaly": {
+      "actual_sha": "c9500ca92fe90995d5146eba9f47ffcee666e314c78bc875426cfc6a7e360082",
+      "expected_sha": "3043c818e36dbdfcee8ee50573c5274a8549fbb1413e4cb55cde07cc0e990a7e",
+      "only_extra_final_lf": true,
+      "temp_dir": "/tmp/scheduler-b18-regression-dri5dgzi",
+      "tests": 157,
+      "failures": 5,
+      "errors": 0,
+      "skipped": 0,
+      "history_tail": "Scoped recovery note: revert this entry and the E0068 dialogue append by excising those appended blocks only.",
+      "resolution_event": "E0070",
+      "resolved": true,
+      "lesson": "Byte-identical migration must preserve EOF state. apply_patch added one LF to the originally unterminated source; full bytes assertions plus one-byte truncate restored original expected hash. Baseline not changed."
+    },
+    "compatibility": "Old two function-reference pickle blobs generated from original functions now raise AttributeError; both new archive function references roundtrip with identity. Generator instances not picklable is a separate fact. Historical2023 documentation and config flags retained.",
+    "review_criteria": "E0066 J1-J6 + E0067 J7 + E0068 J3 guard attribution + E0070 EOF correction",
+    "ledger_after_append": {
+      "move": {
+        "rows": 39,
+        "widths": {
+          "14": 31,
+          "15": 3,
+          "16": 4,
+          "17": 1
+        },
+        "historical_bad_rows": 8
+      },
+      "reachable": {
+        "rows": 261,
+        "widths": {
+          "10": 261
+        }
+      }
+    },
+      "acceptance": {
+        "event": "E0072",
+        "state": "ACCEPTED",
+        "actor": "genuine reviewer",
+        "supplement": {
+          "standalone": {
+            "path": "/tmp/b18_e2e_only.xml",
+            "tests": 25,
+            "failures": [],
+            "errors": 0,
+            "skipped": 0,
+            "modules": {
+              "test_unused_e2e_event_generators": 25
+            }
+          },
+          "full": {
+            "path": "/tmp/b18_e0073_junit.xml",
+            "tests": 157,
+            "failures": [
+              {
+                "name": "test_basic_functionality",
+                "message": "AttributeError: 'StatisticsCollector' object has no attribute 'task_realloc_curr'"
+              },
+              {
+                "name": "test_motiv_exp_specific_stats",
+                "message": "ZeroDivisionError: float division by zero"
+              },
+              {
+                "name": "test_summary_generation",
+                "message": "ZeroDivisionError: float division by zero"
+              },
+              {
+                "name": "test_formatted_output",
+                "message": "ZeroDivisionError: division by zero"
+              },
+              {
+                "name": "test_edge_cases",
+                "message": "ZeroDivisionError: division by zero"
+              }
+            ],
+            "errors": 0,
+            "skipped": 0,
+            "modules": {
+              "test_binpack_pipeline_contract": 3,
+              "test_approach_package_compat": 32,
+              "test_legacy_approach_archive": 7,
+              "test_approach_collector": 7,
+              "test_unused_hdf5_utils": 9,
+              "test_unused_path_utils": 19,
+              "test_unused_global_constants": 13,
+              "test_unused_eq_quantiles": 24,
+              "test_old_task_cfg": 18,
+              "test_unused_e2e_event_generators": 25
+            }
+          },
+          "recovery": "Reviewer decoded persisted compressed patch, matched SHA, reverse-check0 without applying recovery",
+          "disclosure": "E0072 wording24/25 corrected by standalone25/25; first reviewer full attempt omitted B12 seven tests yielding150, complete ten-suite157 rerun independently verified from XML"
+        },
+        "final_codex_verification": {
+          "focused_tests": "25 passed in0.83s",
+          "hashes": "160 unchanged + reviewer guard delta; all3 B18 code hashes unchanged",
+          "eof_original_preserved": true,
+          "ledger_prefixes_unchanged": true,
+          "recovery_check": 0,
+          "head_index_unchanged": true,
+          "dialogue": {
+            "last_event": "E0072",
+            "next_writer": "codex",
+            "tail_sha256": "43ac29fb50354f2e93805f002a4723fd81c4891a82fda580a75eb1fe1322d40e",
+            "lines": 583
+          },
+          "reviewer_xml_read_directly": true,
+          "code_unchanged_after_review": true
+        }
+      }
+  }
+}

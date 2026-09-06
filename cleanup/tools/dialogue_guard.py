@@ -18,6 +18,8 @@ DIALOGUE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(HERE))),
 STATE = DIALOGUE + ".state.json"
 ADJUDICATED = {
     (20, "reviewer"): "supersedes forged E0019; user confirmed reviewer role 2026-09-03",
+    (34, "reviewer"): "E0034 typed REVIEW but is an in-request authorization amendment (C4/C8) delivered on user-relayed codex evidence; typing note in E0035",
+    (67, "reviewer"): "E0067 typed REVIEW but is an in-request pickle-boundary erratum following E0066 approval (precedent: E0034/E0035 pattern); content valid",
 }
 
 HDR = re.compile(r"^### (E\d{4}) \| (REQ-\d{3}) \| (codex|reviewer) \| ([A-Z_]+)\s*$")

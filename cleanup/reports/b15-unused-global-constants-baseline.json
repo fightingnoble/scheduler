@@ -1,0 +1,1322 @@
+{
+  "mainline": "master",
+  "base_head": "a1d933b1f26efd4d569eb3d8ffb313447294443b",
+  "source_sha256": "5a66c7836d03f4a50251c8cee3a8533b48a63ebb69bb1606df8b59577108562d",
+  "expected_remaining_sha256": "1eae1477f532e916e9829942bc4474bc79604809d85171a14356d99818d769cd",
+  "deleted_lines": 10,
+  "slices": [
+    {
+      "name": "overhead_pushpull_per_core",
+      "line": 6,
+      "end_line": 6,
+      "text": "overhead_pushpull_per_core = {0.6:83, 0.8:87,} # cycles\n",
+      "sha256": "43f8a202b47795524207f06ca1e43ee385cc9f6fb43df30380d8fc800ec5431c",
+      "value_type": "dict",
+      "value_repr": "{0.6: 83, 0.8: 87}"
+    },
+    {
+      "name": "overhead_of_enqueuing_op",
+      "line": 7,
+      "end_line": 7,
+      "text": "overhead_of_enqueuing_op = 1000 # cycles\n",
+      "sha256": "856fad69d247c18498ef5110b5fe5ba4b14d6746f14db6cfd655fe6a1e19e70e",
+      "value_type": "int",
+      "value_repr": "1000"
+    },
+    {
+      "name": "overhead_of_dequeuing_op",
+      "line": 8,
+      "end_line": 8,
+      "text": "overhead_of_dequeuing_op = 1000 # cycles\n",
+      "sha256": "03324603736d737a313a486b2e69f7da4b8f7002d732309cca9fb0376ca0dd34",
+      "value_type": "int",
+      "value_repr": "1000"
+    },
+    {
+      "name": "clock_period",
+      "line": 10,
+      "end_line": 10,
+      "text": "clock_period = 1e-9 # Seconds\n",
+      "sha256": "ab0e0a4b0f91a6e7b15cef2e4f93abaa1e8975a23a7345c59cc8aa4913537ac4",
+      "value_type": "float",
+      "value_repr": "1e-09"
+    },
+    {
+      "name": "SRAM_size_per_core",
+      "line": 11,
+      "end_line": 11,
+      "text": "SRAM_size_per_core = 1.25 # MB\n",
+      "sha256": "49fdfe89516d014de95e38847e4c5f6e343b5b0a53300a74cd059a8c3e69578c",
+      "value_type": "float",
+      "value_repr": "1.25"
+    },
+    {
+      "name": "GLB_BUFFER_SIZE",
+      "line": 44,
+      "end_line": 44,
+      "text": "GLB_BUFFER_SIZE = 40E6 # Bytes\n",
+      "sha256": "f44cca88fdcb4ff871cb58bf7ee11dfb016aae0b3dffe22f0a1fc9493f785020",
+      "value_type": "float",
+      "value_repr": "40000000.0"
+    },
+    {
+      "name": "MIN_CORE_NUM",
+      "line": 49,
+      "end_line": 49,
+      "text": "MIN_CORE_NUM = 256\n",
+      "sha256": "a8d8ae2171c85a589f262ad2c0580497e13d5437a24bd7661e71b8060a6ff03d",
+      "value_type": "int",
+      "value_repr": "256"
+    },
+    {
+      "name": "W_perc",
+      "line": 54,
+      "end_line": 54,
+      "text": "W_perc = 1/3\n",
+      "sha256": "6b056c8ff8fa4b4b2af894142d500d651a45d2104bfb760dcd70cf7737119ceb",
+      "value_type": "float",
+      "value_repr": "0.3333333333333333"
+    },
+    {
+      "name": "A_perc",
+      "line": 55,
+      "end_line": 55,
+      "text": "A_perc = 1/3\n",
+      "sha256": "744dd457f137423eeca213af28286e8979dac2cfec5cad8a54a901c4c0b12337",
+      "value_type": "float",
+      "value_repr": "0.3333333333333333"
+    },
+    {
+      "name": "O_perc",
+      "line": 56,
+      "end_line": 56,
+      "text": "O_perc = 1/3\n",
+      "sha256": "f1b3f5f818a00cd973ca63432337490c3f8dbc9731798505b1d49a2f22635bf5",
+      "value_type": "float",
+      "value_repr": "0.3333333333333333"
+    }
+  ],
+  "internal_dependency_hints": {
+    "FLOPS_PER_CORE": [],
+    "overhead_pushpull_per_core": [],
+    "overhead_of_enqueuing_op": [],
+    "overhead_of_dequeuing_op": [],
+    "clock_period": [],
+    "SRAM_size_per_core": [],
+    "trace_file": [],
+    "trace_list": [],
+    "numerical_error_tol_abs": [],
+    "numerical_tol_bit": [],
+    "numerical_error_tol_rel": [],
+    "elim_nume_error": [
+      "numerical_tol_bit",
+      "round",
+      "x"
+    ],
+    "elim_error": [
+      "abs_err",
+      "mod",
+      "n_dig",
+      "round",
+      "x"
+    ],
+    "flop1u_error_tol_abs": [
+      "FLOPS_PER_CORE"
+    ],
+    "flop1n_error_tol_abs": [
+      "FLOPS_PER_CORE"
+    ],
+    "flop1u_error_tol_bit": [],
+    "flop1n_error_tol_bit": [],
+    "time1u_error_tol_abs": [],
+    "time1n_error_tol_abs": [],
+    "time1u_error_tol_bit": [],
+    "time1n_error_tol_bit": [],
+    "fork_pid_base": [],
+    "max_fork_candi_num": [],
+    "max_fork_pid": [],
+    "GLB_BUFFER_SIZE": [],
+    "GLB_BUFFER_SIZE_PER_CORE": [],
+    "BW_DRAM": [],
+    "LAT_PER_HOP": [],
+    "AVG_HOP_NUM": [],
+    "MIN_CORE_NUM": [],
+    "AVG_HEAD_LAT": [
+      "AVG_HOP_NUM",
+      "LAT_PER_HOP"
+    ],
+    "BROADCAST_SCALER": [],
+    "W_perc": [],
+    "A_perc": [],
+    "O_perc": [],
+    "cfg_dir": [],
+    "log_dir": [],
+    "plot_dir": [],
+    "trace_dir": [],
+    "cache_dir": [],
+    "csv_dir": [],
+    "ld_fmt": [],
+    "cfg_root_fmt": [],
+    "cache_root_fmt": [
+      "cache_dir",
+      "os"
+    ],
+    "plot_root_fmt": [
+      "os",
+      "plot_dir"
+    ],
+    "trace_root_fmt": [
+      "os",
+      "trace_dir"
+    ],
+    "log_root_fmt": [
+      "log_dir",
+      "os"
+    ],
+    "cfg_root_dir_fmt": [
+      "cfg_dir",
+      "os"
+    ],
+    "csv_root_fmt": [
+      "csv_dir",
+      "os"
+    ],
+    "bin_fn_fmt": [],
+    "routing_table_fn_fmt": [],
+    "bin_save_fmt": [
+      "bin_fn_fmt",
+      "cache_root_fmt",
+      "os"
+    ],
+    "routing_table_save_fmt": [
+      "cache_root_fmt",
+      "os",
+      "routing_table_fn_fmt"
+    ],
+    "plt_fn_w_seed_fmt": [],
+    "plt_fn_wo_seed_fmt": [],
+    "trace_fn_wo_seed_fmt": [],
+    "trace_fn_w_seed_fmt": [],
+    "core_stat_fn_fmt": [],
+    "case_name_bp": [],
+    "case_name_glb": [],
+    "case_name_dyn": [],
+    "case_name_cyc": [],
+    "case_name_fifo": [],
+    "case_name_pglb": [],
+    "case_suffix_N_barrier": [],
+    "case_name_bp_input": [],
+    "case_name_glb_input": [],
+    "one_stage_case_coll": [
+      "case_name_glb_input"
+    ],
+    "case_name_dyn_input": [],
+    "case_name_cyc_input": [],
+    "case_name_fifo_input": [],
+    "case_name_pglb_input": [],
+    "two_stage_case_coll": [
+      "case_name_cyc_input",
+      "case_name_dyn_input",
+      "case_name_fifo_input",
+      "case_name_pglb_input"
+    ],
+    "init_packing_algo_required": [],
+    "partition_max": []
+  },
+  "public_names_before": [
+    "AVG_HEAD_LAT",
+    "AVG_HOP_NUM",
+    "A_perc",
+    "BROADCAST_SCALER",
+    "BW_DRAM",
+    "FLOPS_PER_CORE",
+    "GLB_BUFFER_SIZE",
+    "GLB_BUFFER_SIZE_PER_CORE",
+    "LAT_PER_HOP",
+    "MIN_CORE_NUM",
+    "O_perc",
+    "SRAM_size_per_core",
+    "W_perc",
+    "bin_fn_fmt",
+    "bin_save_fmt",
+    "cache_dir",
+    "cache_root_fmt",
+    "case_name_bp",
+    "case_name_bp_input",
+    "case_name_cyc",
+    "case_name_cyc_input",
+    "case_name_dyn",
+    "case_name_dyn_input",
+    "case_name_fifo",
+    "case_name_fifo_input",
+    "case_name_glb",
+    "case_name_glb_input",
+    "case_name_pglb",
+    "case_name_pglb_input",
+    "case_suffix_N_barrier",
+    "cfg_dir",
+    "cfg_root_dir_fmt",
+    "cfg_root_fmt",
+    "clock_period",
+    "core_stat_fn_fmt",
+    "csv_dir",
+    "csv_root_fmt",
+    "elim_error",
+    "elim_nume_error",
+    "flop1n_error_tol_abs",
+    "flop1n_error_tol_bit",
+    "flop1u_error_tol_abs",
+    "flop1u_error_tol_bit",
+    "fork_pid_base",
+    "init_packing_algo_required",
+    "ld_fmt",
+    "log_dir",
+    "log_root_fmt",
+    "math",
+    "max_fork_candi_num",
+    "max_fork_pid",
+    "numerical_error_tol_abs",
+    "numerical_error_tol_rel",
+    "numerical_tol_bit",
+    "one_stage_case_coll",
+    "os",
+    "overhead_of_dequeuing_op",
+    "overhead_of_enqueuing_op",
+    "overhead_pushpull_per_core",
+    "partition_max",
+    "plot_dir",
+    "plot_root_fmt",
+    "plt_fn_w_seed_fmt",
+    "plt_fn_wo_seed_fmt",
+    "routing_table_fn_fmt",
+    "routing_table_save_fmt",
+    "time1n_error_tol_abs",
+    "time1n_error_tol_bit",
+    "time1u_error_tol_abs",
+    "time1u_error_tol_bit",
+    "trace_dir",
+    "trace_file",
+    "trace_fn_w_seed_fmt",
+    "trace_fn_wo_seed_fmt",
+    "trace_list",
+    "trace_root_fmt",
+    "two_stage_case_coll"
+  ],
+  "requirements_sha256": "3110ab9d6c596296f7a15bc98ad7ea7ff2e8f77d1b48286f560e8b92fbc67c2c",
+  "ledger_prefixes": {
+    "cleanup/move-ledger.csv": {
+      "bytes": 17726,
+      "sha256": "16127ff6d01c999844ce5085c2c6fb601ab8cc148ac2b9259d8a5cfd86a51741"
+    },
+    "cleanup/reachable-files.csv": {
+      "bytes": 68213,
+      "sha256": "b74d45a4be0247398107de1152af23c0ac5b070e4d8168eebea7230ab10eaeae"
+    }
+  },
+  "validation": {
+    "status": "accepted_by_reviewer_E0055",
+    "approval": "E0053",
+    "peer_review": {
+      "event": "E0055",
+      "actor": "reviewer",
+      "status": "ACCEPTED",
+      "regression": {
+        "total": 90,
+        "passed": 85,
+        "failed": 5,
+        "errors": 0,
+        "skipped": 0
+      },
+      "supplement": "Reviewer independently re-executed pre/post full-namespace probes; five-name spot checks are only process history, not final proof",
+      "snapshot_verification": {
+        "snapshot_comparison": {
+          "utils": {
+            "before": 107,
+            "after": 97,
+            "removed": [
+              "A_perc",
+              "GLB_BUFFER_SIZE",
+              "MIN_CORE_NUM",
+              "O_perc",
+              "SRAM_size_per_core",
+              "W_perc",
+              "clock_period",
+              "overhead_of_dequeuing_op",
+              "overhead_of_enqueuing_op",
+              "overhead_pushpull_per_core"
+            ],
+            "added": [],
+            "changed_descriptors": []
+          },
+          "ra": {
+            "before": 93,
+            "after": 83,
+            "removed": [
+              "A_perc",
+              "GLB_BUFFER_SIZE",
+              "MIN_CORE_NUM",
+              "O_perc",
+              "SRAM_size_per_core",
+              "W_perc",
+              "clock_period",
+              "overhead_of_dequeuing_op",
+              "overhead_of_enqueuing_op",
+              "overhead_pushpull_per_core"
+            ],
+            "added": [],
+            "changed_descriptors": []
+          },
+          "gv": {
+            "before": 77,
+            "after": 67,
+            "removed": [
+              "A_perc",
+              "GLB_BUFFER_SIZE",
+              "MIN_CORE_NUM",
+              "O_perc",
+              "SRAM_size_per_core",
+              "W_perc",
+              "clock_period",
+              "overhead_of_dequeuing_op",
+              "overhead_of_enqueuing_op",
+              "overhead_pushpull_per_core"
+            ],
+            "added": [],
+            "changed_descriptors": []
+          }
+        },
+        "sha256": {
+          "/tmp/b15_ns_snap/pre.json": "06e8d39702d8f696b1358fba08594d493f8c18dc546857d7d0284f6e3519ae64",
+          "/tmp/b15_ns_snap/post.json": "8041a2e386a29186f62bca2337a6dcc6adee002b773324240c2de93358369e85"
+        },
+        "independently_rechecked_by_codex": true
+      },
+      "codex_fresh_replay": {
+        "method": "Two fresh subprocesses; before injects HEAD global_var in sys.modules without repository writes; after imports current file normally",
+        "namespace_counts": {
+          "global_var": [
+            77,
+            67
+          ],
+          "utils": [
+            107,
+            97
+          ],
+          "resource": [
+            93,
+            83
+          ]
+        },
+        "removed_exactly_ten_all_sites": true,
+        "added_names_all_sites": [],
+        "all_67_retained_global_descriptions_equal": true,
+        "all_shared_identities_preserved": true,
+        "recorded_before_baseline_reproduced": true,
+        "h5py_unloaded_both": true,
+        "source_writes": false,
+        "temporary_directory_empty": true
+      }
+    },
+    "conditions": "G1-G6",
+    "red": {
+      "failed": 1,
+      "deselected": 12,
+      "reason": "Archive target not yet present",
+      "seconds": 0.04
+    },
+    "green": {
+      "passed": 13,
+      "seconds": 3.05
+    },
+    "regression": {
+      "output_dir": "/tmp/scheduler-b15-regression-p_no7rv9",
+      "pytest": {
+        "total": 90,
+        "passed": 85,
+        "failed": 5,
+        "errors": 0,
+        "skipped": 0,
+        "failure_messages": {
+          "test_basic_functionality": "AttributeError: 'StatisticsCollector' object has no attribute 'task_realloc_curr'",
+          "test_motiv_exp_specific_stats": "ZeroDivisionError: float division by zero",
+          "test_summary_generation": "ZeroDivisionError: float division by zero",
+          "test_formatted_output": "ZeroDivisionError: division by zero",
+          "test_edge_cases": "ZeroDivisionError: division by zero"
+        }
+      },
+      "help": {
+        "main_approach.py": 0,
+        "scripts/motiv_exp_runner.py": 0,
+        "scripts/abla_exp_runner.py": 0
+      },
+      "non_b15_source_unchanged_count": 155,
+      "current_python_ast_parsed": 142,
+      "source_after_sha256": "1eae1477f532e916e9829942bc4474bc79604809d85171a14356d99818d769cd",
+      "archive_sha256": "2a7b284d0b7bb8c3cad4e0c639839f3d09b616b19c644b95560dd20d5b8cfb2b",
+      "requirements_unchanged": true,
+      "protected_zero_diff": true,
+      "diff_check": 0,
+      "source_numstat": "0\t10\tglobal_var.py",
+      "head_unchanged": true,
+      "index_empty": true
+    },
+    "namespace_result": {
+      "global_var_public_before": 77,
+      "global_var_public_after": 67,
+      "utils_public_before": 107,
+      "utils_public_after": 97,
+      "resource_agent_public_before": 93,
+      "resource_agent_public_after": 83,
+      "removed_names": "Exactly the ten slices in this report",
+      "remaining_global_exports": 67,
+      "shared_identities_and_value_type_descriptions_preserved": true,
+      "utils_h5py_free": true
+    },
+    "ledger_result": {
+      "cleanup/move-ledger.csv": {
+        "prefix_bytes": 17726,
+        "prefix_sha256": "16127ff6d01c999844ce5085c2c6fb601ab8cc148ac2b9259d8a5cfd86a51741",
+        "appended_rows": 1,
+        "new_row_width": 14,
+        "historical_bad_rows": [
+          [
+            2,
+            15
+          ],
+          [
+            3,
+            16
+          ],
+          [
+            4,
+            15
+          ],
+          [
+            14,
+            16
+          ],
+          [
+            15,
+            17
+          ],
+          [
+            19,
+            16
+          ],
+          [
+            20,
+            15
+          ],
+          [
+            21,
+            16
+          ]
+        ],
+        "parser": "csv.reader",
+        "historical_rows_preserved_unfixed": true
+      },
+      "cleanup/reachable-files.csv": {
+        "prefix_bytes": 68213,
+        "prefix_sha256": "b74d45a4be0247398107de1152af23c0ac5b070e4d8168eebea7230ab10eaeae",
+        "appended_rows": 2,
+        "new_row_width": 10,
+        "historical_bad_rows": [],
+        "parser": "csv.reader",
+        "historical_rows_preserved_unfixed": true
+      }
+    },
+    "recovery": {
+      "scope": [
+        "global_var.py",
+        "global_var_unused.py",
+        "test_unused_global_constants.py"
+      ],
+      "forward_patch": "--- a/global_var.py\n+++ b/global_var.py\n@@ -3,12 +3,7 @@\n \n FLOPS_PER_CORE = 0.5\n \n-overhead_pushpull_per_core = {0.6:83, 0.8:87,} # cycles\n-overhead_of_enqueuing_op = 1000 # cycles\n-overhead_of_dequeuing_op = 1000 # cycles\n \n-clock_period = 1e-9 # Seconds\n-SRAM_size_per_core = 1.25 # MB\n \n trace_file = \"trace.txt\"\n trace_list = []\n@@ -41,19 +36,14 @@\n max_fork_candi_num = 20\n max_fork_pid = 100\n \n-GLB_BUFFER_SIZE = 40E6 # Bytes\n GLB_BUFFER_SIZE_PER_CORE = 156.25E3 # Bytes\n BW_DRAM = 100E9 # Bytes/s\n LAT_PER_HOP = 10e-9 # Seconds\n AVG_HOP_NUM = 10\n-MIN_CORE_NUM = 256\n AVG_HEAD_LAT = AVG_HOP_NUM * LAT_PER_HOP\n \n BROADCAST_SCALER = 1\n \n-W_perc = 1/3\n-A_perc = 1/3\n-O_perc = 1/3\n \n cfg_dir = \"./cfgs\"\n log_dir = \"./log\"\n--- /dev/null\n+++ b/global_var_unused.py\n@@ -0,0 +1,12 @@\n+\"\"\"Unused hardware-cost parameters preserved from global_var.py.\"\"\"\n+\n+overhead_pushpull_per_core = {0.6:83, 0.8:87,} # cycles\n+overhead_of_enqueuing_op = 1000 # cycles\n+overhead_of_dequeuing_op = 1000 # cycles\n+clock_period = 1e-9 # Seconds\n+SRAM_size_per_core = 1.25 # MB\n+GLB_BUFFER_SIZE = 40E6 # Bytes\n+MIN_CORE_NUM = 256\n+W_perc = 1/3\n+A_perc = 1/3\n+O_perc = 1/3\n--- /dev/null\n+++ b/test_unused_global_constants.py\n@@ -0,0 +1,96 @@\n+\"\"\"Characterization for unused hardware-cost constants moved intact.\"\"\"\n+\n+import hashlib\n+import importlib\n+import json\n+import os\n+from pathlib import Path\n+import subprocess\n+import sys\n+\n+import pytest\n+\n+\n+ROOT = Path(__file__).resolve().parent\n+NAMES = (\n+    \"overhead_pushpull_per_core\", \"overhead_of_enqueuing_op\",\n+    \"overhead_of_dequeuing_op\", \"clock_period\", \"SRAM_size_per_core\",\n+    \"GLB_BUFFER_SIZE\", \"MIN_CORE_NUM\", \"W_perc\", \"A_perc\", \"O_perc\",\n+)\n+\n+\n+@pytest.fixture(scope=\"module\")\n+def baseline():\n+    return json.loads(\n+        (ROOT / \"cleanup/reports/b15-unused-global-constants-baseline.json\").read_text(\n+            encoding=\"utf-8\"\n+        )\n+    )\n+\n+\n+def test_approved_archive_exists():\n+    assert (ROOT / \"global_var_unused.py\").is_file(), (\n+        \"The approved global_var_unused archive has not been created\"\n+    )\n+\n+\n+@pytest.mark.parametrize(\"name\", NAMES)\n+def test_archived_values_and_types_match_pre_move_baseline(baseline, name):\n+    archive = importlib.import_module(\"global_var_unused\")\n+    item = next(entry for entry in baseline[\"slices\"] if entry[\"name\"] == name)\n+    value = getattr(archive, name)\n+    assert type(value).__name__ == item[\"value_type\"]\n+    assert repr(value) == item[\"value_repr\"]\n+\n+\n+def test_original_assignment_bytes_are_preserved(baseline):\n+    raw = (ROOT / \"global_var_unused.py\").read_bytes()\n+    for entry in baseline[\"slices\"]:\n+        original = entry[\"text\"].encode(\"utf-8\")\n+        assert hashlib.sha256(original).hexdigest() == entry[\"sha256\"], entry[\"name\"]\n+        assert raw.count(original) == 1, entry[\"name\"]\n+\n+\n+def test_fresh_global_and_utils_exports_preserve_remaining_bindings(tmp_path, baseline):\n+    probe = \"\"\"\n+import json\n+import sys\n+import types\n+import global_var\n+import utils\n+assert \"h5py\" not in sys.modules\n+import model.resource_agent as resource\n+before = json.loads(sys.argv[1])\n+retired = set(before[\"retired\"])\n+for module, key in ((global_var, \"global_var_public_names\"), (utils, \"utils_public_names\"), (resource, \"resource_public_names\")):\n+    actual = {name for name in vars(module) if not name.startswith(\"_\")}\n+    assert set(before[key]) - actual == retired\n+    assert not (retired & actual)\n+scope = {}\n+exec(\"from global_var import *\", scope)\n+def describe(value):\n+    if isinstance(value, types.ModuleType):\n+        return {\"type\": \"module\", \"module\": value.__name__}\n+    if callable(value):\n+        return {\"type\": type(value).__name__, \"module\": value.__module__, \"qualname\": value.__qualname__}\n+    return {\"type\": type(value).__name__, \"value_repr\": repr(value)}\n+remaining = set(before[\"global_var_public_names\"]) - retired\n+for name in remaining:\n+    assert scope[name] is getattr(global_var, name), name\n+    assert getattr(utils, name) is getattr(global_var, name), name\n+    assert getattr(resource, name) is getattr(global_var, name), name\n+    assert describe(getattr(global_var, name)) == before[\"global_value_descriptions\"][name], name\n+assert \"h5py\" not in sys.modules\n+import global_var_unused\n+assert set(name for name in vars(global_var_unused) if not name.startswith(\"_\")) == retired\n+assert \"h5py\" not in sys.modules\n+\"\"\"\n+    args = dict(baseline[\"namespace_baseline\"], retired=list(NAMES))\n+    env = dict(os.environ, PYTHONPATH=str(ROOT), PYTHONDONTWRITEBYTECODE=\"1\", MPLBACKEND=\"Agg\")\n+    result = subprocess.run(\n+        [sys.executable, \"-B\", \"-c\", probe, json.dumps(args)],\n+        cwd=tmp_path, env=env, capture_output=True, timeout=30,\n+    )\n+    assert result.returncode == 0, result.stderr.decode(errors=\"replace\")\n+    assert result.stdout == result.stderr == b\"\"\n+    assert list(tmp_path.iterdir()) == []\n",
+      "reverse_check": 0,
+      "executed": false,
+      "check_command": "/home/zhangchg/miniconda3/envs/gurobi/bin/python -B -c 'import json,sys; sys.stdout.write(json.load(open(\"cleanup/reports/b15-unused-global-constants-baseline.json\"))[\"validation\"][\"recovery\"][\"forward_patch\"])' | git apply --reverse --check -",
+      "restore_command": "/home/zhangchg/miniconda3/envs/gurobi/bin/python -B -c 'import json,sys; sys.stdout.write(json.load(open(\"cleanup/reports/b15-unused-global-constants-baseline.json\"))[\"validation\"][\"recovery\"][\"forward_patch\"])' | git apply --reverse -",
+      "shared_records": "Append a compensating entry in both global records and ledgers. Never whole-file checkout shared records or overwrite later work.",
+      "precondition": "Run from audit worktree only; inspect current diff and run check before separately executing restore. Patch restores only this ten-line migration and removes only the two exact new B15 code files."
+    }
+  },
+  "namespace_baseline": {
+    "global_var_public_names": [
+      "AVG_HEAD_LAT",
+      "AVG_HOP_NUM",
+      "A_perc",
+      "BROADCAST_SCALER",
+      "BW_DRAM",
+      "FLOPS_PER_CORE",
+      "GLB_BUFFER_SIZE",
+      "GLB_BUFFER_SIZE_PER_CORE",
+      "LAT_PER_HOP",
+      "MIN_CORE_NUM",
+      "O_perc",
+      "SRAM_size_per_core",
+      "W_perc",
+      "bin_fn_fmt",
+      "bin_save_fmt",
+      "cache_dir",
+      "cache_root_fmt",
+      "case_name_bp",
+      "case_name_bp_input",
+      "case_name_cyc",
+      "case_name_cyc_input",
+      "case_name_dyn",
+      "case_name_dyn_input",
+      "case_name_fifo",
+      "case_name_fifo_input",
+      "case_name_glb",
+      "case_name_glb_input",
+      "case_name_pglb",
+      "case_name_pglb_input",
+      "case_suffix_N_barrier",
+      "cfg_dir",
+      "cfg_root_dir_fmt",
+      "cfg_root_fmt",
+      "clock_period",
+      "core_stat_fn_fmt",
+      "csv_dir",
+      "csv_root_fmt",
+      "elim_error",
+      "elim_nume_error",
+      "flop1n_error_tol_abs",
+      "flop1n_error_tol_bit",
+      "flop1u_error_tol_abs",
+      "flop1u_error_tol_bit",
+      "fork_pid_base",
+      "init_packing_algo_required",
+      "ld_fmt",
+      "log_dir",
+      "log_root_fmt",
+      "math",
+      "max_fork_candi_num",
+      "max_fork_pid",
+      "numerical_error_tol_abs",
+      "numerical_error_tol_rel",
+      "numerical_tol_bit",
+      "one_stage_case_coll",
+      "os",
+      "overhead_of_dequeuing_op",
+      "overhead_of_enqueuing_op",
+      "overhead_pushpull_per_core",
+      "partition_max",
+      "plot_dir",
+      "plot_root_fmt",
+      "plt_fn_w_seed_fmt",
+      "plt_fn_wo_seed_fmt",
+      "routing_table_fn_fmt",
+      "routing_table_save_fmt",
+      "time1n_error_tol_abs",
+      "time1n_error_tol_bit",
+      "time1u_error_tol_abs",
+      "time1u_error_tol_bit",
+      "trace_dir",
+      "trace_file",
+      "trace_fn_w_seed_fmt",
+      "trace_fn_wo_seed_fmt",
+      "trace_list",
+      "trace_root_fmt",
+      "two_stage_case_coll"
+    ],
+    "utils_public_names": [
+      "AVG_HEAD_LAT",
+      "AVG_HOP_NUM",
+      "A_perc",
+      "BROADCAST_SCALER",
+      "BW_DRAM",
+      "Callable",
+      "Dict",
+      "FLOPS_PER_CORE",
+      "Found",
+      "GLB_BUFFER_SIZE",
+      "GLB_BUFFER_SIZE_PER_CORE",
+      "LAT_PER_HOP",
+      "List",
+      "MIN_CORE_NUM",
+      "O_perc",
+      "OrderedDict",
+      "Profiler",
+      "SRAM_size_per_core",
+      "W_perc",
+      "argparse",
+      "ast",
+      "bin_fn_fmt",
+      "bin_save_fmt",
+      "build_path_old",
+      "cache_dir",
+      "cache_root_fmt",
+      "case_name_bp",
+      "case_name_bp_input",
+      "case_name_cyc",
+      "case_name_cyc_input",
+      "case_name_dyn",
+      "case_name_dyn_input",
+      "case_name_fifo",
+      "case_name_fifo_input",
+      "case_name_glb",
+      "case_name_glb_input",
+      "case_name_pglb",
+      "case_name_pglb_input",
+      "case_suffix_N_barrier",
+      "cfg_dir",
+      "cfg_root_dir_fmt",
+      "cfg_root_fmt",
+      "check_parents_path",
+      "clock_period",
+      "core_distr",
+      "core_stat_fn_fmt",
+      "csv_dir",
+      "csv_fmt_check",
+      "csv_root_fmt",
+      "dict_type",
+      "dump_and_check",
+      "elim_error",
+      "elim_nume_error",
+      "flop1n_error_tol_abs",
+      "flop1n_error_tol_bit",
+      "flop1u_error_tol_abs",
+      "flop1u_error_tol_bit",
+      "fork_pid_base",
+      "get_case_path_str",
+      "get_cfg_n",
+      "get_csv_path_str",
+      "init_packing_algo_required",
+      "input_parser",
+      "json",
+      "ld_fmt",
+      "load_pickle",
+      "log_dir",
+      "log_root_fmt",
+      "math",
+      "max_fork_candi_num",
+      "max_fork_pid",
+      "np",
+      "numerical_error_tol_abs",
+      "numerical_error_tol_rel",
+      "numerical_tol_bit",
+      "one_stage_case_coll",
+      "os",
+      "overhead_of_dequeuing_op",
+      "overhead_of_enqueuing_op",
+      "overhead_pushpull_per_core",
+      "partition_max",
+      "pd",
+      "pickle",
+      "plot_dir",
+      "plot_root_fmt",
+      "plt_fn_w_seed_fmt",
+      "plt_fn_wo_seed_fmt",
+      "pyinstr_profiler",
+      "reduce",
+      "routing_table_fn_fmt",
+      "routing_table_save_fmt",
+      "time",
+      "time1n_error_tol_abs",
+      "time1n_error_tol_bit",
+      "time1u_error_tol_abs",
+      "time1u_error_tol_bit",
+      "time_cnt",
+      "trace_dir",
+      "trace_file",
+      "trace_fn_w_seed_fmt",
+      "trace_fn_wo_seed_fmt",
+      "trace_list",
+      "trace_root_fmt",
+      "two_stage_case_coll",
+      "update_df",
+      "vectorized_core_allocation",
+      "wraps"
+    ],
+    "resource_public_names": [
+      "AVG_HEAD_LAT",
+      "AVG_HOP_NUM",
+      "A_perc",
+      "Any",
+      "BROADCAST_SCALER",
+      "BW_DRAM",
+      "DDL_reservation",
+      "Dict",
+      "FLOPS_PER_CORE",
+      "GLB_BUFFER_SIZE",
+      "GLB_BUFFER_SIZE_PER_CORE",
+      "LAT_PER_HOP",
+      "List",
+      "MIN_CORE_NUM",
+      "O_perc",
+      "OrderedDict",
+      "RT_reservation",
+      "Resource_model_int",
+      "RscMapInt",
+      "SRAM_size_per_core",
+      "Tuple",
+      "Union",
+      "W_perc",
+      "annotations",
+      "bin_fn_fmt",
+      "bin_save_fmt",
+      "cache_dir",
+      "cache_root_fmt",
+      "case_name_bp",
+      "case_name_bp_input",
+      "case_name_cyc",
+      "case_name_cyc_input",
+      "case_name_dyn",
+      "case_name_dyn_input",
+      "case_name_fifo",
+      "case_name_fifo_input",
+      "case_name_glb",
+      "case_name_glb_input",
+      "case_name_pglb",
+      "case_name_pglb_input",
+      "case_suffix_N_barrier",
+      "cfg_dir",
+      "cfg_root_dir_fmt",
+      "cfg_root_fmt",
+      "clock_period",
+      "core_stat_fn_fmt",
+      "csv_dir",
+      "csv_root_fmt",
+      "dummy_reservation",
+      "elim_error",
+      "elim_nume_error",
+      "exp_jitter",
+      "flop1n_error_tol_abs",
+      "flop1n_error_tol_bit",
+      "flop1u_error_tol_abs",
+      "flop1u_error_tol_bit",
+      "fork_pid_base",
+      "init_packing_algo_required",
+      "ld_fmt",
+      "log_dir",
+      "log_root_fmt",
+      "math",
+      "max_fork_candi_num",
+      "max_fork_pid",
+      "numerical_error_tol_abs",
+      "numerical_error_tol_rel",
+      "numerical_tol_bit",
+      "one_stage_case_coll",
+      "os",
+      "overhead_of_dequeuing_op",
+      "overhead_of_enqueuing_op",
+      "overhead_pushpull_per_core",
+      "partition_max",
+      "plot_dir",
+      "plot_root_fmt",
+      "plt_fn_w_seed_fmt",
+      "plt_fn_wo_seed_fmt",
+      "reduce",
+      "routing_table_fn_fmt",
+      "routing_table_save_fmt",
+      "slack_comp",
+      "time1n_error_tol_abs",
+      "time1n_error_tol_bit",
+      "time1u_error_tol_abs",
+      "time1u_error_tol_bit",
+      "trace_dir",
+      "trace_file",
+      "trace_fn_w_seed_fmt",
+      "trace_fn_wo_seed_fmt",
+      "trace_list",
+      "trace_root_fmt",
+      "two_stage_case_coll",
+      "typing"
+    ],
+    "global_value_descriptions": {
+      "AVG_HEAD_LAT": {
+        "type": "float",
+        "value_repr": "1e-07"
+      },
+      "AVG_HOP_NUM": {
+        "type": "int",
+        "value_repr": "10"
+      },
+      "A_perc": {
+        "type": "float",
+        "value_repr": "0.3333333333333333"
+      },
+      "BROADCAST_SCALER": {
+        "type": "int",
+        "value_repr": "1"
+      },
+      "BW_DRAM": {
+        "type": "float",
+        "value_repr": "100000000000.0"
+      },
+      "FLOPS_PER_CORE": {
+        "type": "float",
+        "value_repr": "0.5"
+      },
+      "GLB_BUFFER_SIZE": {
+        "type": "float",
+        "value_repr": "40000000.0"
+      },
+      "GLB_BUFFER_SIZE_PER_CORE": {
+        "type": "float",
+        "value_repr": "156250.0"
+      },
+      "LAT_PER_HOP": {
+        "type": "float",
+        "value_repr": "1e-08"
+      },
+      "MIN_CORE_NUM": {
+        "type": "int",
+        "value_repr": "256"
+      },
+      "O_perc": {
+        "type": "float",
+        "value_repr": "0.3333333333333333"
+      },
+      "SRAM_size_per_core": {
+        "type": "float",
+        "value_repr": "1.25"
+      },
+      "W_perc": {
+        "type": "float",
+        "value_repr": "0.3333333333333333"
+      },
+      "bin_fn_fmt": {
+        "type": "str",
+        "value_repr": "'bin_list_{force_suffix}{num_cores}{i_file_suffix}.pkl'"
+      },
+      "bin_save_fmt": {
+        "type": "str",
+        "value_repr": "'./cache/{root_dir}/{cfg_n}/bin_list_{force_suffix}{num_cores}{i_file_suffix}.pkl'"
+      },
+      "cache_dir": {
+        "type": "str",
+        "value_repr": "'./cache'"
+      },
+      "cache_root_fmt": {
+        "type": "str",
+        "value_repr": "'./cache/{root_dir}/{cfg_n}'"
+      },
+      "case_name_bp": {
+        "type": "str",
+        "value_repr": "'bin_pack_new'"
+      },
+      "case_name_bp_input": {
+        "type": "str",
+        "value_repr": "'bin_pack_new'"
+      },
+      "case_name_cyc": {
+        "type": "str",
+        "value_repr": "'cyclic'"
+      },
+      "case_name_cyc_input": {
+        "type": "str",
+        "value_repr": "'cyclic'"
+      },
+      "case_name_dyn": {
+        "type": "str",
+        "value_repr": "'dyn'"
+      },
+      "case_name_dyn_input": {
+        "type": "str",
+        "value_repr": "'dynamic'"
+      },
+      "case_name_fifo": {
+        "type": "str",
+        "value_repr": "'fifo'"
+      },
+      "case_name_fifo_input": {
+        "type": "str",
+        "value_repr": "'fifo'"
+      },
+      "case_name_glb": {
+        "type": "str",
+        "value_repr": "'glb_dyn'"
+      },
+      "case_name_glb_input": {
+        "type": "str",
+        "value_repr": "'glb_dynamic'"
+      },
+      "case_name_pglb": {
+        "type": "str",
+        "value_repr": "'pglb'"
+      },
+      "case_name_pglb_input": {
+        "type": "str",
+        "value_repr": "'partitioned_glb_dynamic'"
+      },
+      "case_suffix_N_barrier": {
+        "type": "str",
+        "value_repr": "'_barrier_dis'"
+      },
+      "cfg_dir": {
+        "type": "str",
+        "value_repr": "'./cfgs'"
+      },
+      "cfg_root_dir_fmt": {
+        "type": "str",
+        "value_repr": "'./cfgs/{root_dir}/{cfg_n}'"
+      },
+      "cfg_root_fmt": {
+        "type": "str",
+        "value_repr": "'x{aux_scale_factor}_{e2e_latency}s_rda-{exec_t_comp_ratioA:.2%}(S)_{lateness_mode:s}'"
+      },
+      "clock_period": {
+        "type": "float",
+        "value_repr": "1e-09"
+      },
+      "core_stat_fn_fmt": {
+        "type": "str",
+        "value_repr": "'{cache_root}/{case}_max_core_stat.pkl'"
+      },
+      "csv_dir": {
+        "type": "str",
+        "value_repr": "'./csv'"
+      },
+      "csv_root_fmt": {
+        "type": "str",
+        "value_repr": "'./csv/{root_dir}'"
+      },
+      "elim_error": {
+        "type": "function",
+        "module": "global_var",
+        "qualname": "elim_error"
+      },
+      "elim_nume_error": {
+        "type": "function",
+        "module": "global_var",
+        "qualname": "<lambda>"
+      },
+      "flop1n_error_tol_abs": {
+        "type": "float",
+        "value_repr": "5e-10"
+      },
+      "flop1n_error_tol_bit": {
+        "type": "int",
+        "value_repr": "10"
+      },
+      "flop1u_error_tol_abs": {
+        "type": "float",
+        "value_repr": "5e-07"
+      },
+      "flop1u_error_tol_bit": {
+        "type": "int",
+        "value_repr": "7"
+      },
+      "fork_pid_base": {
+        "type": "int",
+        "value_repr": "1000"
+      },
+      "init_packing_algo_required": {
+        "type": "list",
+        "value_repr": "['scratch', 'guided']"
+      },
+      "ld_fmt": {
+        "type": "str",
+        "value_repr": "'x{aux_scale_factor}_{e2e_latency}s'"
+      },
+      "log_dir": {
+        "type": "str",
+        "value_repr": "'./log'"
+      },
+      "log_root_fmt": {
+        "type": "str",
+        "value_repr": "'./log/{root_dir}/{cfg_n}'"
+      },
+      "math": {
+        "type": "module",
+        "module": "math"
+      },
+      "max_fork_candi_num": {
+        "type": "int",
+        "value_repr": "20"
+      },
+      "max_fork_pid": {
+        "type": "int",
+        "value_repr": "100"
+      },
+      "numerical_error_tol_abs": {
+        "type": "float",
+        "value_repr": "1e-12"
+      },
+      "numerical_error_tol_rel": {
+        "type": "float",
+        "value_repr": "0.01"
+      },
+      "numerical_tol_bit": {
+        "type": "int",
+        "value_repr": "12"
+      },
+      "one_stage_case_coll": {
+        "type": "list",
+        "value_repr": "['glb_dynamic']"
+      },
+      "os": {
+        "type": "module",
+        "module": "os"
+      },
+      "overhead_of_dequeuing_op": {
+        "type": "int",
+        "value_repr": "1000"
+      },
+      "overhead_of_enqueuing_op": {
+        "type": "int",
+        "value_repr": "1000"
+      },
+      "overhead_pushpull_per_core": {
+        "type": "dict",
+        "value_repr": "{0.6: 83, 0.8: 87}"
+      },
+      "partition_max": {
+        "type": "int",
+        "value_repr": "9999"
+      },
+      "plot_dir": {
+        "type": "str",
+        "value_repr": "'./plot'"
+      },
+      "plot_root_fmt": {
+        "type": "str",
+        "value_repr": "'./plot/{root_dir}/{cfg_n}'"
+      },
+      "plt_fn_w_seed_fmt": {
+        "type": "str",
+        "value_repr": "'{plot_root}/{case}_{plt_size}_{force_suffix}{num_cores}_seed_{seed}{file_suffix}.pdf'"
+      },
+      "plt_fn_wo_seed_fmt": {
+        "type": "str",
+        "value_repr": "'{plot_root}/{case}_{plt_size}_{force_suffix}{num_cores}{file_suffix}.pdf'"
+      },
+      "routing_table_fn_fmt": {
+        "type": "str",
+        "value_repr": "'routing_table_{force_suffix}{num_cores}{i_file_suffix}.pkl'"
+      },
+      "routing_table_save_fmt": {
+        "type": "str",
+        "value_repr": "'./cache/{root_dir}/{cfg_n}/routing_table_{force_suffix}{num_cores}{i_file_suffix}.pkl'"
+      },
+      "time1n_error_tol_abs": {
+        "type": "float",
+        "value_repr": "1e-09"
+      },
+      "time1n_error_tol_bit": {
+        "type": "int",
+        "value_repr": "9"
+      },
+      "time1u_error_tol_abs": {
+        "type": "float",
+        "value_repr": "1e-06"
+      },
+      "time1u_error_tol_bit": {
+        "type": "int",
+        "value_repr": "6"
+      },
+      "trace_dir": {
+        "type": "str",
+        "value_repr": "'./trace'"
+      },
+      "trace_file": {
+        "type": "str",
+        "value_repr": "'trace.txt'"
+      },
+      "trace_fn_w_seed_fmt": {
+        "type": "str",
+        "value_repr": "'{trace_root}/{case}_e2e_trace_{force_suffix}{num_cores}_seed_{seed}{file_suffix}.pkl'"
+      },
+      "trace_fn_wo_seed_fmt": {
+        "type": "str",
+        "value_repr": "'{trace_root}/{case}_e2e_trace_{force_suffix}{num_cores}.pkl'"
+      },
+      "trace_list": {
+        "type": "list",
+        "value_repr": "[]"
+      },
+      "trace_root_fmt": {
+        "type": "str",
+        "value_repr": "'./trace/{root_dir}/{cfg_n}'"
+      },
+      "two_stage_case_coll": {
+        "type": "list",
+        "value_repr": "['dynamic', 'cyclic', 'partitioned_glb_dynamic', 'fifo']"
+      }
+    },
+    "all_global_exports_share_identity": true
+  },
+  "non_b15_source_sha256": {
+    "__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "analyze/UE_extract.py": "647236fe7503c80740cca43e08858ccbe436a18ac4ed7d2bc54ad0b9b5d46cad",
+    "analyze/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "analyze/analyze_ctx_switch.py": "d7856b1f2ccb2fbf3652f00ee5552bfb570836953060f2dbfa1265554a67038d",
+    "analyze/analyze_timing.py": "45b94574b8ee2c7014e3ad5814b5348df28691dcaee124c5a7e15102f044ce8c",
+    "analyze/analyze_tp.py": "cd54307337eb3d37408e50b15b31fb7266b90a3c7addba3c5c3e707b400a3d38",
+    "analyze/pattern.py": "75c5a0ca22d710f7b301be118d820a0d3ca833176abd8777d43c104eaf119a46",
+    "analyze/stat_num_exec.py": "d830debb487d25b50f79384b2580e5d52a853e61e7fd3c2c01651e106b71cafe",
+    "analyze/xlsl_e2e_lat_abla.py": "2803dd27f7c4031af44116eae11439e2e80abb5823ef0255285669dadf6ef826",
+    "analyze/xlsl_e2e_latency.py": "db352b4685c6fa76f3c8c5e5940c469af14b1db6297e6df29135e0beae1c0f60",
+    "analyze/xlsl_max_tp.py": "1468390c1e293780e32b81e649cd501542e9d0d1d9b88b37018c7e1ad8f11201",
+    "analyze/xlsl_min_core.py": "90d91b24da0e3015783044713c84a7abd72b70ba82edd8c56f2415719c614f8d",
+    "analyze/xlsl_safe_scalable.py": "d16deee46b74bd34883d39abfab86691c36455b8fe02547cb5f275ad65b6ee55",
+    "approach/__init__.py": "25606592fea79200c3a2512098898d0af5b53b81bf863b221281d3a46328b68c",
+    "approach/approach_Eq.py": "f5eff8c44b804be60e8de8a4c2d1a3afad9a127b9e80b931fd5edd86d5d0a773",
+    "approach/approach_collector.py": "8f42d09dfe455ebdbf931a11266b5f4afccef485029d02affc5e36546754ffd1",
+    "approach/approach_def.py": "3bf4c156262a66c636be06e744da862240ebf619c5926a2b6928bf3f6e6df931",
+    "approach/approach_initiator.py": "4e805f25b057c5f66220ee491f40523587af265d948316f7c7993df3082decc9",
+    "approach/approach_sched.py": "fe9e3ab6bbb45ed4ee11215417b99a8868d7d0dba648949fc92a0f52a59c5a8e",
+    "approach/approach_setup.py": "0e30787994a6a23ea8c048a10ece4c5dc58bb157a311a2c5e8c242cda7c6bbbf",
+    "approach/approach_sim.py": "1d064618107e7888b9e75debc1e983dbc7e56a4e09240be75214d4dc770b2f4e",
+    "approach_Eq.py": "6a869b99f96cf2bd633f27904fe4d2831e39868bb0aa8f14b4efbbce1d21c09e",
+    "approach_collector.py": "e5d2c0a346067a134ed26204a0e367e94aa2131394d6387e60e4a6ab2fcb46e0",
+    "approach_def.py": "65470e4b084aa67d3c1dcb583c9c15cbf3e521c06cffa17855bd0097b7afb501",
+    "approach_initiator.py": "c55558bf6de3422b61a609f300776f68de7a3e27521a2bb8e81566de5a0e12ef",
+    "approach_sched.py": "44ae9baacc4246eb8a0bac53508be8220bb33064f369ee7e654fb6315d538d42",
+    "approach_setup.py": "7cf7d1550204beb4abba7d7cf0c0c52575253fe7296002ad9033109cb8d6506b",
+    "approach_sim.py": "46247bf523cae1a8a0a62e71109ef0aba3c86b4c278754b28493718815e02369",
+    "cleanup/tools/dialogue_guard.py": "f758288168b13d1f13400d0f84665b6f2323e030707cae190b259401a3fa1a10",
+    "debug_sink_constraint.py": "91b99637ccbc7472819776419d52e659027e37c97732ab248841fc1cf950959b",
+    "example/bm1.py": "9cb4482dd34b5102c5f9c9257a25bbef15273b8d5c4b94665c3f9f151c0fc57f",
+    "example/bm2.py": "a83603e2af0a4637c768a8f8594617fd9629083de2cd716d209436b043b09dfc",
+    "example/bm3.py": "200cd9bc6935e660d0c7d1f3ad6f25b46cb3492db946b694f8c4b7275c8f6b10",
+    "example/bm4.py": "381bebb8759796b353478cfb9aba4c24bab6c5b108dc3fbc9172710426bca4a2",
+    "main_approach.py": "e32f1ec431614e4ea30761eaab6278fe65ba2166717b5386bc0148cfad22db3d",
+    "mapper/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "mapper/mem_planner.py": "6d5bb9291bac221b6da31b9671933aec22b5b0e780ac334a32e7e60030fe947e",
+    "model/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model/barrier_agent.py": "57d2943c3ac1c21423e29affce89f2b7f664d097d2d0cefb0124736545685ab7",
+    "model/buffer.py": "aec736f78d35ba582d8d091cb2078181c53e195f7a97346c9cefb6b09a4576c8",
+    "model/event_gen/e2e_latency.py": "7c460e9258b1b7384ffb4605167e4ccc69b026fc83eb0161429bd9f60b994248",
+    "model/lru.py": "b2be894c685be6c3a5fd48b7b7117d2cc90059a4109c7374c68979f74d4a7013",
+    "model/message/Context_message.py": "c8d4de2ad5e73b2db072f710777d6f846285be1e03d038711aecb46a25247c64",
+    "model/message/data_pipe.py": "544689f0008568d77eeec76ab35ff12d7ce7d5c808dc933e06e76bd6db3b74c0",
+    "model/message/message_handler.py": "7d0c4520760f95b791e1c9f8d0c3220be1959f8ab58aabd8d2328fd8793a0785",
+    "model/message/message_pipe.py": "6d6d8228acca9ff2fd1e2cf02573d35f058845ebafe6dfdae98acba9226fd309",
+    "model/message/msg_dispatcher.py": "1021025fd86f50c8f82799bea77911e05564531fc93fcba886639da1a430a3e3",
+    "model/noc.py": "001d30e29ffe3ebc8b9724e151c445e100ef885287fe5abdd00a9bb0048d8f51",
+    "model/performance.py": "273eabbd6dbc16df28db18758e8f51defe84caba3f6ca3cf40fa22c7b041235a",
+    "model/position_table.py": "fa6615a4b3e54e41304463dda597494be7bc5e672abbae1149e11cfb8f2ecc59",
+    "model/resource_agent.py": "7290b7b496e0a46a0ef74540b1747fcb35e6724443a5f70072562bc7ab8cefd8",
+    "model/streaming_processing/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model/streaming_processing/wartermark_strategy.py": "5af8e0035e2a360ae5bd6201f57f55b30970d8bebf8d542f08815db34264e596",
+    "model/task_queue_agent.py": "227fcd0bc10129614b6481b94f239a621ea6a460de815ee007e828142cad1c24",
+    "model/trace_example.py": "ff2e00c361a9ba9ca0386704abe57acb3e8ca924b3a9187d6fb1129f0e4cd880",
+    "old/allocator_agent.py": "f7b48b84465c9f1390b9ce44e0bfd463f896fb869e2d1364e3e9fe79ef892582",
+    "old/appoach_plot6.py": "44332d84c5d05f7d520b505c96c80c62a8ec6511c41440db41ca4bc6081d0d81",
+    "old/approach_util33.py": "89ae0ac387bd44484b1a345e5bd3999cc279acc2f5a705cba6ab6fc285701352",
+    "old/pre_alloc.py": "8a2e3724401e442c505cc5af34b22abdf30034a7dd7417526c10865df5ed76c0",
+    "optimizer/delta_ver.py": "da1762a2d66c80ca5fbd9a3de4eff3fb96f3d2d6f3ca16186996c0853cd5c9a3",
+    "optimizer/dist_custom.py": "923e2cafa54bd27646b620d3f13e8ab98386f8a6b93a4ad73c78e6dd69f479f9",
+    "optimizer/ops.py": "41d6ddb143b93e14c51d49dbaea2db60ca6adcd0fdc163c784266e64dcb9595c",
+    "optimizer/ops_test.py": "6584b9cff086fb2492e5131153c23b78225a27ed6ce953aee8a84244bd66e758",
+    "optimizer/scheduler_base.py": "323b0e48b88910f152e8c21a06d4c8a0f9f965aa6f2b09bf3388868737a9c884",
+    "paths.py": "b8aa8a5471c8a6420f9b9532013be1b39ea8a195c2c301bdb42193eccc111170",
+    "ref_tdigest.py": "0e7642c9892553f579b5340d21982b589bdb4a85d4965cbfc70fa35289f9c287",
+    "run/1/all.sh": "05105542d6b66aaf914ad86ccd1338ea4049ed8d2c21a91b2783f9c37a0ff6e4",
+    "run/1/scan_aux.sh": "9d7cb82e0805928fed87f4efb9c727c96d371ae51382ea8fce0192eff92180d3",
+    "run/1/scan_core.sh": "958401b5016d0e19eade15c3f7831b07cf8ad611e627ff6d1f4a06db8d27503a",
+    "run/1/sweep_seed.sh": "dea4922a271e4e318ecc29f39a7ef728de52bd581470c87095b4023c50dcfa8a",
+    "run/2/aba_scalability_scan.sh": "d527b302c374401165e3011cca9d3904710ee4154def52aab5489d725c41f925",
+    "run/2/abla_scalablility.sh": "2f56009e9eb0da9cfa9223737aadb356e444b7e8b2e6212810c2e6385151a498",
+    "run/2/all2.sh": "85638195a489880dc8c26bdba929d3c62a4b0b83c6eaaeb252d040db74824880",
+    "run/3/time_sharing.sh": "b8104f1f3c684290dfbdf781e07b60a70e8feb251bbe9cd80278c3fd9dcfa5ee",
+    "run/aba_scalability_scan copy.sh": "c60b76ec65a851962d4b7235ed76e8450a6e80cbefdd22ce6aaf5530fb348819",
+    "run/abla_chain_sharing.sh": "17943f0885c65567943936abdc82e6c53a5df33340f3a0ef37ff9a2c52e370b3",
+    "run/bin_sharing.sh": "a94cd42eb610e21321b47921c5c2063a4590b0b8322cf57ab8b57a13166287b4",
+    "run/cfg_parser.py": "5d8c3a618d13994aee7dbec18e033d938491a9e46fedeaa75ce712b59f7d9f55",
+    "run/clean.sh": "7d5abeedad2abb698003ac37a594feffa5676334a8f615fcdee6c059a1e4ecbe",
+    "run/max_core_num_scan.py": "79fa47da771d7ac88ef383946e4609c8248212f4b4d7fa6517f27ec34f2f464a",
+    "run/scan_coalescing.sh": "2ee0fbb7c0b029075ee071e3ac1af672e63019af484fcc2a30bcdd03173dfa7d",
+    "run/temp.sh": "31236f54d38944c69f2cb3b3f069a7c3931332e4add8cfd252d091d5621a6a49",
+    "sched/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sched/bin_list_utils.py": "67a9aa91714a797d20f504c33bca796836632c6501d954e971cb1aa5aaa79bb4",
+    "sched/bin_list_utils_old.py": "580d943fd5b2057b4fd624c32d6197a24b56a2c5c36d3be3ceb5924032bc4a9e",
+    "sched/bin_list_utils_unused.py": "2142733db35776d6df1936a8091b59cf57e438dad2e10d316ae0be11110a536a",
+    "sched/bin_ops.py": "361bbc497b182e68304694f791354e9a296e93d5941cef267e9775bb9b47c301",
+    "sched/binpack_config.py": "d10829049efd5502328ca5f14d92dbe26435b219a53f3b4b03c06530ebc43f40",
+    "sched/global_sched.py": "a11a8324def4ca8b8763814e7dc8483a5444bc013e29083fa1b1dbbfbbbe4118",
+    "sched/global_sched_alloc.py": "627300a13b10f98ca4c2c8b08807780578cf1cf923c68b9967ce32dc9af1b2e0",
+    "sched/global_sched_old.py": "cc93f501ce6bf24f92841d8a323fe4d9550fd7e76120be27c539242b5e1df425",
+    "sched/global_sched_repack.py": "2e61f425893e6365d711676c53445cf89bec915c3ee5039c82d84d024dfcfece",
+    "sched/monitor_agent.py": "c748029c18bd6c99ffa0fed57536d5344fbc20ae23fc64b37446b2d973f9d83b",
+    "sched/packing_solver/chain_slack_assign.py": "e564906bc80d9b742e321cd9d0395fe6b03a2b891c35ddb9142e852c9c4d141f",
+    "sched/packing_solver/fit.py": "1b3d0b5296648d4d7403016c67f53be21d34b55c334b8d193f4fc770216e7998",
+    "sched/packing_solver/gurobi_MP_semi2DClst.py": "e56adc1a37dbba39cc3f8d707a955bfc64b3b03f71356084f989946593a02895",
+    "sched/packing_solver/unused/gurobi_semi2Dclst_mapping.py": "4d49d05ab20981eafeb9afe897aa0b952c2ce7d2eaac0880b71fa8131430c522",
+    "sched/packing_solver/unused/gurobi_semi2Dclst_mapping2.py": "9c40c2b4e21edcdb5fc25d51b6ce9479bbb4f8c64e2e3bc577d8e61ebf36e3dc",
+    "sched/placement.py": "008ca6d7c2316064c3fce0b75258e35c77f570b727e483d32a2010f6f7408fdf",
+    "sched/pre_alloc_new.py": "6991b6551a7f0ff3fe94f6b47f4fbe469a4da1ccdbd80e8eaca1bb7749cfbea6",
+    "sched/pre_alloc_new_old.py": "97e11a4df33ebc3b3ff6adaeabaa1b1635f34e9ad059cdbda23eb2f6a0cbd878",
+    "sched/ref_alloc_search.py": "c29243f7134518633c9b3f1631420607adef0ef79d994c0152ef579402c88ca7",
+    "sched/runtime_legacy/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sched/runtime_legacy/sched_fn.py": "cc82e889cb203dd7cb306988050c432b92857c559ccd2ab2bb6c85d2a63c79f7",
+    "sched/runtime_legacy/sched_utils.py": "ecc8414c05eeb9f1b7574142c1da5620d0c7a5e4d1ed6d2ecb2a3442604f2135",
+    "sched/runtime_legacy/scheduler_agent.py": "c0e3d3583f0a86947fa1478cb1d42bb9bbd4ff0727aab2128173b878cbc58cac",
+    "sched/runtime_legacy/state_trans.py": "ab3850e46e89c907fd2ca6a19667427c3e787ce1c5cf52e6fc2d93a7a4edc569",
+    "sched/sched_fn.py": "6ddf24cd84d4001c09bc637719430f60a7580950a1499046a0e6f7a1277026ed",
+    "sched/sched_utils.py": "daddd34bce6031198b5866b90eaa22365ee950b41323d2164c00e2e23b8479e6",
+    "sched/scheduler_agent.py": "cf77c531c15130c4dd3a218a9fd197d3daba242c018e1b222bdd1371e893e4de",
+    "sched/scheduling_table.py": "a7df3b3ed412e6b30b29d9cc533749c59b74c38c88e19ff6dba9858f669aad8c",
+    "sched/scheduling_table_event.py": "a79b101f8648cc12411477321025164d0fb6546fa20f9c9780fccc3b7ff46837",
+    "sched/slack_estim.py": "f5389ec5c6f83cf9fc35e07917e66566145a8b2fad7f54a635761e04c69c13d4",
+    "sched/sort_function.py": "50ef837990c9d6a8dda164fca656852a4f25e640394160058d15326291a6183f",
+    "sched/state_trans.py": "29b77a41fed368421d76f5bf06cd698955990684908afbfc03bf49d1262cc628",
+    "scripts/abla_exp_runner.py": "73ca0bccb065a284f1f078c3a4a4027d9134e972b3bba18a6e26380e61e60864",
+    "scripts/e2e_exp_runner.py": "4e64059930d47287f6827beb5043dc382947d6128ae5ef854d0ded49f2ef1286",
+    "scripts/e2e_hyperparam.py": "579229a5e596f3eac366215af6ec2ad67d862d69f5ca43f05b4a06ed466ee9b8",
+    "scripts/exp_common.py": "6d0e913f0eacdc62b2972ce2ee9c25f459891e92da12f32c4001ac74a0f98274",
+    "scripts/motiv_exp_runner.py": "4592032791d2bcfe532aa01adda9f545b9196545bb0c4e8a0e018358e4eb712a",
+    "scripts/run_abla_exps.sh": "3f8d8a01e366995b7e8d4fb0b492e4c1bb0cbe989da2c061d501f80caca7c366",
+    "scripts/run_motiv_exps.sh": "4238e238d4640f53c19f2705f892be988ad19a50439f8c2d48efd2cd43c36d66",
+    "scripts/test_alloc_lat.py": "fc0bf0ead04d6e71fa32e69003388fc1ae402a2cbeee2f18e6ae167cb16ce552",
+    "scripts/unused/repack_sweep.py": "262dad167ec4fad1c6b2b9fe14c5d941f958cdbb0722198b723c2e76adace213",
+    "sim_main.py": "0a16f4cf6c0ebeb1a57079216f4046ab55db8f6bfdbf53b17c537a3488334f5d",
+    "sim_main_old.py": "02aac1cd1af96eec0dbb51393f84cd33c05abaf4b1abf657cb89dd1cd02472cc",
+    "simple_test_collector.py": "b6bff9b527a9941a187d5e89640f5d785791ddd4c69df3a745a1e23a0e127142",
+    "task/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "task/graph_breakdown.py": "5d67c52d35f0ffb2be250b1d1f3a002bd574db50a34cda5b2df832bf88d28933",
+    "task/graph_scaling.py": "23cd8bd44738144c8a4578875a88bab4d06bef003cf0bdaa958e743ce9c88492",
+    "task/load_cfg/loadA.py": "7f75f58b094573322dce01ca6f2366241fbd82e4891292aee390c0a1d98ad287",
+    "task/spec.py": "66f2eeb5f3c35b9ee92fb0f0a90f0bba4e2cecfb88fd2192f3be7ca931d09022",
+    "task/task_agent.py": "21786d243f70d1e41d5ad43f1d8c22dee13d54f3fab28a84719ad3cbe16f8a2e",
+    "task/task_cfg.py": "4320789e8a8f2d5c9e37333bf8b0ee544154a68119d517004770d62ad8521a7d",
+    "task/throughput_cnt.py": "7df7e2fa30a3f6061fffa210952d211666e1dcd00636d18e80fa29cf61fc15ef",
+    "test_approach_collector.py": "efd7b67e99cd0a970dc1a7998461af5a0795fa239ead43e00eb5e8ce0e6f2d68",
+    "test_approach_package_compat.py": "ca4bac52de6e14174ed93fd56d2c23be16d9457be9f15c93122e6ccf94b02792",
+    "test_binpack_pipeline_contract.py": "144f9f0acc656c687adcdc8099124697888c41a4bb0b78a621f43a938cefb1d9",
+    "test_closure_fix.py": "16c04deae220389724a7c4c28a0bb838399d671a61429ddc84cd5d28c3994165",
+    "test_core_allocation.py": "44fe340a041794584e12a30b99cb9aac1aa9dc3dc5e3a6e82f94c9f3ce428045",
+    "test_deduce_cfg2.py": "9edb5c3de657302137144df2ae7425bf36976e3b20a4b5d10f3580f83e41fddb",
+    "test_duplicate.py": "662f0ed5fd5a76dd59e2b82981377297aba2ac118a6c9a150176f619aa2e2dd2",
+    "test_event_update.py": "68ff45c5ff1f5fad893933722565b034bef2e1831f15c56ce398a5b982d7dc95",
+    "test_legacy_approach_archive.py": "b6dc62122ea09a99cbbddf2cffa52613be3376d7f827518487a977fd2fb96d77",
+    "test_mapping.py": "a32256208595f8b9f451c71d9d9c18a8f4f992d161c1bfa79e048b30cbed5b3f",
+    "test_mem_planner.py": "e171129a2a8519f3de13f8e533e2bd74cba08f076dd9e564945be65a01c87b60",
+    "test_repack_diagnostic.py": "d11f52e223cb829fb9dd16c401282b58e035df8bcceac3c000a560b63744b83f",
+    "test_scheduling_table.py": "5a44cb64b2e88744a72816784fb70f87b826dae56bd92a00ee07ffd29200bea0",
+    "test_unused_hdf5_utils.py": "cdc3fab2f6c53006d42c69c1c01abc9cff7bfeb035a828345ea73ebbd4f86fc6",
+    "test_unused_path_utils.py": "01e2d7da2298380db15ab323bc102a1b161788af6f5419d4965e1bfebc9a53ac",
+    "test_updated_stats.py": "cbd88f4afd5bdb6b8642fe435e386c38fc7856737a5df80909d3734dbaafe91d",
+    "tile_2d_mesh_mapper_fixed.py": "db0d65db81bdb53079bdf02e22da85432bafb5777de9b1e2d676834ef883e003",
+    "unused_fun.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "utils.py": "508f1366fb8bb08f16f1ad5f57e651692be7915c6a3c29e054ce73970dcd4e03",
+    "utils_unused.py": "cadac26936dca668f85f6eb6ceb84186c2be32dd52acae7b56785f760c15b40d"
+  },
+  "provenance": {
+    "batch": "B15-UNUSED-GLOBAL-CONSTANTS",
+    "request": "REQ-013",
+    "proposal": "E0052",
+    "approval": "E0053",
+    "scope": "tracked existing + 15 explicitly approved new B11-B14 sources, 140 Python / 16 shell before B15",
+    "import_evidence": {
+      "global_var_import_sites": 51,
+      "wildcard_sites_including_archives": 31,
+      "source": "AST of current 140 files; hints not full binding proof; actual global_var/ utils/ model.resource_agent baseline independently executed"
+    },
+    "kept": [
+      "all numerical tolerances including spec-referenced bits",
+      "all path constants and internal format dependencies",
+      "trace_file/trace_list",
+      "math/os",
+      "elim_error and elim_nume_error",
+      "FLOPS_PER_CORE/GLB_BUFFER_SIZE_PER_CORE/BW_DRAM",
+      "init_packing_algo_required"
+    ],
+    "external_compatibility": "Ten former global_var names and wildcard reexports retire; no promise for external imports/reflection/monkeypatch consumers",
+    "interpretation": "Unused hardware cost parameters, not an equivalent replacement implementation",
+    "no_logic_rewrite": true
+  }
+}

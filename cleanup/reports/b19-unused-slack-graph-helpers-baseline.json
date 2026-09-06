@@ -1,0 +1,4075 @@
+{
+  "request": "REQ-017",
+  "batch_id": "B19-UNUSED-SLACK-GRAPH-HELPERS",
+  "status": "ACCEPTED_E0076",
+  "mainline": "master",
+  "archive_ref": "archive/test_pipeline-20260612",
+  "base_head": "a1d933b1f26efd4d569eb3d8ffb313447294443b",
+  "sources": {
+    "sched/slack_estim.py": {
+      "module": "sched.slack_estim",
+      "archive": "sched/slack_estim_unused.py",
+      "names": [
+        "build_score_dict_ref_flops",
+        "get_chains_info"
+      ],
+      "source_sha256": "f5389ec5c6f83cf9fc35e07917e66566145a8b2fad7f54a635761e04c69c13d4",
+      "ends_lf": true,
+      "slices": [
+        {
+          "name": "build_score_dict_ref_flops",
+          "start": 24,
+          "end": 28,
+          "text": "def build_score_dict_ref_flops(task_dict:Dict[str, TaskBase], nodes:Any, score_dict):\n    for node_n in nodes: \n        assert node_n in task_dict\n        _task = task_dict[node_n]\n        score_dict[node_n] = _task.flops\n",
+          "sha256": "f736a942b7d3f18eb791553f04ffbde4ac78d4156c67c5fcc2a1d676dd3a240b"
+        },
+        {
+          "name": "get_chains_info",
+          "start": 410,
+          "end": 416,
+          "text": "def get_chains_info(task_graph, start_nodes, end_nodes):\n    chains = []\n    for start_node in start_nodes:\n        chains += decompose_dag_into_chains(task_graph, start_node, end_nodes)\n    # zip the chains with its e2e latency\n    chains = [(chain, task_graph.nodes[chain[-1]]['ddl']) for chain in chains]\n    return chains\n",
+          "sha256": "cec6ed91b57f24f152391ff6424c443e27290035ab696ac2e3e13b39e1dbe510"
+        }
+      ],
+      "removed_lines": 12,
+      "remaining_sha256": "bda2da01c0bb32873d021dd32efc0debb5017333221baa3bd5cfbf7f17cc39c5",
+      "public_exports": {
+        "annotations": {
+          "type": "_Feature",
+          "module": "__future__",
+          "qualname": null
+        },
+        "TYPE_CHECKING": {
+          "type": "bool",
+          "module": null,
+          "qualname": null
+        },
+        "math": {
+          "type": "module",
+          "module": null,
+          "qualname": null
+        },
+        "np": {
+          "type": "module",
+          "module": null,
+          "qualname": null
+        },
+        "nx": {
+          "type": "module",
+          "module": null,
+          "qualname": null
+        },
+        "re": {
+          "type": "module",
+          "module": null,
+          "qualname": null
+        },
+        "plt": {
+          "type": "module",
+          "module": null,
+          "qualname": null
+        },
+        "Variation": {
+          "type": "type",
+          "module": "approach.approach_Eq",
+          "qualname": "Variation"
+        },
+        "List": {
+          "type": "_SpecialGenericAlias",
+          "module": "typing",
+          "qualname": null
+        },
+        "Any": {
+          "type": "_SpecialForm",
+          "module": "typing",
+          "qualname": null
+        },
+        "Dict": {
+          "type": "_SpecialGenericAlias",
+          "module": "typing",
+          "qualname": null
+        },
+        "Tuple": {
+          "type": "_TupleType",
+          "module": "typing",
+          "qualname": null
+        },
+        "Union": {
+          "type": "_SpecialForm",
+          "module": "typing",
+          "qualname": null
+        },
+        "os": {
+          "type": "module",
+          "module": null,
+          "qualname": null
+        },
+        "FLOPS_PER_CORE": {
+          "type": "float",
+          "module": null,
+          "qualname": null
+        },
+        "trace_file": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "trace_list": {
+          "type": "list",
+          "module": null,
+          "qualname": null
+        },
+        "numerical_error_tol_abs": {
+          "type": "float",
+          "module": null,
+          "qualname": null
+        },
+        "numerical_tol_bit": {
+          "type": "int",
+          "module": null,
+          "qualname": null
+        },
+        "numerical_error_tol_rel": {
+          "type": "float",
+          "module": null,
+          "qualname": null
+        },
+        "elim_nume_error": {
+          "type": "function",
+          "module": "global_var",
+          "qualname": "<lambda>"
+        },
+        "elim_error": {
+          "type": "function",
+          "module": "global_var",
+          "qualname": "elim_error"
+        },
+        "flop1u_error_tol_abs": {
+          "type": "float",
+          "module": null,
+          "qualname": null
+        },
+        "flop1n_error_tol_abs": {
+          "type": "float",
+          "module": null,
+          "qualname": null
+        },
+        "flop1u_error_tol_bit": {
+          "type": "int",
+          "module": null,
+          "qualname": null
+        },
+        "flop1n_error_tol_bit": {
+          "type": "int",
+          "module": null,
+          "qualname": null
+        },
+        "time1u_error_tol_abs": {
+          "type": "float",
+          "module": null,
+          "qualname": null
+        },
+        "time1n_error_tol_abs": {
+          "type": "float",
+          "module": null,
+          "qualname": null
+        },
+        "time1u_error_tol_bit": {
+          "type": "int",
+          "module": null,
+          "qualname": null
+        },
+        "time1n_error_tol_bit": {
+          "type": "int",
+          "module": null,
+          "qualname": null
+        },
+        "fork_pid_base": {
+          "type": "int",
+          "module": null,
+          "qualname": null
+        },
+        "max_fork_candi_num": {
+          "type": "int",
+          "module": null,
+          "qualname": null
+        },
+        "max_fork_pid": {
+          "type": "int",
+          "module": null,
+          "qualname": null
+        },
+        "GLB_BUFFER_SIZE_PER_CORE": {
+          "type": "float",
+          "module": null,
+          "qualname": null
+        },
+        "BW_DRAM": {
+          "type": "float",
+          "module": null,
+          "qualname": null
+        },
+        "LAT_PER_HOP": {
+          "type": "float",
+          "module": null,
+          "qualname": null
+        },
+        "AVG_HOP_NUM": {
+          "type": "int",
+          "module": null,
+          "qualname": null
+        },
+        "AVG_HEAD_LAT": {
+          "type": "float",
+          "module": null,
+          "qualname": null
+        },
+        "BROADCAST_SCALER": {
+          "type": "int",
+          "module": null,
+          "qualname": null
+        },
+        "cfg_dir": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "log_dir": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "plot_dir": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "trace_dir": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "cache_dir": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "csv_dir": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "ld_fmt": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "cfg_root_fmt": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "cache_root_fmt": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "plot_root_fmt": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "trace_root_fmt": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "log_root_fmt": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "cfg_root_dir_fmt": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "csv_root_fmt": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "bin_fn_fmt": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "routing_table_fn_fmt": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "bin_save_fmt": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "routing_table_save_fmt": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "plt_fn_w_seed_fmt": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "plt_fn_wo_seed_fmt": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "trace_fn_wo_seed_fmt": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "trace_fn_w_seed_fmt": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "core_stat_fn_fmt": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "case_name_bp": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "case_name_glb": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "case_name_dyn": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "case_name_cyc": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "case_name_fifo": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "case_name_pglb": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "case_suffix_N_barrier": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "case_name_bp_input": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "case_name_glb_input": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "one_stage_case_coll": {
+          "type": "list",
+          "module": null,
+          "qualname": null
+        },
+        "case_name_dyn_input": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "case_name_cyc_input": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "case_name_fifo_input": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "case_name_pglb_input": {
+          "type": "str",
+          "module": null,
+          "qualname": null
+        },
+        "two_stage_case_coll": {
+          "type": "list",
+          "module": null,
+          "qualname": null
+        },
+        "init_packing_algo_required": {
+          "type": "list",
+          "module": null,
+          "qualname": null
+        },
+        "partition_max": {
+          "type": "int",
+          "module": null,
+          "qualname": null
+        },
+        "decompose_dag_into_chains": {
+          "type": "function",
+          "module": "task.graph_breakdown",
+          "qualname": "decompose_dag_into_chains"
+        },
+        "OrderedDict": {
+          "type": "type",
+          "module": "collections",
+          "qualname": "OrderedDict"
+        },
+        "GurobiRscSlackEstim": {
+          "type": "type",
+          "module": "sched.packing_solver.chain_slack_assign",
+          "qualname": "GurobiRscSlackEstim"
+        },
+        "HeuriRscSlackEstim": {
+          "type": "function",
+          "module": "sched.packing_solver.chain_slack_assign",
+          "qualname": "HeuriRscSlackEstim"
+        },
+        "AccVarDist": {
+          "type": "type",
+          "module": "approach.approach_Eq",
+          "qualname": "AccVarDist"
+        },
+        "SenVarDist": {
+          "type": "type",
+          "module": "approach.approach_Eq",
+          "qualname": "SenVarDist"
+        },
+        "TaskConstraints": {
+          "type": "type",
+          "module": "sched.ref_alloc_search",
+          "qualname": "TaskConstraints"
+        },
+        "build_score_dict_ref_flops": {
+          "type": "function",
+          "module": "sched.slack_estim",
+          "qualname": "build_score_dict_ref_flops"
+        },
+        "DistributeSlack": {
+          "type": "function",
+          "module": "sched.slack_estim",
+          "qualname": "DistributeSlack"
+        },
+        "rsc_slack_estim": {
+          "type": "function",
+          "module": "sched.slack_estim",
+          "qualname": "rsc_slack_estim"
+        },
+        "get_chains": {
+          "type": "function",
+          "module": "sched.slack_estim",
+          "qualname": "get_chains"
+        },
+        "init_topo_time_attr": {
+          "type": "function",
+          "module": "sched.slack_estim",
+          "qualname": "init_topo_time_attr"
+        },
+        "deduce_RDA": {
+          "type": "function",
+          "module": "sched.slack_estim",
+          "qualname": "<lambda>"
+        },
+        "deduce_num_exec": {
+          "type": "function",
+          "module": "sched.slack_estim",
+          "qualname": "<lambda>"
+        },
+        "deduce_no_stall_latency": {
+          "type": "function",
+          "module": "sched.slack_estim",
+          "qualname": "<lambda>"
+        },
+        "deduce_min_tot_rsc": {
+          "type": "function",
+          "module": "sched.slack_estim",
+          "qualname": "<lambda>"
+        },
+        "deduce_max_tot_rsc": {
+          "type": "function",
+          "module": "sched.slack_estim",
+          "qualname": "<lambda>"
+        },
+        "deduce_flops_ModelSum": {
+          "type": "function",
+          "module": "sched.slack_estim",
+          "qualname": "<lambda>"
+        },
+        "deduce_flops_ModelSumMax": {
+          "type": "function",
+          "module": "sched.slack_estim",
+          "qualname": "<lambda>"
+        },
+        "deduce_equiv_core": {
+          "type": "function",
+          "module": "sched.slack_estim",
+          "qualname": "<lambda>"
+        },
+        "deduce_util": {
+          "type": "function",
+          "module": "sched.slack_estim",
+          "qualname": "<lambda>"
+        },
+        "deduce_task_attrib": {
+          "type": "function",
+          "module": "sched.slack_estim",
+          "qualname": "deduce_task_attrib"
+        },
+        "deduce_cfg2": {
+          "type": "function",
+          "module": "sched.slack_estim",
+          "qualname": "deduce_cfg2"
+        },
+        "update_taskattr_dict": {
+          "type": "function",
+          "module": "sched.slack_estim",
+          "qualname": "update_taskattr_dict"
+        },
+        "get_chains_info": {
+          "type": "function",
+          "module": "sched.slack_estim",
+          "qualname": "get_chains_info"
+        },
+        "plot_timeline_graph": {
+          "type": "function",
+          "module": "sched.slack_estim",
+          "qualname": "plot_timeline_graph"
+        }
+      },
+      "signatures": {
+        "build_score_dict_ref_flops": "(task_dict: 'Dict[str, TaskBase]', nodes: 'Any', score_dict)",
+        "get_chains_info": "(task_graph, start_nodes, end_nodes)"
+      },
+      "pickle_original": {
+        "build_score_dict_ref_flops": "gASVNAAAAAAAAACMEXNjaGVkLnNsYWNrX2VzdGltlIwaYnVpbGRfc2NvcmVfZGljdF9yZWZfZmxvcHOUk5Qu",
+        "get_chains_info": "gASVKQAAAAAAAACMEXNjaGVkLnNsYWNrX2VzdGltlIwPZ2V0X2NoYWluc19pbmZvlJOULg=="
+      }
+    },
+    "task/graph_breakdown.py": {
+      "module": "task.graph_breakdown",
+      "archive": "task/graph_breakdown_unused.py",
+      "names": [
+        "sort_chains_by_ddl_flops"
+      ],
+      "source_sha256": "5d67c52d35f0ffb2be250b1d1f3a002bd574db50a34cda5b2df832bf88d28933",
+      "ends_lf": false,
+      "slices": [
+        {
+          "name": "sort_chains_by_ddl_flops",
+          "start": 19,
+          "end": 20,
+          "text": "def sort_chains_by_ddl_flops(chains, flops_dict, ddl_dict):\n    chains.sort(key=lambda x: (-ddl_dict[id(chains[-1])], sum([flops_dict[n] for n in x])), reverse=True)\n",
+          "sha256": "253e9c36efbe617392b783cbe456dc4f456120fb7b024091bf0fa7c62aa63dec"
+        }
+      ],
+      "removed_lines": 2,
+      "remaining_sha256": "486b438fa3325f8d035ef91ca63518649986e21aee74cb761092908c579cdbd1",
+      "public_exports": {
+        "nx": {
+          "type": "module",
+          "module": null,
+          "qualname": null
+        },
+        "List": {
+          "type": "_SpecialGenericAlias",
+          "module": "typing",
+          "qualname": null
+        },
+        "Any": {
+          "type": "_SpecialForm",
+          "module": "typing",
+          "qualname": null
+        },
+        "decompose_dag_into_chains": {
+          "type": "function",
+          "module": "task.graph_breakdown",
+          "qualname": "decompose_dag_into_chains"
+        },
+        "sort_chains_by_ddl_flops": {
+          "type": "function",
+          "module": "task.graph_breakdown",
+          "qualname": "sort_chains_by_ddl_flops"
+        },
+        "test_decompose_dag_into_chains": {
+          "type": "function",
+          "module": "task.graph_breakdown",
+          "qualname": "test_decompose_dag_into_chains"
+        }
+      },
+      "signatures": {
+        "sort_chains_by_ddl_flops": "(chains, flops_dict, ddl_dict)"
+      },
+      "pickle_original": {
+        "sort_chains_by_ddl_flops": "gASVNQAAAAAAAACMFHRhc2suZ3JhcGhfYnJlYWtkb3dulIwYc29ydF9jaGFpbnNfYnlfZGRsX2Zsb3BzlJOULg=="
+      }
+    }
+  },
+  "test_path": "test_unused_slack_graph_helpers.py",
+  "non_batch_source_sha256": {
+    "__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "analyze/UE_extract.py": "647236fe7503c80740cca43e08858ccbe436a18ac4ed7d2bc54ad0b9b5d46cad",
+    "analyze/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "analyze/analyze_ctx_switch.py": "d7856b1f2ccb2fbf3652f00ee5552bfb570836953060f2dbfa1265554a67038d",
+    "analyze/analyze_timing.py": "45b94574b8ee2c7014e3ad5814b5348df28691dcaee124c5a7e15102f044ce8c",
+    "analyze/analyze_tp.py": "cd54307337eb3d37408e50b15b31fb7266b90a3c7addba3c5c3e707b400a3d38",
+    "analyze/pattern.py": "75c5a0ca22d710f7b301be118d820a0d3ca833176abd8777d43c104eaf119a46",
+    "analyze/stat_num_exec.py": "d830debb487d25b50f79384b2580e5d52a853e61e7fd3c2c01651e106b71cafe",
+    "analyze/xlsl_e2e_lat_abla.py": "2803dd27f7c4031af44116eae11439e2e80abb5823ef0255285669dadf6ef826",
+    "analyze/xlsl_e2e_latency.py": "db352b4685c6fa76f3c8c5e5940c469af14b1db6297e6df29135e0beae1c0f60",
+    "analyze/xlsl_max_tp.py": "1468390c1e293780e32b81e649cd501542e9d0d1d9b88b37018c7e1ad8f11201",
+    "analyze/xlsl_min_core.py": "90d91b24da0e3015783044713c84a7abd72b70ba82edd8c56f2415719c614f8d",
+    "analyze/xlsl_safe_scalable.py": "d16deee46b74bd34883d39abfab86691c36455b8fe02547cb5f275ad65b6ee55",
+    "approach/__init__.py": "25606592fea79200c3a2512098898d0af5b53b81bf863b221281d3a46328b68c",
+    "approach/approach_Eq.py": "bb2e65224f12fe2555c2f12567276a110d8d409808a180f4d4282b86a289cdc8",
+    "approach/approach_Eq_unused.py": "85092d18e980606c456fb8a8a49fdfcff69f519dc75088aab2f3021431093bf4",
+    "approach/approach_collector.py": "8f42d09dfe455ebdbf931a11266b5f4afccef485029d02affc5e36546754ffd1",
+    "approach/approach_def.py": "3bf4c156262a66c636be06e744da862240ebf619c5926a2b6928bf3f6e6df931",
+    "approach/approach_initiator.py": "4e805f25b057c5f66220ee491f40523587af265d948316f7c7993df3082decc9",
+    "approach/approach_sched.py": "fe9e3ab6bbb45ed4ee11215417b99a8868d7d0dba648949fc92a0f52a59c5a8e",
+    "approach/approach_setup.py": "0e30787994a6a23ea8c048a10ece4c5dc58bb157a311a2c5e8c242cda7c6bbbf",
+    "approach/approach_sim.py": "1d064618107e7888b9e75debc1e983dbc7e56a4e09240be75214d4dc770b2f4e",
+    "approach_Eq.py": "6a869b99f96cf2bd633f27904fe4d2831e39868bb0aa8f14b4efbbce1d21c09e",
+    "approach_collector.py": "e5d2c0a346067a134ed26204a0e367e94aa2131394d6387e60e4a6ab2fcb46e0",
+    "approach_def.py": "65470e4b084aa67d3c1dcb583c9c15cbf3e521c06cffa17855bd0097b7afb501",
+    "approach_initiator.py": "c55558bf6de3422b61a609f300776f68de7a3e27521a2bb8e81566de5a0e12ef",
+    "approach_sched.py": "44ae9baacc4246eb8a0bac53508be8220bb33064f369ee7e654fb6315d538d42",
+    "approach_setup.py": "7cf7d1550204beb4abba7d7cf0c0c52575253fe7296002ad9033109cb8d6506b",
+    "approach_sim.py": "46247bf523cae1a8a0a62e71109ef0aba3c86b4c278754b28493718815e02369",
+    "cleanup/tools/dialogue_guard.py": "15879c4efa377efec7c2e114e6d134b33da570e52916dea0ca0bf858bd44691a",
+    "debug_sink_constraint.py": "91b99637ccbc7472819776419d52e659027e37c97732ab248841fc1cf950959b",
+    "example/bm1.py": "9cb4482dd34b5102c5f9c9257a25bbef15273b8d5c4b94665c3f9f151c0fc57f",
+    "example/bm2.py": "a83603e2af0a4637c768a8f8594617fd9629083de2cd716d209436b043b09dfc",
+    "example/bm3.py": "200cd9bc6935e660d0c7d1f3ad6f25b46cb3492db946b694f8c4b7275c8f6b10",
+    "example/bm4.py": "381bebb8759796b353478cfb9aba4c24bab6c5b108dc3fbc9172710426bca4a2",
+    "global_var.py": "1eae1477f532e916e9829942bc4474bc79604809d85171a14356d99818d769cd",
+    "global_var_unused.py": "2a7b284d0b7bb8c3cad4e0c639839f3d09b616b19c644b95560dd20d5b8cfb2b",
+    "main_approach.py": "e32f1ec431614e4ea30761eaab6278fe65ba2166717b5386bc0148cfad22db3d",
+    "mapper/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "mapper/mem_planner.py": "6d5bb9291bac221b6da31b9671933aec22b5b0e780ac334a32e7e60030fe947e",
+    "model/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model/barrier_agent.py": "57d2943c3ac1c21423e29affce89f2b7f664d097d2d0cefb0124736545685ab7",
+    "model/buffer.py": "aec736f78d35ba582d8d091cb2078181c53e195f7a97346c9cefb6b09a4576c8",
+    "model/event_gen/e2e_latency.py": "3043c818e36dbdfcee8ee50573c5274a8549fbb1413e4cb55cde07cc0e990a7e",
+    "model/event_gen/e2e_latency_unused.py": "aab12e28ee3d728540d8f4a016285631f2e935e441e15c76b14a688e20c7a5b3",
+    "model/lru.py": "b2be894c685be6c3a5fd48b7b7117d2cc90059a4109c7374c68979f74d4a7013",
+    "model/message/Context_message.py": "c8d4de2ad5e73b2db072f710777d6f846285be1e03d038711aecb46a25247c64",
+    "model/message/data_pipe.py": "544689f0008568d77eeec76ab35ff12d7ce7d5c808dc933e06e76bd6db3b74c0",
+    "model/message/message_handler.py": "7d0c4520760f95b791e1c9f8d0c3220be1959f8ab58aabd8d2328fd8793a0785",
+    "model/message/message_pipe.py": "6d6d8228acca9ff2fd1e2cf02573d35f058845ebafe6dfdae98acba9226fd309",
+    "model/message/msg_dispatcher.py": "1021025fd86f50c8f82799bea77911e05564531fc93fcba886639da1a430a3e3",
+    "model/noc.py": "001d30e29ffe3ebc8b9724e151c445e100ef885287fe5abdd00a9bb0048d8f51",
+    "model/performance.py": "273eabbd6dbc16df28db18758e8f51defe84caba3f6ca3cf40fa22c7b041235a",
+    "model/position_table.py": "fa6615a4b3e54e41304463dda597494be7bc5e672abbae1149e11cfb8f2ecc59",
+    "model/resource_agent.py": "7290b7b496e0a46a0ef74540b1747fcb35e6724443a5f70072562bc7ab8cefd8",
+    "model/streaming_processing/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model/streaming_processing/wartermark_strategy.py": "5af8e0035e2a360ae5bd6201f57f55b30970d8bebf8d542f08815db34264e596",
+    "model/task_queue_agent.py": "227fcd0bc10129614b6481b94f239a621ea6a460de815ee007e828142cad1c24",
+    "model/trace_example.py": "ff2e00c361a9ba9ca0386704abe57acb3e8ca924b3a9187d6fb1129f0e4cd880",
+    "old/allocator_agent.py": "f7b48b84465c9f1390b9ce44e0bfd463f896fb869e2d1364e3e9fe79ef892582",
+    "old/appoach_plot6.py": "44332d84c5d05f7d520b505c96c80c62a8ec6511c41440db41ca4bc6081d0d81",
+    "old/approach_util33.py": "89ae0ac387bd44484b1a345e5bd3999cc279acc2f5a705cba6ab6fc285701352",
+    "old/pre_alloc.py": "8a2e3724401e442c505cc5af34b22abdf30034a7dd7417526c10865df5ed76c0",
+    "optimizer/delta_ver.py": "da1762a2d66c80ca5fbd9a3de4eff3fb96f3d2d6f3ca16186996c0853cd5c9a3",
+    "optimizer/dist_custom.py": "923e2cafa54bd27646b620d3f13e8ab98386f8a6b93a4ad73c78e6dd69f479f9",
+    "optimizer/ops.py": "41d6ddb143b93e14c51d49dbaea2db60ca6adcd0fdc163c784266e64dcb9595c",
+    "optimizer/ops_test.py": "6584b9cff086fb2492e5131153c23b78225a27ed6ce953aee8a84244bd66e758",
+    "optimizer/scheduler_base.py": "323b0e48b88910f152e8c21a06d4c8a0f9f965aa6f2b09bf3388868737a9c884",
+    "paths.py": "b8aa8a5471c8a6420f9b9532013be1b39ea8a195c2c301bdb42193eccc111170",
+    "ref_tdigest.py": "0e7642c9892553f579b5340d21982b589bdb4a85d4965cbfc70fa35289f9c287",
+    "run/1/all.sh": "05105542d6b66aaf914ad86ccd1338ea4049ed8d2c21a91b2783f9c37a0ff6e4",
+    "run/1/scan_aux.sh": "9d7cb82e0805928fed87f4efb9c727c96d371ae51382ea8fce0192eff92180d3",
+    "run/1/scan_core.sh": "958401b5016d0e19eade15c3f7831b07cf8ad611e627ff6d1f4a06db8d27503a",
+    "run/1/sweep_seed.sh": "dea4922a271e4e318ecc29f39a7ef728de52bd581470c87095b4023c50dcfa8a",
+    "run/2/aba_scalability_scan.sh": "d527b302c374401165e3011cca9d3904710ee4154def52aab5489d725c41f925",
+    "run/2/abla_scalablility.sh": "2f56009e9eb0da9cfa9223737aadb356e444b7e8b2e6212810c2e6385151a498",
+    "run/2/all2.sh": "85638195a489880dc8c26bdba929d3c62a4b0b83c6eaaeb252d040db74824880",
+    "run/3/time_sharing.sh": "b8104f1f3c684290dfbdf781e07b60a70e8feb251bbe9cd80278c3fd9dcfa5ee",
+    "run/aba_scalability_scan copy.sh": "c60b76ec65a851962d4b7235ed76e8450a6e80cbefdd22ce6aaf5530fb348819",
+    "run/abla_chain_sharing.sh": "17943f0885c65567943936abdc82e6c53a5df33340f3a0ef37ff9a2c52e370b3",
+    "run/bin_sharing.sh": "a94cd42eb610e21321b47921c5c2063a4590b0b8322cf57ab8b57a13166287b4",
+    "run/cfg_parser.py": "5d8c3a618d13994aee7dbec18e033d938491a9e46fedeaa75ce712b59f7d9f55",
+    "run/clean.sh": "7d5abeedad2abb698003ac37a594feffa5676334a8f615fcdee6c059a1e4ecbe",
+    "run/max_core_num_scan.py": "79fa47da771d7ac88ef383946e4609c8248212f4b4d7fa6517f27ec34f2f464a",
+    "run/scan_coalescing.sh": "2ee0fbb7c0b029075ee071e3ac1af672e63019af484fcc2a30bcdd03173dfa7d",
+    "run/temp.sh": "31236f54d38944c69f2cb3b3f069a7c3931332e4add8cfd252d091d5621a6a49",
+    "sched/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sched/bin_list_utils.py": "67a9aa91714a797d20f504c33bca796836632c6501d954e971cb1aa5aaa79bb4",
+    "sched/bin_list_utils_old.py": "580d943fd5b2057b4fd624c32d6197a24b56a2c5c36d3be3ceb5924032bc4a9e",
+    "sched/bin_list_utils_unused.py": "2142733db35776d6df1936a8091b59cf57e438dad2e10d316ae0be11110a536a",
+    "sched/bin_ops.py": "361bbc497b182e68304694f791354e9a296e93d5941cef267e9775bb9b47c301",
+    "sched/binpack_config.py": "d10829049efd5502328ca5f14d92dbe26435b219a53f3b4b03c06530ebc43f40",
+    "sched/global_sched.py": "a11a8324def4ca8b8763814e7dc8483a5444bc013e29083fa1b1dbbfbbbe4118",
+    "sched/global_sched_alloc.py": "627300a13b10f98ca4c2c8b08807780578cf1cf923c68b9967ce32dc9af1b2e0",
+    "sched/global_sched_old.py": "cc93f501ce6bf24f92841d8a323fe4d9550fd7e76120be27c539242b5e1df425",
+    "sched/global_sched_repack.py": "2e61f425893e6365d711676c53445cf89bec915c3ee5039c82d84d024dfcfece",
+    "sched/monitor_agent.py": "c748029c18bd6c99ffa0fed57536d5344fbc20ae23fc64b37446b2d973f9d83b",
+    "sched/packing_solver/chain_slack_assign.py": "e564906bc80d9b742e321cd9d0395fe6b03a2b891c35ddb9142e852c9c4d141f",
+    "sched/packing_solver/fit.py": "1b3d0b5296648d4d7403016c67f53be21d34b55c334b8d193f4fc770216e7998",
+    "sched/packing_solver/gurobi_MP_semi2DClst.py": "e56adc1a37dbba39cc3f8d707a955bfc64b3b03f71356084f989946593a02895",
+    "sched/packing_solver/unused/gurobi_semi2Dclst_mapping.py": "4d49d05ab20981eafeb9afe897aa0b952c2ce7d2eaac0880b71fa8131430c522",
+    "sched/packing_solver/unused/gurobi_semi2Dclst_mapping2.py": "9c40c2b4e21edcdb5fc25d51b6ce9479bbb4f8c64e2e3bc577d8e61ebf36e3dc",
+    "sched/placement.py": "008ca6d7c2316064c3fce0b75258e35c77f570b727e483d32a2010f6f7408fdf",
+    "sched/pre_alloc_new.py": "6991b6551a7f0ff3fe94f6b47f4fbe469a4da1ccdbd80e8eaca1bb7749cfbea6",
+    "sched/pre_alloc_new_old.py": "97e11a4df33ebc3b3ff6adaeabaa1b1635f34e9ad059cdbda23eb2f6a0cbd878",
+    "sched/ref_alloc_search.py": "c29243f7134518633c9b3f1631420607adef0ef79d994c0152ef579402c88ca7",
+    "sched/runtime_legacy/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sched/runtime_legacy/sched_fn.py": "cc82e889cb203dd7cb306988050c432b92857c559ccd2ab2bb6c85d2a63c79f7",
+    "sched/runtime_legacy/sched_utils.py": "ecc8414c05eeb9f1b7574142c1da5620d0c7a5e4d1ed6d2ecb2a3442604f2135",
+    "sched/runtime_legacy/scheduler_agent.py": "c0e3d3583f0a86947fa1478cb1d42bb9bbd4ff0727aab2128173b878cbc58cac",
+    "sched/runtime_legacy/state_trans.py": "ab3850e46e89c907fd2ca6a19667427c3e787ce1c5cf52e6fc2d93a7a4edc569",
+    "sched/sched_fn.py": "6ddf24cd84d4001c09bc637719430f60a7580950a1499046a0e6f7a1277026ed",
+    "sched/sched_utils.py": "daddd34bce6031198b5866b90eaa22365ee950b41323d2164c00e2e23b8479e6",
+    "sched/scheduler_agent.py": "cf77c531c15130c4dd3a218a9fd197d3daba242c018e1b222bdd1371e893e4de",
+    "sched/scheduling_table.py": "a7df3b3ed412e6b30b29d9cc533749c59b74c38c88e19ff6dba9858f669aad8c",
+    "sched/scheduling_table_event.py": "a79b101f8648cc12411477321025164d0fb6546fa20f9c9780fccc3b7ff46837",
+    "sched/sort_function.py": "50ef837990c9d6a8dda164fca656852a4f25e640394160058d15326291a6183f",
+    "sched/state_trans.py": "29b77a41fed368421d76f5bf06cd698955990684908afbfc03bf49d1262cc628",
+    "scripts/abla_exp_runner.py": "73ca0bccb065a284f1f078c3a4a4027d9134e972b3bba18a6e26380e61e60864",
+    "scripts/e2e_exp_runner.py": "4e64059930d47287f6827beb5043dc382947d6128ae5ef854d0ded49f2ef1286",
+    "scripts/e2e_hyperparam.py": "579229a5e596f3eac366215af6ec2ad67d862d69f5ca43f05b4a06ed466ee9b8",
+    "scripts/exp_common.py": "6d0e913f0eacdc62b2972ce2ee9c25f459891e92da12f32c4001ac74a0f98274",
+    "scripts/motiv_exp_runner.py": "4592032791d2bcfe532aa01adda9f545b9196545bb0c4e8a0e018358e4eb712a",
+    "scripts/run_abla_exps.sh": "3f8d8a01e366995b7e8d4fb0b492e4c1bb0cbe989da2c061d501f80caca7c366",
+    "scripts/run_motiv_exps.sh": "4238e238d4640f53c19f2705f892be988ad19a50439f8c2d48efd2cd43c36d66",
+    "scripts/test_alloc_lat.py": "fc0bf0ead04d6e71fa32e69003388fc1ae402a2cbeee2f18e6ae167cb16ce552",
+    "scripts/unused/repack_sweep.py": "262dad167ec4fad1c6b2b9fe14c5d941f958cdbb0722198b723c2e76adace213",
+    "sim_main.py": "0a16f4cf6c0ebeb1a57079216f4046ab55db8f6bfdbf53b17c537a3488334f5d",
+    "sim_main_old.py": "02aac1cd1af96eec0dbb51393f84cd33c05abaf4b1abf657cb89dd1cd02472cc",
+    "simple_test_collector.py": "b6bff9b527a9941a187d5e89640f5d785791ddd4c69df3a745a1e23a0e127142",
+    "task/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "task/graph_scaling.py": "23cd8bd44738144c8a4578875a88bab4d06bef003cf0bdaa958e743ce9c88492",
+    "task/load_cfg/loadA.py": "7f75f58b094573322dce01ca6f2366241fbd82e4891292aee390c0a1d98ad287",
+    "task/spec.py": "66f2eeb5f3c35b9ee92fb0f0a90f0bba4e2cecfb88fd2192f3be7ca931d09022",
+    "task/task_agent.py": "21786d243f70d1e41d5ad43f1d8c22dee13d54f3fab28a84719ad3cbe16f8a2e",
+    "task/task_cfg.py": "6194c815e202c298f7789bb37be929dcc59f19d513a2ebb9a476a2fc3b0ef14b",
+    "task/task_cfg_old.py": "06a38533685502a78a0274edd8d5a460f5baa3579f6adb420b38bcbbca2d0356",
+    "task/throughput_cnt.py": "7df7e2fa30a3f6061fffa210952d211666e1dcd00636d18e80fa29cf61fc15ef",
+    "test_approach_collector.py": "efd7b67e99cd0a970dc1a7998461af5a0795fa239ead43e00eb5e8ce0e6f2d68",
+    "test_approach_package_compat.py": "ca4bac52de6e14174ed93fd56d2c23be16d9457be9f15c93122e6ccf94b02792",
+    "test_binpack_pipeline_contract.py": "144f9f0acc656c687adcdc8099124697888c41a4bb0b78a621f43a938cefb1d9",
+    "test_closure_fix.py": "16c04deae220389724a7c4c28a0bb838399d671a61429ddc84cd5d28c3994165",
+    "test_core_allocation.py": "44fe340a041794584e12a30b99cb9aac1aa9dc3dc5e3a6e82f94c9f3ce428045",
+    "test_deduce_cfg2.py": "9edb5c3de657302137144df2ae7425bf36976e3b20a4b5d10f3580f83e41fddb",
+    "test_duplicate.py": "662f0ed5fd5a76dd59e2b82981377297aba2ac118a6c9a150176f619aa2e2dd2",
+    "test_event_update.py": "68ff45c5ff1f5fad893933722565b034bef2e1831f15c56ce398a5b982d7dc95",
+    "test_legacy_approach_archive.py": "b6dc62122ea09a99cbbddf2cffa52613be3376d7f827518487a977fd2fb96d77",
+    "test_mapping.py": "a32256208595f8b9f451c71d9d9c18a8f4f992d161c1bfa79e048b30cbed5b3f",
+    "test_mem_planner.py": "e171129a2a8519f3de13f8e533e2bd74cba08f076dd9e564945be65a01c87b60",
+    "test_old_task_cfg.py": "88498ed6d99d56a16cbbf610c6bc249e309496e5c8e29855da68666fdf274da8",
+    "test_repack_diagnostic.py": "d11f52e223cb829fb9dd16c401282b58e035df8bcceac3c000a560b63744b83f",
+    "test_scheduling_table.py": "5a44cb64b2e88744a72816784fb70f87b826dae56bd92a00ee07ffd29200bea0",
+    "test_unused_e2e_event_generators.py": "9959f891ba33892a0bcf75e3b0eff5b83259247a65e611b15d7b0f3a735aa496",
+    "test_unused_eq_quantiles.py": "7748d46ee067cf89e9707f6ea367733e0ef06e04b6f7d4074d1900f5ec3db832",
+    "test_unused_global_constants.py": "ac3bbe27146f057fa5fe7fa38ed51296f134a7f7dec76828bb8f63542046191d",
+    "test_unused_hdf5_utils.py": "cdc3fab2f6c53006d42c69c1c01abc9cff7bfeb035a828345ea73ebbd4f86fc6",
+    "test_unused_path_utils.py": "01e2d7da2298380db15ab323bc102a1b161788af6f5419d4965e1bfebc9a53ac",
+    "test_updated_stats.py": "cbd88f4afd5bdb6b8642fe435e386c38fc7856737a5df80909d3734dbaafe91d",
+    "tile_2d_mesh_mapper_fixed.py": "db0d65db81bdb53079bdf02e22da85432bafb5777de9b1e2d676834ef883e003",
+    "unused_fun.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "utils.py": "508f1366fb8bb08f16f1ad5f57e651692be7915c6a3c29e054ce73970dcd4e03",
+    "utils_unused.py": "cadac26936dca668f85f6eb6ceb84186c2be32dd52acae7b56785f760c15b40d"
+  },
+  "cases": [
+    {
+      "name": "score_normal",
+      "kind": "score",
+      "tasks": {
+        "a": {
+          "flops": 2.5
+        },
+        "b": {
+          "flops": 0
+        }
+      },
+      "nodes": [
+        "b",
+        "a"
+      ],
+      "scores": {
+        "keep": 9,
+        "a": -1
+      },
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": {
+            "type": "NoneType",
+            "value": null
+          }
+        },
+        "before": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "str",
+                    "value": "b"
+                  },
+                  {
+                    "type": "str",
+                    "value": "a"
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "scores"
+              },
+              {
+                "type": "dict",
+                "items": [
+                  [
+                    {
+                      "type": "str",
+                      "value": "keep"
+                    },
+                    {
+                      "type": "int",
+                      "value": 9
+                    }
+                  ],
+                  [
+                    {
+                      "type": "str",
+                      "value": "a"
+                    },
+                    {
+                      "type": "int",
+                      "value": -1
+                    }
+                  ]
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "tasks"
+              },
+              {
+                "type": "dict",
+                "items": [
+                  [
+                    {
+                      "type": "str",
+                      "value": "a"
+                    },
+                    {
+                      "type": "dict",
+                      "items": [
+                        [
+                          {
+                            "type": "str",
+                            "value": "flops"
+                          },
+                          {
+                            "type": "float",
+                            "value": 2.5
+                          }
+                        ]
+                      ]
+                    }
+                  ],
+                  [
+                    {
+                      "type": "str",
+                      "value": "b"
+                    },
+                    {
+                      "type": "dict",
+                      "items": [
+                        [
+                          {
+                            "type": "str",
+                            "value": "flops"
+                          },
+                          {
+                            "type": "int",
+                            "value": 0
+                          }
+                        ]
+                      ]
+                    }
+                  ]
+                ]
+              }
+            ]
+          ]
+        },
+        "after": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "str",
+                    "value": "b"
+                  },
+                  {
+                    "type": "str",
+                    "value": "a"
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "scores"
+              },
+              {
+                "type": "dict",
+                "items": [
+                  [
+                    {
+                      "type": "str",
+                      "value": "keep"
+                    },
+                    {
+                      "type": "int",
+                      "value": 9
+                    }
+                  ],
+                  [
+                    {
+                      "type": "str",
+                      "value": "a"
+                    },
+                    {
+                      "type": "float",
+                      "value": 2.5
+                    }
+                  ],
+                  [
+                    {
+                      "type": "str",
+                      "value": "b"
+                    },
+                    {
+                      "type": "int",
+                      "value": 0
+                    }
+                  ]
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "tasks"
+              },
+              {
+                "type": "dict",
+                "items": [
+                  [
+                    {
+                      "type": "str",
+                      "value": "a"
+                    },
+                    {
+                      "type": "dict",
+                      "items": [
+                        [
+                          {
+                            "type": "str",
+                            "value": "flops"
+                          },
+                          {
+                            "type": "float",
+                            "value": 2.5
+                          }
+                        ]
+                      ]
+                    }
+                  ],
+                  [
+                    {
+                      "type": "str",
+                      "value": "b"
+                    },
+                    {
+                      "type": "dict",
+                      "items": [
+                        [
+                          {
+                            "type": "str",
+                            "value": "flops"
+                          },
+                          {
+                            "type": "int",
+                            "value": 0
+                          }
+                        ]
+                      ]
+                    }
+                  ]
+                ]
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "score_empty",
+      "kind": "score",
+      "tasks": {},
+      "nodes": [],
+      "scores": {
+        "keep": 9
+      },
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": {
+            "type": "NoneType",
+            "value": null
+          }
+        },
+        "before": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": []
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "scores"
+              },
+              {
+                "type": "dict",
+                "items": [
+                  [
+                    {
+                      "type": "str",
+                      "value": "keep"
+                    },
+                    {
+                      "type": "int",
+                      "value": 9
+                    }
+                  ]
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "tasks"
+              },
+              {
+                "type": "dict",
+                "items": []
+              }
+            ]
+          ]
+        },
+        "after": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": []
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "scores"
+              },
+              {
+                "type": "dict",
+                "items": [
+                  [
+                    {
+                      "type": "str",
+                      "value": "keep"
+                    },
+                    {
+                      "type": "int",
+                      "value": 9
+                    }
+                  ]
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "tasks"
+              },
+              {
+                "type": "dict",
+                "items": []
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "score_duplicate",
+      "kind": "score",
+      "tasks": {
+        "a": {
+          "flops": 3
+        }
+      },
+      "nodes": [
+        "a",
+        "a"
+      ],
+      "scores": {},
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": {
+            "type": "NoneType",
+            "value": null
+          }
+        },
+        "before": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "str",
+                    "value": "a"
+                  },
+                  {
+                    "type": "str",
+                    "value": "a"
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "scores"
+              },
+              {
+                "type": "dict",
+                "items": []
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "tasks"
+              },
+              {
+                "type": "dict",
+                "items": [
+                  [
+                    {
+                      "type": "str",
+                      "value": "a"
+                    },
+                    {
+                      "type": "dict",
+                      "items": [
+                        [
+                          {
+                            "type": "str",
+                            "value": "flops"
+                          },
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ]
+                      ]
+                    }
+                  ]
+                ]
+              }
+            ]
+          ]
+        },
+        "after": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "str",
+                    "value": "a"
+                  },
+                  {
+                    "type": "str",
+                    "value": "a"
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "scores"
+              },
+              {
+                "type": "dict",
+                "items": [
+                  [
+                    {
+                      "type": "str",
+                      "value": "a"
+                    },
+                    {
+                      "type": "int",
+                      "value": 3
+                    }
+                  ]
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "tasks"
+              },
+              {
+                "type": "dict",
+                "items": [
+                  [
+                    {
+                      "type": "str",
+                      "value": "a"
+                    },
+                    {
+                      "type": "dict",
+                      "items": [
+                        [
+                          {
+                            "type": "str",
+                            "value": "flops"
+                          },
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ]
+                      ]
+                    }
+                  ]
+                ]
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "score_partial_missing_task",
+      "kind": "score",
+      "tasks": {
+        "a": {
+          "flops": 3
+        }
+      },
+      "nodes": [
+        "a",
+        "missing"
+      ],
+      "scores": {
+        "keep": 9
+      },
+      "expected": {
+        "result": {
+          "kind": "exception",
+          "type": "AssertionError",
+          "message": ""
+        },
+        "before": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "str",
+                    "value": "a"
+                  },
+                  {
+                    "type": "str",
+                    "value": "missing"
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "scores"
+              },
+              {
+                "type": "dict",
+                "items": [
+                  [
+                    {
+                      "type": "str",
+                      "value": "keep"
+                    },
+                    {
+                      "type": "int",
+                      "value": 9
+                    }
+                  ]
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "tasks"
+              },
+              {
+                "type": "dict",
+                "items": [
+                  [
+                    {
+                      "type": "str",
+                      "value": "a"
+                    },
+                    {
+                      "type": "dict",
+                      "items": [
+                        [
+                          {
+                            "type": "str",
+                            "value": "flops"
+                          },
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ]
+                      ]
+                    }
+                  ]
+                ]
+              }
+            ]
+          ]
+        },
+        "after": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "str",
+                    "value": "a"
+                  },
+                  {
+                    "type": "str",
+                    "value": "missing"
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "scores"
+              },
+              {
+                "type": "dict",
+                "items": [
+                  [
+                    {
+                      "type": "str",
+                      "value": "keep"
+                    },
+                    {
+                      "type": "int",
+                      "value": 9
+                    }
+                  ],
+                  [
+                    {
+                      "type": "str",
+                      "value": "a"
+                    },
+                    {
+                      "type": "int",
+                      "value": 3
+                    }
+                  ]
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "tasks"
+              },
+              {
+                "type": "dict",
+                "items": [
+                  [
+                    {
+                      "type": "str",
+                      "value": "a"
+                    },
+                    {
+                      "type": "dict",
+                      "items": [
+                        [
+                          {
+                            "type": "str",
+                            "value": "flops"
+                          },
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ]
+                      ]
+                    }
+                  ]
+                ]
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "score_partial_missing_flops",
+      "kind": "score",
+      "tasks": {
+        "a": {
+          "flops": 3
+        },
+        "b": {}
+      },
+      "nodes": [
+        "a",
+        "b"
+      ],
+      "scores": {},
+      "expected": {
+        "result": {
+          "kind": "exception",
+          "type": "AttributeError",
+          "message": "'types.SimpleNamespace' object has no attribute 'flops'"
+        },
+        "before": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "str",
+                    "value": "a"
+                  },
+                  {
+                    "type": "str",
+                    "value": "b"
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "scores"
+              },
+              {
+                "type": "dict",
+                "items": []
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "tasks"
+              },
+              {
+                "type": "dict",
+                "items": [
+                  [
+                    {
+                      "type": "str",
+                      "value": "a"
+                    },
+                    {
+                      "type": "dict",
+                      "items": [
+                        [
+                          {
+                            "type": "str",
+                            "value": "flops"
+                          },
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ]
+                      ]
+                    }
+                  ],
+                  [
+                    {
+                      "type": "str",
+                      "value": "b"
+                    },
+                    {
+                      "type": "dict",
+                      "items": []
+                    }
+                  ]
+                ]
+              }
+            ]
+          ]
+        },
+        "after": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "str",
+                    "value": "a"
+                  },
+                  {
+                    "type": "str",
+                    "value": "b"
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "scores"
+              },
+              {
+                "type": "dict",
+                "items": [
+                  [
+                    {
+                      "type": "str",
+                      "value": "a"
+                    },
+                    {
+                      "type": "int",
+                      "value": 3
+                    }
+                  ]
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "tasks"
+              },
+              {
+                "type": "dict",
+                "items": [
+                  [
+                    {
+                      "type": "str",
+                      "value": "a"
+                    },
+                    {
+                      "type": "dict",
+                      "items": [
+                        [
+                          {
+                            "type": "str",
+                            "value": "flops"
+                          },
+                          {
+                            "type": "int",
+                            "value": 3
+                          }
+                        ]
+                      ]
+                    }
+                  ],
+                  [
+                    {
+                      "type": "str",
+                      "value": "b"
+                    },
+                    {
+                      "type": "dict",
+                      "items": []
+                    }
+                  ]
+                ]
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "chains_branch",
+      "kind": "chains",
+      "edges": [
+        [
+          1,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          3,
+          4
+        ]
+      ],
+      "nodes": [
+        [
+          4,
+          {
+            "ddl": 0.1
+          }
+        ]
+      ],
+      "starts": [
+        1
+      ],
+      "ends": [
+        4
+      ],
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": {
+            "type": "list",
+            "items": [
+              {
+                "type": "tuple",
+                "items": [
+                  {
+                    "type": "list",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "int",
+                        "value": 4
+                      }
+                    ]
+                  },
+                  {
+                    "type": "float",
+                    "value": 0.1
+                  }
+                ]
+              },
+              {
+                "type": "tuple",
+                "items": [
+                  {
+                    "type": "list",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "int",
+                        "value": 3
+                      },
+                      {
+                        "type": "int",
+                        "value": 4
+                      }
+                    ]
+                  },
+                  {
+                    "type": "float",
+                    "value": 0.1
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "before": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 3
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 4
+                      },
+                      {
+                        "type": "dict",
+                        "items": [
+                          [
+                            {
+                              "type": "str",
+                              "value": "ddl"
+                            },
+                            {
+                              "type": "float",
+                              "value": 0.1
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "edges"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "int",
+                        "value": 3
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "int",
+                        "value": 4
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 3
+                      },
+                      {
+                        "type": "int",
+                        "value": 4
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "starts"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "int",
+                    "value": 1
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "ends"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "int",
+                    "value": 4
+                  }
+                ]
+              }
+            ]
+          ]
+        },
+        "after": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 3
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 4
+                      },
+                      {
+                        "type": "dict",
+                        "items": [
+                          [
+                            {
+                              "type": "str",
+                              "value": "ddl"
+                            },
+                            {
+                              "type": "float",
+                              "value": 0.1
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "edges"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "int",
+                        "value": 3
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "int",
+                        "value": 4
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 3
+                      },
+                      {
+                        "type": "int",
+                        "value": 4
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "starts"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "int",
+                    "value": 1
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "ends"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "int",
+                    "value": 4
+                  }
+                ]
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "chains_multiple_starts",
+      "kind": "chains",
+      "edges": [
+        [
+          1,
+          2
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          3,
+          4
+        ]
+      ],
+      "nodes": [
+        [
+          4,
+          {
+            "ddl": 0.1
+          }
+        ]
+      ],
+      "starts": [
+        1,
+        2,
+        1
+      ],
+      "ends": [
+        4
+      ],
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": {
+            "type": "list",
+            "items": [
+              {
+                "type": "tuple",
+                "items": [
+                  {
+                    "type": "list",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "int",
+                        "value": 4
+                      }
+                    ]
+                  },
+                  {
+                    "type": "float",
+                    "value": 0.1
+                  }
+                ]
+              },
+              {
+                "type": "tuple",
+                "items": [
+                  {
+                    "type": "list",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "int",
+                        "value": 3
+                      },
+                      {
+                        "type": "int",
+                        "value": 4
+                      }
+                    ]
+                  },
+                  {
+                    "type": "float",
+                    "value": 0.1
+                  }
+                ]
+              },
+              {
+                "type": "tuple",
+                "items": [
+                  {
+                    "type": "list",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "int",
+                        "value": 4
+                      }
+                    ]
+                  },
+                  {
+                    "type": "float",
+                    "value": 0.1
+                  }
+                ]
+              },
+              {
+                "type": "tuple",
+                "items": [
+                  {
+                    "type": "list",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "int",
+                        "value": 4
+                      }
+                    ]
+                  },
+                  {
+                    "type": "float",
+                    "value": 0.1
+                  }
+                ]
+              },
+              {
+                "type": "tuple",
+                "items": [
+                  {
+                    "type": "list",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "int",
+                        "value": 3
+                      },
+                      {
+                        "type": "int",
+                        "value": 4
+                      }
+                    ]
+                  },
+                  {
+                    "type": "float",
+                    "value": 0.1
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "before": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 3
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 4
+                      },
+                      {
+                        "type": "dict",
+                        "items": [
+                          [
+                            {
+                              "type": "str",
+                              "value": "ddl"
+                            },
+                            {
+                              "type": "float",
+                              "value": 0.1
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "edges"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "int",
+                        "value": 3
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "int",
+                        "value": 4
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 3
+                      },
+                      {
+                        "type": "int",
+                        "value": 4
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "starts"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "int",
+                    "value": 1
+                  },
+                  {
+                    "type": "int",
+                    "value": 2
+                  },
+                  {
+                    "type": "int",
+                    "value": 1
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "ends"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "int",
+                    "value": 4
+                  }
+                ]
+              }
+            ]
+          ]
+        },
+        "after": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 3
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 4
+                      },
+                      {
+                        "type": "dict",
+                        "items": [
+                          [
+                            {
+                              "type": "str",
+                              "value": "ddl"
+                            },
+                            {
+                              "type": "float",
+                              "value": 0.1
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "edges"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "int",
+                        "value": 3
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "int",
+                        "value": 4
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 3
+                      },
+                      {
+                        "type": "int",
+                        "value": 4
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "starts"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "int",
+                    "value": 1
+                  },
+                  {
+                    "type": "int",
+                    "value": 2
+                  },
+                  {
+                    "type": "int",
+                    "value": 1
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "ends"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "int",
+                    "value": 4
+                  }
+                ]
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "chains_start_is_end",
+      "kind": "chains",
+      "edges": [],
+      "nodes": [
+        [
+          1,
+          {
+            "ddl": 0.2
+          }
+        ]
+      ],
+      "starts": [
+        1
+      ],
+      "ends": [
+        1
+      ],
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": {
+            "type": "list",
+            "items": [
+              {
+                "type": "tuple",
+                "items": [
+                  {
+                    "type": "list",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      }
+                    ]
+                  },
+                  {
+                    "type": "float",
+                    "value": 0.2
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "before": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "dict",
+                        "items": [
+                          [
+                            {
+                              "type": "str",
+                              "value": "ddl"
+                            },
+                            {
+                              "type": "float",
+                              "value": 0.2
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "edges"
+              },
+              {
+                "type": "list",
+                "items": []
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "starts"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "int",
+                    "value": 1
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "ends"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "int",
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          ]
+        },
+        "after": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "dict",
+                        "items": [
+                          [
+                            {
+                              "type": "str",
+                              "value": "ddl"
+                            },
+                            {
+                              "type": "float",
+                              "value": 0.2
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "edges"
+              },
+              {
+                "type": "list",
+                "items": []
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "starts"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "int",
+                    "value": 1
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "ends"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "int",
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "chains_empty_starts",
+      "kind": "chains",
+      "edges": [],
+      "nodes": [],
+      "starts": [],
+      "ends": [],
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": {
+            "type": "list",
+            "items": []
+          }
+        },
+        "before": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": []
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "edges"
+              },
+              {
+                "type": "list",
+                "items": []
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "starts"
+              },
+              {
+                "type": "list",
+                "items": []
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "ends"
+              },
+              {
+                "type": "list",
+                "items": []
+              }
+            ]
+          ]
+        },
+        "after": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": []
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "edges"
+              },
+              {
+                "type": "list",
+                "items": []
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "starts"
+              },
+              {
+                "type": "list",
+                "items": []
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "ends"
+              },
+              {
+                "type": "list",
+                "items": []
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "chains_missing_ddl",
+      "kind": "chains",
+      "edges": [
+        [
+          1,
+          2
+        ]
+      ],
+      "nodes": [],
+      "starts": [
+        1
+      ],
+      "ends": [
+        2
+      ],
+      "expected": {
+        "result": {
+          "kind": "exception",
+          "type": "KeyError",
+          "message": "'ddl'"
+        },
+        "before": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "edges"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "starts"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "int",
+                    "value": 1
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "ends"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "int",
+                    "value": 2
+                  }
+                ]
+              }
+            ]
+          ]
+        },
+        "after": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "edges"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "starts"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "int",
+                    "value": 1
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "ends"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "int",
+                    "value": 2
+                  }
+                ]
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "chains_integer_end",
+      "kind": "chains",
+      "edges": [
+        [
+          1,
+          2
+        ]
+      ],
+      "nodes": [],
+      "starts": [
+        1
+      ],
+      "ends": 2,
+      "expected": {
+        "result": {
+          "kind": "exception",
+          "type": "TypeError",
+          "message": "argument of type 'int' is not iterable"
+        },
+        "before": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "edges"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "starts"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "int",
+                    "value": 1
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "ends"
+              },
+              {
+                "type": "int",
+                "value": 2
+              }
+            ]
+          ]
+        },
+        "after": {
+          "type": "dict",
+          "items": [
+            [
+              {
+                "type": "str",
+                "value": "nodes"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  },
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "edges"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "tuple",
+                    "items": [
+                      {
+                        "type": "int",
+                        "value": 1
+                      },
+                      {
+                        "type": "int",
+                        "value": 2
+                      },
+                      {
+                        "type": "dict",
+                        "items": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "starts"
+              },
+              {
+                "type": "list",
+                "items": [
+                  {
+                    "type": "int",
+                    "value": 1
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "type": "str",
+                "value": "ends"
+              },
+              {
+                "type": "int",
+                "value": 2
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "sort_empty",
+      "kind": "sort",
+      "chains": [],
+      "flops": {},
+      "ddls": {},
+      "expected": {
+        "result": {
+          "kind": "return",
+          "value": {
+            "type": "NoneType",
+            "value": null
+          }
+        },
+        "before": {
+          "type": "list",
+          "items": [
+            {
+              "type": "list",
+              "items": []
+            },
+            {
+              "type": "dict",
+              "items": []
+            },
+            {
+              "type": "dict",
+              "items": []
+            }
+          ]
+        },
+        "after": {
+          "type": "list",
+          "items": [
+            {
+              "type": "list",
+              "items": []
+            },
+            {
+              "type": "dict",
+              "items": []
+            },
+            {
+              "type": "dict",
+              "items": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "sort_nonempty_existing_failure",
+      "kind": "sort",
+      "chains": [
+        [
+          1,
+          2
+        ],
+        [
+          1,
+          3
+        ]
+      ],
+      "flops": {
+        "1": 1,
+        "2": 2,
+        "3": 3
+      },
+      "ddls": {},
+      "expected": {
+        "result": {
+          "kind": "exception",
+          "type": "IndexError",
+          "message": "list index out of range"
+        },
+        "before": {
+          "type": "list",
+          "items": [
+            {
+              "type": "list",
+              "items": [
+                {
+                  "type": "list",
+                  "items": [
+                    {
+                      "type": "int",
+                      "value": 1
+                    },
+                    {
+                      "type": "int",
+                      "value": 2
+                    }
+                  ]
+                },
+                {
+                  "type": "list",
+                  "items": [
+                    {
+                      "type": "int",
+                      "value": 1
+                    },
+                    {
+                      "type": "int",
+                      "value": 3
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "dict",
+              "items": [
+                [
+                  {
+                    "type": "str",
+                    "value": "1"
+                  },
+                  {
+                    "type": "int",
+                    "value": 1
+                  }
+                ],
+                [
+                  {
+                    "type": "str",
+                    "value": "2"
+                  },
+                  {
+                    "type": "int",
+                    "value": 2
+                  }
+                ],
+                [
+                  {
+                    "type": "str",
+                    "value": "3"
+                  },
+                  {
+                    "type": "int",
+                    "value": 3
+                  }
+                ]
+              ]
+            },
+            {
+              "type": "dict",
+              "items": []
+            }
+          ]
+        },
+        "after": {
+          "type": "list",
+          "items": [
+            {
+              "type": "list",
+              "items": [
+                {
+                  "type": "list",
+                  "items": [
+                    {
+                      "type": "int",
+                      "value": 1
+                    },
+                    {
+                      "type": "int",
+                      "value": 2
+                    }
+                  ]
+                },
+                {
+                  "type": "list",
+                  "items": [
+                    {
+                      "type": "int",
+                      "value": 1
+                    },
+                    {
+                      "type": "int",
+                      "value": 3
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "dict",
+              "items": [
+                [
+                  {
+                    "type": "str",
+                    "value": "1"
+                  },
+                  {
+                    "type": "int",
+                    "value": 1
+                  }
+                ],
+                [
+                  {
+                    "type": "str",
+                    "value": "2"
+                  },
+                  {
+                    "type": "int",
+                    "value": 2
+                  }
+                ],
+                [
+                  {
+                    "type": "str",
+                    "value": "3"
+                  },
+                  {
+                    "type": "int",
+                    "value": 3
+                  }
+                ]
+              ]
+            },
+            {
+              "type": "dict",
+              "items": []
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "wildcard_imports": [],
+  "preflight_regression": {
+    "command": [
+      "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+      "-B",
+      "-m",
+      "pytest",
+      "-q",
+      "-p",
+      "no:cacheprovider",
+      "test_binpack_pipeline_contract.py",
+      "test_approach_package_compat.py",
+      "test_legacy_approach_archive.py",
+      "test_approach_collector.py",
+      "test_unused_hdf5_utils.py",
+      "test_unused_path_utils.py",
+      "test_unused_global_constants.py",
+      "test_unused_eq_quantiles.py",
+      "test_old_task_cfg.py",
+      "test_unused_e2e_event_generators.py",
+      "--junitxml=/tmp/scheduler-b19-preflight-kq_vvumu/pytest.xml"
+    ],
+    "suite": [
+      "test_binpack_pipeline_contract.py",
+      "test_approach_package_compat.py",
+      "test_legacy_approach_archive.py",
+      "test_approach_collector.py",
+      "test_unused_hdf5_utils.py",
+      "test_unused_path_utils.py",
+      "test_unused_global_constants.py",
+      "test_unused_eq_quantiles.py",
+      "test_old_task_cfg.py",
+      "test_unused_e2e_event_generators.py"
+    ],
+    "rc": 1,
+    "seconds": 30.27,
+    "log_dir": "/tmp/scheduler-b19-preflight-kq_vvumu",
+    "tests": 157,
+    "failed": [
+      {
+        "name": "test_basic_functionality",
+        "message": "AttributeError: 'StatisticsCollector' object has no attribute 'task_realloc_curr'"
+      },
+      {
+        "name": "test_motiv_exp_specific_stats",
+        "message": "ZeroDivisionError: float division by zero"
+      },
+      {
+        "name": "test_summary_generation",
+        "message": "ZeroDivisionError: float division by zero"
+      },
+      {
+        "name": "test_formatted_output",
+        "message": "ZeroDivisionError: division by zero"
+      },
+      {
+        "name": "test_edge_cases",
+        "message": "ZeroDivisionError: division by zero"
+      }
+    ],
+    "errors": 0,
+    "skipped": 0
+  },
+  "ledger_prefixes": {
+    "cleanup/move-ledger.csv": {
+      "bytes": 20734,
+      "sha256": "5d8210c957e5c7a7c9e1fc7b8c8c486572292e2fc7cbcd52424e474e895e3885"
+    },
+    "cleanup/reachable-files.csv": {
+      "bytes": 71003,
+      "sha256": "194afe8bced24ed2aa0ced5acd2f8837580708c2213aaf514e20202042a6ceb3"
+    }
+  },
+  "new_paths_exist": {
+    "sched/slack_estim_unused.py": false,
+    "task/graph_breakdown_unused.py": false,
+    "test_unused_slack_graph_helpers.py": false
+  },
+  "index_diff_empty": true,
+  "reference_evidence": {
+    "scope": "git tracked plus explicit B11-B18 approved source targets; no untracked recursion",
+    "source_count": 164,
+    "source_hits": [
+      [
+        "sched/slack_estim.py",
+        24,
+        "def build_score_dict_ref_flops(task_dict:Dict[str, TaskBase], nodes:Any, score_dict):"
+      ],
+      [
+        "sched/slack_estim.py",
+        410,
+        "def get_chains_info(task_graph, start_nodes, end_nodes):"
+      ],
+      [
+        "task/graph_breakdown.py",
+        19,
+        "def sort_chains_by_ddl_flops(chains, flops_dict, ddl_dict):"
+      ]
+    ],
+    "other_tracked_hits": [
+      [
+        "cleanup/symbol-candidates.csv",
+        804,
+        "sched/slack_estim.py,build_score_dict_ref_flops,function,101,record-only,SYMBOL_CANDIDATE"
+      ],
+      [
+        "cleanup/symbol-candidates.csv",
+        813,
+        "sched/slack_estim.py,get_chains_info,function,488,record-only,SYMBOL_CANDIDATE"
+      ],
+      [
+        "cleanup/symbol-candidates.csv",
+        1000,
+        "task/graph_breakdown.py,sort_chains_by_ddl_flops,function,19,record-only,SYMBOL_CANDIDATE"
+      ]
+    ],
+    "explanation": "Only definitions and historical symbol-candidates rows; no direct/wildcard imports or callers in scope. External users unknown."
+  },
+  "dfs_path": [
+    "main_approach",
+    "approach/approach_setup",
+    "task/task_cfg",
+    "sched/slack_estim",
+    "task/graph_breakdown"
+  ],
+  "archive_design": {
+    "slack": "Same-directory slack_estim_unused.py; original two complete functions plus future annotations, typing.Any/Dict and import live task.graph_breakdown.decompose_dag_into_chains. No runtime TaskBase import. Existing live imports remain unchanged.",
+    "graph": "Same-directory graph_breakdown_unused.py; original complete sort function, no imports required.",
+    "old_vs_unused": "No equivalence with current get_chains is claimed; independent unused helpers, not replaced versions."
+  },
+  "compatibility_boundary": "Three old module-level function exports and original function-reference pickle paths retire. Signatures, bodies, partial mutations, return types and existing exceptions remain. New paths pickle round-trip. Other live exports unchanged. External users unknown; no old-name re-export.",
+  "verification_plan": [
+    "RED archive-existence assertion before move; new focused tests characterize 13 original cases twice, exact blocks, signatures, two fresh import orders/full public exports, shared live decompose helper, original pickle failure and new pickle identity.",
+    "Full ten existing suites plus new file; 157 existing tests with exactly five known collector failures; compare names/messages, no skipped/error. Three entry --help calls and B13-B16 benefit probes.",
+    "Exact remaining bytes after deleting 12 slack lines / 2 graph lines, imports and internal methods unchanged. All 162 non-batch source hashes (including current guard) unchanged. Protected paths/dependencies/index/HEAD unchanged.",
+    "Graph source originally lacks final LF: if apply_patch only appends one LF, permit mechanical truncate -s -1 solely after original-SHA and full actual==expected+b'\\n' assertions; otherwise stop. Never change expected SHA.",
+    "Append structured CSV rows, preserve complete prefixes and historical malformed rows; persist scoped five-code-file reversible patch and test git apply -R --check only.",
+    "No commit/push; only genuine reviewer may approve and accept."
+  ],
+  "approval": {"event":"E0074","actor":"reviewer","state":"APPROVED","conditions":"K1-K6 with reviewer-recorded clarifications: slack loses2/graph loses1; all162 current non-batch hashes unchanged; 164 existing source/script scope excludes B12 deleted root index paths.","implementation_started_after_approval":true,"guard_sha256":"15879c4efa377efec7c2e114e6d134b33da570e52916dea0ca0bf858bd44691a","eof_restoration_authorized":true},
+  "validation": {
+    "temp_dir": "/tmp/scheduler-b19-regression-ye0fkl_1",
+    "regression": {
+      "command": [
+        "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "test_binpack_pipeline_contract.py",
+        "test_approach_package_compat.py",
+        "test_legacy_approach_archive.py",
+        "test_approach_collector.py",
+        "test_unused_hdf5_utils.py",
+        "test_unused_path_utils.py",
+        "test_unused_global_constants.py",
+        "test_unused_eq_quantiles.py",
+        "test_old_task_cfg.py",
+        "test_unused_e2e_event_generators.py",
+        "test_unused_slack_graph_helpers.py",
+        "--junitxml=/tmp/scheduler-b19-regression-ye0fkl_1/pytest.xml"
+      ],
+      "rc": 1,
+      "seconds": 29.23,
+      "tests": 186,
+      "failed": [
+        {
+          "name": "test_basic_functionality",
+          "message": "AttributeError: 'StatisticsCollector' object has no attribute 'task_realloc_curr'"
+        },
+        {
+          "name": "test_motiv_exp_specific_stats",
+          "message": "ZeroDivisionError: float division by zero"
+        },
+        {
+          "name": "test_summary_generation",
+          "message": "ZeroDivisionError: float division by zero"
+        },
+        {
+          "name": "test_formatted_output",
+          "message": "ZeroDivisionError: division by zero"
+        },
+        {
+          "name": "test_edge_cases",
+          "message": "ZeroDivisionError: division by zero"
+        }
+      ],
+      "errors": 0,
+      "skipped": 0,
+      "module_counts": {
+        "test_binpack_pipeline_contract": 3,
+        "test_approach_package_compat": 32,
+        "test_legacy_approach_archive": 7,
+        "test_approach_collector": 7,
+        "test_unused_hdf5_utils": 9,
+        "test_unused_path_utils": 19,
+        "test_unused_global_constants": 13,
+        "test_unused_eq_quantiles": 24,
+        "test_old_task_cfg": 18,
+        "test_unused_e2e_event_generators": 25,
+        "test_unused_slack_graph_helpers": 29
+      }
+    },
+    "helps": [
+      {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "main_approach.py",
+          "--help"
+        ],
+        "rc": 0
+      },
+      {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "scripts/motiv_exp_runner.py",
+          "--help"
+        ],
+        "rc": 0
+      },
+      {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "scripts/abla_exp_runner.py",
+          "--help"
+        ],
+        "rc": 0
+      }
+    ],
+    "benefits_probe": "passed",
+    "non_batch_compared": 162,
+    "non_batch_unchanged": 162,
+    "sources": {
+      "sched/slack_estim.py": {
+        "exact_reconstruction": true,
+        "numstat": "0\t12\tsched/slack_estim.py",
+        "ends_lf": true
+      },
+      "task/graph_breakdown.py": {
+        "exact_reconstruction": true,
+        "numstat": "0\t2\ttask/graph_breakdown.py",
+        "ends_lf": false
+      }
+    },
+    "python_ast_parsed": 151,
+    "sha256": {
+      "sched/slack_estim.py": "bda2da01c0bb32873d021dd32efc0debb5017333221baa3bd5cfbf7f17cc39c5",
+      "task/graph_breakdown.py": "486b438fa3325f8d035ef91ca63518649986e21aee74cb761092908c579cdbd1",
+      "sched/slack_estim_unused.py": "0dca3dcceabe1e251c93a469c33840165912a9365894377e78f556b35322b3b0",
+      "task/graph_breakdown_unused.py": "ad0d03b8c4b16bb67f0c8a92e8ccd5f2d03767755135703863cb2649c6582537",
+      "test_unused_slack_graph_helpers.py": "05567227d3c8af745d6598d7616d97e3b69469a0c36e5ccca37c10e82e8c7c3e"
+    },
+    "recovery": {
+      "forward_patch_zlib_base64": "eJy1WW1z2zYS/u5fgWE+kIwoWnJ8TsIMb5oX965zrZ1p3LnpcHQYiIQknCmSJUhZbib//XbxQlKKFLW51G0kAlgs9vXZBZWJxYKMx0vREHYu0xXPzmXO0nvKZSPWYfVI5genz0SR8S15zibzF894GL588eLl4uIFmU4mV5eXZ+Px+Ai/s9FodIznd9+R8cU0mE7JCL6uCIwXdbkmijis+YKyPC9TKjmr0xUR66qsG3LH5P3bspBNzUTRyDPy5Am5zTOS8YUoOIzhvzEMyLwVeUZlWtacZiJtKHJc5GUlvQZ4qLnoHXwkwCtQfN8wyWcBKcqMy+h18RiQfrsfnY0J/C3KWhHQgojCkBK9hH9MSg5S9hTdWT0NxTkS90uJJp/1JP25dg3o1b5QqYBqopLvBAgv5m3DP6BxtWbLmlWrCNb+gQ8BOaFuugJLSiqKRRn9CPySngpsMJsFZ+TQ328tKxqR84iARKyBY1Y1l6syz8wMSHxTFjwgLF+WtWhW64gAV5h2lm1dzoUDe8qG5RSVBSuCP2Hx2WTik/HfyUDWtsp5AquBPQqmZ7NIRdDl5HkwfUZGl5MLHUNolrbKWMOVvVjT1Ep5D/wSkCzLA1LLlK5ZRR+0bToS4E+XaRaQ1WPFa1rtaV7VIIOH/uj3+YdIfBuDS97QgXkH7kEdWN1QFUAB4UWmH22Y6V1gjmTWx12/BSNrwCDqI8dsHMVgiLSEnJEQR2wJ5zelkeWIGEMpNL8n5HdRgV+55foAXiSikYRfcJKDiYv0cV9eTz2aqFOHhIpnouaT8XQ2S1xwgzvzlVJqGvXRLIy6NW/a2s7ZaK/ysqGAHjyHVNe8vbxcihRiSI1osQ1IxZpVvHCQ+Py/5fyuk4Nm82VYZQsHjKxstRBLkLjKmxCe2pp78CXF7zz2LiYBgJvvn2VDxESVzjWrec3ZfVY+FBo0j6wY3FxMrl4+n16G4ZS/WDyfLHZx89heDZ3HVjH2p1fBCzKCzy7wj/scxlGxDTtQOOT3QDmYyhpAVxTaRtlCekPapB/MTPDv+0qFvgSwtrE/f6TgcAO+ek6lciVN2uHqEGQ1TYg8vHv+GOdsPc8Y2UbEG1vaRGSGF8aUD0Am27WX9GwTAE2F1hhc25nvQ+LzDa8lj+/qlvs2qhqoSPS44WywPCHXW7YGJCKtZEu+GxmfFTjaFq2EMna4pParZwV/gDgErmtM60FgnGd8c160eX6shg6YYDBMggnEQnDxDGLhbOQ4zg8QexW4lgOsalKidpMVzwHe5CsCqLwUBcvJnK/YRoCthAQI41DCNsAYeJyNzkaqKFO6aMHLnFJbiFlRAHg3AmpxR9U8VqJYWgpVQRHG+3UsYHvBbKmPegB3n43+mpI+Ol7SR3+gpHc0x0t6R3KypHdqflXVGO1XjU61L1SNTrhvVDVGf7xq7Mn7f1eN0edIdBK7d5L0ywR/PE9P8Bmk6t9spv6is1PrVNYZrzGLdJq+UpZbQV8G2QqFjiyYyCERD6aqjp+vhd6BS/5q6N11DQKwthDV+KbNZ3DKuOck0Z9w0WleAzdNL15aR71dsZqlDfjnd07eTF+6kuDdRIALLKqqaC/bBg1ZLNGPkAmiHnrQoq31mgHAOUDV1WU3TEvsAcxAf+Vi3s8UsuIIQWb8X1kW3aCUBnCxF4JdFmPfw7AjqkR6n/NuKNt5VZcpl7KfeuyfAdq5HEhbPaIVceLn29s7SGHk7UGZAAdQ6sP9TZb5hnt+WLEaShDQXb+//RkpUdQQGvlMep7afE6cNOesaKvzmiN3eT6fvhxrD42Vh8bKQ2Nj5DHaCpvAEHk5eBrLaMO30HsDCn14f/32AxykT0wcWbY1KOYASnz/y83bux9ub3A50RHvoZGgRLA193vU1JNoY4xhxTEUDV9DQzCoGrBHgSqQJQ6O1CHw/0+373758RpP+ajJHYX/DqSRoy+4n1dyuA85x0uc4weGk069k6z2yki/H3Nb7T5UjgcMjuGI4vTJok1R1muWQ0J4G4shYgHoBLsaVqQwHWh8MeD80cVQciMXZ93AVUZ1oyTpGd37QT/Y+hpL7oMtmnpjvTD7dPgwr8HrYpBDvvmfHYqfIGdIKTqL0v744YHqPH2aPeUknw3LW1jYfNJWKecKmb0UAjVYtEXa2UanT8Gbh7K+30J3QYqtXrqH20KMGxIXH93ZqzRGFAgzzit8UNz8Tm1FH7sqWNxBMUe3yvjjvZJShh8Edq03GJwVAxM9fbrxjUU3qoImrtrhzqxpPw2an3op40StB0CoarI7w0d1LDwPWhxVfKAnhKy3hu/N+tFsjgZsLJNowC8w0kSgwIbV0tuVVi12gn4y1gAw6OyhI3ZoEBXicX/78fxXusVgWUZ5tuSSIlp6IIUaQZPRb1Z5HjBjKSN51O/HGa8Inj5l/r7ZdLOEumG7ZOwG7dLXWA3j2Rs0RnCha5iupn5gxB4SqZldIiNFNBRIixN1cvUGlTza1weojHGVJgoM9CNgw59QCrmZc+Yc7MtjQ6rnmvoR9sg2b+KPOhMiV/NwuzzrmWFyeU8VSxu4fJvyqoH7Gn7BBQWTjH/Gkttl4DrIaj7MasgZvOy5EVwoYGUfDDRL17AOXK2NG+nvwGUL6BVws9Kug0zTM1DoU9qce1g9LDwY1l29D/XTkDRxzH5nlkTjZzMoflWOie2cI2qHDpZAe5Rqdex5WJsl5VuMEnugud2wPO+K8d4hfiik2urpRNyticof0rNnfqf7gnDN6nus/GDHBrslz0HsAvlsTcYhFMuAiEzaJjONiCmjDmZgJ7+9p1LbOWkgNBpo0+gCDvXWVN5EAamDvnZsYGKoAAUURnx15x0zsv7yd1oCY6YdWFf8fBLHRJ/Ft9iRQe2cfd2eL9tPNSTKNgHpupjDVspLaAfAaWlZNGLZlq0c9jjGbMqNsfZigstGarUbFgrspmTiYFfl6BIs+15H5kJ1VFiHpPUZqqWOCOGKh7C4a7yj8aW6tzkqDu1iWrZF4ykplJ2m384wUiwLhm8x/oQ5jOyY/6blDns2NpIOJbRh7ysljNHsRjBcgqsnnd5nbi0b0C/5nuUYRQjpOyki23ojNnDdoFU7B99AlqtGGlo/qG1crqhp7r0dllZ7WJxj8qgbyf6dI8AmOzBXiUBdCnSbHg86ebMcqmsA0ISAyJtkOtvvzdESMtb7oQ7pztwFQ+QgVJzIxNVGdPdCTnZIA7RGB6nozcDdQ0P3HHA9dP0vsFFX7dgyUxKoeLbSX8ygnUBTu6oeEiTozoYb1uAGoFhFxxDFAIl+QyvTWlRwF+z75ZPNpTFJZONtE7jU8KbUDfBnFqjvv7Usxx17dHa6o/ykRbc4vmuWHVCNv1iHOk/ZNE8bOAobzx0lh92baugMvtomDk1elA25D3VXghdoz6VuX801RCLjzZCZFmI33vsmVnXIinFHqi5orm3pbeXTUsf2mGBPuUDyxtNE/n/w2RJiNKt8UUIWG0ifUgLybUQNWaH6db9bDPVPUt77X+/+eXvz7vbm7t8//3B3/ebXu+u3t++uY2cK2f3T+x/fvH77r+ubd7Hzerl0zPa6LYB3fz8PYcLrW60E45Vvedo2bI6F0Bm/wUZgnMKnSuygJ1ZA9m0u3ftcd4FlNlhOH7IYz8R3hZsY/gUE8UA1pgEUwkq9WS7bpmrtJP7KAxPx1cTw2S0lYIFQZw3WGUTYSaAmZZPhy5eRHfC6/nb1A2s3NoxUvzqhuBPrLEgiap4dqCoVe0R4BPfptzvh/OoS37BCbRxUmsQxDO1JtjwYpdULVCN/zQQ0Tt7rxvzue13XZR2QNWtSuOIMjlbHK7YdQitZTjZqJ+1R8IfPTCHwZwbRPB6wwV7XtVcrB2Y42HHtqqAHWbuupGr8oboKqU443PJm+v2FebNHIbQlRRS3Pwial90CVelbYr0XZD4Gf8ffuxjh8xP7D715cXYVN1KEe69xoCos83IObQCliXP0bT12ZlKJER7/YeV/5Y9YCA==",
+      "forward_patch_sha256": "440ad00ec48bb315323ec1e70a2fe3015291e43061b856bf6340e49c338eb033",
+      "check_rc": 0,
+      "scoped_paths": [
+        "sched/slack_estim.py",
+        "task/graph_breakdown.py",
+        "sched/slack_estim_unused.py",
+        "task/graph_breakdown_unused.py",
+        "test_unused_slack_graph_helpers.py"
+      ],
+      "generated_patch": "/tmp/scheduler-b19-regression-ye0fkl_1/b19-recovery.patch",
+      "extract_command": "/home/zhangchg/miniconda3/envs/gurobi/bin/python -B -c \"import base64,hashlib,json,pathlib,zlib; r=json.loads(pathlib.Path('cleanup/reports/b19-unused-slack-graph-helpers-baseline.json').read_text())['validation']['recovery']; data=zlib.decompress(base64.b64decode(r['forward_patch_zlib_base64'])); assert hashlib.sha256(data).hexdigest()==r['forward_patch_sha256']; pathlib.Path('/tmp/scheduler-b19-recovery.patch').write_bytes(data)\"",
+      "working_directory": "/home/zhangchg/git_repo/scheduler-audit-20260612",
+      "check_command": "git apply -R --check /tmp/scheduler-b19-recovery.patch",
+      "restore_command": "git apply -R /tmp/scheduler-b19-recovery.patch",
+      "executed_restore": false
+    },
+    "ledger": {
+      "cleanup/move-ledger.csv": {
+        "rows": 42,
+        "widths": {
+          "14": 34,
+          "15": 3,
+          "16": 4,
+          "17": 1
+        },
+        "prefix_bytes": 20734,
+        "prefix_sha256_verified": true,
+        "new_rows": 3,
+        "new_row_width": 14,
+        "historical_bad_rows": 8
+      },
+      "cleanup/reachable-files.csv": {
+        "rows": 264,
+        "widths": {
+          "10": 264
+        },
+        "prefix_bytes": 71003,
+        "prefix_sha256_verified": true,
+        "new_rows": 3,
+        "new_row_width": 10,
+        "historical_bad_rows": 0
+      }
+    },
+    "head_index_unchanged": true,
+    "protected_diff_empty": true,
+    "diff_check": 0,
+    "ledger_before_append": {
+      "cleanup/move-ledger.csv": {
+        "row_count": 39,
+        "widths": {
+          "14": 31,
+          "15": 3,
+          "16": 4,
+          "17": 1
+        },
+        "historical_bad_rows": 8,
+        "last_line": "B18-MOVE-002,model/event_gen/e2e_latency.py,model/event_gen/e2e_latency_unused.py,move-reference,EXECUTED_WAITING_REVIEW,Independent unused generator; preserve exact original function,MEDIUM,E0066/E0067/E0068/E0070; e2e_var_sim,codex,archive/test_pipeline-20260612,See B18 baseline JSON validation.recovery; extract then git apply -R --check,B18-UNUSED-E2E-EVENT-GENERATORS,reviewer E0066/E0067/E0068/E0070,Old function name and pickle path retire; six borrowed live helpers retained"
+      },
+      "cleanup/reachable-files.csv": {
+        "row_count": 261,
+        "widths": {
+          "10": 261
+        },
+        "historical_bad_rows": 0,
+        "last_line": "test_unused_e2e_event_generators.py,KEEP,regression-test,codex,pytest explicit B18 suite,25 tests:13 cases repeated twice; bytes; full exports; signatures; pickle boundary,LOW,archive/test_pipeline-20260612,See B18 baseline JSON validation.recovery; extract then git apply -R --check,New approved tests; existing tests untouched"
+      }
+    },
+    "tdd": {
+      "red": {
+        "tests": 1,
+        "failed": 1,
+        "deselected": 28,
+        "reason": "archive files absent before move",
+        "log": "/tmp/scheduler-b19-red.log"
+      },
+      "green": {
+        "tests": 29,
+        "passed": 29,
+        "seconds": 8.61,
+        "xml": "/tmp/scheduler-b19-green.xml"
+      }
+    },
+    "eof_restoration": {
+      "approved_by": "E0074",
+      "path": "task/graph_breakdown.py",
+      "tool_added_bytes": 1,
+      "guard": "Verified original SHA, expected remaining SHA, expected lacks LF and full actual==expected+LF before truncate -s -1; after bytes exact",
+      "remaining_sha256": "486b438fa3325f8d035ef91ca63518649986e21aee74cb761092908c579cdbd1"
+    },
+    "compatibility": {
+      "slack_public": "105 -> 103: only build_score_dict_ref_flops and get_chains_info removed",
+      "graph_public": "6 -> 5: only sort_chains_by_ddl_flops removed",
+      "old_pickle": "Three original pre-move function-reference payloads now raise AttributeError naming retired export",
+      "new_pickle": "All three new module function references roundtrip with identity",
+      "external_users": "unknown"
+    },
+    "acceptance": {"event":"E0076","actor":"reviewer","state":"ACCEPTED","supplement":"Reviewer independently corrected K6 to B19 prefixes20734/71003 and3 rows each; acknowledged authorized truncate actually used; reran three helps and benefit probes. Original event preserved.","codex_verified_reviewer_xml":{"/tmp/b19_review_junit.xml":{"tests":186,"failed":[{"name":"test_basic_functionality","message":"AttributeError: 'StatisticsCollector' object has no attribute 'task_realloc_curr'"},{"name":"test_motiv_exp_specific_stats","message":"ZeroDivisionError: float division by zero"},{"name":"test_summary_generation","message":"ZeroDivisionError: float division by zero"},{"name":"test_formatted_output","message":"ZeroDivisionError: division by zero"},{"name":"test_edge_cases","message":"ZeroDivisionError: division by zero"}],"errors":0,"skipped":0,"module_counts":{"test_binpack_pipeline_contract":3,"test_approach_package_compat":32,"test_legacy_approach_archive":7,"test_approach_collector":7,"test_unused_hdf5_utils":9,"test_unused_path_utils":19,"test_unused_global_constants":13,"test_unused_eq_quantiles":24,"test_old_task_cfg":18,"test_unused_e2e_event_generators":25,"test_unused_slack_graph_helpers":29}},"/tmp/b19_new_only.xml":{"tests":29,"failed":[],"errors":0,"skipped":0,"module_counts":{"test_unused_slack_graph_helpers":29}}},"reviewer_probe_logs":"/tmp/b19_review_probes/","final_all167_source_hashes_unchanged":true,"final_recovery_reverse_check":0}
+  }
+}

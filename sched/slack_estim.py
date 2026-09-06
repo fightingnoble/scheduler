@@ -21,11 +21,6 @@ from sched.ref_alloc_search import TaskConstraints
 ## Old defines
 
 
-def build_score_dict_ref_flops(task_dict:Dict[str, TaskBase], nodes:Any, score_dict):
-    for node_n in nodes: 
-        assert node_n in task_dict
-        _task = task_dict[node_n]
-        score_dict[node_n] = _task.flops
 
 def DistributeSlack(task_graph: DiGraph, task_dict:Dict[str, TaskBase], chains_info:List[Dict[str, Any]],
                     quantile: float, threshold: float = None, algorithm: str = "gurobi", total_cores: int = 300) -> Dict[str, Tuple[int, float, str]]:
@@ -407,13 +402,6 @@ def update_taskattr_dict(ert, ddl, rsc_map_w, taskattr_dict, f_gcd, hyper_p,
             print(node, taskattr)
             print()
 
-def get_chains_info(task_graph, start_nodes, end_nodes):
-    chains = []
-    for start_node in start_nodes:
-        chains += decompose_dag_into_chains(task_graph, start_node, end_nodes)
-    # zip the chains with its e2e latency
-    chains = [(chain, task_graph.nodes[chain[-1]]['ddl']) for chain in chains]
-    return chains
 
 def plot_timeline_graph(logical_graph_nx, path=f"plot/jobTask_graph_dbg.pdf"):
     fig = plt.figure(figsize=(20, 10))

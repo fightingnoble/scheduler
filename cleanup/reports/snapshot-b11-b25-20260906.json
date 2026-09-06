@@ -1,0 +1,305 @@
+{
+  "schema_version": 1,
+  "kind": "user_authorized_git_snapshot",
+  "date": "2026-09-06",
+  "branch": "audit/minimal-from-test_pipeline-20260612",
+  "parent_commit": "a1d933b1f26efd4d569eb3d8ffb313447294443b",
+  "mainline_baseline": {
+    "ref": "master",
+    "commit": "656dbbf3c656f7ee510468f5a41e354f547377d1"
+  },
+  "authorization": "用户明确要求提交commit作为恢复快照；不授权push、merge、rebase或原始worktree操作。",
+  "source_batches": [
+    {
+      "batch": "B11",
+      "reviewer_acceptance": "E0037"
+    },
+    {
+      "batch": "B12",
+      "reviewer_acceptance": "E0041"
+    },
+    {
+      "batch": "B13",
+      "reviewer_acceptance": "E0045"
+    },
+    {
+      "batch": "B14",
+      "reviewer_acceptance": "E0049"
+    },
+    {
+      "batch": "B15",
+      "reviewer_acceptance": "E0055"
+    },
+    {
+      "batch": "B16",
+      "reviewer_acceptance": "E0059"
+    },
+    {
+      "batch": "B17",
+      "reviewer_acceptance": "E0064"
+    },
+    {
+      "batch": "B18",
+      "reviewer_acceptance": "E0072"
+    },
+    {
+      "batch": "B19",
+      "reviewer_acceptance": "E0076"
+    },
+    {
+      "batch": "B20",
+      "reviewer_acceptance": "E0082"
+    },
+    {
+      "batch": "B21",
+      "reviewer_acceptance": "E0086"
+    },
+    {
+      "batch": "B23",
+      "reviewer_acceptance": "E0092"
+    },
+    {
+      "batch": "B24",
+      "reviewer_acceptance": "E0100"
+    }
+  ],
+  "analysis_batches": [
+    {
+      "batch": "B22",
+      "reviewer_acceptance": "E0088",
+      "verdict": "KEEP_AS_IS"
+    },
+    {
+      "batch": "B25",
+      "reviewer_acceptance": "E0102",
+      "verdict": "KEEP_AS_IS"
+    }
+  ],
+  "staging": {
+    "method": "git add -- 精确逐文件清单；不使用add -A、add .或目录通配。仅两份批准的old目标用git add -f --，不改.gitignore。",
+    "force_include_approved_ignored_paths": [
+      "old/appoach_plot6.py",
+      "old/approach_util33.py"
+    ],
+    "path_count": 97,
+    "paths": [
+      "AGENT_DIALOGUE.md",
+      "AGENT_DIALOGUE.md.state.json",
+      "CLEANUP_STATUS.md",
+      "FILE_ADJUSTMENT_RECORD.md",
+      "REVIEW_PACKET_BATCH_B11-APPROACH-PACKAGE.md",
+      "REVIEW_PACKET_BATCH_B12-LEGACY-APPROACH-ARCHIVE.md",
+      "REVIEW_PACKET_BATCH_B13-UNUSED-HDF5-UTILS.md",
+      "REVIEW_PACKET_BATCH_B14-UNUSED-PATH-UTILS.md",
+      "REVIEW_PACKET_BATCH_B15-UNUSED-GLOBAL-CONSTANTS.md",
+      "REVIEW_PACKET_BATCH_B16-UNUSED-EQ-QUANTILES.md",
+      "REVIEW_PACKET_BATCH_B17-TASK-CFG-LEGACY-GRAPH.md",
+      "REVIEW_PACKET_BATCH_B18-UNUSED-E2E-EVENT-GENERATORS.md",
+      "REVIEW_PACKET_BATCH_B19-UNUSED-SLACK-GRAPH-HELPERS.md",
+      "REVIEW_PACKET_BATCH_B20-UNUSED-SIM-CACHE-HELPERS.md",
+      "REVIEW_PACKET_BATCH_B21-UNUSED-MESSAGE-HELPERS.md",
+      "REVIEW_PACKET_BATCH_B22-RESOURCE-EXP-BOUNDARY-AUDIT.md",
+      "REVIEW_PACKET_BATCH_B23-UNUSED-EXPERIMENT-HELPERS.md",
+      "REVIEW_PACKET_BATCH_B24-MAPPER-LEGACY-HELPERS.md",
+      "REVIEW_PACKET_BATCH_B25-LEGACY-OPTIMIZER-RUN-AUDIT.md",
+      "REVIEW_PACKET_EXPLORATION_DFS.md",
+      "analyze/stat_num_exec.py",
+      "analyze/stat_num_exec_unused.py",
+      "appoach_plot6.py",
+      "approach/__init__.py",
+      "approach/approach_Eq.py",
+      "approach/approach_Eq_unused.py",
+      "approach/approach_collector.py",
+      "approach/approach_def.py",
+      "approach/approach_initiator.py",
+      "approach/approach_sched.py",
+      "approach/approach_setup.py",
+      "approach/approach_sim.py",
+      "approach_Eq.py",
+      "approach_collector.py",
+      "approach_def.py",
+      "approach_initiator.py",
+      "approach_sched.py",
+      "approach_setup.py",
+      "approach_sim.py",
+      "approach_util33.py",
+      "cleanup/move-ledger.csv",
+      "cleanup/reachable-files.csv",
+      "cleanup/reports/b11-approach-package-compat.json",
+      "cleanup/reports/b12-legacy-approach-archive.json",
+      "cleanup/reports/b13-utils-hdf5-baseline.json",
+      "cleanup/reports/b14-unused-path-utils-baseline.json",
+      "cleanup/reports/b15-unused-global-constants-baseline.json",
+      "cleanup/reports/b16-unused-eq-quantiles-baseline.json",
+      "cleanup/reports/b17-task-cfg-legacy-graph-baseline.json",
+      "cleanup/reports/b18-unused-e2e-event-generators-baseline.json",
+      "cleanup/reports/b19-unused-slack-graph-helpers-baseline.json",
+      "cleanup/reports/b20-unused-sim-cache-helpers-baseline.json",
+      "cleanup/reports/b21-unused-message-helpers-baseline.json",
+      "cleanup/reports/b22-resource-exp-boundary-assessment.json",
+      "cleanup/reports/b23-unused-experiment-helpers.json",
+      "cleanup/reports/b24-mapper-legacy-helpers.json",
+      "cleanup/reports/b25-legacy-optimizer-run-audit.json",
+      "cleanup/reports/dfs-approach-runtime-review-20260906.json",
+      "cleanup/reports/dfs-exploration-inventory-20260906.json",
+      "cleanup/reports/snapshot-b11-b25-20260906.json",
+      "cleanup/tools/dialogue_guard.py",
+      "global_var.py",
+      "global_var_unused.py",
+      "mapper/mem_planner.py",
+      "mapper/mem_planner_old.py",
+      "mapper/mem_planner_unused.py",
+      "model/event_gen/e2e_latency.py",
+      "model/event_gen/e2e_latency_unused.py",
+      "model/message/msg_dispatcher.py",
+      "model/message/msg_dispatcher_unused.py",
+      "old/appoach_plot6.py",
+      "old/approach_util33.py",
+      "sched/slack_estim.py",
+      "sched/slack_estim_unused.py",
+      "scripts/e2e_exp_runner.py",
+      "scripts/e2e_exp_runner_unused.py",
+      "sim_main.py",
+      "sim_main_unused.py",
+      "task/graph_breakdown.py",
+      "task/graph_breakdown_unused.py",
+      "task/task_cfg.py",
+      "task/task_cfg_old.py",
+      "test_approach_package_compat.py",
+      "test_legacy_approach_archive.py",
+      "test_mapper_legacy_helpers.py",
+      "test_old_task_cfg.py",
+      "test_unused_e2e_event_generators.py",
+      "test_unused_eq_quantiles.py",
+      "test_unused_experiment_helpers.py",
+      "test_unused_global_constants.py",
+      "test_unused_hdf5_utils.py",
+      "test_unused_message_helpers.py",
+      "test_unused_path_utils.py",
+      "test_unused_sim_cache_helpers.py",
+      "test_unused_slack_graph_helpers.py",
+      "utils.py",
+      "utils_unused.py"
+    ],
+    "previously_tracked_changed_count": 27,
+    "approved_new_code_count": 36,
+    "approved_new_artifact_count": 33,
+    "other_untracked_included": false
+  },
+  "verification": {
+    "environment": "/home/zhangchg/miniconda3/envs/gurobi/bin/python -B; PYTHONDONTWRITEBYTECODE=1; MPLBACKEND=Agg; GRB_LICENSE_FILE=/home/zhangchg/gurobi1003/gurobi.lic",
+    "regression": {
+      "total": 330,
+      "failures": [
+        {
+          "name": "test_basic_functionality",
+          "classname": "test_approach_collector",
+          "message": "AttributeError: 'StatisticsCollector' object has no attribute 'task_realloc_curr'"
+        },
+        {
+          "name": "test_motiv_exp_specific_stats",
+          "classname": "test_approach_collector",
+          "message": "ZeroDivisionError: float division by zero"
+        },
+        {
+          "name": "test_summary_generation",
+          "classname": "test_approach_collector",
+          "message": "ZeroDivisionError: float division by zero"
+        },
+        {
+          "name": "test_formatted_output",
+          "classname": "test_approach_collector",
+          "message": "ZeroDivisionError: division by zero"
+        },
+        {
+          "name": "test_edge_cases",
+          "classname": "test_approach_collector",
+          "message": "ZeroDivisionError: division by zero"
+        }
+      ],
+      "errors": 0,
+      "skipped": 0,
+      "passed": 325,
+      "pytest_rc": 1,
+      "modules": 15,
+      "log": "/tmp/scheduler-snapshot-check-8igod7f3/regression.log",
+      "xml": "/tmp/scheduler-snapshot-check-8igod7f3/regression.xml",
+      "whole_repository_suite": false,
+      "comparison": "五个失败的名称、异常消息与B24基线一致，0 error/skip；未修复或跳过原失败。"
+    },
+    "code_baseline": {
+      "path": "cleanup/reports/b24-mapper-legacy-helpers.json",
+      "field": "validation.code_sha256",
+      "report_sha256": "f82390a1fd0b403bc0dfa7bdf14013b4043063fe4a442fab8f1f6d17faef3300",
+      "count": 177,
+      "changed": [],
+      "missing": []
+    },
+    "b25_cli_log_suffix": {
+      "all_six_exact": true,
+      "reviewer_addition": "\n===STDERR===\n"
+    },
+    "ledger_sha256": {
+      "cleanup/move-ledger.csv": "724c2039e0f53b8e122a39b43e279881d00afce95b503a4d679a84553a8f0a81",
+      "cleanup/reachable-files.csv": "b0d4a1688abe13cb3b6c3dd8eeebdf5421a8337f5a1413f9a64de948d02709fd"
+    },
+    "protected_document_sha256": {
+      "CLAUDE.md": "827bd76d4055e16bc411fd033cafd872d5360e4ffdb3ce25cf3b5e19dfc337e7",
+      "doc/spec/readme.md": "b957c85985e127bdcc3b169966fb7acc5fbe3504c9fdc3b124945ab29caf5071",
+      "doc/spec/test_plan.md": "cafde29eb8e74c9be9b7584cda4aecfd60f57330339e10ae731445bcf451b38e",
+      "doc/spec/e2e_sched_sim_flow.md": "7a38f19dd280c591e2432a96376722ff5c17a9296957531bf7de7c01c2572cf8",
+      "doc/guide/deprecated_code.md": "fad4c2ac3c9046275896df69b52a80e0f4886c1c28e2a5abd29c8ad1d1c12317",
+      "doc/guide/plotting_overview.md": "aa46c79e409b61c00cdf35f12510a4d4560b1950b6b0bb69b4ff726cdbfc7cb3"
+    },
+    "dialogue": {
+      "last_event": "E0102",
+      "next_writer": "codex",
+      "guard_check_rc": 0,
+      "known_warning_events": [
+        "E0017",
+        "E0023",
+        "E0035",
+        "E0062",
+        "E0068"
+      ]
+    },
+    "diff_check": {
+      "rc": 2,
+      "known_tracked_warning": "sim_main.py:677: new blank line at EOF.",
+      "staged_warning_count": 465,
+      "inherited_trailing_whitespace_verified_against_parent_lines": 461,
+      "accepted_eof_warning_paths": [
+        "approach/approach_collector.py",
+        "approach/approach_def.py",
+        "approach/approach_sched.py",
+        "sim_main.py"
+      ],
+      "unattributed_trailing_whitespace": [],
+      "staged_path_count_verified": 97,
+      "rename_aware_changed_item_count": 95,
+      "all_staged_blobs_equal_worktree": true,
+      "policy": "不为消除检查警告改写已验收的原字节；新增归档可能保留原文件空白，暂存后另核。"
+    }
+  },
+  "commit_policy": {
+    "scope": "当前audit快照，不操作原worktree、test_pipeline或master",
+    "hooks": "本次命令使用-c core.hooksPath=/dev/null，避免执行共享Git目录中来源未核实的hook；15模块回归已显式执行，不把此快照声称为全绿发布。",
+    "push": false,
+    "commit_hash_recorded_in": [
+      "CLEANUP_STATUS.md",
+      "FILE_ADJUSTMENT_RECORD.md"
+    ],
+    "self_reference": "本报告为提交前清单，自己的commit hash在提交后写入双全局记录并单独形成记录提交。"
+  },
+  "recovery": {
+    "inspect": "git show --stat <snapshot_commit>",
+    "isolated_recovery": "git worktree add --detach <new_empty_recovery_path> <snapshot_commit>",
+    "undo_snapshot": "仅用户决定撤销整批且已先检查工作区时：git revert <snapshot_commit>；有冲突则停止人工审查，不强制覆盖。",
+    "selective_recovery": "优先使用各批JSON的validation.recovery限定patch，或检查git diff <snapshot_commit>^ <snapshot_commit> -- <exact_paths>后制定逐文件恢复；本次未实际回退。"
+  },
+  "limitations": [
+    "全仓语义审计未完成；本轮只建立快照，不开展新源码批次。",
+    "不纳入其他未跟踪内容、缓存或临时测试日志。",
+    "未追溯重写历史记录中的未提交字样；提交后的当前状态以双全局记录的新快照节为准。"
+  ]
+}

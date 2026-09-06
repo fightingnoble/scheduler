@@ -1,0 +1,1531 @@
+{
+  "batch_id": "B25-LEGACY-OPTIMIZER-RUN-AUDIT",
+  "request": "REQ-023",
+  "status": "CLOSED_ACCEPTED_KEEP_AS_IS",
+  "mode": "READ_ONLY_CLASSIFICATION_NO_SOURCE_AUTHORIZATION",
+  "mainline": "master",
+  "base_head": "a1d933b1f26efd4d569eb3d8ffb313447294443b",
+  "previous_accepted_event": "E0100",
+  "no_progress_audit": {
+    "previous_turn": "PROGRESS",
+    "evidence": "B24 actual source migration, tests and independent acceptance completed; this turn advances the recorded DFS frontier."
+  },
+  "scope": {
+    "code_files": 28,
+    "entries": [
+      {
+        "path": "old/allocator_agent.py",
+        "sha256": "f7b48b84465c9f1390b9ce44e0bfd463f896fb869e2d1364e3e9fe79ef892582",
+        "lines": 825,
+        "read_scope": "AST/imports and first 35 lines; existing archive retention review, not full-body audit",
+        "classification": "REUSE_CANDIDATE",
+        "action": "KEEP_AS_IS",
+        "reason": "Already archived; preserve the whole legacy unit and its methods. No re-pruning existing archives.",
+        "top_symbols": [
+          {
+            "name": "AllocatorInt",
+            "kind": "ClassDef",
+            "start": 12,
+            "end": 81
+          },
+          {
+            "name": "sched_step",
+            "kind": "FunctionDef",
+            "start": 239,
+            "end": 320
+          },
+          {
+            "name": "cyclic_sched",
+            "kind": "FunctionDef",
+            "start": 324,
+            "end": 466
+          },
+          {
+            "name": "glb_sched",
+            "kind": "FunctionDef",
+            "start": 469,
+            "end": 545
+          },
+          {
+            "name": "period_boader_display",
+            "kind": "FunctionDef",
+            "start": 547,
+            "end": 554
+          }
+        ],
+        "main_guards": [
+          557
+        ]
+      },
+      {
+        "path": "old/pre_alloc.py",
+        "sha256": "8a2e3724401e442c505cc5af34b22abdf30034a7dd7417526c10865df5ed76c0",
+        "lines": 593,
+        "read_scope": "AST/imports and first 35 lines; existing archive retention review, not full-body audit",
+        "classification": "REUSE_CANDIDATE",
+        "action": "KEEP_AS_IS",
+        "reason": "Already archived; preserve the whole legacy unit and its methods. No re-pruning existing archives.",
+        "top_symbols": [
+          {
+            "name": "glb_alloc_new",
+            "kind": "FunctionDef",
+            "start": 19,
+            "end": 107
+          },
+          {
+            "name": "allocate_rsc_4_process_new",
+            "kind": "FunctionDef",
+            "start": 109,
+            "end": 229
+          },
+          {
+            "name": "bin_select",
+            "kind": "FunctionDef",
+            "start": 231,
+            "end": 348
+          },
+          {
+            "name": "check_and_preemt_at_queue",
+            "kind": "FunctionDef",
+            "start": 350,
+            "end": 386
+          },
+          {
+            "name": "try_to_allocate",
+            "kind": "FunctionDef",
+            "start": 388,
+            "end": 413
+          },
+          {
+            "name": "get_preempt_candi",
+            "kind": "FunctionDef",
+            "start": 415,
+            "end": 469
+          }
+        ],
+        "main_guards": [
+          472
+        ]
+      },
+      {
+        "path": "old/appoach_plot6.py",
+        "sha256": "44332d84c5d05f7d520b505c96c80c62a8ec6511c41440db41ca4bc6081d0d81",
+        "lines": 93,
+        "read_scope": "AST/imports and first 35 lines; existing archive retention review, not full-body audit",
+        "classification": "REUSE_CANDIDATE",
+        "action": "KEEP_AS_IS",
+        "reason": "Already archived; preserve the whole legacy unit and its methods. No re-pruning existing archives.",
+        "top_symbols": [],
+        "main_guards": []
+      },
+      {
+        "path": "old/approach_util33.py",
+        "sha256": "89ae0ac387bd44484b1a345e5bd3999cc279acc2f5a705cba6ab6fc285701352",
+        "lines": 278,
+        "read_scope": "AST/imports and first 35 lines; existing archive retention review, not full-body audit",
+        "classification": "REUSE_CANDIDATE",
+        "action": "KEEP_AS_IS",
+        "reason": "Already archived; preserve the whole legacy unit and its methods. No re-pruning existing archives.",
+        "top_symbols": [
+          {
+            "name": "MyGraph",
+            "kind": "ClassDef",
+            "start": 8,
+            "end": 48
+          },
+          {
+            "name": "Sen_p",
+            "kind": "ClassDef",
+            "start": 51,
+            "end": 102
+          },
+          {
+            "name": "Acc_p",
+            "kind": "ClassDef",
+            "start": 104,
+            "end": 278
+          }
+        ],
+        "main_guards": []
+      },
+      {
+        "path": "optimizer/delta_ver.py",
+        "sha256": "da1762a2d66c80ca5fbd9a3de4eff3fb96f3d2d6f3ca16186996c0853cd5c9a3",
+        "lines": 346,
+        "read_scope": "full module",
+        "classification": "REVIEW",
+        "action": "KEEP_AS_IS",
+        "reason": "Independent probabilistic scheduling experiment dependency. Not reached from three primary entries, but internally linked; missing environment is not dead-code evidence.",
+        "top_symbols": [
+          {
+            "name": "SchedulingBayesNet",
+            "kind": "ClassDef",
+            "start": 36,
+            "end": 294
+          }
+        ],
+        "main_guards": [
+          298
+        ]
+      },
+      {
+        "path": "optimizer/scheduler_base.py",
+        "sha256": "323b0e48b88910f152e8c21a06d4c8a0f9f965aa6f2b09bf3388868737a9c884",
+        "lines": 287,
+        "read_scope": "full module",
+        "classification": "KEEP",
+        "action": "KEEP_AS_IS",
+        "reason": "draw_computational_graph is a protected guide API and is called by delta_ver's standalone main; preserve class and other helper until this experimental path can be baselined.",
+        "top_symbols": [
+          {
+            "name": "SchedulerBase",
+            "kind": "ClassDef",
+            "start": 12,
+            "end": 198
+          },
+          {
+            "name": "build_cat_prob_tensor",
+            "kind": "FunctionDef",
+            "start": 201,
+            "end": 236
+          },
+          {
+            "name": "draw_computational_graph",
+            "kind": "FunctionDef",
+            "start": 240,
+            "end": 286
+          }
+        ],
+        "main_guards": []
+      },
+      {
+        "path": "optimizer/dist_custom.py",
+        "sha256": "923e2cafa54bd27646b620d3f13e8ab98386f8a6b93a4ad73c78e6dd69f479f9",
+        "lines": 169,
+        "read_scope": "full module",
+        "classification": "REVIEW",
+        "action": "KEEP_AS_IS",
+        "reason": "Independent probabilistic scheduling experiment dependency. Not reached from three primary entries, but internally linked; missing environment is not dead-code evidence.",
+        "top_symbols": [
+          {
+            "name": "TruncatedNormal",
+            "kind": "ClassDef",
+            "start": 6,
+            "end": 137
+          }
+        ],
+        "main_guards": [
+          139
+        ]
+      },
+      {
+        "path": "optimizer/ops.py",
+        "sha256": "41d6ddb143b93e14c51d49dbaea2db60ca6adcd0fdc163c784266e64dcb9595c",
+        "lines": 206,
+        "read_scope": "full module",
+        "classification": "REVIEW",
+        "action": "KEEP_AS_IS",
+        "reason": "Independent probabilistic scheduling experiment dependency. Not reached from three primary entries, but internally linked; missing environment is not dead-code evidence.",
+        "top_symbols": [
+          {
+            "name": "update_w_rem",
+            "kind": "FunctionDef",
+            "start": 47,
+            "end": 68
+          },
+          {
+            "name": "update_IF",
+            "kind": "FunctionDef",
+            "start": 70,
+            "end": 81
+          },
+          {
+            "name": "update_IA",
+            "kind": "FunctionDef",
+            "start": 86,
+            "end": 126
+          },
+          {
+            "name": "update_delta_w",
+            "kind": "FunctionDef",
+            "start": 129,
+            "end": 149
+          },
+          {
+            "name": "prior_alloc",
+            "kind": "FunctionDef",
+            "start": 152,
+            "end": 164
+          },
+          {
+            "name": "core_req_lb",
+            "kind": "FunctionDef",
+            "start": 167,
+            "end": 170
+          },
+          {
+            "name": "alloc_spatial",
+            "kind": "FunctionDef",
+            "start": 174,
+            "end": 177
+          },
+          {
+            "name": "Next_comp_time",
+            "kind": "FunctionDef",
+            "start": 179,
+            "end": 200
+          }
+        ],
+        "main_guards": []
+      },
+      {
+        "path": "optimizer/ops_test.py",
+        "sha256": "6584b9cff086fb2492e5131153c23b78225a27ed6ce953aee8a84244bd66e758",
+        "lines": 199,
+        "read_scope": "full module",
+        "classification": "KEEP",
+        "action": "KEEP_AS_IS",
+        "reason": "Existing interactive test/demo. Top-level figures, Sliders, callbacks and plt.show; protected and not imported/executed in this audit.",
+        "top_symbols": [
+          {
+            "name": "softplus",
+            "kind": "FunctionDef",
+            "start": 21,
+            "end": 22
+          },
+          {
+            "name": "sigmoid",
+            "kind": "FunctionDef",
+            "start": 24,
+            "end": 25
+          },
+          {
+            "name": "func1",
+            "kind": "FunctionDef",
+            "start": 36,
+            "end": 37
+          },
+          {
+            "name": "func2",
+            "kind": "FunctionDef",
+            "start": 40,
+            "end": 41
+          },
+          {
+            "name": "func3",
+            "kind": "FunctionDef",
+            "start": 44,
+            "end": 45
+          },
+          {
+            "name": "func4",
+            "kind": "FunctionDef",
+            "start": 48,
+            "end": 50
+          },
+          {
+            "name": "func5",
+            "kind": "FunctionDef",
+            "start": 53,
+            "end": 54
+          },
+          {
+            "name": "func6",
+            "kind": "FunctionDef",
+            "start": 57,
+            "end": 58
+          },
+          {
+            "name": "func7",
+            "kind": "FunctionDef",
+            "start": 61,
+            "end": 62
+          },
+          {
+            "name": "update",
+            "kind": "FunctionDef",
+            "start": 145,
+            "end": 175
+          },
+          {
+            "name": "reset",
+            "kind": "FunctionDef",
+            "start": 189,
+            "end": 195
+          }
+        ],
+        "main_guards": []
+      },
+      {
+        "path": "model/noc.py",
+        "sha256": "001d30e29ffe3ebc8b9724e151c445e100ef885287fe5abdd00a9bb0048d8f51",
+        "lines": 65,
+        "read_scope": "B24 full read retained; B25 SHA and real import revalidated",
+        "classification": "REVIEW",
+        "action": "KEEP_AS_IS",
+        "reason": "Original ctypes.Union annotation evaluation raises TypeError. Three classes retained; no class-internal fix or whole-file move authorized."
+      },
+      {
+        "path": "run/cfg_parser.py",
+        "sha256": "5d8c3a618d13994aee7dbec18e033d938491a9e46fedeaa75ce712b59f7d9f55",
+        "read_scope": "full module",
+        "classification": "KEEP",
+        "action": "KEEP_AS_IS",
+        "reason": "Shared config-name CLI called by several tracked scanning scripts; --help exits successfully."
+      },
+      {
+        "path": "run/max_core_num_scan.py",
+        "sha256": "79fa47da771d7ac88ef383946e4609c8248212f4b4d7fa6517f27ec34f2f464a",
+        "read_scope": "full module",
+        "classification": "REVIEW",
+        "action": "KEEP_AS_IS",
+        "reason": "Standalone legacy dynamic/global experiment driver; --help succeeds, body launches many subprocesses and was not run. No proof of safe retirement."
+      },
+      {
+        "path": "run/1/all.sh",
+        "sha256": "05105542d6b66aaf914ad86ccd1338ea4049ed8d2c21a91b2783f9c37a0ff6e4",
+        "lines": 29,
+        "read_scope": "full script",
+        "classification": "REVIEW",
+        "action": "KEEP_AS_IS",
+        "reason": "Historical standalone experiment script with output/deletion/background-job side effects; old command paths and parameter contracts require separate migration design."
+      },
+      {
+        "path": "run/1/scan_aux.sh",
+        "sha256": "9d7cb82e0805928fed87f4efb9c727c96d371ae51382ea8fce0192eff92180d3",
+        "lines": 87,
+        "read_scope": "full script",
+        "classification": "REVIEW",
+        "action": "KEEP_AS_IS",
+        "reason": "Historical standalone experiment script with output/deletion/background-job side effects; old command paths and parameter contracts require separate migration design."
+      },
+      {
+        "path": "run/1/scan_core.sh",
+        "sha256": "958401b5016d0e19eade15c3f7831b07cf8ad611e627ff6d1f4a06db8d27503a",
+        "lines": 89,
+        "read_scope": "full script",
+        "classification": "REVIEW",
+        "action": "KEEP_AS_IS",
+        "reason": "Historical standalone experiment script with output/deletion/background-job side effects; old command paths and parameter contracts require separate migration design."
+      },
+      {
+        "path": "run/1/sweep_seed.sh",
+        "sha256": "dea4922a271e4e318ecc29f39a7ef728de52bd581470c87095b4023c50dcfa8a",
+        "lines": 58,
+        "read_scope": "full script",
+        "classification": "REVIEW",
+        "action": "KEEP_AS_IS",
+        "reason": "Historical standalone experiment script with output/deletion/background-job side effects; old command paths and parameter contracts require separate migration design."
+      },
+      {
+        "path": "run/2/all2.sh",
+        "sha256": "85638195a489880dc8c26bdba929d3c62a4b0b83c6eaaeb252d040db74824880",
+        "lines": 11,
+        "read_scope": "full script",
+        "classification": "REVIEW",
+        "action": "KEEP_AS_IS",
+        "reason": "Historical standalone experiment script with output/deletion/background-job side effects; old command paths and parameter contracts require separate migration design."
+      },
+      {
+        "path": "run/2/aba_scalability_scan.sh",
+        "sha256": "d527b302c374401165e3011cca9d3904710ee4154def52aab5489d725c41f925",
+        "lines": 228,
+        "read_scope": "full script",
+        "classification": "REVIEW",
+        "action": "KEEP_AS_IS",
+        "reason": "Historical standalone experiment script with output/deletion/background-job side effects; old command paths and parameter contracts require separate migration design."
+      },
+      {
+        "path": "run/2/abla_scalablility.sh",
+        "sha256": "2f56009e9eb0da9cfa9223737aadb356e444b7e8b2e6212810c2e6385151a498",
+        "lines": 79,
+        "read_scope": "full script",
+        "classification": "REVIEW",
+        "action": "KEEP_AS_IS",
+        "reason": "Historical standalone experiment script with output/deletion/background-job side effects; old command paths and parameter contracts require separate migration design."
+      },
+      {
+        "path": "run/3/time_sharing.sh",
+        "sha256": "b8104f1f3c684290dfbdf781e07b60a70e8feb251bbe9cd80278c3fd9dcfa5ee",
+        "lines": 246,
+        "read_scope": "full script",
+        "classification": "REVIEW",
+        "action": "KEEP_AS_IS",
+        "reason": "Historical standalone experiment script with output/deletion/background-job side effects; old command paths and parameter contracts require separate migration design."
+      },
+      {
+        "path": "run/aba_scalability_scan copy.sh",
+        "sha256": "c60b76ec65a851962d4b7235ed76e8450a6e80cbefdd22ce6aaf5530fb348819",
+        "lines": 254,
+        "read_scope": "full comparison against fully read run/2/aba_scalability_scan.sh",
+        "classification": "REVIEW",
+        "action": "KEEP_AS_IS",
+        "reason": "Adds a 1000-job FIFO demonstration to a scanning script; not byte-identical duplicate. No behavior rewrite or filename-based deletion."
+      },
+      {
+        "path": "run/abla_chain_sharing.sh",
+        "sha256": "17943f0885c65567943936abdc82e6c53a5df33340f3a0ef37ff9a2c52e370b3",
+        "lines": 42,
+        "read_scope": "full script",
+        "classification": "REVIEW",
+        "action": "KEEP_AS_IS",
+        "reason": "Historical standalone experiment script with output/deletion/background-job side effects; old command paths and parameter contracts require separate migration design."
+      },
+      {
+        "path": "run/bin_sharing.sh",
+        "sha256": "a94cd42eb610e21321b47921c5c2063a4590b0b8322cf57ab8b57a13166287b4",
+        "lines": 245,
+        "read_scope": "full script",
+        "classification": "REVIEW",
+        "action": "KEEP_AS_IS",
+        "reason": "Historical standalone experiment script with output/deletion/background-job side effects; old command paths and parameter contracts require separate migration design."
+      },
+      {
+        "path": "run/scan_coalescing.sh",
+        "sha256": "2ee0fbb7c0b029075ee071e3ac1af672e63019af484fcc2a30bcdd03173dfa7d",
+        "lines": 55,
+        "read_scope": "full script",
+        "classification": "REVIEW",
+        "action": "KEEP_AS_IS",
+        "reason": "Historical standalone experiment script with output/deletion/background-job side effects; old command paths and parameter contracts require separate migration design."
+      },
+      {
+        "path": "run/clean.sh",
+        "sha256": "7d5abeedad2abb698003ac37a594feffa5676334a8f615fcdee6c059a1e4ecbe",
+        "lines": 3,
+        "read_scope": "full script",
+        "classification": "REVIEW",
+        "action": "KEEP_AS_IS",
+        "reason": "Destructive manual cache/trace/log cleanup tool, unquoted $1 and no guard; syntax-only, never execute. Preserve pending a separately authorized safety/retirement decision."
+      },
+      {
+        "path": "run/temp.sh",
+        "sha256": "31236f54d38944c69f2cb3b3f069a7c3931332e4add8cfd252d091d5621a6a49",
+        "lines": 47,
+        "read_scope": "full script",
+        "classification": "REVIEW",
+        "action": "KEEP_AS_IS",
+        "reason": "Historical standalone experiment script with output/deletion/background-job side effects; old command paths and parameter contracts require separate migration design."
+      },
+      {
+        "path": "scripts/run_abla_exps.sh",
+        "sha256": "3f8d8a01e366995b7e8d4fb0b492e4c1bb0cbe989da2c061d501f80caca7c366",
+        "lines": 44,
+        "read_scope": "full script",
+        "classification": "KEEP",
+        "action": "KEEP_AS_IS",
+        "reason": "Wrapper of current motiv/abla runners; explicit CLI outside Python import graph."
+      },
+      {
+        "path": "scripts/run_motiv_exps.sh",
+        "sha256": "4238e238d4640f53c19f2705f892be988ad19a50439f8c2d48efd2cd43c36d66",
+        "lines": 178,
+        "read_scope": "full script",
+        "classification": "KEEP",
+        "action": "KEEP_AS_IS",
+        "reason": "Wrapper of current motiv/abla runners; explicit CLI outside Python import graph."
+      }
+    ],
+    "source_changes": 0,
+    "test_changes": 0,
+    "dependency_changes": 0,
+    "ledger_changes": 0,
+    "protected_path_changes": 0,
+    "untracked_files_considered": false,
+    "approved_new_artifacts": [
+      "cleanup/reports/b25-legacy-optimizer-run-audit.json",
+      "REVIEW_PACKET_BATCH_B25-LEGACY-OPTIMIZER-RUN-AUDIT.md"
+    ]
+  },
+  "traversal": {
+    "source": "cleanup/reports/dfs-exploration-inventory-20260906.json",
+    "sequence": [
+      "mapper/model frontier from B24",
+      "NoC prior full-read revalidation",
+      "old existing-archive boundaries",
+      "optimizer/delta_ver.py",
+      "optimizer/scheduler_base.py",
+      "optimizer/dist_custom.py",
+      "optimizer/ops.py",
+      "optimizer/ops_test.py",
+      "run/cfg_parser.py",
+      "run/max_core_num_scan.py",
+      "run wrapper-to-scan relations",
+      "scripts current experiment wrappers"
+    ],
+    "full_python_modules_this_pass": 7,
+    "existing_archive_boundary_only": 4,
+    "prior_full_read_revalidated": 1,
+    "fully_read_shell_scripts": 15,
+    "comparatively_read_shell_scripts": 1,
+    "shell_total": 16,
+    "shell_total_lines": 1695,
+    "repository_semantic_audit_complete": false,
+    "next_frontier": "Continue existing DFS after run: archived scheduling helpers are retained as units; inspect sched/packing_solver/fit.py, remaining standalone scripts/tests and task/throughput_cnt.py, tile_2d_mesh_mapper_fixed.py, unused_fun.py without reopening REQ003/005/006/007."
+  },
+  "critical_evidence": [
+    {
+      "path": "doc/guide/deprecated_code.md",
+      "line": 33,
+      "fact": "Deprecated scope is optimizer/old/, not all five tracked optimizer modules. Do not inspect referenced untracked historical paths."
+    },
+    {
+      "path": "doc/guide/plotting_overview.md",
+      "line": 60,
+      "fact": "draw_computational_graph(model) remains explicitly documented at optimizer/scheduler_base.py:240."
+    },
+    {
+      "path": "optimizer/delta_ver.py",
+      "line": 24,
+      "fact": "Imports SchedulerBase; its main at298 uses SchedulingBayesNet, graph cache, training and Graphviz rendering. Not run."
+    },
+    {
+      "path": "optimizer/scheduler_base.py",
+      "line": 10,
+      "fact": "Imports TruncatedNormal; class instantiates it at136. draw_computational_graph is imported and called by delta_ver main."
+    },
+    {
+      "path": "optimizer/scheduler_base.py",
+      "line": 201,
+      "fact": "build_cat_prob_tensor has only its definition in scoped textual search. Kept with the independent experiment: callable-body preservation cannot be verified in current missing torch/graphviz environment; no cut proposed."
+    },
+    {
+      "path": "optimizer/ops_test.py",
+      "line": 17,
+      "fact": "Existing test/demo creates figure at import time; bottom plt.show. Not executed. Local softplus/sigmoid/update attribute name matches elsewhere do not establish imports/calls."
+    },
+    {
+      "path": "sim_main_old.py",
+      "line": 23,
+      "fact": "Still names allocator_agent without old prefix. Existing historical path issue, retained; not a verified runnable workflow, no import repair in this request."
+    },
+    {
+      "path": "run/1/all.sh",
+      "line": 8,
+      "fact": "Invokes literal run/sweep_seed.sh absent from tracked/approved inventory, while run/1/sweep_seed.sh exists. Do not infer absence on disk or inspect untracked alternatives."
+    },
+    {
+      "path": "run/2/all2.sh",
+      "line": 1,
+      "fact": "Literal run/aba_scalability_scan.sh is outside tracked/approved inventory; run/2 variant is not an automatic drop-in replacement."
+    },
+    {
+      "path": "run/abla_chain_sharing.sh",
+      "line": 15,
+      "fact": "Calls ablation_main.py, outside tracked/approved inventory. No experiment execution."
+    },
+    {
+      "path": "run/clean.sh",
+      "line": 1,
+      "fact": "Three recursive rm commands on cache/$1/**, trace/$1/**, log/$1/**. bash -n only; no deletion or dry-run that expands paths."
+    },
+    {
+      "path": "run/3/time_sharing.sh",
+      "line": 139,
+      "fact": "Uses shared /tmp/fd1 FIFO and removes its pathname. Not executed; potential cross-run interaction retained as REVIEW."
+    }
+  ],
+  "reference_evidence": [
+    {
+      "path": "CLAUDE.md",
+      "line": 38,
+      "text": "| Resource allocation (runtime, archived) | `old/allocator_agent.py` — old sim-chain, moved B2 |"
+    },
+    {
+      "path": "doc/guide/architecture_overview.md",
+      "line": 56,
+      "text": "├── allocator_agent.py        # 资源分配代理"
+    },
+    {
+      "path": "doc/guide/deprecated_code.md",
+      "line": 33,
+      "text": "### 6. optimizer/old/"
+    },
+    {
+      "path": "doc/guide/deprecated_code.md",
+      "line": 34,
+      "text": "路径: `/home/zhangchg/git_repo/scheduler/optimizer/old/`"
+    },
+    {
+      "path": "doc/guide/deprecated_code.md",
+      "line": 60,
+      "text": "| `sched/pre_alloc.py` | `old/pre_alloc.py` | v1 代（glb_alloc_new 等），被 `pre_alloc_new.py`（_new2）取代 |"
+    },
+    {
+      "path": "doc/guide/plotting_overview.md",
+      "line": 60,
+      "text": "| `draw_computational_graph(model)` | `optimizer/scheduler_base.py:240` | 计算图（optimizer 模块） |"
+    },
+    {
+      "path": "model/noc.py",
+      "line": 8,
+      "text": "class NoC_model(object):"
+    },
+    {
+      "path": "model/noc.py",
+      "line": 33,
+      "text": "class ideal_model(NoC_model):"
+    },
+    {
+      "path": "model/noc.py",
+      "line": 46,
+      "text": "class aggregate_model(NoC_model):"
+    },
+    {
+      "path": "optimizer/delta_ver.py",
+      "line": 24,
+      "text": "from optimizer.scheduler_base import SchedulerBase"
+    },
+    {
+      "path": "optimizer/delta_ver.py",
+      "line": 31,
+      "text": "from optimizer.ops import ("
+    },
+    {
+      "path": "optimizer/delta_ver.py",
+      "line": 36,
+      "text": "class SchedulingBayesNet(SchedulerBase):"
+    },
+    {
+      "path": "optimizer/delta_ver.py",
+      "line": 305,
+      "text": "    from optimizer.scheduler_base import draw_computational_graph"
+    },
+    {
+      "path": "optimizer/delta_ver.py",
+      "line": 320,
+      "text": "    model = SchedulingBayesNet(**inputs)"
+    },
+    {
+      "path": "optimizer/dist_custom.py",
+      "line": 6,
+      "text": "class TruncatedNormal(Distribution, TorchDistributionMixin):"
+    },
+    {
+      "path": "optimizer/dist_custom.py",
+      "line": 53,
+      "text": "        new = self._get_checked_instance(TruncatedNormal, _instance)"
+    },
+    {
+      "path": "optimizer/dist_custom.py",
+      "line": 61,
+      "text": "        super(TruncatedNormal, new).__init__(batch_shape, validate_args=self.validate_args)"
+    },
+    {
+      "path": "optimizer/dist_custom.py",
+      "line": 147,
+      "text": "    trunc_norm = TruncatedNormal(loc=loc, scale=scale, lower=lower, upper=upper)"
+    },
+    {
+      "path": "optimizer/scheduler_base.py",
+      "line": 10,
+      "text": "from optimizer.dist_custom import TruncatedNormal"
+    },
+    {
+      "path": "optimizer/scheduler_base.py",
+      "line": 12,
+      "text": "class SchedulerBase:"
+    },
+    {
+      "path": "optimizer/scheduler_base.py",
+      "line": 136,
+      "text": "        self.ft_dist = TruncatedNormal(ft_ref, ft_std, torch.tensor(ft_a), torch.tensor(ft_b))"
+    },
+    {
+      "path": "optimizer/scheduler_base.py",
+      "line": 201,
+      "text": "def build_cat_prob_tensor(self):"
+    },
+    {
+      "path": "path_replacement_summary.md",
+      "line": 88,
+      "text": "**位置**: `allocator_agent.py` 第 337 行"
+    },
+    {
+      "path": "sim_main_old.py",
+      "line": 23,
+      "text": "from allocator_agent import glb_sched, cyclic_sched"
+    }
+  ],
+  "copy_comparison": {
+    "path": "run/aba_scalability_scan copy.sh",
+    "base": "run/2/aba_scalability_scan.sh",
+    "base_sha256": "d527b302c374401165e3011cca9d3904710ee4154def52aab5489d725c41f925",
+    "sha256": "c60b76ec65a851962d4b7235ed76e8450a6e80cbefdd22ce6aaf5530fb348819",
+    "diff": "--- run/2/aba_scalability_scan.sh\n+++ run/aba_scalability_scan copy.sh\n@@ -45,6 +45,32 @@\n n_p=3\n Orin_PY_ARGS=\"$Orin_PY_ARGS --profiling_filename profiling/profiling_light.csv --n_p $n_p --gen_benchmark\"\n \n+\n+start_time=`date +%s`              #定义脚本运行的开始时间\n+[ -e /tmp/fd1 ] || mkfifo /tmp/fd1 #创建有名管道\n+exec 3<>/tmp/fd1                   #创建文件描述符，以可读（<）可写（>）的方式关联管道文件，这时候文件描述符3就有了有名管道文件的所有特性\n+rm -rf /tmp/fd1                    #关联后的文件描述符拥有管道文件的所有特性,所以这时候管道文件可以删除，我们留下文件描述符来用就可以了\n+for ((i=1;i<=10;i++))\n+do\n+        echo >&3                   #&3代表引用文件描述符3，这条命令代表往管道里面放入了一个\"令牌\"\n+done\n+ \n+for ((i=1;i<=1000;i++))\n+do\n+read -u3                           #代表从管道中读取一个令牌\n+{\n+        sleep 1  #sleep 1用来模仿执行一条命令需要花费的时间（可以用真实命令来代替）\n+        echo 'success'$i       \n+        echo >&3                   #代表我这一次命令执行到最后，把令牌放回管道\n+}&\n+done\n+wait\n+ \n+stop_time=`date +%s`  #定义脚本运行的结束时间\n+ \n+echo \"TIME:`expr $stop_time - $start_time`\"\n+exec 3<&-                       #关闭文件描述符的读\n+exec 3>&-                       #关闭文件描述符的写\n printf \"\\n********************* Start ***********************\\n\"\n \n # Strategy:"
+  },
+  "code_baseline_ref": {
+    "path": "cleanup/reports/b24-mapper-legacy-helpers.json",
+    "sha256": "f82390a1fd0b403bc0dfa7bdf14013b4043063fe4a442fab8f1f6d17faef3300",
+    "field": "validation.code_sha256",
+    "count": 177,
+    "map_canonical_sha256": "c88153de5b41d0fb5c9b0ff88709e7391447e3e19fe8428256d55d119ce11e42"
+  },
+  "validation": {
+    "import_probes": {
+      "environment": {
+        "torch": null,
+        "pyro": null,
+        "torchsort": null,
+        "graphviz": null,
+        "seaborn": null
+      },
+      "runs": [
+        {
+          "module": "optimizer.delta_ver",
+          "command": [
+            "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+            "-B",
+            "-c",
+            "import optimizer.delta_ver"
+          ],
+          "rc": 1,
+          "log": "/tmp/scheduler-b25-imports-1u5enmnz/optimizer.delta_ver.log",
+          "stdout": "",
+          "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/home/zhangchg/git_repo/scheduler-audit-20260612/optimizer/delta_ver.py\", line 1, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n"
+        },
+        {
+          "module": "optimizer.scheduler_base",
+          "command": [
+            "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+            "-B",
+            "-c",
+            "import optimizer.scheduler_base"
+          ],
+          "rc": 1,
+          "log": "/tmp/scheduler-b25-imports-1u5enmnz/optimizer.scheduler_base.log",
+          "stdout": "",
+          "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/home/zhangchg/git_repo/scheduler-audit-20260612/optimizer/scheduler_base.py\", line 2, in <module>\n    from graphviz import Digraph\nModuleNotFoundError: No module named 'graphviz'\n"
+        },
+        {
+          "module": "optimizer.dist_custom",
+          "command": [
+            "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+            "-B",
+            "-c",
+            "import optimizer.dist_custom"
+          ],
+          "rc": 1,
+          "log": "/tmp/scheduler-b25-imports-1u5enmnz/optimizer.dist_custom.log",
+          "stdout": "",
+          "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/home/zhangchg/git_repo/scheduler-audit-20260612/optimizer/dist_custom.py\", line 1, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n"
+        },
+        {
+          "module": "optimizer.ops",
+          "command": [
+            "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+            "-B",
+            "-c",
+            "import optimizer.ops"
+          ],
+          "rc": 1,
+          "log": "/tmp/scheduler-b25-imports-1u5enmnz/optimizer.ops.log",
+          "stdout": "",
+          "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/home/zhangchg/git_repo/scheduler-audit-20260612/optimizer/ops.py\", line 1, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n"
+        },
+        {
+          "module": "model.noc",
+          "command": [
+            "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+            "-B",
+            "-c",
+            "import model.noc"
+          ],
+          "rc": 1,
+          "log": "/tmp/scheduler-b25-imports-1u5enmnz/model.noc.log",
+          "stdout": "",
+          "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/home/zhangchg/git_repo/scheduler-audit-20260612/model/noc.py\", line 46, in <module>\n    class aggregate_model(NoC_model):\n  File \"/home/zhangchg/git_repo/scheduler-audit-20260612/model/noc.py\", line 47, in aggregate_model\n    def __init__(self, transfer_curve:List[Union(np.ndarray, List), Union(np.ndarray, List)]) -> None:\nTypeError: abstract class\n"
+        }
+      ],
+      "ops_test_executed": false,
+      "reason": "Interactive plotting module has import-time figure/Slider/show side effects; read and AST only. No training/main/demo entry executed.",
+      "files_unchanged": true
+    },
+    "shell_syntax": [
+      {
+        "path": "run/1/all.sh",
+        "command": [
+          "bash",
+          "--noprofile",
+          "--norc",
+          "-n",
+          "run/1/all.sh"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "sha256": "05105542d6b66aaf914ad86ccd1338ea4049ed8d2c21a91b2783f9c37a0ff6e4"
+      },
+      {
+        "path": "run/1/scan_aux.sh",
+        "command": [
+          "bash",
+          "--noprofile",
+          "--norc",
+          "-n",
+          "run/1/scan_aux.sh"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "sha256": "9d7cb82e0805928fed87f4efb9c727c96d371ae51382ea8fce0192eff92180d3"
+      },
+      {
+        "path": "run/1/scan_core.sh",
+        "command": [
+          "bash",
+          "--noprofile",
+          "--norc",
+          "-n",
+          "run/1/scan_core.sh"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "sha256": "958401b5016d0e19eade15c3f7831b07cf8ad611e627ff6d1f4a06db8d27503a"
+      },
+      {
+        "path": "run/1/sweep_seed.sh",
+        "command": [
+          "bash",
+          "--noprofile",
+          "--norc",
+          "-n",
+          "run/1/sweep_seed.sh"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "sha256": "dea4922a271e4e318ecc29f39a7ef728de52bd581470c87095b4023c50dcfa8a"
+      },
+      {
+        "path": "run/2/aba_scalability_scan.sh",
+        "command": [
+          "bash",
+          "--noprofile",
+          "--norc",
+          "-n",
+          "run/2/aba_scalability_scan.sh"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "sha256": "d527b302c374401165e3011cca9d3904710ee4154def52aab5489d725c41f925"
+      },
+      {
+        "path": "run/2/abla_scalablility.sh",
+        "command": [
+          "bash",
+          "--noprofile",
+          "--norc",
+          "-n",
+          "run/2/abla_scalablility.sh"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "sha256": "2f56009e9eb0da9cfa9223737aadb356e444b7e8b2e6212810c2e6385151a498"
+      },
+      {
+        "path": "run/2/all2.sh",
+        "command": [
+          "bash",
+          "--noprofile",
+          "--norc",
+          "-n",
+          "run/2/all2.sh"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "sha256": "85638195a489880dc8c26bdba929d3c62a4b0b83c6eaaeb252d040db74824880"
+      },
+      {
+        "path": "run/3/time_sharing.sh",
+        "command": [
+          "bash",
+          "--noprofile",
+          "--norc",
+          "-n",
+          "run/3/time_sharing.sh"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "sha256": "b8104f1f3c684290dfbdf781e07b60a70e8feb251bbe9cd80278c3fd9dcfa5ee"
+      },
+      {
+        "path": "run/aba_scalability_scan copy.sh",
+        "command": [
+          "bash",
+          "--noprofile",
+          "--norc",
+          "-n",
+          "run/aba_scalability_scan copy.sh"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "sha256": "c60b76ec65a851962d4b7235ed76e8450a6e80cbefdd22ce6aaf5530fb348819"
+      },
+      {
+        "path": "run/abla_chain_sharing.sh",
+        "command": [
+          "bash",
+          "--noprofile",
+          "--norc",
+          "-n",
+          "run/abla_chain_sharing.sh"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "sha256": "17943f0885c65567943936abdc82e6c53a5df33340f3a0ef37ff9a2c52e370b3"
+      },
+      {
+        "path": "run/bin_sharing.sh",
+        "command": [
+          "bash",
+          "--noprofile",
+          "--norc",
+          "-n",
+          "run/bin_sharing.sh"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "sha256": "a94cd42eb610e21321b47921c5c2063a4590b0b8322cf57ab8b57a13166287b4"
+      },
+      {
+        "path": "run/clean.sh",
+        "command": [
+          "bash",
+          "--noprofile",
+          "--norc",
+          "-n",
+          "run/clean.sh"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "sha256": "7d5abeedad2abb698003ac37a594feffa5676334a8f615fcdee6c059a1e4ecbe"
+      },
+      {
+        "path": "run/scan_coalescing.sh",
+        "command": [
+          "bash",
+          "--noprofile",
+          "--norc",
+          "-n",
+          "run/scan_coalescing.sh"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "sha256": "2ee0fbb7c0b029075ee071e3ac1af672e63019af484fcc2a30bcdd03173dfa7d"
+      },
+      {
+        "path": "run/temp.sh",
+        "command": [
+          "bash",
+          "--noprofile",
+          "--norc",
+          "-n",
+          "run/temp.sh"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "sha256": "31236f54d38944c69f2cb3b3f069a7c3931332e4add8cfd252d091d5621a6a49"
+      },
+      {
+        "path": "scripts/run_abla_exps.sh",
+        "command": [
+          "bash",
+          "--noprofile",
+          "--norc",
+          "-n",
+          "scripts/run_abla_exps.sh"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "sha256": "3f8d8a01e366995b7e8d4fb0b492e4c1bb0cbe989da2c061d501f80caca7c366"
+      },
+      {
+        "path": "scripts/run_motiv_exps.sh",
+        "command": [
+          "bash",
+          "--noprofile",
+          "--norc",
+          "-n",
+          "scripts/run_motiv_exps.sh"
+        ],
+        "rc": 0,
+        "stderr": "",
+        "sha256": "4238e238d4640f53c19f2705f892be988ad19a50439f8c2d48efd2cd43c36d66"
+      }
+    ],
+    "cli": [
+      {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "run/cfg_parser.py",
+          "--help"
+        ],
+        "rc": 0,
+        "log": "/tmp/scheduler-b25-cli-pzkvt_ro/cli-0.log",
+        "stdout_excerpt": "usage: cfg_parser.py [-h] [--verbose] [--test_case TEST_CASE] [--plot PLOT]\n                     [--plot_fmt PLOT_FMT] [--test_all TEST_ALL]\n                     [--num_cores NUM_CORES] [--num_bins NUM_BINS]\n                     [--timestepxus TIMESTEPXUS]\n                     [--BinExtendRule BINEXTENDRULE] [--preemptable]\n                     [--quantum_check_en] [--quantumSize QUANTUMSIZE]\n                     [--warmup_dis] [--n_p N_P] [--jitter_sim_en]\n                     [--jitter_sim_para JITTER_SIM_PARA] [--exec_var_en]\n                     [--exec_var_para EXEC_VAR_PARA] [--var_sim_en]\n                     [--var_sim_cfg VAR_SIM_CFG] [--load_var_sim_en]\n                     [--load_var_sim_para LOAD_VAR_SIM_PARA]\n                     [--e2e_var_sim_en] [--e2e_var_sim_para E2E_VAR_SIM_PARA]\n                     [--seed SEED] [--file_suffix FILE_SUFFIX]\n                     [--i_file_suffix I_FILE_SUFFIX] [--barrier_dis]\n                     [--data_lifetime_mode DATA_LIFETIME_",
+        "stderr": ""
+      },
+      {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "run/max_core_num_scan.py",
+          "--help"
+        ],
+        "rc": 0,
+        "log": "/tmp/scheduler-b25-cli-pzkvt_ro/cli-1.log",
+        "stdout_excerpt": "usage: max_core_num_scan.py [-h] [--type TYPE]\n\noptional arguments:\n  -h, --help   show this help message and exit\n  --type TYPE  type\n",
+        "stderr": ""
+      },
+      {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "main_approach.py",
+          "--help"
+        ],
+        "rc": 0,
+        "log": "/tmp/scheduler-b25-cli-pzkvt_ro/cli-2.log",
+        "stdout_excerpt": "usage: main_approach.py [-h] [--verbose] [--test_case TEST_CASE] [--plot PLOT]\n                        [--plot_fmt PLOT_FMT] [--test_all TEST_ALL]\n                        [--num_cores NUM_CORES] [--num_bins NUM_BINS]\n                        [--timestepxus TIMESTEPXUS]\n                        [--BinExtendRule BINEXTENDRULE] [--preemptable]\n                        [--quantum_check_en] [--quantumSize QUANTUMSIZE]\n                        [--warmup_dis] [--n_p N_P] [--jitter_sim_en]\n                        [--jitter_sim_para JITTER_SIM_PARA] [--exec_var_en]\n                        [--exec_var_para EXEC_VAR_PARA] [--var_sim_en]\n                        [--var_sim_cfg VAR_SIM_CFG] [--load_var_sim_en]\n                        [--load_var_sim_para LOAD_VAR_SIM_PARA]\n                        [--e2e_var_sim_en]\n                        [--e2e_var_sim_para E2E_VAR_SIM_PARA] [--seed SEED]\n                        [--file_suffix FILE_SUFFIX]\n                        [--i_file_suffix I_FILE_SUFFIX] [--barr",
+        "stderr": ""
+      },
+      {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "scripts/motiv_exp_runner.py",
+          "--help"
+        ],
+        "rc": 0,
+        "log": "/tmp/scheduler-b25-cli-pzkvt_ro/cli-3.log",
+        "stdout_excerpt": "usage: motiv_exp_runner.py [-h] --case {1,2,3} [--output_dir OUTPUT_DIR]\n                           [--cache_collectors] [--case1_ratios CASE1_RATIOS]\n                           [--case2_tiles CASE2_TILES]\n                           [--case2_loads CASE2_LOADS]\n                           [--case2_chains CASE2_CHAINS]\n                           [--case3_mode {raw,binned}] [--case3_baseline]\n                           [--case3_experiment]\n                           [--case3_num_periods CASE3_NUM_PERIODS]\n                           [--num_hp NUM_HP] [--verbose] [--dry_run]\n                           [--use_plot_cache] [--lang {en,zh}]\n                           [--base_ratioA BASE_RATIOA]\n                           [--base_ratioB BASE_RATIOB]\n                           [--extra_args EXTRA_ARGS]\n\nMotivation Experiments Runner\n\noptional arguments:\n  -h, --help            show this help message and exit\n  --case {1,2,3}        实验编号: 1=静态利用率问题, 2=动态可扩展性问题, 3=切换不确定性\n  --output_dir OUTPUT_DIR\n  ",
+        "stderr": ""
+      },
+      {
+        "command": [
+          "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+          "-B",
+          "-m",
+          "scripts.abla_exp_runner",
+          "--help"
+        ],
+        "rc": 0,
+        "log": "/tmp/scheduler-b25-cli-pzkvt_ro/cli-4.log",
+        "stdout_excerpt": "usage: abla_exp_runner.py [-h] --case {1,2,3} [--output_dir OUTPUT_DIR]\n                          [--case1_ratioBs CASE1_RATIOBS]\n                          [--case1_ratioA CASE1_RATIOA]\n                          [--case1_cyc_ratios CASE1_CYC_RATIOS]\n                          [--case1_cycS_policy CASE1_CYCS_POLICY]\n                          [--case2_bins CASE2_BINS]\n                          [--case2_tiles CASE2_TILES]\n                          [--case2_chains CASE2_CHAINS]\n                          [--case2_loads CASE2_LOADS]\n                          [--case3_tiles CASE3_TILES]\n                          [--case3_chains CASE3_CHAINS]\n                          [--case3_loads CASE3_LOADS]\n                          [--case3_ratioBs CASE3_RATIOBS]\n                          [--case3_bins CASE3_BINS] [--case3_fixed_strength]\n                          [--case3_fixed_tiles CASE3_FIXED_TILES]\n                          [--case3_fixed_chains CASE3_FIXED_CHAINS]\n                          [--case3_",
+        "stderr": ""
+      },
+      {
+        "command": [
+          "bash",
+          "--noprofile",
+          "--norc",
+          "scripts/run_motiv_exps.sh",
+          "-h"
+        ],
+        "rc": 1,
+        "log": "/tmp/scheduler-b25-cli-pzkvt_ro/cli-5.log",
+        "stdout_excerpt": "Usage: scripts/run_motiv_exps.sh [OPTIONS] CASE\n\n运行Motivation实验的便捷脚本\n\nArguments:\n    CASE        实验编号: 1, 2, 3, 或 'all'（运行所有）\n\nOptions:\n    -o DIR      输出目录（默认: ./motiv_exp_results）\n    -n NUM      超周期数（默认: 100）\n    -v          详细输出\n    -d          干运行模式（只打印命令）\n    -h          显示此帮助信息\n\nExamples:\n    # 运行Case 1\n    scripts/run_motiv_exps.sh 1\n\n    # 运行所有实验，详细输出\n    scripts/run_motiv_exps.sh -v all\n\n    # 运行Case 3，使用自定义输出目录和更多周期\n    scripts/run_motiv_exps.sh -o ./my_results -n 500 3\n\n",
+        "stderr": ""
+      }
+    ],
+    "tracked_literal_targets": {
+      "run/sweep_seed.sh": {
+        "tracked": false,
+        "approved_code": false
+      },
+      "run/exp_cmd_min_core.sh": {
+        "tracked": false,
+        "approved_code": false
+      },
+      "run/exp_cmd_max_tp.sh": {
+        "tracked": false,
+        "approved_code": false
+      },
+      "run/aba_scalability_scan.sh": {
+        "tracked": false,
+        "approved_code": false
+      },
+      "run/abla_scalablility.sh": {
+        "tracked": false,
+        "approved_code": false
+      },
+      "ablation_main.py": {
+        "tracked": false,
+        "approved_code": false
+      },
+      "run/cfg_parser.py": {
+        "tracked": true,
+        "approved_code": true
+      },
+      "sim_main.py": {
+        "tracked": true,
+        "approved_code": true
+      }
+    },
+    "code_mismatch": [],
+    "ledger_sha256": {
+      "cleanup/move-ledger.csv": "724c2039e0f53b8e122a39b43e279881d00afce95b503a4d679a84553a8f0a81",
+      "cleanup/reachable-files.csv": "b0d4a1688abe13cb3b6c3dd8eeebdf5421a8337f5a1413f9a64de948d02709fd"
+    },
+    "protected_document_sha256": {
+      "CLAUDE.md": "827bd76d4055e16bc411fd033cafd872d5360e4ffdb3ce25cf3b5e19dfc337e7",
+      "doc/spec/readme.md": "b957c85985e127bdcc3b169966fb7acc5fbe3504c9fdc3b124945ab29caf5071",
+      "doc/spec/test_plan.md": "cafde29eb8e74c9be9b7584cda4aecfd60f57330339e10ae731445bcf451b38e",
+      "doc/spec/e2e_sched_sim_flow.md": "7a38f19dd280c591e2432a96376722ff5c17a9296957531bf7de7c01c2572cf8",
+      "doc/guide/deprecated_code.md": "fad4c2ac3c9046275896df69b52a80e0f4886c1c28e2a5abd29c8ad1d1c12317",
+      "doc/guide/plotting_overview.md": "aa46c79e409b61c00cdf35f12510a4d4560b1950b6b0bb69b4ff726cdbfc7cb3"
+    },
+    "head": "a1d933b1f26efd4d569eb3d8ffb313447294443b",
+    "index": "",
+    "pytest_run_this_batch": false,
+    "experiments_or_training_run": false,
+    "destructive_script_bodies_executed": false,
+    "syntax_checks_not_runtime_validation": true
+  },
+  "reviewer_acceptance": {
+    "event": "E0102",
+    "actor": "reviewer",
+    "status": "ACCEPTED",
+    "verdict": "KEEP_AS_IS",
+    "source_authorization": false,
+    "session_id": 11983,
+    "review_file": "/tmp/b25_review_final/review.json",
+    "review_file_sha256": "a805668c1eaeffb1871cce6a539b6f40693bfdbd8056534f7e41e5cf7561cfcf",
+    "independent_results": {
+      "cli": [
+        {
+          "idx": 1,
+          "command_tail": "--help",
+          "rc": 0,
+          "declared_rc": 0,
+          "log": "/tmp/b25_review_final/cli-1.log"
+        },
+        {
+          "idx": 2,
+          "command_tail": "--help",
+          "rc": 0,
+          "declared_rc": 0,
+          "log": "/tmp/b25_review_final/cli-2.log"
+        },
+        {
+          "idx": 3,
+          "command_tail": "--help",
+          "rc": 0,
+          "declared_rc": 0,
+          "log": "/tmp/b25_review_final/cli-3.log"
+        },
+        {
+          "idx": 4,
+          "command_tail": "--help",
+          "rc": 0,
+          "declared_rc": 0,
+          "log": "/tmp/b25_review_final/cli-4.log"
+        },
+        {
+          "idx": 5,
+          "command_tail": "--help",
+          "rc": 0,
+          "declared_rc": 0,
+          "log": "/tmp/b25_review_final/cli-5.log"
+        },
+        {
+          "idx": 6,
+          "command_tail": "-h",
+          "rc": 1,
+          "declared_rc": 1,
+          "log": "/tmp/b25_review_final/cli-6.log"
+        }
+      ],
+      "shell_syntax": {
+        "count": 16,
+        "all_pass": true,
+        "entries": [
+          {
+            "file": "run/1/all.sh",
+            "rc": 0
+          },
+          {
+            "file": "run/1/scan_aux.sh",
+            "rc": 0
+          },
+          {
+            "file": "run/1/scan_core.sh",
+            "rc": 0
+          },
+          {
+            "file": "run/1/sweep_seed.sh",
+            "rc": 0
+          },
+          {
+            "file": "run/2/aba_scalability_scan.sh",
+            "rc": 0
+          },
+          {
+            "file": "run/2/abla_scalablility.sh",
+            "rc": 0
+          },
+          {
+            "file": "run/2/all2.sh",
+            "rc": 0
+          },
+          {
+            "file": "run/3/time_sharing.sh",
+            "rc": 0
+          },
+          {
+            "file": "run/aba_scalability_scan copy.sh",
+            "rc": 0
+          },
+          {
+            "file": "run/abla_chain_sharing.sh",
+            "rc": 0
+          },
+          {
+            "file": "run/bin_sharing.sh",
+            "rc": 0
+          },
+          {
+            "file": "run/clean.sh",
+            "rc": 0
+          },
+          {
+            "file": "run/scan_coalescing.sh",
+            "rc": 0
+          },
+          {
+            "file": "run/temp.sh",
+            "rc": 0
+          },
+          {
+            "file": "scripts/run_abla_exps.sh",
+            "rc": 0
+          },
+          {
+            "file": "scripts/run_motiv_exps.sh",
+            "rc": 0
+          }
+        ]
+      },
+      "import_probes": [
+        {
+          "idx": 1,
+          "rc": 1,
+          "declared_rc": 1,
+          "error_tail": "ModuleNotFoundError: No module named 'torch'"
+        },
+        {
+          "idx": 2,
+          "rc": 1,
+          "declared_rc": 1,
+          "error_tail": "ModuleNotFoundError: No module named 'graphviz'"
+        },
+        {
+          "idx": 3,
+          "rc": 1,
+          "declared_rc": 1,
+          "error_tail": "ModuleNotFoundError: No module named 'torch'"
+        },
+        {
+          "idx": 4,
+          "rc": 1,
+          "declared_rc": 1,
+          "error_tail": "ModuleNotFoundError: No module named 'torch'"
+        },
+        {
+          "idx": 5,
+          "rc": 1,
+          "declared_rc": 1,
+          "error_tail": "TypeError: abstract class"
+        }
+      ],
+      "code_sha256_177": {
+        "ok": 177,
+        "changed": [],
+        "missing": []
+      },
+      "ledger_sha256": {
+        "cleanup/move-ledger.csv": true,
+        "cleanup/reachable-files.csv": true
+      },
+      "protected_document_sha256": {
+        "CLAUDE.md": true,
+        "doc/spec/readme.md": true,
+        "doc/spec/test_plan.md": true,
+        "doc/spec/e2e_sched_sim_flow.md": true,
+        "doc/guide/deprecated_code.md": true,
+        "doc/guide/plotting_overview.md": true
+      }
+    },
+    "codex_cli_comparison": {
+      "entries": [
+        {
+          "idx": 1,
+          "declared_command": [
+            "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+            "-B",
+            "run/cfg_parser.py",
+            "--help"
+          ],
+          "reviewer_log": "/tmp/b25_review_final/cli-1.log",
+          "reviewer_sha256": "4658a5fdb33ec74a8b3c2b4e9b994e1a8c843881cb0d1879217b1457b6f65353",
+          "matches_codex_log": false,
+          "rc": 0
+        },
+        {
+          "idx": 2,
+          "declared_command": [
+            "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+            "-B",
+            "run/max_core_num_scan.py",
+            "--help"
+          ],
+          "reviewer_log": "/tmp/b25_review_final/cli-2.log",
+          "reviewer_sha256": "ef49f7472c126f26f8a68225df8b8655322db5e50456f0d09d4906573489b798",
+          "matches_codex_log": false,
+          "rc": 0
+        },
+        {
+          "idx": 3,
+          "declared_command": [
+            "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+            "-B",
+            "main_approach.py",
+            "--help"
+          ],
+          "reviewer_log": "/tmp/b25_review_final/cli-3.log",
+          "reviewer_sha256": "5a6faa01a9f81f2017ed46467aea0252fecdf904a83bd7a9e484c243a4e52b7c",
+          "matches_codex_log": false,
+          "rc": 0
+        },
+        {
+          "idx": 4,
+          "declared_command": [
+            "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+            "-B",
+            "scripts/motiv_exp_runner.py",
+            "--help"
+          ],
+          "reviewer_log": "/tmp/b25_review_final/cli-4.log",
+          "reviewer_sha256": "d678300780625f95b9c3a8b8acd18cfcda6b3f69216d31cd9fde618c390d6366",
+          "matches_codex_log": false,
+          "rc": 0
+        },
+        {
+          "idx": 5,
+          "declared_command": [
+            "/home/zhangchg/miniconda3/envs/gurobi/bin/python",
+            "-B",
+            "-m",
+            "scripts.abla_exp_runner",
+            "--help"
+          ],
+          "reviewer_log": "/tmp/b25_review_final/cli-5.log",
+          "reviewer_sha256": "35f739c82c385f756f444add7c769a788ddef867b712ef1d59a061894046f08d",
+          "matches_codex_log": false,
+          "rc": 0
+        },
+        {
+          "idx": 6,
+          "declared_command": [
+            "bash",
+            "--noprofile",
+            "--norc",
+            "scripts/run_motiv_exps.sh",
+            "-h"
+          ],
+          "reviewer_log": "/tmp/b25_review_final/cli-6.log",
+          "reviewer_sha256": "69e1e9137e3b8830540e311d51e112186712ec0dff45e1d00140c1daebed7d77",
+          "matches_codex_log": false,
+          "rc": 1
+        }
+      ],
+      "format_difference": "Every reviewer CLI log equals the corresponding Codex stdout+stderr log plus exactly '\\n===STDERR===\\n'. This is a recorder separator, not a command-output change.",
+      "exact_suffix_assertion_pending": false
+    },
+    "index_erratum": {
+      "tracked_shell_count": 16,
+      "tracked_shells": [
+        "run/1/all.sh",
+        "run/1/scan_aux.sh",
+        "run/1/scan_core.sh",
+        "run/1/sweep_seed.sh",
+        "run/2/aba_scalability_scan.sh",
+        "run/2/abla_scalablility.sh",
+        "run/2/all2.sh",
+        "run/3/time_sharing.sh",
+        "run/aba_scalability_scan copy.sh",
+        "run/abla_chain_sharing.sh",
+        "run/bin_sharing.sh",
+        "run/clean.sh",
+        "run/scan_coalescing.sh",
+        "run/temp.sh",
+        "scripts/run_abla_exps.sh",
+        "scripts/run_motiv_exps.sh"
+      ],
+      "tracked_missing": [],
+      "scope_difference": [],
+      "call_sites": [
+        {
+          "line": 340,
+          "name": "draw_computational_graph"
+        }
+      ]
+    },
+    "historical_event_note": "Reviewer corrected E0102's ghost-index attribution in global history: unquoted splitting of the one space-containing filename caused the two false failures. E0102 is not rewritten; no index changes were made.",
+    "source_changes": 0,
+    "source_batches_uncommitted": 13,
+    "whole_repository_complete": false
+  },
+  "readonly_followup": {
+    "mode": "READ_ONLY_WHILE_WAITING_NOT_ADDITIONAL_SOURCE_AUTHORIZATION",
+    "entries": [
+      {
+        "path": "sched/packing_solver/fit.py",
+        "sha256": "1b3d0b5296648d4d7403016c67f53be21d34b55c334b8d193f4fc770216e7998",
+        "lines": 59,
+        "read_scope": "full module",
+        "classification": "REVIEW",
+        "note": "Standalone top-level numerical fitting and plt.show; first fit_func definition is replaced by another. Do not infer the whole experiment is unused or rewrite formulas. Body not executed; reference review still needed."
+      },
+      {
+        "path": "task/throughput_cnt.py",
+        "sha256": "7df7e2fa30a3f6061fffa210952d211666e1dcd00636d18e80fa29cf61fc15ef",
+        "lines": 19,
+        "read_scope": "full module",
+        "classification": "REVIEW",
+        "note": "Two independent generator functions; initial inventory gives no external imports, but full fresh reference search and original generator boundary behavior remain to be checked before any proposal."
+      },
+      {
+        "path": "scripts/test_alloc_lat.py",
+        "sha256": "fc0bf0ead04d6e71fa32e69003388fc1ae402a2cbeee2f18e6ae167cb16ce552",
+        "lines": 45,
+        "read_scope": "full module",
+        "classification": "KEEP_PROTECTED_TEST",
+        "note": "Line2 inserts /home/zhangchg/git_repo/scheduler first on sys.path, then imports and runs simulation at module scope. Not executed to avoid operating the prohibited original worktree; no protected test modification."
+      }
+    ],
+    "repository_semantic_audit_complete": false
+  },
+  "decision_requested": {
+    "id": "REQ-023",
+    "verdict": "KEEP_AS_IS",
+    "nature": "Analysis-only independent review; no source move/delete or API retirement authorization requested.",
+    "retained_exports": [
+      "optimizer.scheduler_base.draw_computational_graph",
+      "optimizer.scheduler_base.build_cat_prob_tensor"
+    ],
+    "no_dependency_removal": true
+  },
+  "recovery": {
+    "source_restore_required": false,
+    "commands": [],
+    "note": "Only remove this request's new report/packet and appended record blocks if explicitly asked. Do not restore whole global files or revert B24, and do not rewrite reviewer events."
+  },
+  "limitations": [
+    "No whole-repository semantic-completion claim; initial137-Python static inventory remains historical.",
+    "External/manual/dynamic consumers are not exhaustively observable.",
+    "Four existing old files reviewed at archive boundary/AST/header only; internals intentionally not re-pruned.",
+    "Missing optimizer packages prevent a full behavioral baseline; no packages installed.",
+    "16 bash -n successes prove syntax only. Five Python --help successes and shell -h rc1 do not prove experiment execution.",
+    "Scripts may rely on untracked/manual targets; those targets are explicitly outside cleanup scope."
+  ]
+}

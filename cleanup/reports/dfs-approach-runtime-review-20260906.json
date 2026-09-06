@@ -1,0 +1,1925 @@
+{
+  "date": "2026-09-06",
+  "kind": "read_only_depth_first_review",
+  "source_changes": false,
+  "scope": "tracked plus explicitly approved additions; 144 Python and 16 shell source paths from B16",
+  "route": [
+    "main_approach",
+    "approach_sched",
+    "utils -> global_var -> approach_Eq -> sched/ref_alloc_search (earlier completed)",
+    "approach_def (earlier top-level/state review)",
+    "approach_sched dynamic policy binding",
+    "approach_collector -> ref_tdigest",
+    "approach_initiator -> task/task_cfg JSON loading and graph generation"
+  ],
+  "sched": {
+    "module": "approach/approach_sched.py",
+    "sha256": "fe9e3ab6bbb45ed4ee11215417b99a8868d7d0dba648949fc92a0f52a59c5a8e",
+    "top_level_functions": [
+      "trigger_cond_dyn",
+      "task_filter",
+      "alloc_fn_pglb",
+      "no_trigger",
+      "alloc_fn_cyclic",
+      "acc_p_factory"
+    ],
+    "verdict": "KEEP",
+    "policy_scenarios": 6,
+    "real_processors_checked": 8,
+    "rows": [
+      {
+        "requested_policy": "pglb",
+        "partitions": 2,
+        "effective_policy": "pglb",
+        "processor_id": "acc_p0",
+        "bindings": {
+          "alloc_fn": {
+            "function": "alloc_fn_pglb",
+            "kwargs": {
+              "reserv_en": false
+            },
+            "bound_to_actual_Acc_p": true
+          },
+          "trigger_cond": {
+            "function": "trigger_cond_dyn",
+            "kwargs": {},
+            "bound_to_actual_Acc_p": true
+          },
+          "task_filter": {
+            "function": "task_filter",
+            "kwargs": {
+              "reserv_en": false
+            },
+            "bound_to_actual_Acc_p": true
+          }
+        },
+        "empty_allocation": {},
+        "empty_trigger": false,
+        "warnings": []
+      },
+      {
+        "requested_policy": "pglb",
+        "partitions": 2,
+        "effective_policy": "pglb",
+        "processor_id": "acc_p1",
+        "bindings": {
+          "alloc_fn": {
+            "function": "alloc_fn_pglb",
+            "kwargs": {
+              "reserv_en": false
+            },
+            "bound_to_actual_Acc_p": true
+          },
+          "trigger_cond": {
+            "function": "trigger_cond_dyn",
+            "kwargs": {},
+            "bound_to_actual_Acc_p": true
+          },
+          "task_filter": {
+            "function": "task_filter",
+            "kwargs": {
+              "reserv_en": false
+            },
+            "bound_to_actual_Acc_p": true
+          }
+        },
+        "empty_allocation": {},
+        "empty_trigger": false,
+        "warnings": []
+      },
+      {
+        "requested_policy": "glb",
+        "partitions": 1,
+        "effective_policy": "glb",
+        "processor_id": "acc_p0",
+        "bindings": {
+          "alloc_fn": {
+            "function": "alloc_fn_pglb",
+            "kwargs": {
+              "reserv_en": false
+            },
+            "bound_to_actual_Acc_p": true
+          },
+          "trigger_cond": {
+            "function": "trigger_cond_dyn",
+            "kwargs": {},
+            "bound_to_actual_Acc_p": true
+          },
+          "task_filter": {
+            "function": "task_filter",
+            "kwargs": {
+              "reserv_en": false
+            },
+            "bound_to_actual_Acc_p": true
+          }
+        },
+        "empty_allocation": {},
+        "empty_trigger": false,
+        "warnings": []
+      },
+      {
+        "requested_policy": "reserv",
+        "partitions": 2,
+        "effective_policy": "reserv",
+        "processor_id": "acc_p0",
+        "bindings": {
+          "alloc_fn": {
+            "function": "alloc_fn_pglb",
+            "kwargs": {
+              "reserv_en": true
+            },
+            "bound_to_actual_Acc_p": true
+          },
+          "trigger_cond": {
+            "function": "trigger_cond_dyn",
+            "kwargs": {},
+            "bound_to_actual_Acc_p": true
+          },
+          "task_filter": {
+            "function": "task_filter",
+            "kwargs": {
+              "reserv_en": true,
+              "op_miss_en": true
+            },
+            "bound_to_actual_Acc_p": true
+          }
+        },
+        "empty_allocation": {},
+        "empty_trigger": false,
+        "warnings": []
+      },
+      {
+        "requested_policy": "reserv",
+        "partitions": 2,
+        "effective_policy": "reserv",
+        "processor_id": "acc_p1",
+        "bindings": {
+          "alloc_fn": {
+            "function": "alloc_fn_pglb",
+            "kwargs": {
+              "reserv_en": true
+            },
+            "bound_to_actual_Acc_p": true
+          },
+          "trigger_cond": {
+            "function": "trigger_cond_dyn",
+            "kwargs": {},
+            "bound_to_actual_Acc_p": true
+          },
+          "task_filter": {
+            "function": "task_filter",
+            "kwargs": {
+              "reserv_en": true,
+              "op_miss_en": true
+            },
+            "bound_to_actual_Acc_p": true
+          }
+        },
+        "empty_allocation": {},
+        "empty_trigger": false,
+        "warnings": []
+      },
+      {
+        "requested_policy": "cyc",
+        "partitions": 1,
+        "effective_policy": "cyc",
+        "processor_id": "acc_p0",
+        "bindings": {
+          "alloc_fn": {
+            "function": "alloc_fn_cyclic",
+            "kwargs": {
+              "T_hp": 1,
+              "force": true
+            },
+            "bound_to_actual_Acc_p": true
+          },
+          "trigger_cond": {
+            "function": "no_trigger",
+            "kwargs": {},
+            "bound_to_actual_Acc_p": true
+          }
+        },
+        "empty_allocation": {},
+        "empty_trigger": false,
+        "warnings": []
+      },
+      {
+        "requested_policy": "cyc-S",
+        "partitions": 1,
+        "effective_policy": "cyc-S",
+        "processor_id": "acc_p0",
+        "bindings": {
+          "alloc_fn": {
+            "function": "alloc_fn_cyclic",
+            "kwargs": {
+              "T_hp": 1,
+              "force": false
+            },
+            "bound_to_actual_Acc_p": true
+          },
+          "trigger_cond": {
+            "function": "no_trigger",
+            "kwargs": {},
+            "bound_to_actual_Acc_p": true
+          }
+        },
+        "empty_allocation": {},
+        "empty_trigger": false,
+        "warnings": []
+      },
+      {
+        "requested_policy": "pglb",
+        "partitions": 1,
+        "effective_policy": "glb",
+        "processor_id": "acc_p0",
+        "bindings": {
+          "alloc_fn": {
+            "function": "alloc_fn_pglb",
+            "kwargs": {
+              "reserv_en": false
+            },
+            "bound_to_actual_Acc_p": true
+          },
+          "trigger_cond": {
+            "function": "trigger_cond_dyn",
+            "kwargs": {},
+            "bound_to_actual_Acc_p": true
+          },
+          "task_filter": {
+            "function": "task_filter",
+            "kwargs": {
+              "reserv_en": false
+            },
+            "bound_to_actual_Acc_p": true
+          }
+        },
+        "empty_allocation": {},
+        "empty_trigger": false,
+        "warnings": [
+          "pglb policy is not supported for single partition, use glb instead"
+        ]
+      }
+    ],
+    "limitations": "Empty workloads prove bindings and hook execution only, not scheduling correctness for loaded workloads."
+  },
+  "runtime_leaf_probe": {
+    "events": {
+      "cyc": [
+        [
+          0,
+          "table"
+        ],
+        [
+          0.1,
+          "external"
+        ],
+        [
+          0.3,
+          "table"
+        ]
+      ],
+      "glb": [
+        [
+          0.1,
+          "external"
+        ]
+      ],
+      "pglb": [
+        [
+          0.1,
+          "external"
+        ]
+      ],
+      "reserv": [
+        [
+          0.1,
+          "external"
+        ],
+        [
+          0.2,
+          "external"
+        ]
+      ],
+      "cyc-S": [
+        [
+          0.1,
+          "external"
+        ]
+      ]
+    },
+    "collector_distribution_class": "ref_tdigest.TDigestStreamingHistogram",
+    "tdigest_real_roundtrip": true,
+    "tdigest_mean": 3,
+    "tdigest_summary": {
+      "histogram": [
+        [
+          1,
+          3,
+          2
+        ],
+        [
+          3,
+          5.000000001,
+          2.000000001
+        ]
+      ],
+      "percentiles": {
+        "p50.0": 3,
+        "p90.0": 5
+      },
+      "total_processed_count": 5
+    },
+    "scope": "Initial event seeding and real TDigest dependency only; no claim about full runtime correctness."
+  },
+  "initiator": {
+    "sha256": "4e805f25b057c5f66220ee491f40523587af265d948316f7c7993df3082decc9",
+    "verdict": "KEEP five live top-level functions; old_num_hp REVIEW only",
+    "symbol_uses": {
+      "get_partition_info": [
+        {
+          "path": "approach/approach_sim.py",
+          "line": 253,
+          "kind": "NameLoad"
+        },
+        {
+          "path": "approach/approach_sim.py",
+          "line": 293,
+          "kind": "NameLoad"
+        },
+        {
+          "path": "approach/approach_sim.py",
+          "line": 339,
+          "kind": "NameLoad"
+        },
+        {
+          "path": "main_approach.py",
+          "line": 35,
+          "kind": "NameLoad"
+        }
+      ],
+      "initialize_events": [
+        {
+          "path": "main_approach.py",
+          "line": 54,
+          "kind": "NameLoad"
+        }
+      ],
+      "instantiate_mygraph_from_json": [
+        {
+          "path": "approach/approach_setup.py",
+          "line": 127,
+          "kind": "NameLoad"
+        },
+        {
+          "path": "approach/approach_sim.py",
+          "line": 214,
+          "kind": "NameLoad"
+        },
+        {
+          "path": "approach/approach_sim.py",
+          "line": 247,
+          "kind": "NameLoad"
+        },
+        {
+          "path": "approach/approach_sim.py",
+          "line": 284,
+          "kind": "NameLoad"
+        },
+        {
+          "path": "approach/approach_sim.py",
+          "line": 330,
+          "kind": "NameLoad"
+        },
+        {
+          "path": "scripts/test_alloc_lat.py",
+          "line": 16,
+          "kind": "NameLoad"
+        }
+      ],
+      "instantiate_processors": [
+        {
+          "path": "approach/approach_sim.py",
+          "line": 374,
+          "kind": "NameLoad"
+        },
+        {
+          "path": "main_approach.py",
+          "line": 57,
+          "kind": "NameLoad"
+        },
+        {
+          "path": "scripts/test_alloc_lat.py",
+          "line": 40,
+          "kind": "NameLoad"
+        },
+        {
+          "path": "test_mapping.py",
+          "line": 63,
+          "kind": "NameLoad"
+        }
+      ],
+      "load_graph_from_json": [
+        {
+          "path": "approach/approach_initiator.py",
+          "line": 172,
+          "kind": "NameLoad"
+        }
+      ],
+      "old_T_hp": [
+        {
+          "path": "approach/approach_initiator.py",
+          "line": 65,
+          "kind": "NameLoad"
+        },
+        {
+          "path": "approach/approach_initiator.py",
+          "line": 66,
+          "kind": "NameLoad"
+        }
+      ],
+      "old_num_hp": [],
+      "old_stable_hp": [
+        {
+          "path": "approach/approach_initiator.py",
+          "line": 66,
+          "kind": "NameLoad"
+        },
+        {
+          "path": "approach/approach_initiator.py",
+          "line": 65,
+          "kind": "NameLoad"
+        }
+      ],
+      "old_timestep": [
+        {
+          "path": "approach/approach_initiator.py",
+          "line": 62,
+          "kind": "NameLoad"
+        },
+        {
+          "path": "approach/approach_initiator.py",
+          "line": 68,
+          "kind": "NameLoad"
+        },
+        {
+          "path": "approach/approach_initiator.py",
+          "line": 69,
+          "kind": "NameLoad"
+        },
+        {
+          "path": "approach/approach_initiator.py",
+          "line": 69,
+          "kind": "NameLoad"
+        }
+      ]
+    }
+  },
+  "collector": {
+    "sha256": "8f42d09dfe455ebdbf931a11266b5f4afccef485029d02affc5e36546754ffd1",
+    "verdict": "KEEP StatisticsCollector class whole and its test main entry; class-internal cleanup excluded",
+    "evidence": "Live initializer imports and instantiates collector; its distributions instantiate ref_tdigest.TDigestStreamingHistogram; direct test dependency retained"
+  },
+  "ref_tdigest": {
+    "verdict": "KEEP live class and embedded numerical diagnostic; no class-internal cleanup",
+    "evidence": "Real collector distribution type and TDigest serialization/mean/summary probe passed; randomized 50000-sample main not run or removed"
+  },
+  "task_cfg": {
+    "status": "PARTIAL semantic review, not whole-module completion",
+    "function_reference_map": [
+      {
+        "name": "vis_task_static_timeline",
+        "start": 84,
+        "end": 213,
+        "uses": [
+          {
+            "path": "task/task_cfg.py",
+            "line": 1350,
+            "kind": "Name"
+          },
+          {
+            "path": "task/task_cfg.py",
+            "line": 1352,
+            "kind": "Name"
+          }
+        ]
+      },
+      {
+        "name": "process_sink_nodes_for_full_mode",
+        "start": 215,
+        "end": 248,
+        "uses": [
+          {
+            "path": "task/task_cfg.py",
+            "line": 1054,
+            "kind": "Name"
+          }
+        ]
+      },
+      {
+        "name": "creat_logical_graph",
+        "start": 250,
+        "end": 318,
+        "uses": [
+          {
+            "path": "analyze/stat_num_exec.py",
+            "line": 5,
+            "kind": "ImportFrom",
+            "module": "task.task_cfg"
+          },
+          {
+            "path": "analyze/stat_num_exec.py",
+            "line": 47,
+            "kind": "Name"
+          },
+          {
+            "path": "old/allocator_agent.py",
+            "line": 563,
+            "kind": "ImportFrom",
+            "module": "task.task_cfg"
+          },
+          {
+            "path": "old/allocator_agent.py",
+            "line": 579,
+            "kind": "Name"
+          },
+          {
+            "path": "task/task_cfg.py",
+            "line": 1047,
+            "kind": "Name"
+          },
+          {
+            "path": "task/task_cfg.py",
+            "line": 1339,
+            "kind": "Name"
+          },
+          {
+            "path": "task/task_cfg.py",
+            "line": 1358,
+            "kind": "Name"
+          },
+          {
+            "path": "test_deduce_cfg2.py",
+            "line": 24,
+            "kind": "ImportFrom",
+            "module": "task.task_cfg"
+          },
+          {
+            "path": "test_deduce_cfg2.py",
+            "line": 33,
+            "kind": "Name"
+          }
+        ]
+      },
+      {
+        "name": "export_json_graph_utils",
+        "start": 321,
+        "end": 348,
+        "uses": [
+          {
+            "path": "approach/approach_setup.py",
+            "line": 2,
+            "kind": "ImportFrom",
+            "module": "task.task_cfg"
+          },
+          {
+            "path": "approach/approach_setup.py",
+            "line": 30,
+            "kind": "Name"
+          },
+          {
+            "path": "sim_main.py",
+            "line": 4,
+            "kind": "ImportFrom",
+            "module": "task.task_cfg"
+          },
+          {
+            "path": "sim_main_old.py",
+            "line": 10,
+            "kind": "ImportFrom",
+            "module": "task.task_cfg"
+          },
+          {
+            "path": "sim_main_old.py",
+            "line": 136,
+            "kind": "Name"
+          }
+        ]
+      },
+      {
+        "name": "load_json_graph_utils",
+        "start": 350,
+        "end": 383,
+        "uses": [
+          {
+            "path": "approach/approach_initiator.py",
+            "line": 105,
+            "kind": "ImportFrom",
+            "module": "task.task_cfg"
+          },
+          {
+            "path": "approach/approach_initiator.py",
+            "line": 106,
+            "kind": "Name"
+          },
+          {
+            "path": "optimizer/delta_ver.py",
+            "line": 304,
+            "kind": "ImportFrom",
+            "module": "task.task_cfg"
+          },
+          {
+            "path": "optimizer/delta_ver.py",
+            "line": 306,
+            "kind": "Name"
+          }
+        ]
+      },
+      {
+        "name": "creat_physical_graph",
+        "start": 385,
+        "end": 549,
+        "uses": [
+          {
+            "path": "old/allocator_agent.py",
+            "line": 563,
+            "kind": "ImportFrom",
+            "module": "task.task_cfg"
+          },
+          {
+            "path": "old/allocator_agent.py",
+            "line": 581,
+            "kind": "Name"
+          },
+          {
+            "path": "task/task_cfg.py",
+            "line": 1080,
+            "kind": "Name"
+          },
+          {
+            "path": "task/task_cfg.py",
+            "line": 1359,
+            "kind": "Name"
+          }
+        ]
+      },
+      {
+        "name": "creat_jobTask_graph",
+        "start": 551,
+        "end": 697,
+        "uses": []
+      },
+      {
+        "name": "load_taskint",
+        "start": 698,
+        "end": 810,
+        "uses": [
+          {
+            "path": "old/allocator_agent.py",
+            "line": 561,
+            "kind": "ImportFrom",
+            "module": "task.task_cfg"
+          },
+          {
+            "path": "old/allocator_agent.py",
+            "line": 577,
+            "kind": "Name"
+          },
+          {
+            "path": "task/task_cfg.py",
+            "line": 1331,
+            "kind": "Name"
+          }
+        ]
+      },
+      {
+        "name": "load_taskattrib",
+        "start": 813,
+        "end": 910,
+        "uses": [
+          {
+            "path": "analyze/analyze_timing.py",
+            "line": 214,
+            "kind": "ImportFrom",
+            "module": "task.task_cfg"
+          },
+          {
+            "path": "analyze/analyze_timing.py",
+            "line": 215,
+            "kind": "Name"
+          },
+          {
+            "path": "analyze/stat_num_exec.py",
+            "line": 5,
+            "kind": "ImportFrom",
+            "module": "task.task_cfg"
+          },
+          {
+            "path": "analyze/stat_num_exec.py",
+            "line": 39,
+            "kind": "Name"
+          },
+          {
+            "path": "task/task_cfg.py",
+            "line": 1014,
+            "kind": "Name"
+          },
+          {
+            "path": "test_deduce_cfg2.py",
+            "line": 25,
+            "kind": "ImportFrom",
+            "module": "task.task_cfg"
+          },
+          {
+            "path": "test_deduce_cfg2.py",
+            "line": 26,
+            "kind": "Name"
+          }
+        ]
+      },
+      {
+        "name": "decide_division_mod",
+        "start": 912,
+        "end": 913,
+        "uses": [
+          {
+            "path": "task/task_cfg.py",
+            "line": 916,
+            "kind": "Name"
+          }
+        ]
+      },
+      {
+        "name": "gen_taskint_from_cfg",
+        "start": 915,
+        "end": 1009,
+        "uses": [
+          {
+            "path": "task/task_cfg.py",
+            "line": 1083,
+            "kind": "Name"
+          },
+          {
+            "path": "test_deduce_cfg2.py",
+            "line": 25,
+            "kind": "ImportFrom",
+            "module": "task.task_cfg"
+          },
+          {
+            "path": "test_deduce_cfg2.py",
+            "line": 41,
+            "kind": "Name"
+          }
+        ]
+      },
+      {
+        "name": "gen_workloads",
+        "start": 1011,
+        "end": 1111,
+        "uses": [
+          {
+            "path": "sim_main.py",
+            "line": 4,
+            "kind": "ImportFrom",
+            "module": "task.task_cfg"
+          },
+          {
+            "path": "sim_main.py",
+            "line": 244,
+            "kind": "Name"
+          },
+          {
+            "path": "sim_main_old.py",
+            "line": 10,
+            "kind": "ImportFrom",
+            "module": "task.task_cfg"
+          }
+        ]
+      },
+      {
+        "name": "extract_parallel_cfg",
+        "start": 1114,
+        "end": 1133,
+        "uses": [
+          {
+            "path": "task/task_cfg.py",
+            "line": 738,
+            "kind": "Name"
+          },
+          {
+            "path": "task/task_cfg.py",
+            "line": 739,
+            "kind": "Name"
+          },
+          {
+            "path": "task/task_cfg.py",
+            "line": 833,
+            "kind": "Name"
+          },
+          {
+            "path": "task/task_cfg.py",
+            "line": 834,
+            "kind": "Name"
+          }
+        ]
+      },
+      {
+        "name": "init_depen",
+        "start": 1136,
+        "end": 1170,
+        "uses": [
+          {
+            "path": "old/allocator_agent.py",
+            "line": 563,
+            "kind": "ImportFrom",
+            "module": "task.task_cfg"
+          },
+          {
+            "path": "old/allocator_agent.py",
+            "line": 582,
+            "kind": "Name"
+          },
+          {
+            "path": "task/task_cfg.py",
+            "line": 1084,
+            "kind": "Name"
+          },
+          {
+            "path": "task/task_cfg.py",
+            "line": 1360,
+            "kind": "Name"
+          }
+        ]
+      },
+      {
+        "name": "init_affinity",
+        "start": 1172,
+        "end": 1243,
+        "uses": [
+          {
+            "path": "old/allocator_agent.py",
+            "line": 563,
+            "kind": "ImportFrom",
+            "module": "task.task_cfg"
+          },
+          {
+            "path": "old/allocator_agent.py",
+            "line": 586,
+            "kind": "Name"
+          },
+          {
+            "path": "task/task_cfg.py",
+            "line": 1102,
+            "kind": "Name"
+          }
+        ]
+      },
+      {
+        "name": "redist_ert_dll",
+        "start": 1245,
+        "end": 1269,
+        "uses": [
+          {
+            "path": "old/allocator_agent.py",
+            "line": 563,
+            "kind": "ImportFrom",
+            "module": "task.task_cfg"
+          },
+          {
+            "path": "old/allocator_agent.py",
+            "line": 580,
+            "kind": "Name"
+          }
+        ]
+      },
+      {
+        "name": "create_init_p_list",
+        "start": 1271,
+        "end": 1294,
+        "uses": [
+          {
+            "path": "old/allocator_agent.py",
+            "line": 561,
+            "kind": "ImportFrom",
+            "module": "task.task_cfg"
+          },
+          {
+            "path": "old/allocator_agent.py",
+            "line": 585,
+            "kind": "Name"
+          },
+          {
+            "path": "task/task_cfg.py",
+            "line": 1086,
+            "kind": "Name"
+          }
+        ]
+      },
+      {
+        "name": "plot_workflow_g",
+        "start": 1297,
+        "end": 1312,
+        "uses": [
+          {
+            "path": "task/task_cfg.py",
+            "line": 1370,
+            "kind": "Name"
+          }
+        ]
+      }
+    ],
+    "candidate_request": "REQ-015 / B17",
+    "keep": "Current graph JSON I/O, creat_physical_graph and gen_workloads path; old allocator borrowed functions remain intact",
+    "deferred": "Remaining task_cfg functions and their deeper dependencies still require semantic review"
+  },
+  "model_dependency_review": {
+    "date": "2026-09-06",
+    "scope": "Read-only model DFS, captured before B18; explicit146Python+16shell, not all-repository semantic completion",
+    "modules": {
+      "model/message/Context_message.py": {
+        "lines": 345,
+        "sha256": "c8d4de2ad5e73b2db072f710777d6f846285be1e03d038711aecb46a25247c64",
+        "imports": [
+          {
+            "line": 1,
+            "code": "from __future__ import annotations"
+          },
+          {
+            "line": 2,
+            "code": "from typing import TYPE_CHECKING"
+          },
+          {
+            "line": 3,
+            "code": "from typing import List, Dict, Callable"
+          },
+          {
+            "line": 4,
+            "code": "import networkx as nx"
+          },
+          {
+            "line": 5,
+            "code": "from functools import reduce"
+          },
+          {
+            "line": 6,
+            "code": "import re"
+          },
+          {
+            "line": 7,
+            "code": "import numpy as np"
+          },
+          {
+            "line": 8,
+            "code": "import argparse"
+          },
+          {
+            "line": 10,
+            "code": "import pickle"
+          },
+          {
+            "line": 11,
+            "code": "import pandas as pd"
+          },
+          {
+            "line": 12,
+            "code": "import copy"
+          },
+          {
+            "line": 13,
+            "code": "import os"
+          }
+        ],
+        "symbols": [
+          {
+            "kind": "ClassDef",
+            "name": "ContextMsg",
+            "start": 41,
+            "end": 250
+          },
+          {
+            "kind": "FunctionDef",
+            "name": "trace_analyser",
+            "start": 253,
+            "end": 338
+          }
+        ]
+      },
+      "model/resource_agent.py": {
+        "lines": 346,
+        "sha256": "7290b7b496e0a46a0ef74540b1747fcb35e6724443a5f70072562bc7ab8cefd8",
+        "imports": [
+          {
+            "line": 1,
+            "code": "from __future__ import annotations"
+          },
+          {
+            "line": 2,
+            "code": "import typing"
+          },
+          {
+            "line": 9,
+            "code": "from global_var import *"
+          },
+          {
+            "line": 10,
+            "code": "from typing import Dict, List, Tuple, Union, Any, OrderedDict"
+          },
+          {
+            "line": 11,
+            "code": "from model.event_gen.e2e_latency import exp_jitter"
+          },
+          {
+            "line": 12,
+            "code": "from model.performance import slack_comp"
+          },
+          {
+            "line": 13,
+            "code": "from functools import reduce"
+          }
+        ],
+        "symbols": [
+          {
+            "kind": "ClassDef",
+            "name": "RscMapInt",
+            "start": 15,
+            "end": 36
+          },
+          {
+            "kind": "ClassDef",
+            "name": "Resource_model_int",
+            "start": 39,
+            "end": 262
+          },
+          {
+            "kind": "ClassDef",
+            "name": "DDL_reservation",
+            "start": 266,
+            "end": 311
+          },
+          {
+            "kind": "ClassDef",
+            "name": "RT_reservation",
+            "start": 313,
+            "end": 324
+          },
+          {
+            "kind": "ClassDef",
+            "name": "dummy_reservation",
+            "start": 326,
+            "end": 337
+          }
+        ]
+      },
+      "model/event_gen/e2e_latency.py": {
+        "lines": 124,
+        "sha256": "7c460e9258b1b7384ffb4605167e4ccc69b026fc83eb0161429bd9f60b994248",
+        "imports": [
+          {
+            "line": 1,
+            "code": "from __future__ import annotations"
+          },
+          {
+            "line": 2,
+            "code": "from scipy.stats import truncnorm as _scipy_truncnorm, truncexpon as _scipy_truncexpon, expon as _scipy_expon, norm as _scipy_norm"
+          },
+          {
+            "line": 3,
+            "code": "from typing import List, Dict, Union, Callable"
+          },
+          {
+            "line": 4,
+            "code": "from global_var import *"
+          },
+          {
+            "line": 5,
+            "code": "import numpy as np"
+          }
+        ],
+        "symbols": [
+          {
+            "kind": "FunctionDef",
+            "name": "naive_period_event_gen",
+            "start": 7,
+            "end": 11
+          },
+          {
+            "kind": "FunctionDef",
+            "name": "e2e_var_sim",
+            "start": 14,
+            "end": 34
+          },
+          {
+            "kind": "FunctionDef",
+            "name": "discrete_event_sim",
+            "start": 36,
+            "end": 57
+          },
+          {
+            "kind": "FunctionDef",
+            "name": "jitter_gen_biside",
+            "start": 59,
+            "end": 70
+          },
+          {
+            "kind": "FunctionDef",
+            "name": "get_truncnorm_para",
+            "start": 72,
+            "end": 95
+          },
+          {
+            "kind": "FunctionDef",
+            "name": "exp_jitter",
+            "start": 97,
+            "end": 108
+          },
+          {
+            "kind": "FunctionDef",
+            "name": "get_truncexpon_param",
+            "start": 110,
+            "end": 115
+          },
+          {
+            "kind": "FunctionDef",
+            "name": "get_intger_gen",
+            "start": 118,
+            "end": 124
+          }
+        ]
+      },
+      "model/performance.py": {
+        "lines": 16,
+        "sha256": "273eabbd6dbc16df28db18758e8f51defe84caba3f6ca3cf40fa22c7b041235a",
+        "imports": [
+          {
+            "line": 1,
+            "code": "from global_var import AVG_HOP_NUM, LAT_PER_HOP, BW_DRAM, BROADCAST_SCALER, AVG_HEAD_LAT"
+          }
+        ],
+        "symbols": [
+          {
+            "kind": "FunctionDef",
+            "name": "avg_trasfer_time",
+            "start": 11,
+            "end": 12
+          },
+          {
+            "kind": "FunctionDef",
+            "name": "multicast_lat_scaler",
+            "start": 15,
+            "end": 16
+          }
+        ]
+      }
+    },
+    "findings": [
+      {
+        "path": "model/message/Context_message.py",
+        "decision": "KEEP",
+        "reason": "Read full345lines. ContextMsg whole class retained. trace_analyser real imports/calls analyze/analyze_timing.py:8,148,157; main invokes ContextMsg.find_sensor on trace_example, not dead top-level code."
+      },
+      {
+        "path": "model/resource_agent.py",
+        "decision": "KEEP",
+        "reason": "Resource model / reservation classes whole retained; actual exp_jitter/slack_comp calls. Class method cleanup excluded."
+      },
+      {
+        "path": "model/event_gen/e2e_latency.py",
+        "decision": "B18_PROPOSED",
+        "reason": "Read full124lines; two complete unused generators proposed, all six remaining functions retained. Historical textual call recorded separately; no claim equivalence with discrete event simulator."
+      },
+      {
+        "path": "model/performance.py",
+        "decision": "KEEP",
+        "reason": "Read full16lines. cal_lat/slack_comp live, avg_trasfer_time/multicast_lat_scaler called data_pipe.py. Old commented formulas retained this turn, not mixed into B18."
+      },
+      {
+        "path": "task/task_agent.py",
+        "decision": "KEEP_REVIEW",
+        "reason": "Seven classes retained whole; load_task_from_cfg has explicit CLI call and remains REVIEW. Only dependency routing/selected class context read, not full method correctness audit."
+      }
+    ],
+    "slack_followup": {
+      "read_scope": "Read all443 lines of slack_estim; all40lines graph_breakdown; chain_slack_assign two complete top functions (check_solution_validity and HeuriRscSlackEstim); loadA all68lines. GurobiRscSlackEstim class method cleanup excluded.",
+      "uses": {
+        "DistributeSlack": [
+          {
+            "path": "sched/slack_estim.py",
+            "line": 158,
+            "kind": "Name"
+          }
+        ],
+        "_fixcore_slack_estim": [
+          {
+            "path": "sched/slack_estim.py",
+            "line": 367,
+            "kind": "Name"
+          }
+        ],
+        "build_score_dict_ref_flops": [],
+        "deduce_RDA": [
+          {
+            "path": "sched/slack_estim.py",
+            "line": 305,
+            "kind": "Name"
+          }
+        ],
+        "deduce_cfg2": [
+          {
+            "path": "task/task_cfg.py",
+            "line": 16,
+            "kind": "ImportFrom",
+            "module": "sched.slack_estim"
+          },
+          {
+            "path": "task/task_cfg.py",
+            "line": 867,
+            "kind": "Name"
+          },
+          {
+            "path": "test_deduce_cfg2.py",
+            "line": 7,
+            "kind": "ImportFrom",
+            "module": "sched.slack_estim"
+          },
+          {
+            "path": "test_deduce_cfg2.py",
+            "line": 35,
+            "kind": "Name"
+          }
+        ],
+        "deduce_equiv_core": [
+          {
+            "path": "task/task_cfg.py",
+            "line": 16,
+            "kind": "ImportFrom",
+            "module": "sched.slack_estim"
+          },
+          {
+            "path": "task/task_cfg.py",
+            "line": 697,
+            "kind": "Name"
+          }
+        ],
+        "deduce_flops_ModelSum": [
+          {
+            "path": "task/task_cfg.py",
+            "line": 16,
+            "kind": "ImportFrom",
+            "module": "sched.slack_estim"
+          },
+          {
+            "path": "task/task_cfg.py",
+            "line": 694,
+            "kind": "Name"
+          }
+        ],
+        "deduce_flops_ModelSumMax": [
+          {
+            "path": "task/task_cfg.py",
+            "line": 16,
+            "kind": "ImportFrom",
+            "module": "sched.slack_estim"
+          },
+          {
+            "path": "task/task_cfg.py",
+            "line": 696,
+            "kind": "Name"
+          }
+        ],
+        "deduce_max_tot_rsc": [
+          {
+            "path": "sched/slack_estim.py",
+            "line": 312,
+            "kind": "Name"
+          }
+        ],
+        "deduce_min_tot_rsc": [
+          {
+            "path": "sched/slack_estim.py",
+            "line": 310,
+            "kind": "Name"
+          }
+        ],
+        "deduce_no_stall_latency": [
+          {
+            "path": "sched/slack_estim.py",
+            "line": 309,
+            "kind": "Name"
+          }
+        ],
+        "deduce_num_exec": [
+          {
+            "path": "analyze/stat_num_exec.py",
+            "line": 7,
+            "kind": "ImportFrom",
+            "module": "sched.slack_estim"
+          },
+          {
+            "path": "analyze/stat_num_exec.py",
+            "line": 54,
+            "kind": "Name"
+          },
+          {
+            "path": "analyze/stat_num_exec.py",
+            "line": 60,
+            "kind": "Name"
+          },
+          {
+            "path": "sched/slack_estim.py",
+            "line": 306,
+            "kind": "Name"
+          }
+        ],
+        "deduce_task_attrib": [
+          {
+            "path": "sched/slack_estim.py",
+            "line": 403,
+            "kind": "Name"
+          }
+        ],
+        "deduce_util": [
+          {
+            "path": "sched/slack_estim.py",
+            "line": 313,
+            "kind": "Name"
+          }
+        ],
+        "get_chains": [
+          {
+            "path": "sched/global_sched_alloc.py",
+            "line": 40,
+            "kind": "ImportFrom",
+            "module": "sched.slack_estim"
+          },
+          {
+            "path": "sched/global_sched_alloc.py",
+            "line": 312,
+            "kind": "Name"
+          },
+          {
+            "path": "sched/global_sched_old.py",
+            "line": 38,
+            "kind": "ImportFrom",
+            "module": "sched.slack_estim"
+          },
+          {
+            "path": "sched/global_sched_repack.py",
+            "line": 39,
+            "kind": "ImportFrom",
+            "module": "sched.slack_estim"
+          },
+          {
+            "path": "sched/slack_estim.py",
+            "line": 370,
+            "kind": "Name"
+          }
+        ],
+        "get_chains_info": [],
+        "init_topo_time_attr": [
+          {
+            "path": "sched/slack_estim.py",
+            "line": 379,
+            "kind": "Name"
+          }
+        ],
+        "plot_timeline_graph": [
+          {
+            "path": "sched/slack_estim.py",
+            "line": 388,
+            "kind": "Name"
+          }
+        ],
+        "rsc_slack_estim": [
+          {
+            "path": "sched/packing_solver/chain_slack_assign.py",
+            "line": 122,
+            "kind": "Constant"
+          },
+          {
+            "path": "sched/slack_estim.py",
+            "line": 372,
+            "kind": "Name"
+          }
+        ],
+        "update_taskattr_dict": [
+          {
+            "path": "task/task_cfg.py",
+            "line": 16,
+            "kind": "ImportFrom",
+            "module": "sched.slack_estim"
+          },
+          {
+            "path": "task/task_cfg.py",
+            "line": 876,
+            "kind": "Name"
+          },
+          {
+            "path": "test_deduce_cfg2.py",
+            "line": 7,
+            "kind": "ImportFrom",
+            "module": "sched.slack_estim"
+          },
+          {
+            "path": "test_deduce_cfg2.py",
+            "line": 39,
+            "kind": "Name"
+          }
+        ]
+      },
+      "graph_probe": {
+        "paths": [
+          [
+            1,
+            2,
+            4,
+            5,
+            7
+          ],
+          [
+            1,
+            2,
+            4,
+            6,
+            7
+          ],
+          [
+            1,
+            3,
+            4,
+            5,
+            7
+          ],
+          [
+            1,
+            3,
+            4,
+            6,
+            7
+          ]
+        ],
+        "with_src_sink_false": [
+          [
+            1,
+            2,
+            4,
+            5,
+            7
+          ],
+          [
+            1,
+            2,
+            4,
+            6,
+            7
+          ],
+          [
+            1,
+            3,
+            4,
+            5,
+            7
+          ],
+          [
+            1,
+            3,
+            4,
+            6,
+            7
+          ]
+        ],
+        "chain_info": [
+          [
+            [
+              1,
+              2,
+              4,
+              5,
+              7
+            ],
+            0.1
+          ],
+          [
+            [
+              1,
+              2,
+              4,
+              6,
+              7
+            ],
+            0.1
+          ],
+          [
+            [
+              1,
+              3,
+              4,
+              5,
+              7
+            ],
+            0.1
+          ],
+          [
+            [
+              1,
+              3,
+              4,
+              6,
+              7
+            ],
+            0.1
+          ]
+        ],
+        "existing_demo": {
+          "error": "TypeError",
+          "message": "argument of type 'int' is not iterable"
+        },
+        "sort_helper": {
+          "error": "IndexError",
+          "message": "list index out of range"
+        }
+      },
+      "decisions": [
+        "Keep live DistributeSlack/rsc_slack_estim/get_chains/init_topo_time_attr/fixcore/deduce_cfg2/update_taskattr_dict and all9 lambda helpers; plot_timeline_graph KEEP_AS_IS per REQ005",
+        "build_score_dict_ref_flops/get_chains_info: REVIEW candidates only; no source proposal yet, need tracked historical references and caller-contract baseline",
+        "graph_breakdown.sort_chains_by_ddl_flops: REVIEW only. Example test has existing int-not-iterable error; do not repair or delete protected test based on failure",
+        "decompose_dag_into_chains accepts iterable end nodes; actual example graph with [7] returns4 chains. with_src_sink=False still returns endpoints; existing semantics, not fixed",
+        "chain_slack_assign heuristic calls check_solution_validity; keep both complete functions, no local-variable cleanup. Gurobi algorithm remains supported branch even if current default is avg",
+        "loadA seven explicit exports used by task_cfg; keep static configuration. task_cfg.load_taskint also has its own standalone main call at1126, not merely an old allocator borrower; retain.",
+        "Read task_cfg.load_taskint, init_depen/init_affinity/redist_ert_dll/create_init_p_list/plot_workflow_g and main in full this turn. Historical estim_release_dll_time linkage remains unresolved; do not move/fix speculatively."
+      ],
+      "next_dependencies": {
+        "sched/packing_solver/chain_slack_assign.py": {
+          "lines": 349,
+          "sha256": "e564906bc80d9b742e321cd9d0395fe6b03a2b891c35ddb9142e852c9c4d141f",
+          "top_nodes": [
+            {
+              "kind": "ImportFrom",
+              "name": null,
+              "start": 1,
+              "end": 1
+            },
+            {
+              "kind": "Import",
+              "name": null,
+              "start": 2,
+              "end": 2
+            },
+            {
+              "kind": "ImportFrom",
+              "name": null,
+              "start": 3,
+              "end": 3
+            },
+            {
+              "kind": "ImportFrom",
+              "name": null,
+              "start": 4,
+              "end": 4
+            },
+            {
+              "kind": "ImportFrom",
+              "name": null,
+              "start": 5,
+              "end": 5
+            },
+            {
+              "kind": "ImportFrom",
+              "name": null,
+              "start": 7,
+              "end": 7
+            },
+            {
+              "kind": "ImportFrom",
+              "name": null,
+              "start": 8,
+              "end": 8
+            },
+            {
+              "kind": "ImportFrom",
+              "name": null,
+              "start": 10,
+              "end": 10
+            },
+            {
+              "kind": "ImportFrom",
+              "name": null,
+              "start": 11,
+              "end": 11
+            },
+            {
+              "kind": "Import",
+              "name": null,
+              "start": 12,
+              "end": 12
+            },
+            {
+              "kind": "FunctionDef",
+              "name": "check_solution_validity",
+              "start": 15,
+              "end": 81
+            },
+            {
+              "kind": "ClassDef",
+              "name": "GurobiRscSlackEstim",
+              "start": 83,
+              "end": 225
+            },
+            {
+              "kind": "FunctionDef",
+              "name": "HeuriRscSlackEstim",
+              "start": 229,
+              "end": 348
+            }
+          ],
+          "imports": [
+            "from typing import List, Dict, Tuple, Union, Any",
+            "import gurobipy as gp",
+            "from gurobipy import GRB, quicksum",
+            "from utils import time_cnt",
+            "from global_var import FLOPS_PER_CORE, elim_nume_error, flop1n_error_tol_abs, time1n_error_tol_abs",
+            "from approach_Eq import SenVarDist, AccVarDist, Variation",
+            "from sched.ref_alloc_search import TaskConstraints",
+            "from approach_Eq import find_legal",
+            "from collections import OrderedDict",
+            "import math"
+          ]
+        },
+        "task/load_cfg/loadA.py": {
+          "lines": 68,
+          "sha256": "7f75f58b094573322dce01ca6f2366241fbd82e4891292aee390c0a1d98ad287",
+          "top_nodes": [
+            {
+              "kind": "Assign",
+              "name": null,
+              "start": 1,
+              "end": 2
+            },
+            {
+              "kind": "Assign",
+              "name": null,
+              "start": 4,
+              "end": 10
+            },
+            {
+              "kind": "Assign",
+              "name": null,
+              "start": 11,
+              "end": 14
+            },
+            {
+              "kind": "Assign",
+              "name": null,
+              "start": 15,
+              "end": 18
+            },
+            {
+              "kind": "Assign",
+              "name": null,
+              "start": 19,
+              "end": 24
+            },
+            {
+              "kind": "Assign",
+              "name": null,
+              "start": 26,
+              "end": 40
+            },
+            {
+              "kind": "Assign",
+              "name": null,
+              "start": 43,
+              "end": 57
+            },
+            {
+              "kind": "Assign",
+              "name": null,
+              "start": 61,
+              "end": 68
+            }
+          ],
+          "imports": []
+        }
+      }
+    },
+    "b18": {
+      "request": "REQ-016",
+      "status": "ACCEPTED_E0072",
+      "original26lines": true,
+      "tests": "25 new; full157=152passed+5 same historical collector failures",
+      "exception": "E0068 reviewer guard delta individually attributed; E0070 EOF tool-side effect corrected with exact original hash"
+    },
+    "limitations": [
+      "DAG probes expose existing demo/helper errors, not newly introduced B18 regressions",
+      "No complete legacy runtime correctness claim; no new source request pending B18 acceptance"
+    ]
+  },
+  "b19_result": {"request":"REQ-017","status":"ACCEPTED_E0076","path":"task_cfg -> slack_estim -> graph_breakdown","moved_functions":["build_score_dict_ref_flops","get_chains_info","sort_chains_by_ddl_flops"],"original_lines":14,"tests":"29 new passed; full186=181passed+5 unchanged collector failures","non_batch_sha256":"162 of162 unchanged","reviewer_supplement":"Actual use of preapproved EOF restoration and correct batch ledger prefixes20734/71003; three new rows each; direct XML verification","source_inventory_after":{"python":151,"shell":16},"report":"cleanup/reports/b19-unused-slack-graph-helpers-baseline.json"},
+  "b20_result": {
+    "request": "REQ-018",
+    "status": "ACCEPTED_E0082",
+    "source": "sim_main.py",
+    "archive": "sim_main_unused.py",
+    "functions": [
+      "ensure_csv",
+      "prepare_induced_env_if_needed",
+      "get_core_num_from_trace_name",
+      "check_max_bin_num"
+    ],
+    "original_lines": 74,
+    "tests": "38 new passed; full224=219passed+5 unchanged collector failures",
+    "non_batch_sha256": "166/166 unchanged; all169 post-review hashes unchanged",
+    "eof": "E0080 single missing LF restored under exact-byte guards; E0082 accepts inherited EOF blank-line warning without formatting changes",
+    "source_inventory_after": {
+      "python": 153,
+      "shell": 16
+    },
+    "report": "cleanup/reports/b20-unused-sim-cache-helpers-baseline.json"
+  },
+  "b20_dependency_review": {
+    "path": "approach_setup -> sim_main -> Spec/MsgDispatcher/DataPipe/placement",
+    "mode": "read-only during B20 independent acceptance",
+    "source_scope": 169,
+    "modules": {
+      "task/spec.py": {
+        "sha256": "66f2eeb5f3c35b9ee92fb0f0a90f0bba4e2cecfb88fd2192f3be7ca931d09022",
+        "lines": 33,
+        "top_nodes": [
+          {
+            "kind": "ImportFrom",
+            "name": null,
+            "start": 1,
+            "end": 1
+          },
+          {
+            "kind": "ImportFrom",
+            "name": null,
+            "start": 2,
+            "end": 2
+          },
+          {
+            "kind": "ClassDef",
+            "name": "Spec",
+            "start": 3,
+            "end": 32
+          }
+        ],
+        "disposition": "KEEP; class internals or demonstrated legacy borrowers retained"
+      },
+      "model/message/msg_dispatcher.py": {
+        "sha256": "1021025fd86f50c8f82799bea77911e05564531fc93fcba886639da1a430a3e3",
+        "lines": 74,
+        "top_nodes": [
+          {
+            "kind": "ImportFrom",
+            "name": null,
+            "start": 2,
+            "end": 2
+          },
+          {
+            "kind": "ImportFrom",
+            "name": null,
+            "start": 3,
+            "end": 3
+          },
+          {
+            "kind": "ClassDef",
+            "name": "MsgDispatcher",
+            "start": 5,
+            "end": 20
+          },
+          {
+            "kind": "FunctionDef",
+            "name": "msg_read",
+            "start": 30,
+            "end": 48
+          },
+          {
+            "kind": "FunctionDef",
+            "name": "msg_filter",
+            "start": 50,
+            "end": 51
+          }
+        ],
+        "disposition": "KEEP class; REVIEW two helpers pending complete references/behavior"
+      },
+      "model/message/data_pipe.py": {
+        "sha256": "544689f0008568d77eeec76ab35ff12d7ce7d5c808dc933e06e76bd6db3b74c0",
+        "lines": 126,
+        "top_nodes": [
+          {
+            "kind": "Import",
+            "name": null,
+            "start": 19,
+            "end": 19
+          },
+          {
+            "kind": "ImportFrom",
+            "name": null,
+            "start": 20,
+            "end": 20
+          },
+          {
+            "kind": "ImportFrom",
+            "name": null,
+            "start": 21,
+            "end": 21
+          },
+          {
+            "kind": "ImportFrom",
+            "name": null,
+            "start": 22,
+            "end": 22
+          },
+          {
+            "kind": "ImportFrom",
+            "name": null,
+            "start": 23,
+            "end": 23
+          },
+          {
+            "kind": "ImportFrom",
+            "name": null,
+            "start": 24,
+            "end": 24
+          },
+          {
+            "kind": "ClassDef",
+            "name": "DataPipe",
+            "start": 26,
+            "end": 110
+          },
+          {
+            "kind": "ClassDef",
+            "name": "TriggerPipe",
+            "start": 112,
+            "end": 124
+          }
+        ],
+        "disposition": "KEEP; class internals or demonstrated legacy borrowers retained"
+      },
+      "sched/placement.py": {
+        "sha256": "008ca6d7c2316064c3fce0b75258e35c77f570b727e483d32a2010f6f7408fdf",
+        "lines": 126,
+        "top_nodes": [
+          {
+            "kind": "ImportFrom",
+            "name": null,
+            "start": 1,
+            "end": 1
+          },
+          {
+            "kind": "ImportFrom",
+            "name": null,
+            "start": 2,
+            "end": 2
+          },
+          {
+            "kind": "If",
+            "name": null,
+            "start": 3,
+            "end": 4
+          },
+          {
+            "kind": "FunctionDef",
+            "name": "core_mapping_1d",
+            "start": 6,
+            "end": 15
+          },
+          {
+            "kind": "FunctionDef",
+            "name": "update_phy_posi",
+            "start": 18,
+            "end": 125
+          }
+        ],
+        "disposition": "KEEP; class internals or demonstrated legacy borrowers retained"
+      }
+    },
+    "evidence": {
+      "core_mapping_1d": [
+        "sched/runtime_legacy/sched_utils.py:17 import; :239-240 calls",
+        "sim_main_old.py:21 import; :190 call"
+      ],
+      "update_phy_posi": [
+        "sched/runtime_legacy/sched_fn.py:29 import; :421,:1118,:1360 calls"
+      ],
+      "msg_read": "No direct Name usage found in the explicit169 source scope. Attribute/dynamic/text references not yet excluded.",
+      "msg_filter": "Called by msg_read. Same spelling in scheduling_table_event denotes a local filter dictionary; not evidence of a function binding."
+    },
+    "review_candidates": [
+      "model/message/msg_dispatcher.py::msg_read",
+      "model/message/msg_dispatcher.py::msg_filter"
+    ],
+    "unverified_static_concerns": [
+      "Spec.if_change references lowercase spec; not reproduced, class internals out of cleanup scope",
+      "core_mapping_1d does not advance start; not fixed or characterized in this review"
+    ],
+    "next": "Complete message-helper reference and behavior analysis before any proposal; follow actual module dependencies; preserve classes and legacy placement borrowers.",
+    "whole_repo_semantic_audit_complete": false
+  },
+  "frontier": "B20 accepted E0082; reviewer XML224/38 directly verified and EOF warning explicitly accepted; no active request. Continue DFS along sim_main message dependencies: msg_read/msg_filter require full attribute/dynamic/text reference checks and original behavior characterization before any proposal. Keep Spec/MsgDispatcher/DataPipe/TriggerPipe class internals and placement functions borrowed by runtime_legacy. Do not reopen cancelled/deferred Repack items or fix unverified old logic. Whole-repository semantic audit remains incomplete.",
+  "limitations": [
+    "Binding probes and initial event cases are not full simulation correctness tests",
+    "Static no-use evidence is supplemented by tracked text/import forms and baseline behavior, not treated as automatic deletion authority",
+    "No whole-repository completion claim"
+  ]
+}
