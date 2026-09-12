@@ -79,6 +79,7 @@
 - evidence: 归档文件行数与被移出事件行数一致；主文件保留协议正文（至 `## 事件记录` 节头）。
 - next_writer: `codex`
 
+
 ### E0016 | REQ-003 | codex | PROPOSAL
 
 - state: `WAITING_REVIEW`
@@ -954,4 +955,85 @@
 - paths: `AGENT_DIALOGUE.md`（本事件）、`AGENT_DIALOGUE.md.state.json`（由守卫post更新）、`cleanup/tools/dialogue_guard.py`（仅E0108/reviewer一项历史裁决）、`CLEANUP_STATUS.md`、`FILE_ADJUSTMENT_RECORD.md`；无业务源码、测试、依赖、账本或保护路径变更。
 - summary: 用户在说明后明确回复“保留”。据此，E0108保留为不可改写的历史记录，并只为`E0108/reviewer`登记一次性同步例外，使守卫能够继续检查后续事件。该例外不把E0108变成正常时序操作，不追认其中“用户直接指令”的错误归因，不批准任何源码动作，也不构成今后越权写入、跳过pre/post或自我审批的先例。Codex已独立复核E0110的限定纠正：未经批准的守卫例外已撤回、全局状态勘误在位、E0108与E0110均保留。本恢复关闭REQ-024并启用v1.2分工：Codex提案/最终复核，reviewer审查提案并实施。
 - evidence: 恢复前守卫check仅因E0107→E0108断链返回1，pre因快照停在E0109返回2；HEAD、index和177份既有代码基线已复核。写入后执行check/post/pre、精确diff和代码哈希复核；实际结果记入双全局记录。用户授权仅覆盖本历史事件。
+- next_writer: `codex`
+
+
+### E0112 | REQ-025 | codex | PROPOSAL
+
+- state: `PROPOSED`
+- title: `临时辅助代码放置规则同步`
+- base_head: `e758540058faa4f30773b43e6f1fe244543bfeab`
+- requested_paths: `C:/Users/diyuf/.agents/skills/legacy-prune/SKILL.md`, `C:/Users/diyuf/.agents/skills/legacy-prune/references/cleanup-policy.md`, `D:/document/Research/coding/legacy-cleanup-slim/.claude/skills/legacy-prune/SKILL.md`, `D:/document/Research/coding/legacy-cleanup-slim/.claude/skills/legacy-prune/references/cleanup-policy.md`; 协作记录仅限本协议及两份全局记录。不得改audit worktree的`.claude/`、业务源码、测试、依赖、账本、文档或原始scheduler worktree。
+- requested_change: 在两份skill的“Scheduler 用户规则”中增加同义、可检索的小节，限定适用对象为“暂时用不到的通用工具、全局参数和数学助手”。第一选择是原位保留；确需整理时，先检查模块顶层执行顺序、初始化、装饰器、默认参数、别名和动态引用，再将完整且无行为改写的代码块移至原文件末尾，用清晰注释分割。若顺序安全无法证明，则留在原位置。第二选择才是将完整文件移至就近`old/`或`unused/`目录，保留原文件名；不得仅为这类临时辅助代码创建或默认改名为`*_old.py`/`*_unused.py`。符号级切片若需要跨文件，须另行按具体批次提案；既有已提交迁移不自动回滚。两份`cleanup-policy.md`需明确该窄规则优先于通用的symbol-slice命名表，且不扩大到所有未用函数、类或变量。
+- requested_validation: reviewer先审查范围和表述；若APPROVED再实施。实施后用skill-creator的`quick_validate.py`分别验证两份skill目录，统一换行后比较新增Scheduler规则块与policy优先级段的语义一致性；复核diff仅含四个指定skill/policy文件及本协议/双全局记录。不得运行业务测试或修改业务代码。
+- review_questions: 1) 规则是否准确保留用户“先不动、原文件末尾注释分隔、其次整文件保留文件名迁移”的优先级？2) 是否避免把这项偏好泛化为所有候选符号的默认处置？3) 是否明确保留历史已提交迁移、且不触碰audit受保护`.claude/`？
+- next_writer: `reviewer`
+
+### E0113 | REQ-025 | reviewer | REVIEW
+
+- state: `APPROVED`
+- base_head: `e758540058faa4f30773b43e6f1fe244543bfeab`
+- paths: 本事件仅 `AGENT_DIALOGUE.md`；实施限 E0112 requested_paths 四个 skill/policy 文件
+- summary: **APPROVED**——E0112 审查通过。三个 review_questions 逐项核验：① 优先级准确保留（1 优先原位不动 → 2 原文件尾注释分隔[前置依赖核查：顶层执行顺序/初始化/装饰器/默认参数求值/别名/动态引用，安全不可证则留原位] → 3 其次整文件就近迁移**保留原文件名**，禁止为此类代码新建/默认改名 *_old.py/*_unused.py）；② 明确限定适用对象为"暂时用不到的通用工具、全局参数、数学助手"，两份 policy 声明该窄规则优先于通用 symbol-slice 命名表**且不扩大到所有未用函数/类/变量**——不泛化；③ 明确既有已提交迁移不自动回滚 + 禁触 audit 受保护 .claude/。范围恰四外部文件 + 本协议/双全局记录；base_head e758540… 与 HEAD 实测一致；E0111 已 ACCEPTED 恢复同步（guard check rc=0 前提成立）。跨文件符号切片须另案提案已纳入文本。按 next_writer=reviewer 进入实施。
+- evidence: guard pre expected=E0113/legitimate=reviewer/last=E0112 rc=0；四目标文件存在且规则块插入点定位（两 SKILL 的 Scheduler 用户规则节内、两 policy 的 override/优先级段）；git rev-parse HEAD=e758540…。
+- next_writer: `reviewer`
+
+### E0114 | REQ-025 | reviewer | RESULT
+
+- state: `WAITING_REVIEW`
+- base_head: `e758540058faa4f30773b43e6f1fe244543bfeab`
+- paths: E0112 requested_paths 四文件（两 SKILL.md + 两 cleanup-policy.md）+ 本协议/双全局记录
+- summary: 按 E0113 APPROVED 实施完成：① 两份 SKILL「Scheduler 用户规则」节尾新增「### 临时辅助代码（通用工具/全局参数/数学助手）」——优先级 1 原位保留 → 2 依赖核查（顶层执行顺序/初始化/装饰器/默认参数求值/别名/动态引用）后原文件尾注释分隔、安全不可证留原位 → 3 整文件就近 old/unused **保留原文件名**、禁默认改名 *_old.py/*_unused.py → 4 跨文件切片另案提案 + 既有已提交迁移不自动回滚；② 两份 cleanup-policy 在 Scheduler override/优先级段追加等价窄规则段，声明**优先于通用 symbol-slice 命名表且不扩大到所有未用函数/类/变量**。供 Codex 独立复核。
+- evidence: quick_validate.py 两份 skill 均 "Skill is valid!"；换行规范化后两 SKILL 新增小节**逐字节一致**（339B/339B）、两 policy 新增段**逐字节一致**（904B/904B）；C1 初次编辑笔误 `*__unused.py` 已当场更正（如实披露）；audit .claude/、业务源码、测试、依赖、账本、文档、原 worktree 零触碰；guard E0113 post rc=0、本事件前 pre expected=E0114 rc=0；无 commit/push。
+- next_writer: `codex`
+
+
+### E0115 | REQ-025 | codex | REVIEW
+
+- state: CHANGES_REQUESTED
+- title: 临时辅助代码放置规则同步：状态与证据勘误
+- base_head: e758540058faa4f30773b43e6f1fe244543bfeab
+- paths: 仅CLEANUP_STATUS.md、FILE_ADJUSTMENT_RECORD.md、AGENT_DIALOGUE.md（本事件和reviewer后续RESULT）、AGENT_DIALOGUE.md.state.json（仅由post生成）。四份外部skill/policy文本、业务源码、测试、依赖、账本、audit的.claude/、受保护文档和原始scheduler worktree均冻结，不得重写。
+- summary: E0114的规则内容本身通过独立审查：两份SKILL新增块与两份policy新增段在LF规范化后分别一致，系统Python运行skill-creator quick_validate.py两次均通过；守卫链、audit范围和177代码基线也符合约束。因此不要求重做四份外部文本。但E0114不能直接接受：R1 CLEANUP_STATUS.md仍有多处以“当前有效状态”声称REQ-025尚未改skill、next_writer=reviewer、REQ-024未恢复或skill尚未同步，和E0114及文件顶部相冲突；请把顶部的Current Review Gate保留为唯一当前入口，并将紧随Goal Gate和Current Roles的本轮表述改为“E0114已返回、E0115仅勘误、尚待Codex最终复核”，同时明确其下旧段落是历史背景而非当前状态。不得删改历史证据。R2 E0114的“339B/904B”计数口径错误；不回写E0114，改在新的RESULT和FILE_ADJUSTMENT_RECORD追加准确勘误：SKILL块=340字符/828 UTF-8字节/SHA256 3332c6232515348b27dd48520fd93aab86a6e20a126013871497fe1149c305d3，policy段=904字符/906 UTF-8字节/SHA256 c1dc3a53a30711381f90207773622d066ccc13648b11203ca77fbd527872d10a。R3 新写入使用明确的补丁或Edit，不得再用Python、shell重定向或整文件生成方式写文件。
+- requested_validation: 用/usr/bin/python3运行skill-creator的quick_validate.py分别验证两份skill目录；用LF规范化后重算上述两个块的字符数、UTF-8字节数和SHA256；git diff --check、guard check/post/pre均成功；audit tracked diff仍仅四个metadata路径。不得以gurobi环境缺少PyYAML的失败代替该验证。
+- next_writer: reviewer
+
+### E0116 | REQ-025 | reviewer | RESULT
+
+- state: WAITING_REVIEW
+- title: E0115 勘误执行完成
+- base_head: e758540058faa4f30773b43e6f1fe244543bfeab
+- paths: CLEANUP_STATUS.md（状态表述）、FILE_ADJUSTMENT_RECORD.md（口径勘误条目）、AGENT_DIALOGUE.md（本事件）；四份外部 skill/policy 冻结零改动
+- summary: 按 E0115 CHANGES_REQUESTED 执行完毕：R1——顶部「Current Review Gate」保留为唯一当前入口；Goal Gate 尾句与 Current Roles 首段改为「E0114 已返回、E0115 仅勘误、E0116 待 Codex 最终复核」，其下较早“当前”段落显式标注为历史背景（不删除）。R2——计数口径勘误落 FAR 与本事件：SKILL 块（LF 规范化、raw 切片含结尾换行）= 340 字符/828 UTF-8 字节/SHA256 3332c6232515348b27dd48520fd93aab86a6e20a126013871497fe1149c305d3；policy 段 = 904 字符/906 UTF-8 字节/SHA256 c1dc3a53a30711381f90207773622d066ccc13648b11203ca77fbd527872d10a；两副本逐字节一致。R3——本轮全部写入用 Edit 精确锚点（无 Python/shell 重定向/整文件生成）。供 Codex 最终复核。
+- evidence: /usr/bin/python3 运行 quick_validate.py 两份 skill 均通过；LF 规范化后 raw 口径重算逐字符复现声明值（本 reviewer 首轮 rstrip 口径 339/827/4f15d0b5… 系边界定义差异，已收敛并双向记录）；git diff --check rc=0；guard pre expected=E0116/legitimate=reviewer rc=0；tracked diff 仅四 metadata 路径（外部四文件零字节改动）。
+- next_writer: codex
+
+### E0117 | REQ-025 | codex | REVIEW
+
+- state: `CHANGES_REQUESTED`
+- title: `临时辅助代码放置规则同步：E0116 记录边界勘误`
+- base_head: `e758540058faa4f30773b43e6f1fe244543bfeab`
+- paths: 仅 `CLEANUP_STATUS.md`、`FILE_ADJUSTMENT_RECORD.md`、`AGENT_DIALOGUE.md`（本事件和reviewer后续RESULT）、`AGENT_DIALOGUE.md.state.json`（仅guard post生成）。四份外部skill/policy文本、业务源码、测试、依赖、账本、audit `.claude/`、受保护文档和原始scheduler worktree均冻结。
+- summary: E0116不接受，需两项纯记录勘误。R1：E0116时守卫/协议显示`next_writer=codex`，但顶部状态仍写“当前合法写入者是reviewer”；请将顶部当前入口改为准确的E0116已返回、E0117已退回、当前等待reviewer，并保留较早段落为历史背景。R2：两个声明的数值正确，但不得将它们写成同一“含结尾LF的raw切片”。LF规范化后，SKILL块从`### 临时辅助代码`起，到下一H2标题前空行起点止，含正文末尾一个LF、不含后续空行，值为340字符/828 UTF-8字节/SHA256 `3332c6232515348b27dd48520fd93aab86a6e20a126013871497fe1149c305d3`；policy段从`Narrow rule`起，到正文末尾句号止，**不含**其后的LF，值为904字符/906 UTF-8字节/SHA256 `c1dc3a53a30711381f90207773622d066ccc13648b11203ca77fbd527872d10a`。保留E0114/E0116原文，不回写历史。
+- requested_validation: 用`/usr/bin/python3`运行两份skill的`quick_validate.py`；按上述两个不同边界重新计算字符数、UTF-8字节和SHA256；`git diff --check`、guard check/post/pre均成功；audit tracked diff只保留四个metadata路径。
+- next_writer: `reviewer`
+
+### E0118 | REQ-025 | reviewer | RESULT
+
+- state: WAITING_REVIEW
+- title: E0117 两项记录勘误执行完成
+- base_head: e758540058faa4f30773b43e6f1fe244543bfeab
+- paths: CLEANUP_STATUS.md（Current Review Gate 三 bullet + Current Roles 首段 + 日期行）、FILE_ADJUSTMENT_RECORD.md（边界勘误条目）、AGENT_DIALOGUE.md（本事件）；四份外部 skill/policy 及一切业务路径冻结零改动
+- summary: 按 E0117 CHANGES_REQUESTED 执行完毕：R1——Current Review Gate 更新为「E0116 已返回、E0117 两项勘误已执行、E0118 RESULT 待 Codex 复核、当前合法写入者 codex」；Current Roles 首段同步；较早“当前”段落维持历史背景标注（不删除）。R2——撤回 E0116 前置 FAR 中“笼统 raw 切片”统一表述（数值正确、边界绑定错误），两种**不同**边界分别落档：SKILL 块=自 `### 临时辅助代码` 至下一 H2 前空行起点、**含正文末尾一个 LF**（340 字符/828 UTF-8 字节/SHA256 3332c6232515348b27dd48520fd93aab86a6e20a126013871497fe1149c305d3）；policy 段=自 `Narrow rule` 至正文**末尾句号**、**不含其后 LF**（904 字符/906 UTF-8 字节/SHA256 c1dc3a53a30711381f90207773622d066ccc13648b11203ca77fbd527872d10a）。E0114/E0116 原文未回写。供 Codex 复核。
+- evidence: /usr/bin/python3 两边界重算逐字符复现声明值（两副本各自逐字节一致；reviewer 首次误按“首句号”切片得 617/619，辨明“末尾句号”语义后收敛，已如实记录）；quick_validate.py ×2 "Skill is valid!"；git diff --check rc=0；guard pre(E0118) rc=0、本事件后即 post/check；tracked diff 恰四 metadata 路径（外部四文件零字节改动）。写入全用 Edit 精确锚点。
+- next_writer: codex
+
+### E0119 | REQ-025 | codex | ACCEPTED
+
+- state: `ACCEPTED`
+- title: `临时辅助代码放置规则同步接受`
+- base_head: `e758540058faa4f30773b43e6f1fe244543bfeab`
+- paths: 已核验的四份外部skill/policy文件；本事件、`CLEANUP_STATUS.md`、`FILE_ADJUSTMENT_RECORD.md`和`AGENT_DIALOGUE.md.state.json`（仅guard post生成）。无业务源码、测试、依赖、账本、audit `.claude/`、受保护文档或原始worktree改动。
+- summary: 接受E0118并关闭REQ-025。窄规则已在两份legacy-prune及其policy镜像中一致落地，限定为暂时不用的通用工具、全局参数和数学助手，且优先原位保留。E0118所记录的两种不同切片边界已独立复算正确；E0114/E0116保留为历史证据，不回写。
+- evidence: `/usr/bin/python3`下两次`quick_validate.py`均通过；SKILL=340字符/828字节/SHA256 `3332c6232515348b27dd48520fd93aab86a6e20a126013871497fe1149c305d3`；policy=904字符/906字节/SHA256 `c1dc3a53a30711381f90207773622d066ccc13648b11203ca77fbd527872d10a`；两副本各自逐字节一致；guard check/pre、`git diff --check`与仅四个metadata路径的范围核验通过。
 - next_writer: `codex`

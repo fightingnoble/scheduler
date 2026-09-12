@@ -1,14 +1,22 @@
 # Cleanup status
 
-Last updated: 2026-09-12 (用户授权保留E0108；REQ-024已恢复并验证通过，待建立精确Git快照)
+Last updated: 2026-09-12 (REQ-025 已由 E0119 接受：两份 legacy-prune 规则副本已同步；没有在途请求，准备根目录审计归档与测试迁移提案)
 
 This is the canonical global status file for the scheduler cleanup work. It supersedes `PHASE1_STATUS_FOR_NEXT_AGENT.md` as the main entry point for future agents.
 
 Use this file to understand the current cleanup state, approved decisions, executed batches, protected areas, and next actions. Use `FILE_ADJUSTMENT_RECORD.md` for the global action/change history.
 
+## Current Review Gate (authoritative, 2026-09-12)
+
+- REQ-024已由用户授权恢复并提交为e758540058faa4f30773b43e6f1fe244543bfeab；E0108保留为一次性历史同步例外，不授权业务改动。
+- REQ-025的四份外部skill/policy文本已由reviewer实施，并由Codex在E0119接受；规则只覆盖暂时不用的通用工具、全局参数和数学助手，不扩大为所有未用符号的默认处置。
+- 验证已闭环：两份skill通过`quick_validate.py`；SKILL块按“从`### 临时辅助代码`起至下一H2前空行起点，含正文末尾一个LF”计为340字符/828字节/SHA256 3332c623…305d3；policy段按“从`Narrow rule`起至段末、不含其后LF”计为904字符/906字节/SHA256 c1dc3a53…d10a；每对副本逐字节一致。
+- 当前没有在途请求，下一合法写入者是codex。根目录审计归档和根级测试迁移尚未提案或执行；业务源码、测试、依赖、账本、audit的.claude/、受保护文档和原始scheduler worktree保持不变。
+- 下方较早的“当前”段落保留作历史证据；与本节冲突时，以本节和协议末尾事件为准。
+
 ## Goal Gate (2026-09-12)
 
-当前有效状态（E0111）：用户已明确授权保留E0108，并只为这一个历史事件登记同步例外。REQ-024恢复并关闭；正常审查流程重新启用。该例外不批准源码、不豁免未来事件，也不改变“Codex提案和最终复核、reviewer审查并实施”的分工。恢复验证已完成：`dialogue_guard.py check` rc0（仅五条既有历史WARN）、`post` rc0并把state更新为E0111/codex、`pre` rc0并返回E0112/codex；`git diff --check` rc0，index为空，保护路径无diff。B24的177文件基线中176项未变；唯一差异是本次用户授权的`cleanup/tools/dialogue_guard.py`一行历史裁决，SHA从`15879c4…`变为`67773b52…`。随后只对这五个明确路径建立恢复快照，不收未跟踪内容。
+当前有效状态（E0111）：用户已明确授权保留E0108，并只为这一个历史事件登记同步例外。REQ-024恢复并关闭；正常审查流程重新启用。该例外不批准源码、不豁免未来事件，也不改变“Codex提案和最终复核、reviewer审查并实施”的分工。恢复验证已完成：`dialogue_guard.py check` rc0（仅五条既有历史WARN）、`post` rc0并把state更新为E0111/codex、`pre` rc0并返回E0112/codex；`git diff --check` rc0，index为空，保护路径无diff。B24的177文件基线中176项未变；唯一差异是本次用户授权的`cleanup/tools/dialogue_guard.py`一行历史裁决，SHA从`15879c4…`变为`67773b52…`。五个明确路径已提交为恢复快照`e758540058faa4f30773b43e6f1fe244543bfeab`，不含未跟踪内容。REQ-025四份外部skill/policy文本已由reviewer实施，E0114 RESULT已返回Codex；E0115仅为本文件状态表述与计数口径勘误，reviewer执行后E0116 RESULT待Codex最终复核。本段以下较早文字保留为历史背景。
 
 恢复后第2轮复核（2026-09-12）：上一轮只有状态复核，没有清理进展。本轮仍无E0108用户裁决；check=1/pre=2，末尾E0110/state E0109、HEAD968b12e及四metadata差异未变。当前目标保持active，重新计数尚未达到三轮阻塞阈值。源码/skill/协议/测试/提交均不操作；仅更新双全局记录，不能把重复核验当作实质推进。
 
@@ -33,7 +41,9 @@ Use this file to understand the current cleanup state, approved decisions, execu
 
 ## Current Roles (2026-09-12)
 
-当前有效状态（E0111）：Codex已按用户授权完成一次性历史裁决，并独立接受REQ-024的协议恢复；`next_writer=codex`。E0108保留作错误证据，但只通过`cleanup/tools/dialogue_guard.py`中精确的`(108, reviewer)`条目被识别，不是通用例外。下一步先将用户的新“原位保留通用工具/全局参数/数学助手”偏好以单独REQ交给reviewer审查实施，再由Codex独立复核。任何源码批次仍须独立提案、reviewer批准和实施、Codex验收。
+REQ-025：E0113 APPROVED → reviewer 已实施四 skill/policy 文件同步（窄规则=暂时用不到的通用工具/全局参数/数学助手；原位保留→依赖核查后原文件尾注释分隔→整文件就近迁移保留文件名；禁默认 *_old/_unused 改名；既有提交不回滚；优先于通用 symbol-slice 命名表且不泛化）。quick_validate 两份 PASS；两份新增文本分别跨副本一致。**E0119 已接受：当前写入者与两种不同计数边界均已独立复核。**audit .claude/ 与业务路径零触碰。其下较早的“当前”段落为历史背景，非当前状态。
+
+当前有效状态（E0111）：Codex已按用户授权完成一次性历史裁决，并独立接受REQ-024的协议恢复；E0112/REQ-025现由Codex提案，`next_writer=reviewer`。E0108保留作错误证据，但只通过`cleanup/tools/dialogue_guard.py`中精确的`(108, reviewer)`条目被识别，不是通用例外。REQ-025只同步用户的新“原位保留通用工具/全局参数/数学助手”偏好到两份legacy-prune skill及其policy；reviewer审查并实施后，由Codex独立复核。任何源码批次仍须独立提案、reviewer批准和实施、Codex验收。
 
 当前核验（Codex，E0110之后）：REQ-024尚未验收，等待用户确认是否为E0108登记一次性历史裁决并恢复同步，不推进源码或skill实施。对方新增守卫例外已撤回，守卫与HEAD逐字节一致，177代码SHA全部匹配。仅四个tracked元数据文件修改，index为空，git diff --check通过。本轮没有新commit/push；原快照968b12e与源码快照ea46783仍在。实际协议末尾E0110/next_writer=codex；state停在E0109/next_writer=reviewer（不是E0108），因为post拒绝更新。guard check=1（E0107→E0108历史越权）、pre=2（快照落后），不能当作通过，不能手改state。所有历史事件保留，撤销只追加裁决，不执行后文旧条目的删事件建议。
 

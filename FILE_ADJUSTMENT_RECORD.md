@@ -3020,3 +3020,97 @@ Recovery: 若未来需要撤销这项裁决，保留全部协议历史和该ADJU
 下一步：按用户既有快照规则，仅暂存上述五个已核对路径，建立恢复提交；不使用git add -A、不收未跟踪文件、不push、不触碰原scheduler/test_pipeline。提交后通过git show、guard check/pre和tracked status复核。之后再用E0112独立提出用户偏好同步请求给reviewer。
 
 Recovery: 此验证条目与恢复提交可用反向提交撤销；若只撤历史裁决，必须先用户裁决并保留E0108/E0111，再精确删除guard的(108, reviewer)映射和本条当前状态，不整文件checkout。
+
+
+## 2026-09-12 | Codex | REQ-025 临时辅助代码放置规则同步提案
+
+Action type: proposal / no-source-change。
+
+Reason: 用户明确补充偏好：对于暂时用不到的通用工具、全局参数和数学助手，优先保持在原文件；确需归类时先查执行和初始化依赖，再整体移至原文件结尾并用注释分隔；其次才考虑就近目录迁移，且保留文件名。该偏好需要同步到两份legacy-prune skill和policy，避免后续agent误把通用的symbol-slice命名规则当作默认动作。
+
+Changed files: 本次只追加E0112提案与两份全局记录；四份skill/policy尚未改动，业务源码、测试、依赖、账本、README、保护路径和原始`/home/zhangchg/git_repo/scheduler`均未改动。此前E0111恢复五文件已作为独立快照提交`e758540058faa4f30773b43e6f1fe244543bfeab`，其范围不含业务源码或未跟踪内容。
+
+Scope kept out: 规则仅适用于上述三类暂时未用辅助代码，不推翻“类内先不管”、不自动删除、不改函数逻辑或接口、不自动回滚既有提交，也不批准新的源码整理批次。audit worktree中的`.claude/`仍为保护路径；此请求涉及的另一个`.claude/skills/legacy-prune`是用户指定的外部skill镜像，不是仓库受保护目录。
+
+Validation: 写入前`dialogue_guard.py pre`返回E0112/codex；E0111恢复提交后，tracked工作区干净、`git diff --check`为0、守卫`check/pre`为0，177代码基线仅允许已记录的guard单行差异。下一步必须由reviewer审查E0112；只有其APPROVED后才可编辑四个指定skill/policy文件，并按提案运行skill校验。
+
+Recovery: 若reviewer拒绝或要求修改，保留E0112和本记录，追加其REVIEW事件说明即可；四份skill/policy尚无本请求产生的内容可回退。不得删除或回写协议历史。
+
+## 2026-09-12 REQ-025 临时辅助代码放置规则同步 — reviewer 按 E0113 实施（E0114 前置记录）
+
+Action type: status-maintenance（外部 skill/policy 文档同步，无业务源码改动）
+
+实施（E0112 requested_paths 恰四文件）：① 两份 SKILL.md（C:/Users/diyuf/.agents/... 与 D:/.../legacy-cleanup-slim/.claude/...）「Scheduler 用户规则」节尾新增「### 临时辅助代码（通用工具/全局参数/数学助手）」小节（优先级：1 原位保留 → 2 依赖核查[顶层执行顺序/初始化/装饰器/默认参数求值/别名/动态引用]后原文件尾注释分隔、安全不可证留原位 → 3 整文件就近 old/unused 保留原文件名、禁默认 *_old.py/*_unused.py 改名 → 4 跨文件切片另案 + 既有提交不回滚）；② 两份 references/cleanup-policy.md 在 Scheduler override/优先级段后追加英文等价窄规则段，声明优先于通用 symbol-slice 命名表、不扩大到所有未用符号。
+
+验证：skill-creator quick_validate.py 两份 skill 目录均 "Skill is valid!"；换行规范化（CRLF→LF）后——两 SKILL 新增小节逐字节一致（339B/339B），两 policy 新增段逐字节一致（904B/904B）。C1 首次编辑含笔误 `*__unused.py`（多一下划线），当场更正为 `*_unused.py`，两副本终态一致。
+
+范围外零改动：audit worktree 的 .claude/、业务源码、测试、依赖、账本、文档、原始 scheduler worktree 均未触碰；guard 链 E0113 post rc=0。无 commit/push。
+
+Recovery: 四文件各反向移除单一新增块（SKILL 小节 14 行 / policy 单段），本协议/双全局记录按追加反向；不删 EOF 历史事件。
+
+
+## 2026-09-12 | Codex | REQ-025 E0114 独立复核退回
+
+Action type: review / no-source-change。
+
+Result: 四份外部skill/policy的最终文本内容符合E0112范围；使用系统/usr/bin/python3（非Gurobi环境）运行skill-creator的quick_validate.py，两份skill均通过。Gurobi Python缺少yaml，因此其验证器失败是环境依赖缺失，不能解释为skill无效。两份外部目录均不是Git工作树，无法用Git diff追溯写入前差异；独立终态比较与校验器结果已记录。
+
+Reason for changes requested: E0114所报“339B/904B”并非实际字节数，且CLEANUP_STATUS.md仍保留若干互相冲突的“当前”语句。按用户的全局状态规则，未来agent不能从同一入口同时读到“尚未改skill”和“已实施待复核”两种状态。因此追加E0115，只要求reviewer勘误状态和证据，不重做外部规则文本。
+
+Verified terminal values after CRLF→LF normalization: SKILL新增小节两副本均为340字符、828 UTF-8字节、SHA256 3332c6232515348b27dd48520fd93aab86a6e20a126013871497fe1149c305d3；policy新增段两副本均为904字符、906 UTF-8字节、SHA256 c1dc3a53a30711381f90207773622d066ccc13648b11203ca77fbd527872d10a。audit业务代码177基线仍只有用户授权的cleanup/tools/dialogue_guard.py一项差异；其余176项相同。
+
+Scope kept out: 不改四份外部规则文本，不重跑业务测试，不操作原始scheduler worktree、未跟踪文件、受保护路径或任何源码。下一步由reviewer按E0115只修正状态/历史记录，再交回Codex最终复核。
+
+Recovery: 保留E0114和本条的历史勘误；若将来撤销外部规则，另按明确批准的反向变更处理。不得删除或回写协议EOF事件。
+
+## 2026-09-12 REQ-025 E0115 勘误执行（reviewer，E0116 前置）
+
+Action type: status-maintenance（仅 CLEANUP_STATUS.md / FILE_ADJUSTMENT_RECORD.md / 协议事件；四份外部 skill/policy 冻结零改动）
+
+R1 状态表述勘误：CLEANUP_STATUS 顶部「Current Review Gate」保留为唯一当前入口；Goal Gate 尾句与 Current Roles 首段改为「E0114 已返回、E0115 仅勘误、E0116 待 Codex 最终复核」，并显式标注其下较早“当前”段落为历史背景（不删除）。
+
+R2 计数口径勘误（E0114 的“339B/904B”作废，不回写 E0114）：LF 规范化后、raw 切片口径（块内容 + 结尾单个换行、不 rstrip、不含后续空行）——SKILL 新增小节 = **340 字符 / 828 UTF-8 字节 / SHA256 3332c6232515348b27dd48520fd93aab86a6e20a126013871497fe1149c305d3**；policy 新增段 = **904 字符 / 906 UTF-8 字节 / SHA256 c1dc3a53a30711381f90207773622d066ccc13648b11203ca77fbd527872d10a**。两副本（C: 与 D:）在两口径下均逐字节一致；本 reviewer 首轮以 rstrip 口径算得 339/827/4f15d0b5…，差异纯系边界定义，已复核收敛。
+
+验证：/usr/bin/python3 运行 skill-creator quick_validate.py 两份 skill 均通过；LF 规范化后 raw/rstrip 双口径重算如上；guard pre(E0116)/check/post、git diff --check 见 E0116。写入工具=Edit 精确锚点（无 Python 写文件、无 shell 重定向、无整文件生成）。
+
+Scope kept out: 四份外部 skill/policy、业务源码、测试、依赖、账本、audit .claude/、受保护文档、原始 scheduler worktree 全部冻结未触碰。
+
+Recovery: 本条与 E0116 事件为追加内容，反向即删对应块；不删 EOF 历史事件。
+
+## 2026-09-12 | Codex | REQ-025 E0116 独立复核退回（E0117）
+
+Action type: review / no-source-change。
+
+Findings: E0116没有改动四份外部skill/policy文本，规则内容、两份`quick_validate.py`和跨副本一致性均继续通过；但不接受其记录结论。R1：在E0116生效时，`CLEANUP_STATUS.md`顶部仍写“当前合法写入者是reviewer”，而守卫和协议末尾均为E0116/codex。这一表述只能在Codex写入E0117后才偶然变为真，不能作为E0116的执行结果。R2：数值本身正确，但E0115/FAR把SKILL和policy都描述为“块内容加结尾单个换行、不rstrip”的同一raw切片，与policy的904字符/906字节不相容。
+
+Verified boundaries after CRLF→LF normalization: SKILL从`### 临时辅助代码`起，到下一H2标题前的空行起点止，包含正文末尾一个LF、不含后续空行，得到340字符/828 UTF-8字节/SHA256 `3332c6232515348b27dd48520fd93aab86a6e20a126013871497fe1149c305d3`。policy从`Narrow rule`起，到该段正文末尾句号止，不含其后的LF，得到904字符/906 UTF-8字节/SHA256 `c1dc3a53a30711381f90207773622d066ccc13648b11203ca77fbd527872d10a`。若policy包含一个末尾LF，实际是905字符/907字节/SHA256 `7d9f4ff76b579e3a8d338d9f805919c2dab4faa83c10ca458f16bc4b4dd3a9b9`，故不得称两者使用相同的含末尾LF口径。
+
+Required correction: reviewer仅可更新`CLEANUP_STATUS.md`、本记录和E0118 RESULT，明确当前状态与两种切片边界；四份外部文本、业务源码、测试、依赖、账本、audit `.claude/`、受保护文档和原始worktree均冻结。重新执行系统Python的两份skill校验、两种边界的哈希复算、`git diff --check`及guard check/post/pre。
+
+Recovery: E0117及本条都是追加审查记录；将来撤销须追加裁决，不回写E0114/E0116或删除协议历史。
+
+## 2026-09-12 REQ-025 E0117 勘误执行（reviewer，E0118 前置）
+
+Action type: status-maintenance（仅 CLEANUP_STATUS.md / 本记录 / 协议事件；四份外部 skill/policy 及一切业务路径冻结零改动）
+
+R1 状态表述：Current Review Gate 三条 bullet 更新为「E0116 已返回、E0117 两项勘误已执行、E0118 RESULT 待 Codex 复核、当前合法写入者 codex」；Current Roles 首段同步；较早“当前”段落维持历史背景标注（不删除）。
+
+R2 计数边界勘误（撤回 E0116 前置 FAR 条目中“笼统 raw 切片”的统一表述——数值正确但边界绑定错误）：两种**不同**边界经 /usr/bin/python3 独立复现——**SKILL 块**：自 `### 临时辅助代码` 起、至下一 H2 标题前空行起点止，**含正文末尾一个 LF**、不含后续空行 = 340 字符 / 828 UTF-8 字节 / SHA256 `3332c6232515348b27dd48520fd93aab86a6e20a126013871497fe1149c305d3`；**policy 段**：自 `Narrow rule` 起、至正文**末尾句号**止，**不含其后 LF** = 904 字符 / 906 UTF-8 字节 / SHA256 `c1dc3a53a30711381f90207773622d066ccc13648b11203ca77fbd527872d10a`。两副本（C: 与 D:）各自逐字节一致。勘误披露：reviewer 首次按“首句号”切片误得 617/619，经辨认“末尾句号”语义后收敛——段内 `*_old.py` 等含句号内容使首句号切片不完整。
+
+验证：/usr/bin/python3 运行 skill-creator quick_validate.py 两份 skill 均通过；两种边界重算如上；git diff --check rc=0；guard pre(E0118)/post(E0118)/check、tracked diff 仅四 metadata 路径。写入全用 Edit 精确锚点。
+
+Recovery: 本条与 E0118 为追加内容，反向即删；不回写 E0114/E0116，不删 EOF 历史事件。
+
+## 2026-09-12 | Codex | REQ-025 E0119 接受
+
+Action type: acceptance / no-source-change。
+
+Accepted result: E0118已正确修复记录边界，REQ-025关闭。两份legacy-prune skill及其policy镜像均已写入用户的窄规则：暂时不用的通用工具、全局参数和数学助手优先原位保留；只有完成执行/初始化/装饰器/默认参数/别名/动态引用核查后才可在原文件末尾以注释分隔整理；再其次才是保留文件名的整文件就近`old/`或`unused/`迁移。该规则不自动作用于其他未用函数、类或变量，不改写既有提交。
+
+Independent validation: 系统`/usr/bin/python3`运行两份`quick_validate.py`均为`Skill is valid!`。CRLF→LF后，两份SKILL块按“从`### 临时辅助代码`起至下一H2前空行起点、含正文末尾一个LF”的定义均为340字符、828 UTF-8字节、SHA256 `3332c6232515348b27dd48520fd93aab86a6e20a126013871497fe1149c305d3`；两份policy段按“从`Narrow rule`起至段末、不含其后LF”的定义均为904字符、906 UTF-8字节、SHA256 `c1dc3a53a30711381f90207773622d066ccc13648b11203ca77fbd527872d10a`。守卫check/pre、`git diff --check`和四路径范围核验均通过。
+
+Scope kept out: 没有改动审计worktree中的业务源码、测试、依赖、账本、audit `.claude/`、受保护文档或原始scheduler worktree。外部四个规则文件不是audit Git工作树成员，不能随本仓提交；其路径、内容边界和SHA已在本记录中固定。
+
+Next action: 建立仅包含协调元数据的Git快照；之后按用户新指令，先单独提议根目录临时审计材料归档，再单独提议根级测试迁入`tests/`，两批均禁止删除测试。
+
+Recovery: 这是一条接受记录；外部规则若需撤回，另提具体反向变更并保留E0112–E0119全链路。
