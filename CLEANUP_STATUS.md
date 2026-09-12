@@ -1,10 +1,59 @@
 # Cleanup status
 
-Last updated: 2026-09-06 (audit snapshot ea46783 committed; final global-record commit)
+Last updated: 2026-09-12 (用户授权保留E0108；REQ-024已恢复并验证通过，待建立精确Git快照)
 
 This is the canonical global status file for the scheduler cleanup work. It supersedes `PHASE1_STATUS_FOR_NEXT_AGENT.md` as the main entry point for future agents.
 
 Use this file to understand the current cleanup state, approved decisions, executed batches, protected areas, and next actions. Use `FILE_ADJUSTMENT_RECORD.md` for the global action/change history.
+
+## Goal Gate (2026-09-12)
+
+当前有效状态（E0111）：用户已明确授权保留E0108，并只为这一个历史事件登记同步例外。REQ-024恢复并关闭；正常审查流程重新启用。该例外不批准源码、不豁免未来事件，也不改变“Codex提案和最终复核、reviewer审查并实施”的分工。恢复验证已完成：`dialogue_guard.py check` rc0（仅五条既有历史WARN）、`post` rc0并把state更新为E0111/codex、`pre` rc0并返回E0112/codex；`git diff --check` rc0，index为空，保护路径无diff。B24的177文件基线中176项未变；唯一差异是本次用户授权的`cleanup/tools/dialogue_guard.py`一行历史裁决，SHA从`15879c4…`变为`67773b52…`。随后只对这五个明确路径建立恢复快照，不收未跟踪内容。
+
+恢复后第2轮复核（2026-09-12）：上一轮只有状态复核，没有清理进展。本轮仍无E0108用户裁决；check=1/pre=2，末尾E0110/state E0109、HEAD968b12e及四metadata差异未变。当前目标保持active，重新计数尚未达到三轮阻塞阈值。源码/skill/协议/测试/提交均不操作；仅更新双全局记录，不能把重复核验当作实质推进。
+
+执行状态：BLOCKED_WAITING_USER_DECISION，不是目标完成。相同的E0108历史越权/协作门禁问题已连续三轮出现：用户偏好更新轮、五个表格脚本只读补查轮、本轮原计划完成度核对。前两轮确有纠正与新增证据，本轮复查仍为check=1/pre=2；未收到用户对一次性历史裁决的明确同意。真实clean会话30074经实际轮询仍存活但闲置，不是运行中任务等待。不得自动重开会话、恢复例外、手改state或自行批准提案。
+
+原计划核验结果：
+
+| 项目 | 当前结论 | 核验依据 |
+| --- | --- | --- |
+| 行为基线 | 已验收并提交 | B10/E0025；test_binpack_pipeline_contract.py及Split/fixcore-Repack基线在库 |
+| 初始化上下文封装 | 已实施 | sim_main.py:577的init_sched_components；approach/approach_setup.py:36调用；B10转发契约保护 |
+| 收窄perform_bin_packing | 未实施，REQ-003取消 | 函数仍在sim_main.py:381；不能把取消写成完成 |
+| Repack拆分 | 延期保留 | E0029 DEFER_KEEP_AS_IS；scratch问题不在本轮修复 |
+| 资源分配计算/提交拆分 | 并入未来Repack设计 | E0031 DEFER_WITH_REPACK；不擅自重开 |
+| 调度表附属功能拆分 | 裁定KEEP_AS_IS | E0027；类内与仍在用的辅助功能保留 |
+| approach包迁移 | 已验收并提交 | E0037/B11；七个实现和根兼容入口、32项测试；包含在ea46783 |
+| 两份历史approach文件归档 | 已验收并提交 | E0041/B12；old/appoach_plot6.py和old/approach_util33.py、7项测试；包含在ea46783 |
+
+全仓后续探索及独立审查尚未全部完成；最近五表格脚本检查只补证据，不是全仓通过或新清理授权。两个legacy-prune仍保留旧符号后缀默认，新偏好只已落在双全局记录并通知对方，skill同步尚待实施。REVIEW项继续原位保留。B11-B25快照已存在，当前四份元数据修改仍待审未提交。
+
+解除条件：用户明确裁决是否为E0108登记一次性历史例外并恢复同步；不得扩大到未来事件豁免、源码批准或抹去历史。恢复后先独立审核协议修复、同步新偏好并建立精确提交快照，再继续未完成的清理；不把自动续跑当作这项批准。
+
+## Current Roles (2026-09-12)
+
+当前有效状态（E0111）：Codex已按用户授权完成一次性历史裁决，并独立接受REQ-024的协议恢复；`next_writer=codex`。E0108保留作错误证据，但只通过`cleanup/tools/dialogue_guard.py`中精确的`(108, reviewer)`条目被识别，不是通用例外。下一步先将用户的新“原位保留通用工具/全局参数/数学助手”偏好以单独REQ交给reviewer审查实施，再由Codex独立复核。任何源码批次仍须独立提案、reviewer批准和实施、Codex验收。
+
+当前核验（Codex，E0110之后）：REQ-024尚未验收，等待用户确认是否为E0108登记一次性历史裁决并恢复同步，不推进源码或skill实施。对方新增守卫例外已撤回，守卫与HEAD逐字节一致，177代码SHA全部匹配。仅四个tracked元数据文件修改，index为空，git diff --check通过。本轮没有新commit/push；原快照968b12e与源码快照ea46783仍在。实际协议末尾E0110/next_writer=codex；state停在E0109/next_writer=reviewer（不是E0108），因为post拒绝更新。guard check=1（E0107→E0108历史越权）、pre=2（快照落后），不能当作通过，不能手改state。所有历史事件保留，撤销只追加裁决，不执行后文旧条目的删事件建议。
+
+用户新偏好（立即有效）：暂时用不到的通用工具、全局参数和数学助手，优先先不动；需要归类时，先检查执行/初始化依赖，再放到原文件结尾并加注释分割线；其次才考虑就近文件夹迁移并保留原文件名，不默认改成*_unused.py。旧提交不自动回滚，fit.py归档暂停。两份legacy-prune与引用政策尚未同步，不能声称已完成。新增gurobi回归330=325通过+原5collector失败，0error/skip。
+
+用户已要求继续清理并交换实施职责：Codex负责提案和独立结果审查，原clean会话负责审查提案、实施和修正。会话身份仍为codex/reviewer，禁止代写对方事件。协议 v1.2 正文已实施（E0103→E0104→E0105→E0106→E0107）；E0108 系 reviewer 在 next_writer=codex 时的越权写入（依据的澄清实为 Codex 转述、非用户直接授权），已被 Codex E0109 拒绝为无效交接，事件保留作证据；尚未启动新源码批次。
+
+实际执行基线为968b12e6882619bb67693c5fa5ec1865fcd47ef1，源码快照ea46783已提交，177业务代码SHA与验收状态一致；当前 tracked 改动仅为四个 metadata 路径（AGENT_DIALOGUE.md 协议正文与事件、双全局记录、快照），index 无暂存。旧段落中的暂停、Codex修改和未提交只代表当时状态，本轮以上述用户新角色指令和协议末尾为准。主线master和原worktree不动。
+
+本轮已重读CLAUDE测试环境、doc/spec/readme、全局状态与协议；沿既有DFS只读throughput_cnt和fit，不作迁移。旧11983工具句柄失效，恢复相同clean历史UUID并确认B25/E0102勘误及audit目录；当前交互会话30074保持。未给其他项目的Claude进程输入。
+
+下一步：按 Codex E0109 限定纠正执行完毕（守卫 (108) 行已撤回、与 HEAD 逐字节一致 SHA 15879c4e…；本两处状态行更正；E0110 reviewer RESULT 已追加）。**guard check 预期非零**：E0107→E0108 历史断链 ERR 保留为诚实状态，不绕过、不手动改 state；等待用户裁决恢复同步点。此后 Codex 复核 E0110；177 业务代码零改动。
+
+REQ-024 当前审查：E0109要求的守卫撤回已由对方完成，Codex已独立核实E0110结果。当前不是ACCEPTED；协议同步仍须用户裁决。新偏好已记入双全局文件并通知原clean会话，两份skill尚未同步。
+
+## Read-only Followup (2026-09-12)
+
+协作门禁未恢复期间，继续已有DFS的实验后处理链，只读补完analyze/xlsl_e2e_lat_abla.py、xlsl_e2e_latency.py、xlsl_max_tp.py、xlsl_min_core.py、xlsl_safe_scalable.py五份源码（246/123/59/77/55逻辑行，共560；wc仅557换行，因为3文件末尾无LF）。run/1/all.sh:22-24明确直接调用后三个统计入口中的max_tp/min_core/e2e_latency，这三份KEEP；abla/safe_scalable原位REVIEW保留，均无迁移/删除批准。模块顶层会解析参数并读CSV、写CSV/Excel，不能仅凭无import判死，也不能把被顶层调用的定义移到调用之后。
+
+验证使用CLAUDE.md指定gurobi绝对Python：五份AST有效；python -B -m analyze.<模块> --help全部rc0；直接python -B analyze/<文件>.py --help则前四份因No module named 'analyze'返回1，safe_scalable返回0。openpyxl和xlsxwriter在该环境find_spec均为空，pandas可找到；未安装依赖，没有读实验CSV或输出工作簿，也没运行run/1/all.sh主体。帮助检查不等于实验通过。日志/tmp/scheduler-xlsl-readonly-4f8cp25j；177代码SHA全同，仍仅四metadata未提交。细节与后续运行问题见FILE_ADJUSTMENT_RECORD末条，不是新清理批次或reviewer验收。
 
 ## Latest Git Snapshot
 

@@ -20,6 +20,7 @@ ADJUDICATED = {
     (20, "reviewer"): "supersedes forged E0019; user confirmed reviewer role 2026-09-03",
     (34, "reviewer"): "E0034 typed REVIEW but is an in-request authorization amendment (C4/C8) delivered on user-relayed codex evidence; typing note in E0035",
     (67, "reviewer"): "E0067 typed REVIEW but is an in-request pickle-boundary erratum following E0066 approval (precedent: E0034/E0035 pattern); content valid",
+    (108, "reviewer"): "User explicitly authorized preserving E0108 on 2026-09-12; one historical synchronization exception only, not a source approval or future precedent",
 }
 
 HDR = re.compile(r"^### (E\d{4}) \| (REQ-\d{3}) \| (codex|reviewer) \| ([A-Z_]+)\s*$")
