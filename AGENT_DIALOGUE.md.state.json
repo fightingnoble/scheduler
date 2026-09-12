@@ -1,6 +1,8 @@
 {
- "last_event": "E0119",
+ "last_event": "E0124",
  "next_writer": "codex",
- "tail_sha256": "35c241c7f6dcbebef2e01689fa2db6ffb6917c69b82ee1f36b726246ed354209",
- "lines": 1039
+ "tail_sha256": "cbdd96d3964dba90d3b5e70921aeb9a2415bbcc72f7462c64499ea4933f70c1b",
+ "lines": 122,
+ "history_sha256": "bd34b59be57b28c3bf42dc8564d9cd26496f9aa03e97d5b6509b059f9de49289",
+ "active_count": 5
 }

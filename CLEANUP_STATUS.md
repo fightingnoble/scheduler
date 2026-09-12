@@ -1,6 +1,6 @@
 # Cleanup status
 
-Last updated: 2026-09-12 (REQ-025 已由 E0119 接受：两份 legacy-prune 规则副本已同步；没有在途请求，准备根目录审计归档与测试迁移提案)
+Last updated: 2026-09-12 (REQ-026 B26 历史切换已实施但 E0123 要求修正：跨文件归档恢复语义与当前状态记录；未接受、未提交)
 
 This is the canonical global status file for the scheduler cleanup work. It supersedes `PHASE1_STATUS_FOR_NEXT_AGENT.md` as the main entry point for future agents.
 
@@ -9,9 +9,9 @@ Use this file to understand the current cleanup state, approved decisions, execu
 ## Current Review Gate (authoritative, 2026-09-12)
 
 - REQ-024已由用户授权恢复并提交为e758540058faa4f30773b43e6f1fe244543bfeab；E0108保留为一次性历史同步例外，不授权业务改动。
-- REQ-025的四份外部skill/policy文本已由reviewer实施，并由Codex在E0119接受；规则只覆盖暂时不用的通用工具、全局参数和数学助手，不扩大为所有未用符号的默认处置。
-- 验证已闭环：两份skill通过`quick_validate.py`；SKILL块按“从`### 临时辅助代码`起至下一H2前空行起点，含正文末尾一个LF”计为340字符/828字节/SHA256 3332c623…305d3；policy段按“从`Narrow rule`起至段末、不含其后LF”计为904字符/906字节/SHA256 c1dc3a53…d10a；每对副本逐字节一致。
-- 当前没有在途请求，下一合法写入者是codex。根目录审计归档和根级测试迁移尚未提案或执行；业务源码、测试、依赖、账本、audit的.claude/、受保护文档和原始scheduler worktree保持不变。
+- REQ-025已由E0119接受：两份legacy-prune规则副本已同步，规则只覆盖暂时不用的通用工具、全局参数和数学助手，不扩大为所有未用符号的默认处置。
+- REQ-026 / B26-DIALOGUE-HISTORY-CUTOVER：E0121 APPROVED（P1-P6）→ reviewer 已完成 E0122 实施结果，E0015-E0119 的 105 个事件块已移入 `cleanup/history/AGENT_DIALOGUE_HISTORY.md`，当前 HISTORY SHA 为 `bd34b59be57b28c3bf42dc8564d9cd26496f9aa03e97d5b6509b059f9de49289`；但 Codex 在 E0123 发现 `archive --through` 的跨文件失败恢复不足，故本批**修正中，尚未接受或提交**。禁止重写既有 HISTORY 或重新归档已成功移动的事件。
+- 当前活动区为 E0120-E0124 共 5 条，E0123 的两项修正（guard v1.4 事务恢复 + state 原子写 + 故障注入测试 6/6）已执行完毕，**E0124 RESULT 待 Codex 复核**，下一合法写入者为 codex。HISTORY 未重写、真实归档未重跑（真实仓无 journal 目录）。根目录其余审计报告归档和根级测试迁入`tests/`尚未提案或执行；业务源码、既有测试、依赖、账本、audit的.claude/、受保护文档、四份外部skill/policy文本和原始scheduler worktree保持不变。
 - 下方较早的“当前”段落保留作历史证据；与本节冲突时，以本节和协议末尾事件为准。
 
 ## Goal Gate (2026-09-12)
@@ -41,7 +41,7 @@ Use this file to understand the current cleanup state, approved decisions, execu
 
 ## Current Roles (2026-09-12)
 
-REQ-025：E0113 APPROVED → reviewer 已实施四 skill/policy 文件同步（窄规则=暂时用不到的通用工具/全局参数/数学助手；原位保留→依赖核查后原文件尾注释分隔→整文件就近迁移保留文件名；禁默认 *_old/_unused 改名；既有提交不回滚；优先于通用 symbol-slice 命名表且不泛化）。quick_validate 两份 PASS；两份新增文本分别跨副本一致。**E0119 已接受：当前写入者与两种不同计数边界均已独立复核。**audit .claude/ 与业务路径零触碰。其下较早的“当前”段落为历史背景，非当前状态。
+REQ-025已关闭：E0113 APPROVED → reviewer 已实施四 skill/policy 文件同步（窄规则=暂时用不到的通用工具/全局参数/数学助手；原位保留→依赖核查后原文件尾注释分隔→整文件就近迁移保留文件名；禁默认 *_old/_unused 改名；既有提交不回滚；优先于通用 symbol-slice 命名表且不泛化）。quick_validate 两份 PASS；两份新增文本分别跨副本一致，E0119已接受。**当前在途：REQ-026 / E0123，reviewer须仅修正归档事务恢复语义、state 写入和状态记录；不得碰业务路径或既有测试。**audit .claude/ 与业务路径零触碰。其下较早的“当前”段落为历史背景，非当前状态。
 
 当前有效状态（E0111）：Codex已按用户授权完成一次性历史裁决，并独立接受REQ-024的协议恢复；E0112/REQ-025现由Codex提案，`next_writer=reviewer`。E0108保留作错误证据，但只通过`cleanup/tools/dialogue_guard.py`中精确的`(108, reviewer)`条目被识别，不是通用例外。REQ-025只同步用户的新“原位保留通用工具/全局参数/数学助手”偏好到两份legacy-prune skill及其policy；reviewer审查并实施后，由Codex独立复核。任何源码批次仍须独立提案、reviewer批准和实施、Codex验收。
 
