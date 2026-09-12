@@ -40,8 +40,8 @@ python -m scripts.abla_exp_runner --case 3 --output_dir ./abla_results --num_hp 
 | 入口 | 文件 | 职责 |
 |------|------|------|
 | 主入口 | `main_approach.py` | 端到端流程编排 |
-| 基准设置 | `approach_setup.py` | workload生成和装箱 |
-| 仿真运行 | `approach_sim.py` | 事件驱动仿真 |
+| 基准设置 | `approach/approach_setup.py` | workload生成和装箱 |
+| 仿真运行 | `approach/approach_sim.py` | 事件驱动仿真 |
 | 装箱算法 | `sched/global_sched.py` | 两阶段装箱 |
 
 ## 调度策略

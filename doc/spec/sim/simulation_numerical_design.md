@@ -4,8 +4,8 @@
 >
 > **相关文件**:
 > - `global_var.py`: 数值精度常量和 `elim_nume_error`
-> - `approach_Eq.py`: 公式模块 (Equations)
-> - `approach_def.py`, `approach_sim.py`, `approach_sched.py`: 仿真逻辑
+> - `approach/approach_Eq.py`: 公式模块 (Equations)
+> - `approach/approach_def.py`, `approach/approach_sim.py`, `approach/approach_sched.py`: 仿真逻辑
 
 ## 1. 设计理念
 
@@ -17,7 +17,7 @@
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    仿真逻辑层                                │
-│  (approach_def.py, approach_sim.py, approach_sched.py)     │
+│  (approach/approach_def.py, approach/approach_sim.py, approach/approach_sched.py)     │
 │                                                             │
 │   调用 ───────────────────────────────► 返回结果           │
 │                                                             │
@@ -33,7 +33,7 @@
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    公式模块层                                │
-│                      (approach_Eq.py)                       │
+│                      (approach/approach_Eq.py)                       │
 │                                                             │
 │   内部调用 ─────────────────────────► 返回结果              │
 │                                                             │
@@ -54,7 +54,7 @@
 
 ### 1.2 分离的好处
 
-1. **公式可替换**: 修改 `approach_Eq.py` 中的公式，仿真逻辑不变
+1. **公式可替换**: 修改 `approach/approach_Eq.py` 中的公式，仿真逻辑不变
 2. **精度可调**: 修改 `global_var.py` 中的常量，全局生效
 3. **测试友好**: 公式可以独立测试
 4. **维护简单**: 公式集中管理，避免散落在各处
@@ -87,7 +87,7 @@ elim_nume_error = lambda x: round(x, numerical_tol_bit)
 
 ### 2.3 时间运算封装
 
-**定义位置**: `approach_Eq.py:486-506`
+**定义位置**: `approach/approach_Eq.py:486-506`
 
 ```python
 # 所有时间运算都经过 elim_nume_error
@@ -128,23 +128,23 @@ if time_gtq(curr_t, next_hp_boundary):
 
 | 场景 | 处理方式 | 代码位置 |
 |------|----------|----------|
-| 任务进度更新 | `elim_nume_error(init_load - elapsed * res * base_pwr)` | `approach_Eq.py:362` |
-| 执行时间计算 | `normalize_time_to_unit()` 或 `elim_nume_error()` | `approach_Eq.py:382-386` |
-| 松弛时间计算 | `normalize_time_to_unit()` 或 `elim_nume_error()` | `approach_Eq.py:400-404` |
-| 节点时间属性 | `elim_nume_error(node['offset'])` | `approach_initiator.py` |
+| 任务进度更新 | `elim_nume_error(init_load - elapsed * res * base_pwr)` | `approach/approach_Eq.py:362` |
+| 执行时间计算 | `normalize_time_to_unit()` 或 `elim_nume_error()` | `approach/approach_Eq.py:382-386` |
+| 松弛时间计算 | `normalize_time_to_unit()` 或 `elim_nume_error()` | `approach/approach_Eq.py:400-404` |
+| 节点时间属性 | `elim_nume_error(node['offset'])` | `approach/approach_initiator.py` |
 
 ## 3. 时间单位对齐
 
 ### 3.1 全局时间单位
 
-**定义位置**: `approach_Eq.py:13-14`
+**定义位置**: `approach/approach_Eq.py:13-14`
 
 ```python
 time_unit = 1        # 时间单位（秒）
 unit_align = True    # 是否对齐到时间单位
 ```
 
-**设置函数**: `approach_Eq.py:17-25`
+**设置函数**: `approach/approach_Eq.py:17-25`
 
 ```python
 def set_time_unit(timestep, int_slot):
@@ -160,7 +160,7 @@ def set_time_unit(timestep, int_slot):
 
 ### 3.2 时间标准化函数
 
-**定义位置**: `approach_Eq.py:422-443`
+**定义位置**: `approach/approach_Eq.py:422-443`
 
 ```python
 def normalize_time_to_unit(time_value: float, time_unit: float, mod: str = 'up') -> float:
@@ -195,7 +195,7 @@ def normalize_time_to_unit(time_value: float, time_unit: float, mod: str = 'up')
 
 ### 4.1 任务执行时间
 
-**公式**: `approach_Eq.py:368-386`
+**公式**: `approach/approach_Eq.py:368-386`
 
 ```python
 def sim_comp_time(task_load: float, allocated_resources: int,
@@ -225,7 +225,7 @@ def sim_comp_time(task_load: float, allocated_resources: int,
 
 ### 4.2 资源需求估计
 
-**公式**: `approach_Eq.py:406-419`
+**公式**: `approach/approach_Eq.py:406-419`
 
 ```python
 def estimate_resource_requirement(task_load: float, slack_time: float,
@@ -246,7 +246,7 @@ def estimate_resource_requirement(task_load: float, slack_time: float,
 
 ### 4.3 松弛时间计算
 
-**公式**: `approach_Eq.py:388-404`
+**公式**: `approach/approach_Eq.py:388-404`
 
 ```python
 def calculate_slack_time(deadline: float, current_time: float,
@@ -267,7 +267,7 @@ def calculate_slack_time(deadline: float, current_time: float,
 
 ### 4.4 任务进度更新
 
-**公式**: `approach_Eq.py:355-362`
+**公式**: `approach/approach_Eq.py:355-362`
 
 ```python
 def update_task_progress(init_load: float, elapsed_time: float,
@@ -288,7 +288,7 @@ def update_task_progress(init_load: float, elapsed_time: float,
 
 ### 4.5 负载计算
 
-**公式**: `approach_Eq.py:473-483`
+**公式**: `approach/approach_Eq.py:473-483`
 
 ```python
 def cal_load(exp_comp_t, base_size):
@@ -302,7 +302,7 @@ def cal_load(exp_comp_t, base_size):
 
 ### 4.6 重调度开销
 
-**公式**: `approach_Eq.py:446-450`
+**公式**: `approach/approach_Eq.py:446-450`
 
 ```python
 def trasfer_realloc_as_task(BW_DRAM, cap, tile_buffer_size, time_norm_factor=1.0):
@@ -323,7 +323,7 @@ def trasfer_realloc_as_task(BW_DRAM, cap, tile_buffer_size, time_norm_factor=1.0
 **场景**: 考虑新的开销因素
 
 **步骤**:
-1. 修改 `approach_Eq.py:sim_comp_time()`
+1. 修改 `approach/approach_Eq.py:sim_comp_time()`
 2. 添加新参数（如有需要）
 3. 更新调用处传递新参数
 
@@ -362,7 +362,7 @@ numerical_tol_bit = 9   # 从 12 改为 9
 **场景**: 需要新的时间操作
 
 **步骤**:
-1. 在 `approach_Eq.py` 中添加新函数
+1. 在 `approach/approach_Eq.py` 中添加新函数
 2. 内部使用 `elim_nume_error`
 3. 在仿真代码中调用
 
@@ -395,7 +395,7 @@ def time_div(time: float, divisor: float) -> float:
 - ✅ 始终使用 `time_*` 函数进行时间运算
 - ✅ 所有浮点结果都经过 `elim_nume_error`
 - ✅ 时间比较使用 `time_eq`, `time_gt` 等
-- ✅ 修改公式时只改 `approach_Eq.py`
+- ✅ 修改公式时只改 `approach/approach_Eq.py`
 
 ### 7.2 DON'T
 

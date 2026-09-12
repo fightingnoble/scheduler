@@ -16,9 +16,9 @@
 ```
 scheduler/
 ├── main_approach.py          # 主入口点
-├── approach_setup.py         # 基准设置流程
-├── approach_sim.py           # 事件驱动仿真后端
-├── approach_collector.py     # 统计收集器
+├── approach/approach_setup.py         # 基准设置流程
+├── approach/approach_sim.py           # 事件驱动仿真后端
+├── approach/approach_collector.py     # 统计收集器
 ├── sim_main.py               # 仿真主模块（装箱流程）
 │
 ├── sched/                    # 调度核心模块
@@ -66,7 +66,7 @@ scheduler/
 ```
 main_approach.py::main()
     │
-    └── approach_setup.py::setup_benchmark()
+    └── approach/approach_setup.py::setup_benchmark()
             │
             ├── Step 0-1: build_workload_and_criticality()
             │       └── 生成workload，计算初始时间片分派
@@ -77,7 +77,7 @@ main_approach.py::main()
             ├── Step 3: perform_bin_packing() [repack, 可选]
             │       └── push_task_into_bins_new() - 时间调度
             │
-            └── Step 4: approach_sim.py::run_simulation()
+            └── Step 4: approach/approach_sim.py::run_simulation()
                     └── 事件驱动仿真
 ```
 

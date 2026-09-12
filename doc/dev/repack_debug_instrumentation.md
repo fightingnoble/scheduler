@@ -6,7 +6,7 @@
 
 ## 一、诊断代码位置与作用
 
-### 1. `approach_setup.py:127-133` — Repack 触发点
+### 1. `approach/approach_setup.py:127-133` — Repack 触发点
 
 ```python
 import sys
@@ -89,7 +89,7 @@ print(f"  - Restored Phase 1 layout with {len(phase1_pids)} tasks")
 
 | 位置 | 输出通道 | 原因 |
 |------|---------|------|
-| `approach_setup.py` 触发点 | **stderr** | `run_benchmark_setup_pipeline` 用 `redirect_stdout` 把 stdout 重定向到日志文件 |
+| `approach/approach_setup.py` 触发点 | **stderr** | `run_benchmark_setup_pipeline` 用 `redirect_stdout` 把 stdout 重定向到日志文件 |
 | `sim_main.py` repack 开始 | **stderr** | 同上，在 `redirect_stdout` 作用域内 |
 | `sim_main.py` 完整性检查/成功/失败 | **stdout** (日志文件) | 在 `redirect_stdout` 作用域内，输出到 `path_ctx.get_log_path()` |
 
@@ -123,7 +123,7 @@ print(f"  - Restored Phase 1 layout with {len(phase1_pids)} tasks")
 
 这些诊断代码是临时添加的，确认 repack 行为后可移除。移除范围：
 
-- `approach_setup.py:127-133` — 6 行 stderr 输出
+- `approach/approach_setup.py:127-133` — 6 行 stderr 输出
 - `sim_main.py:508-517` — 9 行 stderr 输出
 - `sim_main.py:555-560` — 5 行 print（Incomplete）
 - `sim_main.py:565-571` — 6 行 print（SUCCESS）

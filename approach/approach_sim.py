@@ -1,16 +1,16 @@
 from __future__ import annotations
 import typing 
 if typing.TYPE_CHECKING:
-    from approach_def import BaseProcessor
-    from approach_collector import StatisticsCollector
+    from .approach_def import BaseProcessor
+    from .approach_collector import StatisticsCollector
 from typing import List, Iterable
 from itertools import chain
-from approach_def import Acc_p, Sen_p, MyGraph, GlobalEvent_t, set_verbose_output, print_if_verbose
-from approach_sched import PartitionConfig
+from .approach_def import Acc_p, Sen_p, MyGraph, GlobalEvent_t, set_verbose_output, print_if_verbose
+from .approach_sched import PartitionConfig
 from global_var import elim_nume_error, BW_DRAM, GLB_BUFFER_SIZE_PER_CORE
-from approach_Eq import trasfer_realloc_as_task, time_eq, time_gt, time_gtq, time_lt, time_ltq, time_add, time_sub
-from approach_initiator import instantiate_processors, instantiate_mygraph_from_json, get_partition_info
-from approach_Eq import set_time_unit
+from .approach_Eq import trasfer_realloc_as_task, time_eq, time_gt, time_gtq, time_lt, time_ltq, time_add, time_sub
+from .approach_initiator import instantiate_processors, instantiate_mygraph_from_json, get_partition_info
+from .approach_Eq import set_time_unit
 from utils import load_pickle
 from global_var import FLOPS_PER_CORE
 
@@ -188,7 +188,7 @@ if __name__ == "__main__":
             task_graph_srcs, task_graph_ops, task_graph_sinks, 
             task_attr, src_attr, sink_attr
         )
-        from approach_def import set_drop_disabled
+        from .approach_def import set_drop_disabled
         set_drop_disabled(True)
         # # Suppose there is only one partition
         sink_and_op_nodes = [n for n, x in G.logical_graph.in_degree() if x > 0]

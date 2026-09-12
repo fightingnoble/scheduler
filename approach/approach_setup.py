@@ -5,7 +5,7 @@ from sim_main import (build_paths_and_ctx, build_workload_and_criticality,
                      apply_forced_num_cores, generate_bin_paths, Bin_list_print,
                      render_bin_pack_plots, dump_and_check)
 from global_var import *
-from approach_initiator import instantiate_mygraph_from_json
+from .approach_initiator import instantiate_mygraph_from_json
 
 def run_benchmark_setup_pipeline(
     args, path_ctx, path_params, need_repack, hyper_p,

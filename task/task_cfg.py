@@ -14,7 +14,7 @@ from model.task_queue_agent import TaskQueue
 from task.task_agent import ProcessInt
 from task.graph_scaling import build_node_relationship
 from sched.slack_estim import deduce_cfg2, deduce_flops_ModelSum, deduce_flops_ModelSumMax, deduce_equiv_core, update_taskattr_dict
-from approach_Eq import init_var_dist
+from approach.approach_Eq import init_var_dist
 
 # 'ID', 'Task (chain) names', 'Flops on path (G)', 'Expected Latency (ms)', 'T release (ms)', 'Freq.', 'DDL (ms)', 'Cores/Req.', 
 # 'Throuput factor (Spat.)', 'Thread factor (S)', 'Min required cores', 'Timing_flag', 'Max required Cores', 'RDA./Req.', 'Resource Type', 'Pre-assigned', 'Priority'
@@ -299,7 +299,7 @@ def load_json_graph_utils(f:str):
             if '__dist_type__' in obj:
                 # 导入分布恢复函数
                 try:
-                    from approach_Eq import dist_from_dict
+                    from approach.approach_Eq import dist_from_dict
                     return dist_from_dict(obj.copy())  # 使用副本避免修改原数据
                 except ImportError:
                     print("警告: 无法导入dist_from_dict函数，分布对象将保持为字典格式")

@@ -3,7 +3,7 @@
 测试动态事件更新功能的脚本
 """
 
-from approach_def import MyGraph, GlobalEvent_t
+from approach.approach_def import MyGraph, GlobalEvent_t
 from approach_plot import instantiate_processors, update_processors_for_hyperperiod
 
 def test_dynamic_event_update():

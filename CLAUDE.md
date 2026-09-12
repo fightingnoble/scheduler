@@ -11,35 +11,52 @@ conda activate gurobi   # MUST run before any code execution or testing
 **非交互 shell（子进程/脚本/`python -c`）**：`conda activate` 不生效，用绝对路径
 `/home/zhangchg/miniconda3/envs/gurobi/bin/python`（base python 缺 scipy/networkx/gurobipy）。
 
+### Gurobi license persistence in WSL
+
+WSL 每次启动都可能重新生成默认网卡身份。不要把 HostID mismatch 当成许可证过期，也不要只依赖
+交互 shell 里的手动函数：
+
+- `~/gurobi.lic` 固定链接到仍有效的许可证文件，供非交互 Python 使用。
+- `gurobi-hostid.service` 每次 WSL 启动时调用
+  `/usr/local/sbin/gurobi-hostid-setup`，从许可证读取 HostID、创建或校正 `bond0`，并验证其处于管理态 UP。
+- `bond0` 没有物理 carrier，因此 `ip link` 可能显示 `state DOWN`；这不等于管理态未启用。
+  最终判断以服务成功且不设置 `GRB_LICENSE_FILE` 也能创建 Gurobi 模型为准。
+
+```bash
+systemctl is-enabled --quiet gurobi-hostid.service
+systemctl is-active --quiet gurobi-hostid.service
+env -u GRB_LICENSE_FILE /home/zhangchg/miniconda3/envs/gurobi/bin/python -c 'import gurobipy as gp; m = gp.Model(); m.dispose()'
+```
+
 ## Quick Code Location
 
 | What you need | Where to look |
 |---------------|---------------|
 | Main entry point | `main_approach.py:main()` |
-| Benchmark setup pipeline | `approach_setup.py:setup_benchmark()` |
+| Benchmark setup pipeline | `approach/approach_setup.py:setup_benchmark()` |
 | Bin-packing core (both phases) | `sim_main.py:perform_bin_packing()` — handles Phase 1, repack, backup/fallback |
 | Slack allocation formula | `sched/packing_solver/chain_slack_assign.py:287` — `ideal_cores = ceil(flops_rem/(slack_rem*FLOPS_PER_CORE))` |
 | Bin-packing (Phase 1 split) | `sched/global_sched_alloc.py:coleasing_alloc_cluster()` (B6: split from global_sched.py) |
 | Bin-packing (Phase 2 repack) | `sched/global_sched_repack.py:push_task_into_bins_new()` (B6: split from global_sched.py) |
 | Per-task deadline calculation (Step 1) | `sched/slack_estim.py:deduce_cfg2()` |
-| Event-driven simulation | `approach_sim.py:run_simulation()` |
-| Statistics collection | `approach_collector.py:StatisticsCollector` |
-| **Algorithm 2 runtime overhead** | `approach_def.py:Acc_p.sched()` + `approach_collector.py:record_sched_overhead()` |
+| Event-driven simulation | `approach/approach_sim.py:run_simulation()` |
+| Statistics collection | `approach/approach_collector.py:StatisticsCollector` |
+| **Algorithm 2 runtime overhead** | `approach/approach_def.py:Acc_p.sched()` + `approach/approach_collector.py:record_sched_overhead()` |
 | Task representation | `task/task_agent.py:ProcessInt` |
 | Bin-packing config | `sched/binpack_config.py:BinPackConfig` |
 | Fixcore repack switch | `sim_main.py:33` — `USE_FIXCORE_REPACK = True` |
 | Fixcore latency calc | `sched/slack_estim.py:393` — `_fixcore_slack_estim()` |
 | Run experiment (motiv) | `scripts/motiv_exp_runner.py` |
 | Run experiment (ablation) | `scripts/abla_exp_runner.py` |
-| Repack debug diagnostics | `sim_main.py:508-583`, `approach_setup.py:127-133` (stderr output) |
+| Repack debug diagnostics | `sim_main.py:508-583`, `approach/approach_setup.py:127-133` (stderr output) |
 | Repack debug history | `doc/dev/ablation_dev.md` §五 Repack 执行验证 |
-| Debug test script | `test_repack_diagnostic.py` (standalone repack verification) |
+| Debug test script | `tests/test_repack_diagnostic.py` (standalone repack verification) |
 | Shared experiment utilities | `scripts/exp_common.py` (ParamTemplate, run_main_approach_inproc) |
 | Resource allocation (runtime, archived) | `old/allocator_agent.py` — old sim-chain, moved B2 |
 | Path resolution | `paths.py` |
 
 ### Deprecated (do not use)
-- `sched/scheduler_agent.py` — 仿真循环被 `approach_sim.py` 替代；但 `Scheduler` 类 + 工具函数仍活（repack 路径用），**文件级不可删**
+- `sched/scheduler_agent.py` — 仿真循环被 `approach/approach_sim.py` 替代；但 `Scheduler` 类 + 工具函数仍活（repack 路径用），**文件级不可删**
 - `sched/monitor_agent.py` — 仿真循环被替代；但 `get_target_bin_id`/`get_rsc_2b_released` 仍活（`pre_alloc_new` 用），**文件级不可删**
 - `unused_fun.py`, `old/`, `ref/`, `unused/` — dead code（`old/`=历史版本, `unused/`=独立未完成）
 
@@ -70,7 +87,7 @@ conda activate gurobi   # MUST run before any code execution or testing
 ```
 main_approach.py::main()
     │
-    └── approach_setup.py::setup_benchmark()
+    └── approach/approach_setup.py::setup_benchmark()
             │
             ├── [Phase 1] run_benchmark_setup_pipeline(need_repack=False)
             │       ├── args.quantile = ratioA
@@ -87,7 +104,7 @@ main_approach.py::main()
             │               - cyc-S (num_bins=-1): bypass — spatial rearrangement meaningless
             │               - reserv (num_bins>=2): try repack; on failure, restore Phase 1 layout
             │
-            └── approach_sim.py::run_simulation()                 → Step 4: event-driven sim
+            └── approach/approach_sim.py::run_simulation()                 → Step 4: event-driven sim
 ```
 
 ### Step Summary
@@ -131,7 +148,7 @@ main_approach.py::main()
 
 > **Common pitfalls**: see `doc/spec/readme.md §4` — covers: glb needs Step 1, reserv dual mechanism, Exp 2/3 resource control via load intensity NOT ratioA, cyc-S requires repack.
 >
-> **Python pitfall**: `policy in ["cyc" or "cyc-S"]` evaluates to `["cyc"]` (truthy short-circuit). Correct: `policy in ["cyc", "cyc-S"]` — see `approach_sched.py:303`.
+> **Python pitfall**: `policy in ["cyc" or "cyc-S"]` evaluates to `["cyc"]` (truthy short-circuit). Correct: `policy in ["cyc", "cyc-S"]` — see `approach/approach_sched.py:303`.
 
 ### BinPackConfig Key Fields
 
@@ -320,7 +337,7 @@ Speed-reference (full per-experiment details below):
 3. Use `ProcessPoolExecutor` with `max_workers=min(_PHYSICAL_CORES, len(tasks))`
 4. Save results to JSON for `--use_plot_cache` support
 5. Use `StatisticsCollector.plot_motiv_case1/2()` for standard plots
-6. **Do not modify** `plot_motiv_case1/2()` in `approach_collector.py` — shared with motiv experiments
+6. **Do not modify** `plot_motiv_case1/2()` in `approach/approach_collector.py` — shared with motiv experiments
 7. For ablation-specific plots, use `ABLA_COLORS` dict in `abla_exp_runner.py` (unified with motiv color scheme: exec=C0, realloc=C1, wait=C2, miss_bar=C3, miss_line=C4, idle=C7)
 
 ## 代码清理（legacy-prune）
@@ -338,6 +355,13 @@ Speed-reference (full per-experiment details below):
 | 搬迁函数陷阱 | 函数签名默认参数（如 `def f(cfg=default_binpack_cfg)`）在定义时求值，依赖**模块级常量**（夹在 import 块与 def 之间）。搬迁脚本只搬 import+函数会漏常量 → import 探针抓 `NameError`。md5 验搬迁无损，**不证搬迁完整** |
 | `--help` 退出码假阳性 | 不要用 `cmd >/dev/null 2>&1 && echo ✓`（for 循环+变量传播会假阳性）。显式 `"$GP" "$cmd" --help >/tmp/o 2>&1; rc=$?` 判 `rc==0` |
 
+当前测试整理状态：
+
+- `tests/helpers/` 保存不能作为自动化 pytest 收集的手工或历史测试材料；pytest 明确忽略该目录，文件仍完整保留。
+- `tests/helpers/test_alloc_lat.py` 已移除原始 worktree 的硬编码路径，但手工执行仍需要对应缓存数据。
+- `tests/helpers/test_event_update.py`、`tests/helpers/test_mapping.py` 依赖已不存在的 `approach_plot`，仅作历史测试材料保留。
+- 本轮没有删除测试。
+
 ## Troubleshooting
 
 | Problem | Likely cause | Where to look |
@@ -348,7 +372,7 @@ Speed-reference (full per-experiment details below):
 | Statistics data missing | `forward_hyperperiod()` not called | Simulation main loop — hyperperiod boundary |
 | Repack incomplete (tasks not placed) | Greedy algorithm cannot reproduce ILP solution | `push_task_into_bins_new` — algorithm incompatibility; fallback handles this |
 | Repack falls back to Phase 1 | Expected behavior — `extract_pid2_bin_id` clears scheduling_table | Check log for "Repack failed" message; fallback is intentional |
-| `TypeError: cannot pickle 'PyCapsule'` / `HostID mismatch (licensed to X, hostid is Y)` | WSL2 eth0 MAC 重生成致 license HostID 不匹配（**非过期**，license 可能仍有效） | 用 `gurobi-wsl-fix` skill 创建 bond0（MAC=license HOSTID，如 `00:15:5d:80:30:e7`）；`~/.zshrc` 只保留手动 `gurobi_fix` 函数，不能自动跑 sudo；若要全自动，需另行批准 systemd service |
+| `TypeError: cannot pickle 'PyCapsule'` / `HostID mismatch` | WSL 重启后默认网卡身份变化，或 HostID 启动服务失败；不是许可证过期的充分证据 | 检查 `~/gurobi.lic`、`systemctl status gurobi-hostid.service` 与本次启动日志；最后用未设置 `GRB_LICENSE_FILE` 的模型创建命令验证 |
 | `KeyError: 'acc_pN'` in simulation | `num_bins` exceeds actual task groups | `coleasing_alloc_cluster()` produces fewer bins; worker has try/except guard |
 | `KeyError: 'miss_mean_count'` | Case 2 nests it in `stats['utilization']`, Case 3 flattens to top-level | `_case2_worker` vs `_case3_worker` data structure difference |
 | Diagnostic `print()` invisible | `run_benchmark_setup_pipeline` uses `redirect_stdout` to log file | Use `sys.stderr.write()` for terminal-visible diagnostics |

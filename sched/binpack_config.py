@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Dict, Any, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from approach_Eq import Variation
+    from approach.approach_Eq import Variation
 
 class BinPackConfig(dict):
     """

@@ -115,7 +115,7 @@ $$
 由于随机采样函数无法通过 JSON 序列化，所有随机变化分布均被改造为**参数化序列化对象**：
 1.  **序列化**：通过继承自 `Variation` 并在每个子类（`SenVarDist`, `ExecVarDist`, `LoadVarDist`, `AccVarDist`）中实现 `to_dict()`，将生成随机采样器所需的“参数配方”（如 $\alpha, \beta, \text{loc}, \text{scale}$）存入图节点的 `dist_info` 字段并落盘。
 2.  **反序列化与复建**：仿真端 `MyGraph` 初始化时，通过全局工厂函数 `dist_from_dict(dist_info)` 解析“配方”，并在本地完美重建采样函数塞入 `self.var_dist_map` 并附加回节点的 `var_dist` 属性中，打通了两端的数据壁垒。
-3.  **代码参考**：`approach_Eq.py`（分布类、`to_dict`、`dist_from_dict`）、`approach_def.py`（`_rebuild_distributions` 与 `duplicate_for_hyperperiod`）。
+3.  **代码参考**：`approach/approach_Eq.py`（分布类、`to_dict`、`dist_from_dict`）、`approach/approach_def.py`（`_rebuild_distributions` 与 `duplicate_for_hyperperiod`）。
 
 ---
 
@@ -131,5 +131,5 @@ $$
    │   └── packing_solver/
    │       ├── chain_slack_assign.py             <-- Phase 1 求解器
    │       └── gurobi_semi2Dclst_mapping.py      <-- Phase 2 亲和力求解器
-   └── approach_Eq.py           <-- 采样分布、序列化/反序列化、T_compute+T_memory核心延迟公式
+   └── approach/approach_Eq.py           <-- 采样分布、序列化/反序列化、T_compute+T_memory核心延迟公式
 ```

@@ -5,7 +5,7 @@ import numpy as np
 import networkx as nx
 import re 
 import matplotlib.pyplot as plt
-from approach_Eq import Variation
+from approach.approach_Eq import Variation
 
 if TYPE_CHECKING:
     from task.task_agent import TaskBase, ProcessBase, TaskIntAttr, ProcessInt, TaskInt
@@ -15,7 +15,7 @@ from global_var import *
 from task.graph_breakdown import decompose_dag_into_chains
 from collections import OrderedDict
 from sched.packing_solver.chain_slack_assign import GurobiRscSlackEstim, HeuriRscSlackEstim
-from approach_Eq import AccVarDist, SenVarDist
+from approach.approach_Eq import AccVarDist, SenVarDist
 from sched.ref_alloc_search import TaskConstraints
 
 ## Old defines

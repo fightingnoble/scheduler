@@ -3,7 +3,7 @@
 测试动态映射功能的脚本
 """
 
-from approach_def import MyGraph, Sen_p, Acc_p
+from approach.approach_def import MyGraph, Sen_p, Acc_p
 from approach_plot import instantiate_processors, update_processors_for_hyperperiod
 
 def test_dynamic_mapping():
@@ -51,7 +51,7 @@ def test_dynamic_mapping():
     print(f"  sinks: {G.sinks}")
     
     # 创建处理器
-    from approach_sched import PartitionConfig
+    from approach.approach_sched import PartitionConfig
     partition_cfg = PartitionConfig(
         num_partitions=1,
         cap_list=[2],

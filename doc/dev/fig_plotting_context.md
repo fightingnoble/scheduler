@@ -34,8 +34,8 @@
 
 | 函数 | 文件 | 用途 |
 |------|------|------|
-| `plot_motiv_case1()` | `approach_collector.py` | 动机 Case 1 + 消融 Case 1 共用；搜索函数名定位 |
-| `plot_motiv_case2()` | `approach_collector.py` | 动机 Case 2 breakdown + utilization |
+| `plot_motiv_case1()` | `approach/approach_collector.py` | 动机 Case 1 + 消融 Case 1 共用；搜索函数名定位 |
+| `plot_motiv_case2()` | `approach/approach_collector.py` | 动机 Case 2 breakdown + utilization |
 | `_plot_abla_overhead()` | `scripts/abla_exp_runner.py` | 消融 Case 2/3 overhead |
 | `_plot_abla_tradeoff()` | `scripts/abla_exp_runner.py` | 消融 Case 2/3 tradeoff |
 | `_plot_satisfy_projection()` | `scripts/abla_exp_runner.py` | 消融 Case 1 额外投影图 |

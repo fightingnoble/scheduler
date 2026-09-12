@@ -29,7 +29,7 @@
    - 为 scratch 算法添加 `max_core_num` 计算
    - `determine_resource_config` 函数标记为 deprecated（251-276行）
 
-2. **approach_setup.py**
+2. **approach/approach_setup.py**
    - `run_benchmark_setup_pipeline` 函数（11-83行）
    - 接收 `perform_bin_packing` 的新返回值
    - 在外层应用资源约束（60-64行）
@@ -62,7 +62,7 @@ dump_and_check(bin_list_save_path, bin_list)
 return bin_list_save_path, num_cores, glb_p_list, hyper_p
 ```
 
-#### approach_setup.py - run_benchmark_setup_pipeline (48-59行)
+#### approach/approach_setup.py - run_benchmark_setup_pipeline (48-59行)
 ```python
 # 旧版本：接收 dump 路径
 bin_list_save_path, num_cores, glb_p_list, hyper_p = perform_bin_packing(...)
@@ -77,7 +77,7 @@ assert bin_list_save_path is not None, "Error: Failed to perform bin packing"
 return bin_list, max_core_num, glb_p_list, hyper_p
 ```
 
-#### approach_setup.py - run_benchmark_setup_pipeline (47-84行)
+#### approach/approach_setup.py - run_benchmark_setup_pipeline (47-84行)
 ```python
 # 6. 执行装箱算法（返回装箱结果，不包含资源约束和 dump）
 bin_list, max_core_num, glb_p_list, hyper_p = perform_bin_packing(...)
@@ -123,7 +123,7 @@ perform_bin_packing (sim_main.py)
     ├── Guided non-repack: coleasing_alloc_cluster
     └── Guided repack: push_task_into_bins_new with pre-defined bins
 
-run_benchmark_setup_pipeline (approach_setup.py)
+run_benchmark_setup_pipeline (approach/approach_setup.py)
 ├── 资源约束（统一位置，仅 non-repack）
 └── Dump（路径生成、打印、绘制、序列化）
 ```

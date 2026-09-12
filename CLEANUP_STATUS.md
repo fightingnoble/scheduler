@@ -1,20 +1,27 @@
 # Cleanup status
 
-Last updated: 2026-09-12 (B27 根目录审计材料与测试归类已执行并验证；本文件所在提交即本批回退点)
+Last updated: 2026-09-13 (B28 verified after a real WSL restart; 316 passed, 1 known xfailed; this file's containing commit is the batch snapshot)
 
 This is the canonical global status file for the scheduler cleanup work. It supersedes `cleanup/history/phase1/PHASE1_STATUS_FOR_NEXT_AGENT.md` as the main entry point for future agents.
 
 Use this file to understand the current cleanup state, approved decisions, executed batches, protected areas, and next actions. Use `FILE_ADJUSTMENT_RECORD.md` for the global action/change history.
 
-## Current Execution State (authoritative, 2026-09-12)
+## Current Execution State (authoritative, 2026-09-13)
 
-- B26 对话历史切换已作为独立检查点提交：`093763e`。活动记录保持 5 条，历史位于 `cleanup/history/AGENT_DIALOGUE_HISTORY.md`；守卫专项测试 6 项通过。
-- B27 根目录归类由用户直接授权并已执行：28 份 `REVIEW_PACKET_*` 移入 `cleanup/reports/review-packets/`，3 份旧阶段/环境摘要移入 `cleanup/history/` 或 `cleanup/reports/`，27 个根目录测试/诊断脚本完整移入 `tests/`。没有删除测试或审核材料。
-- 测试收集迁移前为 334 项、3 个既有错误；迁移后为 340 项、同样 3 个既有错误。路径迁移专项 328 项全过；完整可收集测试为 331 通过、7 失败、2 个 Gurobi 环境错误。7 个失败均来自未改动的旧测试/生产行为，2 个错误是许可证报 `expired 2025-11-24`。
-- 本批没有修改生产逻辑、函数接口、依赖、受保护目录或原始 `/home/zhangchg/git_repo/scheduler` worktree；只改测试自身的仓库根路径和当前账本/状态路径。
-- 协作粒度改为按完整工作流或模块链的大批次推进：一次提案、一次实施、一次批次边界审查；不再为每个文件或无行为影响的小细节消耗独立对话。规则已写入 `AGENT_DIALOGUE.md` 和两份 `legacy-prune` skill；下方较早的“当前”段落只作历史证据。
+> 只有本节是当前状态。其后的旧门禁、旧角色和旧“下一步”均为历史证据，不得覆盖本节。
 
-## Goal Gate (2026-09-12)
+- **B28 已执行并验证；本文件所在提交就是本批回退快照。** 执行基线为 `f792ca02e9e121d0884a1e3468ec5dec56c59dfa`；用户已直接批准整批，reviewer 在 E0127 批准原范围。用户随后明确纠正 HostID 会随 WSL 重启变化，因此持久化修复按用户直接指令完成。
+- **运行行为：** 没有修改调度算法、Repack/Split 决策、生产函数接口或依赖。唯一有意兼容变化是旧的根模块导入（例如 `import approach_sim`）不再支持；仓库内调用方全部改用 `approach.approach_*`。
+- **Approach 归类：** 七个实现保留在 `approach/`，七个根目录转发壳已完全移除，没有留下空引用文件。当前代码和现行文档中没有旧根模块 import，包契约会同时检查物理文件不存在和模块不可解析。
+- **测试归类：** 五个不能自动收集的手工/历史场景完整移到 `tests/helpers/`，由 `tests/conftest.py` 明确排除。它们没有被删除。过期 collector 测试按当前数据结构修正；另为 `StatisticsCollector.export_summary()` 的旧绘图签名缺陷增加 strict xfail，生产缺陷本批不顺手修改。
+- **验证：** 真实终止并重启 Ubuntu-20.04 后，`gurobi-hostid.service` 于本次启动自动运行成功；不设置 `GRB_LICENSE_FILE` 仍能用 Gurobi 11.0.3 创建模型，加载的是 2027-03-14 到期许可证。完整 pytest 为 `316 passed, 1 xfailed`；B10 Split/Repack 行为基线单独为 `3 passed`；B28 approach/collector 专项为 `15 passed, 1 xfailed`。
+- **环境防护：** `~/gurobi.lic` 指向有效许可证；`/usr/local/sbin/gurobi-hostid-setup` 从许可证动态读取 HostID，每次启动创建或校正 `bond0` 并验证结果；`/etc/systemd/system/gurobi-hostid.service` 已启用。实际 HostID、MAC 和许可证 key 不写入仓库。
+- **协作基础设施：** E0125 的 guard 空活动区修复及第 7 项专项测试仍包含在本次待提交改动中。Claude reviewer 因使用额度暂不可用；Codex 没有代写 reviewer 裁决，最终实现和用户直接纠正将以 RECOVERY/RESULT 事件如实追加。
+- **范围：** 只处理 tracked/index 内容；`cleanup/history/.guard_journal/` 等 untracked 文件不暂存。没有操作 `/home/zhangchg/git_repo/scheduler`，也没有修改 `.claude/`、`claude_talk/` 或依赖。
+- **报告：** 中文复核摘要见 `cleanup/reports/review-packets/REVIEW_PACKET_BATCH_B28-APPROACH-PACKAGE-FINALIZATION.md`，机器结果见 `cleanup/reports/b28-approach-package-finalization.json`。
+- **下一步：** B28 关闭。后续另开批次修复 `export_summary()`；不要把该生产修复追写进 B28。远端同步状态以 `git status --short --branch` 为准。
+
+## Historical Coordination Context (not current instructions)
 
 当前有效状态（E0111）：用户已明确授权保留E0108，并只为这一个历史事件登记同步例外。REQ-024恢复并关闭；正常审查流程重新启用。该例外不批准源码、不豁免未来事件，也不改变“Codex提案和最终复核、reviewer审查并实施”的分工。恢复验证已完成：`dialogue_guard.py check` rc0（仅五条既有历史WARN）、`post` rc0并把state更新为E0111/codex、`pre` rc0并返回E0112/codex；`git diff --check` rc0，index为空，保护路径无diff。B24的177文件基线中176项未变；唯一差异是本次用户授权的`cleanup/tools/dialogue_guard.py`一行历史裁决，SHA从`15879c4…`变为`67773b52…`。五个明确路径已提交为恢复快照`e758540058faa4f30773b43e6f1fe244543bfeab`，不含未跟踪内容。REQ-025四份外部skill/policy文本已由reviewer实施，E0114 RESULT已返回Codex；E0115仅为本文件状态表述与计数口径勘误，reviewer执行后E0116 RESULT待Codex最终复核。本段以下较早文字保留为历史背景。
 

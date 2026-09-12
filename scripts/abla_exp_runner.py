@@ -44,7 +44,7 @@ from scripts.exp_common import (
     ABLA_SATISFY_LABELS_ZH,
 )
 
-from approach_collector import StatisticsCollector
+from approach.approach_collector import StatisticsCollector
 
 
 # -------------- Ablation plot settings --------

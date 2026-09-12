@@ -15,6 +15,8 @@ import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+if __name__ == "__main__":
+    sys.path.insert(0, str(REPO_ROOT))  # worker 脚本模式：保证可发现 approach 包
 BASELINE_PATH = REPO_ROOT / "cleanup/reports/b10-binpack-behavior-baseline.json"
 SIGNATURE_MARKER = "B10_SIGNATURE_JSON="
 SCENARIOS = {
@@ -132,8 +134,8 @@ def _normalize_task_timing(graph, pid_to_name, packed_pids):
 
 
 def _run_pipeline_worker(scenario: str, output_root: Path):
-    from approach_Eq import set_time_unit
-    import approach_setup
+    from approach.approach_Eq import set_time_unit
+    import approach.approach_setup as approach_setup
 
     output_root.mkdir(parents=True, exist_ok=True)
     os.chdir(output_root)

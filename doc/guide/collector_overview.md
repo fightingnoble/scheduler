@@ -1,6 +1,6 @@
 # StatisticsCollector 模块概览
 
-本文档描述 `approach_collector.py` 中 `StatisticsCollector` 类的设计和功能。
+本文档描述 `approach/approach_collector.py` 中 `StatisticsCollector` 类的设计和功能。
 
 ## 1. 类结构图
 
@@ -318,10 +318,10 @@ StatisticsCollector.plot_motiv_case1(
 ## 8. 文件依赖
 
 ```
-approach_collector.py
+approach/approach_collector.py
 ├── ref_tdigest.py          # TDigestStreamingHistogram
-├── approach_Eq.py          # time_gt, elim_nume_error, cal_cost
-├── approach_def.py         # MyGraph (TYPE_CHECKING)
+├── approach/approach_Eq.py          # time_gt, elim_nume_error, cal_cost
+├── approach/approach_def.py         # MyGraph (TYPE_CHECKING)
 └── numpy, matplotlib
 ```
 

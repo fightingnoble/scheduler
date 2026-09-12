@@ -1,7 +1,7 @@
 from __future__ import annotations
 import typing 
 if typing.TYPE_CHECKING:
-    from approach_collector import StatisticsCollector
+    from .approach_collector import StatisticsCollector
 
 import networkx as nx
 from itertools import chain
@@ -14,7 +14,7 @@ from utils import elim_nume_error
 from warnings import warn
 import numpy as np
 import time
-from approach_Eq import (
+from .approach_Eq import (
     sim_comp_time, 
     estimate_resource_requirement, 
     find_legal,

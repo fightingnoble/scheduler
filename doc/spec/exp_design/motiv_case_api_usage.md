@@ -7,7 +7,7 @@
 ## 快速开始
 
 ```python
-from approach_collector import StatisticsCollector
+from approach.approach_collector import StatisticsCollector
 
 # 假设已经运行仿真并获得 stats_collector 对象
 collector = stats_collector
@@ -361,8 +361,8 @@ collector_experiment.plot_load_latency_binned(
 ### 在 `main_approach.py` 中使用
 
 ```python
-from approach_sim import run_simulation
-from approach_collector import StatisticsCollector
+from approach.approach_sim import run_simulation
+from approach.approach_collector import StatisticsCollector
 
 # ... 前置代码 ...
 

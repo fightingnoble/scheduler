@@ -210,7 +210,7 @@ custom_output = f"Realloc: {realloc_ratio:.2%}, Wait: {wait_ratio:.2%}"
 
 本次重构涉及的文件：
 
-1. **`approach_collector.py`** (核心修改)
+1. **`approach/approach_collector.py`** (核心修改)
    - 新增3个case专用数据获取接口
    - 新增3个case专用格式化接口
    - 新增统一导出接口

@@ -3193,3 +3193,48 @@ Action type: batch execution / path-only organization。
 范围外：没有触碰 `.claude/`、`claude_talk/`、`doc/spec/`、`doc/guide/`、`doc/dev/`、未跟踪文件或 `/home/zhangchg/git_repo/scheduler`。`CLAUDE.md` 中旧的根测试路径暂未改，因为它仍属受保护文档。
 
 Recovery：仓库内变更提交后使用 `git revert --no-edit $(git log --format=%H --grep='cleanup: organize audit files and tests' -1)`。外部完整 skill 用 `patch -R -p1 -d /mnt/c/Users/diyuf/.agents/skills/legacy-prune -i /home/zhangchg/git_repo/scheduler-audit-20260612/cleanup/reports/b27-legacy-prune-full.diff`；精简 skill 使用同命令并改为 D 盘目录和 `b27-legacy-prune-slim.diff`。
+
+## 2026-09-13 E0125 RECOVERY — 空活动区 post 崩溃修复与交接恢复（用户直接指令）
+
+Action type: status-maintenance（guard v1.4.1 + 回归测试 + state 重建；HISTORY 只读；业务路径零触碰）
+
+背景：Codex 提交 B27（f792ca0，根审计材料归档 + 测试迁入 tests/）；用户运行 archive --through E0124 成功（journal txn_1789230362_0124 committed，HISTORY SHA a3d2861d…，125 头 = legacy 15 + guarded 110，序列 15..124 连续），活动区归零；随后 post 于 guard:185 对空 root_events IndexError，state 过期（E0124/active=5/旧 SHA），pre rc=2，交接阻断。
+
+修复（guard v1.4.1）：cmd_post/cmd_pre 空活动区回退 last_from_history()（HISTORY 可守卫段末事件推导交接）；cmd_check 附加推导说明。恢复序列：post 重建 state（E0124/codex/active=0）→ pre rc=0（E0125/codex）→ check rc=0 → E0125 RECOVERY 事件追加 → post（active=1）。新增回归测试 test_archive_all_then_rebuild_state，gurobi 环境 7/7 PASS。
+
+Scope kept out: HISTORY 未改写、真实归档未重跑、业务源码/测试/依赖/账本/外部 skill/audit .claude/原 worktree 零触碰；无 commit/push。
+
+Recovery: guard/tests 为 tracked 修改可反向；E0125 与本条为追加内容。
+
+## 2026-09-13 | B28 Approach 包迁移收尾、测试归类与 Gurobi 重启防护
+
+Action type: batch execution + environment repair。执行基线：`f792ca02e9e121d0884a1e3468ec5dec56c59dfa`。
+
+功能和行为：调度算法、Split/Repack 决策、生产函数接口和依赖均未修改。仓库内运行路径统一为 `approach.approach_*`。按照用户明确要求，七个根目录兼容壳全部退役，因此仓库外代码若仍导入根模块名，需要改用包路径；这是本批唯一有意的兼容变化。
+
+代码路径：
+
+- `approach/`：七个活实现保持原功能，只把内部相互导入改为包内相对导入。
+- 根目录及调用方：删除七个纯转发壳；`main_approach.py`、`sched/`、`scripts/`、`task/` 和现有测试改用完整包路径。
+- `tests/`：collector 与统计测试按现行字段补齐有效断言；`tests/test_approach_package_compat.py` 改为 package-only 契约，同时断言根文件不存在、旧模块不可解析。
+- `tests/helpers/`：完整保留 `ops_test.py`、`test_alloc_lat.py`、`test_event_update.py`、`test_mapping.py`、`test_mem_planner.py`；`tests/conftest.py` 明确禁止自动收集。`test_alloc_lat.py` 改为从自身位置解析当前 checkout，不再跳回原 worktree。
+- `CLAUDE.md`、`doc/spec/`、`doc/guide/` 与四份现行 `doc/dev/`：只同步新路径和测试/Gurobi 运行说明。历史 change log 与计划文档没有回写。
+- `cleanup/reachable-files.csv`、`cleanup/ownership.csv`、`cleanup/ownership.md`、`cleanup/move-ledger.csv`：同步当前路径并追加 12 条 B28 迁移记录；历史批次行保持历史语义。
+
+测试中发现但未修复的生产问题：`StatisticsCollector.export_summary()` 仍用旧参数调用 `plot_load_latency_binned()`。新增 strict xfail 固定该缺陷；后续必须另开修复批次，不能把本批记成全功能无缺陷。
+
+Gurobi 持久修复：
+
+- 新建 `~/gurobi.lic` 符号链接，目标为现有且 2027 年到期的许可证。
+- 备份旧 unit 为 `/etc/systemd/system/gurobi-hostid.service.bak-20260913`。
+- 安装 `/usr/local/sbin/gurobi-hostid-setup`：动态读取许可证 HostID、校验格式、创建或重设 `bond0`、验证 MAC 和管理态 UP，任一步失败都令 service 失败。
+- 更新并启用 `/etc/systemd/system/gurobi-hostid.service`。旧 service 用分号串接命令，只返回最后一条命令状态，会掩盖中间失败；新 service 只调用 fail-fast 脚本。
+- 实际执行一次 `wsl --terminate Ubuntu-20.04`。重启后 service 在本次启动自动执行并为 active/exited/success；未设置 `GRB_LICENSE_FILE` 时 Gurobi 11.0.3 建模成功并显示许可证到期日为 2027-03-14。记录中不保存 HostID、MAC 或 key。
+
+验证：重启后完整 pytest 两次均为 `316 passed, 1 xfailed`，最终一次为 `31.81s`；B10 行为基线 `3 passed in 10.85s`；B28 专项 `15 passed, 1 xfailed in 10.15s`。`git diff --check`、旧根 import 扫描、根壳物理存在性、现行文档路径和 untracked 排除均通过。
+
+范围外：没有操作 `/home/zhangchg/git_repo/scheduler`；没有修改 `.claude/`、`claude_talk/`、依赖或调度生产逻辑；untracked 文件不暂存。
+
+Git recovery：提交后执行 `git revert --no-edit "$(git log --format=%H --grep='refactor: finalize approach package migration' -1)"`，可整体反向本批 tracked 变更。若只需恢复旧根 import 兼容，另提案从基线恢复七个壳并反向对应 import 测试，不要部分恢复实现文件。
+
+System recovery（只在明确决定撤销持久防护时执行）：恢复 `/etc/systemd/system/gurobi-hostid.service.bak-20260913` 到 unit 原路径，删除 `/usr/local/sbin/gurobi-hostid-setup`，运行 `systemctl daemon-reload` 后重启旧 unit；最后仅当 `~/gurobi.lic` 仍是本批创建的符号链接时删除它。旧 unit 会重新暴露中间命令失败被掩盖的问题，因此回退不等于推荐状态。

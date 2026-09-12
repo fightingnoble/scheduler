@@ -1,13 +1,13 @@
 import argparse
 import os
 import pickle
-from approach_def import set_verbose_output, set_realloc_disabled
-from approach_sched import PartitionConfig
+from approach.approach_def import set_verbose_output, set_realloc_disabled
+from approach.approach_sched import PartitionConfig
 from global_var import BW_DRAM, GLB_BUFFER_SIZE_PER_CORE, case_name_bp
-from approach_Eq import trasfer_realloc_as_task, set_time_unit
-from approach_initiator import instantiate_processors, get_partition_info, initialize_events
-from approach_sim import run_simulation
-from approach_setup import setup_benchmark
+from approach.approach_Eq import trasfer_realloc_as_task, set_time_unit
+from approach.approach_initiator import instantiate_processors, get_partition_info, initialize_events
+from approach.approach_sim import run_simulation
+from approach.approach_setup import setup_benchmark
 from utils import check_parents_path
 from utils import input_parser
 

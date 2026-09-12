@@ -3,11 +3,11 @@
 > **状态**: 草稿 (2026-02)
 >
 > **相关文件**:
-> - `approach_sim.py`: 仿真主循环
-> - `approach_sched.py`: 调度策略定义
-> - `approach_def.py`: 处理器基类和图结构
-> - `approach_initiator.py`: 实例化工厂
-> - `approach_collector.py`: 统计收集器
+> - `approach/approach_sim.py`: 仿真主循环
+> - `approach/approach_sched.py`: 调度策略定义
+> - `approach/approach_def.py`: 处理器基类和图结构
+> - `approach/approach_initiator.py`: 实例化工厂
+> - `approach/approach_collector.py`: 统计收集器
 
 ## 1. 概述
 
@@ -16,7 +16,7 @@
 | 模块 | 职责 | 调用位置 |
 |------|------|----------|
 | `sim_main.py` | **配置生成** - Bin packing, 资源约束, Dump | `main_approach.py` 第一阶段 |
-| `approach_sim.py` | **仿真执行** - Event-driven 调度模拟 | `main_approach.py` 第二阶段 |
+| `approach/approach_sim.py` | **仿真执行** - Event-driven 调度模拟 | `main_approach.py` 第二阶段 |
 
 ### 1.2 流程结合 (main_approach.py)
 
@@ -30,7 +30,7 @@ main_approach.py
     │   │   └── dump(bin_list)
     │   └── 输出: bin_list.pkl, G, pid2name
     │
-    └── Stage 2: 仿真执行 (approach_sim.py)
+    └── Stage 2: 仿真执行 (approach/approach_sim.py)
         ├── get_partition_info(bin_list) → PartitionConfig
         ├── instantiate_processors(partition_cfg, policy)
         └── run_simulation(processors, event_t, G)
@@ -40,7 +40,7 @@ main_approach.py
 
 ### 2.1 PartitionConfig
 
-**定义位置**: `approach_sched.py:243-266`
+**定义位置**: `approach/approach_sched.py:243-266`
 
 **作用**: 描述所有分区的调度配置，是仿真输入的核心数据结构
 
@@ -75,7 +75,7 @@ class PartitionConfig:
 **从 bin_list 构造**:
 
 ```python
-# approach_initiator.py:24-97
+# approach/approach_initiator.py:24-97
 def get_partition_info(bin_list, graph, pid2name):
     # 1. 分区的任务映射
     partition_task_map = []
@@ -102,7 +102,7 @@ def get_partition_info(bin_list, graph, pid2name):
 
 ### 2.2 MyGraph
 
-**定义位置**: `approach_def.py:100-264`
+**定义位置**: `approach/approach_def.py:100-264`
 
 **作用**: 任务图，包含节点属性和状态管理
 
@@ -118,7 +118,7 @@ def get_partition_info(bin_list, graph, pid2name):
 
 ### 2.3 GlobalEvent_t
 
-**定义位置**: `approach_def.py:267-340`
+**定义位置**: `approach/approach_def.py:267-340`
 
 **作用**: 全局事件队列，管理仿真时间推进
 
@@ -179,7 +179,7 @@ confirm_next_event() → 消费事件
 
 ### 3.2 策略绑定逻辑
 
-**位置**: `approach_sched.py:269-324`
+**位置**: `approach/approach_sched.py:269-324`
 
 ```python
 def acc_p_factory(policy, cfg, stats_collector):
@@ -304,7 +304,7 @@ for node in op_nodes:
 
 ### 4.1 run_simulation 流程
 
-**位置**: `approach_sim.py:43-168`
+**位置**: `approach/approach_sim.py:43-168`
 
 ```
 run_simulation(processors, event_t, G, num_hp, T_hp)
@@ -362,7 +362,7 @@ run_simulation(processors, event_t, G, num_hp, T_hp)
 **触发条件**: `curr_t >= (curr_hp + 1) * T_hp`
 
 ```python
-# approach_sim.py:54-79
+# approach/approach_sim.py:54-79
 next_hp_boundary = (curr_hp + 1) * T_hp
 if curr_t >= next_hp_boundary and pred_t < next_hp_boundary:
     # 1. 记录上一超周期的超时任务
@@ -399,7 +399,7 @@ if curr_t >= next_hp_boundary and pred_t < next_hp_boundary:
 #### 4.3.4 时间推进机制
 
 ```python
-# approach_sim.py:145-164
+# approach/approach_sim.py:145-164
 
 # 1. 计算各处理器的下一个事件时间
 duration_dict = {}
@@ -444,7 +444,7 @@ else:
 
 **状态转换代码**:
 ```python
-# approach_sched.py:69-77
+# approach/approach_sched.py:69-77
 if cond:  # trigger_cond 返回 True
     realloc = True
     acc_p.sys_state = "R"
@@ -509,7 +509,7 @@ for node in op_nodes:
 
 **流程**:
 ```python
-# approach_def.py:167-264
+# approach/approach_def.py:167-264
 def duplicate_for_hyperperiod(self, hp_idx, seed, T_hp, var_en):
     # 1. 复制节点
     for node, attr in orig_nodes:
@@ -580,7 +580,7 @@ def duplicate_for_hyperperiod(self, hp_idx, seed, T_hp, var_en):
 每个处理器共享同一个 `stats_collector` 实例：
 
 ```python
-# approach_initiator.py:176-193
+# approach/approach_initiator.py:176-193
 def instantiate_processors(partition_cfg, event_t, policy, stat_param):
     stats_collector = StatisticsCollector(**stat_param)
     sen_p0 = Sen_p(..., stats_collector)
@@ -611,7 +611,7 @@ def instantiate_processors(partition_cfg, event_t, policy, stat_param):
 
 ### 8.1 延迟分布类型
 
-**定义位置**: `approach_Eq.py:149-315`
+**定义位置**: `approach/approach_Eq.py:149-315`
 
 | 类型 | 适用任务 | 组成 |
 |------|----------|------|
@@ -622,10 +622,10 @@ def instantiate_processors(partition_cfg, event_t, policy, stat_param):
 
 ### 8.2 分布初始化
 
-**位置**: `approach_Eq.py:318-352` (初始化) → `approach_def.py:105-138` (重建)
+**位置**: `approach/approach_Eq.py:318-352` (初始化) → `approach/approach_def.py:105-138` (重建)
 
 ```python
-# approach_Eq.py: init_var_dist()
+# approach/approach_Eq.py: init_var_dist()
 def init_var_dist(args, logical_graph):
     for _node, _type in logical_graph.nodes(data="type"):
         if _type == "src":
@@ -660,7 +660,7 @@ def init_var_dist(args, logical_graph):
 
 ### 8.3 运行时采样
 
-**位置**: `approach_def.py:167-264`
+**位置**: `approach/approach_def.py:167-264`
 
 ```python
 def duplicate_for_hyperperiod(self, hp_idx: int, seed: int, T_hp: float, var_en: bool):
@@ -722,7 +722,7 @@ exp_comp_t = var_dist.get_var_fn()(rng)  # 从分布采样
 | **配置生成** | `exec_t_comp_ratioB` (0.80) | Phase 2 时间窗口 |
 | **仿真运行** | `var_en` 控制 | 实际执行时间 |
 
-**关键公式** (`approach_Eq.py`):
+**关键公式** (`approach/approach_Eq.py`):
 
 ```python
 # 配置生成时：使用分位数
@@ -758,7 +758,7 @@ actual_size = var_dist.get_var_fn()(rng)
 
 #### 8.6.2 关键代码位置
 
-**任务负载初始化** (`approach_def.py:721`):
+**任务负载初始化** (`approach/approach_def.py:721`):
 
 ```python
 def update_ready(self, curr_t):
@@ -770,7 +770,7 @@ def update_ready(self, curr_t):
             self.ready[node] = load  # 存入 ready 字典
 ```
 
-**资源需求估算** (`approach_sched.py:124-126`):
+**资源需求估算** (`approach/approach_sched.py:124-126`):
 
 ```python
 def alloc_fn_pglb(...):

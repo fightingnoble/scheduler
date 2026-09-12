@@ -42,7 +42,7 @@ from scripts.exp_common import (
     MOTIV_CASE1_TABLE_CFG,
     MOTIV_CASE2_LAYOUT_CFG,
 )
-from approach_collector import StatisticsCollector
+from approach.approach_collector import StatisticsCollector
 
 # -------------- Parallel workers -------------
 

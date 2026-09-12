@@ -1,7 +1,7 @@
 from __future__ import annotations
 import typing 
 if typing.TYPE_CHECKING:
-    from approach_collector import StatisticsCollector
+    from .approach_collector import StatisticsCollector
 
 import networkx as nx
 # from example.bm4 import swt_lat
@@ -11,7 +11,7 @@ import functools
 import types
 from itertools import chain
 from warnings import warn
-from approach_Eq import (
+from .approach_Eq import (
     sim_comp_time, 
     estimate_resource_requirement, 
     calculate_slack_time,
@@ -20,7 +20,7 @@ from approach_Eq import (
     time_ltq,
     time_gt,
 )
-from approach_def import Acc_p, print_if_verbose
+from .approach_def import Acc_p, print_if_verbose
 
 
 def trigger_cond_dyn(acc_p, new_comp, new_ready_list, curr_t):

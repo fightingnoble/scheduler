@@ -43,9 +43,9 @@
 > - `sched/monitor_agent.py`：`get_target_bin_id` / `get_rsc_2b_released` 被 `sched/pre_alloc_new.py`（repack 路径）使用 → 活
 > - `sched/scheduler_agent.py`：`Scheduler` 类被 repack 路径实例化使用（`create_common_scheduler_elements` → `perform_bin_packing`）→ 活
 >
-> 死的是它们的**仿真 timestep 循环**（已被 `approach_sim.py` 替代）。详见 `scheduler-audit-20260612/cleanup/reports/`。
+> 死的是它们的**仿真 timestep 循环**（已被 `approach/approach_sim.py` 替代）。详见 `scheduler-audit-20260612/cleanup/reports/`。
 
-- `sched/scheduler_agent.py` - 旧版运行时调度器（仿真循环已被 approach_sim.py 替代；Scheduler 类仍活）
+- `sched/scheduler_agent.py` - 旧版运行时调度器（仿真循环已被 approach/approach_sim.py 替代；Scheduler 类仍活）
 - `sched/monitor_agent.py` - 旧版监控代理（仿真循环已弃用；工具函数仍活）
 
 ### 9. 弃用的文件

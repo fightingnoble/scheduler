@@ -39,7 +39,7 @@
 
 ### 2.1 测量位置
 
-**文件**: `approach_def.py:Acc_p.sched()`
+**文件**: `approach/approach_def.py:Acc_p.sched()`
 
 ```python
 def sched(self, curr_t, new_comp, new_ready_list, **kwargs):
@@ -76,7 +76,7 @@ def sched(self, curr_t, new_comp, new_ready_list, **kwargs):
 ### 3.1 关键变量
 
 ```python
-# approach_Eq.py
+# approach/approach_Eq.py
 time_unit = 1e-6  # 1 sim unit = 1 µs
 
 # set_time_unit(timestep, int_slot)
@@ -155,7 +155,7 @@ td.C.max_item()[1].mean # → 最大质心的中心值
 
 ```python
 # 错误：在模块加载时捕获初始值
-from approach_Eq import time_unit  # time_unit = 1 (初始值)
+from approach.approach_Eq import time_unit  # time_unit = 1 (初始值)
 
 # set_time_unit() 修改了全局变量，但上面的 time_unit 不会更新
 ```
@@ -164,7 +164,7 @@ from approach_Eq import time_unit  # time_unit = 1 (初始值)
 
 ```python
 # 方法 1：动态访问
-import approach_Eq
+import approach.approach_Eq as approach_Eq
 approach_Eq.time_unit  # 每次访问时获取当前值
 
 # 方法 2：传递参数
@@ -231,6 +231,6 @@ time_unit = get_time_unit()  # 通过函数获取
 
 | 文件 | 内容 |
 |------|------|
-| `approach_def.py:Acc_p.sched()` | 计时逻辑插入点 |
-| `approach_collector.py` | `record_sched_overhead()`, `get_sched_overhead_info()` |
+| `approach/approach_def.py:Acc_p.sched()` | 计时逻辑插入点 |
+| `approach/approach_collector.py` | `record_sched_overhead()`, `get_sched_overhead_info()` |
 | `doc/spec/stat/statistics_collection_spec.md` | StatisticsCollector 架构 |

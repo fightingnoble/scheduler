@@ -160,6 +160,25 @@ def test_txn_rollback_on_second_replace_failure(tmprepo):
     assert rr.returncode != 0 and "超过上限" in rr.stdout and "journal" not in rr.stdout
 
 
+def test_archive_all_then_rebuild_state(tmprepo):
+    """E0125 恢复场景回归：全部事件归档后（活动区=0）——
+    post 不崩溃且 state 由 HISTORY 末事件推导；pre 给出正确续接编号与合法写入者。"""
+    assert run_guard(tmprepo, "archive", "--through", "E0020").returncode == 0  # 全部移入
+    root_p = os.path.join(tmprepo, "AGENT_DIALOGUE.md")
+    assert "### E0" not in open(root_p).read()  # 活动区为空
+    r = run_guard(tmprepo, "post")  # 修复前此处 IndexError
+    assert r.returncode == 0, r.stdout + r.stderr
+    st = json.load(open(root_p + ".state.json"))
+    assert st["active_count"] == 0
+    assert st["last_event"] == "E0020"
+    assert st["next_writer"] == "codex"  # E0020（reviewer/REVIEW→next codex? 见 ev 定义）
+    r = run_guard(tmprepo, "pre")
+    assert r.returncode == 0, r.stdout
+    d = json.loads(r.stdout)
+    assert d["expected_next_event"] == "E0021" and d["legitimate_writer"] == "codex"
+    assert run_guard(tmprepo, "check").returncode == 0
+
+
 def test_txn_rollback_failure_blocks_writes(tmprepo):
     """E0123：回滚本身失败——journal/前像保留、pre/check 非零阻断。"""
     before_root = open(os.path.join(tmprepo, "AGENT_DIALOGUE.md"), "rb").read()

@@ -15,7 +15,7 @@
 │            │                                                                │
 │            ▼                                                                │
 │   ┌──────────────────┐                                                      │
-│   │ approach_setup.py│ ◄─── 基准设置 (bin_list 生成)                         │
+│   │ approach/approach_setup.py│ ◄─── 基准设置 (bin_list 生成)                         │
 │   └────────┬─────────┘                                                      │
 │            │                                                                │
 │            ▼                                                                │
@@ -25,7 +25,7 @@
 │            │                                                                │
 │            ▼                                                                │
 │   ┌──────────────────┐                                                      │
-│   │  approach_sim.py │ ◄─── 事件驱动仿真运行时                               │
+│   │  approach/approach_sim.py │ ◄─── 事件驱动仿真运行时                               │
 │   └──────────────────┘                                                      │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -84,7 +84,7 @@
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────┐
-│                     approach_setup.py: setup_benchmark()                           │
+│                     approach/approach_setup.py: setup_benchmark()                           │
 ├────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                    │
 │  ┌──────────────────────────────────────────────────────────────────────────────┐ │
@@ -137,7 +137,7 @@
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────┐
-│             approach_setup.py: run_benchmark_setup_pipeline()                      │
+│             approach/approach_setup.py: run_benchmark_setup_pipeline()                      │
 ├────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                    │
 │  输入: args, path_ctx, path_params, need_repack, hyper_p, bin_list, num_cores     │
@@ -227,11 +227,11 @@
 └────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## 5. 事件驱动仿真流程 (approach_sim.py)
+## 5. 事件驱动仿真流程 (approach/approach_sim.py)
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────┐
-│                      approach_sim.py: run_simulation()                             │
+│                      approach/approach_sim.py: run_simulation()                             │
 ├────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                    │
 │  输入: processors, event_t, G, num_hp, T_hp, verbose, var_en                      │
@@ -301,28 +301,28 @@ main_approach.py:main()
     │
     ├── utils.py:input_parser()                    # 解析命令行参数
     │
-    ├── approach_Eq.py:set_time_unit()             # 设置时间单位
+    ├── approach/approach_Eq.py:set_time_unit()             # 设置时间单位
     │
-    ├── approach_setup.py:setup_benchmark()        # 基准设置 (见 6.2)
+    ├── approach/approach_setup.py:setup_benchmark()        # 基准设置 (见 6.2)
     │
-    ├── approach_initiator.py:get_partition_info() # 从 bin_list 提取分区信息
+    ├── approach/approach_initiator.py:get_partition_info() # 从 bin_list 提取分区信息
     │
-    ├── approach_sched.py:PartitionConfig()        # 创建分区配置
+    ├── approach/approach_sched.py:PartitionConfig()        # 创建分区配置
     │
-    ├── approach_initiator.py:initialize_events()  # 初始化事件集
+    ├── approach/approach_initiator.py:initialize_events()  # 初始化事件集
     │
-    ├── approach_initiator.py:instantiate_processors() # 实例化处理器
+    ├── approach/approach_initiator.py:instantiate_processors() # 实例化处理器
     │   │
     │   ├── Sen_p()                                # 传感器处理器
     │   └── acc_p_factory()                        # 加速器处理器工厂
     │
-    └── approach_sim.py:run_simulation()           # 运行仿真
+    └── approach/approach_sim.py:run_simulation()           # 运行仿真
 ```
 
 ### 6.2 setup_benchmark 调用链
 
 ```
-approach_setup.py:setup_benchmark()
+approach/approach_setup.py:setup_benchmark()
     │
     ├── sim_main.py:preprocess_args()              # 预处理参数
     │
@@ -495,7 +495,7 @@ args.num_cores
 ```
 main_approach.py
     │
-    ├── approach_setup.py ─────────────────────────────────────────────┐
+    ├── approach/approach_setup.py ─────────────────────────────────────────────┐
     │   │                                                              │
     │   ├── sim_main.py ────────────────────────────────────────────┐  │
     │   │   │                                                        │  │
@@ -507,14 +507,14 @@ main_approach.py
     │   │   ├── model/message/ (MsgDispatcher, DataPipe)            │  │
     │   │   └── paths.py (PathContext)                              │  │
     │   │                                                            │  │
-    │   └── approach_initiator.py ───────────────────────────────┐  │  │
+    │   └── approach/approach_initiator.py ───────────────────────────────┐  │  │
     │                                                            │  │  │
-    ├── approach_sched.py (PartitionConfig, acc_p_factory)      │  │  │
+    ├── approach/approach_sched.py (PartitionConfig, acc_p_factory)      │  │  │
     │                                                            │  │  │
-    ├── approach_sim.py (run_simulation)                        │  │  │
+    ├── approach/approach_sim.py (run_simulation)                        │  │  │
     │   │                                                        │  │  │
-    │   ├── approach_def.py (Sen_p, Acc_p, MyGraph) ◄───────────┘  │  │
-    │   └── approach_collector.py (StatisticsCollector)            │  │
+    │   ├── approach/approach_def.py (Sen_p, Acc_p, MyGraph) ◄───────────┘  │  │
+    │   └── approach/approach_collector.py (StatisticsCollector)            │  │
     │                                                               │  │
     └── utils.py (input_parser, dump_and_check, load_pickle) ◄──────┘  │
                                                                       │
@@ -528,10 +528,10 @@ main_approach.py
 | `ProcessInt` | task/task_agent.py | 进程实例，包含任务属性和执行状态 |
 | `SchedulingTableInt` | sched/scheduling_table.py | 调度表，管理时间槽分配 |
 | `BinPackConfig` | sched/binpack_config.py | 装箱算法配置封装 |
-| `PartitionConfig` | approach_sched.py | 分区配置，包含映射和调度表 |
+| `PartitionConfig` | approach/approach_sched.py | 分区配置，包含映射和调度表 |
 | `PathContext` | paths.py | 统一路径管理上下文 |
-| `MyGraph` | approach_def.py | 逻辑图，管理任务 DAG |
-| `StatisticsCollector` | approach_collector.py | 统计收集器 |
+| `MyGraph` | approach/approach_def.py | 逻辑图，管理任务 DAG |
+| `StatisticsCollector` | approach/approach_collector.py | 统计收集器 |
 
 ---
 

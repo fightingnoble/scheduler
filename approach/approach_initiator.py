@@ -2,18 +2,18 @@ from utils import elim_nume_error
 
 from global_var import FLOPS_PER_CORE
 
-from approach_Eq import (
+from .approach_Eq import (
     get_task_load_and_base_size,
 )
-from approach_def import (
+from .approach_def import (
     Acc_p, 
     Sen_p, 
     MyGraph, 
     GlobalEvent_t, 
     print_if_verbose,
 )
-from approach_sched import acc_p_factory, PartitionConfig
-from approach_collector import StatisticsCollector
+from .approach_sched import acc_p_factory, PartitionConfig
+from .approach_collector import StatisticsCollector
 
 # TODO: These numbers are temporal magic numbers, which must be removed. 
 old_timestep = 10e-6

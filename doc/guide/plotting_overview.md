@@ -10,7 +10,7 @@
 - **统一字体/样式**：`scripts/exp_common.py:252-264` 通过 `plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', ...]` 设置中文字体，`axes.unicode_minus = False` 修正负号。实验脚本统一走此设置。
 - **输出格式**：实验图默认 PDF（论文用），部分 PNG。路径由 `path_para` / `save_path` 参数控制。
 
-## 2. 实验结果绘图（`approach_collector.py`，核心）
+## 2. 实验结果绘图（`approach/approach_collector.py`，核心）
 
 `StatisticsCollector` 类的 `@staticmethod` 方法，用于 motiv/abla/e2e 实验的结果可视化。输入为统计摘要 `data_points: List[Dict]`，输出 PDF/PNG。
 

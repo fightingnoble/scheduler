@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "batch_id": "B28-APPROACH-PACKAGE-FINALIZATION",
+  "date": "2026-09-13",
+  "status": "verified",
+  "base_head": "f792ca02e9e121d0884a1e3468ec5dec56c59dfa",
+  "approvals": [
+    "user direct approval",
+    "reviewer E0127",
+    "user direct correction that WSL HostID changes on restart"
+  ],
+  "behavior": {
+    "scheduling_logic_changed": false,
+    "production_function_interfaces_changed": false,
+    "dependencies_changed": false,
+    "intentional_compatibility_change": "root-level approach module imports are retired; use approach.approach_*"
+  },
+  "approach": {
+    "canonical_modules": [
+      "approach/approach_Eq.py",
+      "approach/approach_collector.py",
+      "approach/approach_def.py",
+      "approach/approach_initiator.py",
+      "approach/approach_sched.py",
+      "approach/approach_setup.py",
+      "approach/approach_sim.py"
+    ],
+    "retired_root_shells": [
+      "approach_Eq.py",
+      "approach_collector.py",
+      "approach_def.py",
+      "approach_initiator.py",
+      "approach_sched.py",
+      "approach_setup.py",
+      "approach_sim.py"
+    ],
+    "root_shells_present_after_batch": 0,
+    "legacy_imports_in_current_python": 0
+  },
+  "test_helpers": [
+    "tests/helpers/optimizer/ops_test.py",
+    "tests/helpers/test_alloc_lat.py",
+    "tests/helpers/test_event_update.py",
+    "tests/helpers/test_mapping.py",
+    "tests/helpers/test_mem_planner.py"
+  ],
+  "validation": {
+    "full_pytest": {
+      "passed": 316,
+      "xfailed": 1,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 31.81,
+      "explicit_license_environment_variable": false
+    },
+    "b10_split_repack_baseline": {
+      "passed": 3,
+      "seconds": 10.85
+    },
+    "b28_targeted": {
+      "passed": 15,
+      "xfailed": 1,
+      "seconds": 10.15
+    },
+    "known_strict_xfail": "StatisticsCollector.export_summary uses the retired plot_load_latency_binned signature"
+  },
+  "gurobi": {
+    "version": "11.0.3",
+    "license_expiration": "2027-03-14",
+    "default_license_link": "/home/zhangchg/gurobi.lic",
+    "startup_service": "gurobi-hostid.service",
+    "post_restart_service_result": "active/exited/success",
+    "post_restart_model_creation": "pass",
+    "hostid_and_key_redacted": true
+  },
+  "protected_paths_untouched": [
+    ".claude/",
+    "claude_talk/",
+    "/home/zhangchg/git_repo/scheduler"
+  ],
+  "untracked_files_in_scope": false,
+  "recovery": {
+    "tracked": "revert the commit whose subject is refactor: finalize approach package migration",
+    "system": "restore the dated unit backup, remove the helper, daemon-reload, and remove the home license link only if it is still this batch's symlink"
+  }
+}

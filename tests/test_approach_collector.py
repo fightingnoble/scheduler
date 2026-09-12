@@ -1,20 +1,20 @@
 from __future__ import annotations
 import typing 
 if typing.TYPE_CHECKING:
-    from approach_def import MyGraph
+    from approach.approach_def import MyGraph
 from typing import Dict, List, Iterable, Tuple
 from collections import defaultdict
 import re
 import json
 import os
 from functools import reduce
-from approach_Eq import time_gt, elim_nume_error, cal_cost
+from approach.approach_Eq import time_gt, elim_nume_error, cal_cost
 from ref_tdigest import TDigestStreamingHistogram # Assuming ref_tdigest.py is in the same directory
 import numpy as np
 import pytest
 
 # Import the class to be tested
-from approach_collector import StatisticsCollector
+from approach.approach_collector import StatisticsCollector
 
 # ================= Mocks and Fixtures =================
 
@@ -93,22 +93,28 @@ def test_basic_functionality(collector: StatisticsCollector, mock_graph: MockMyG
     collector.record_realloc_num('part1', ['op1_0'])
     collector.record_realloc('part2', 0.3, ['op2_0'])
     collector.record_realloc_num('part2', ['op2_0'])
-    assert collector.task_realloc_curr['op1_0'] == 0.5
-    assert collector.task_realloc_num['op2_0'] == 1
+    # Per-task and per-partition reallocation state are tracked separately.
     assert collector.part_realloc_curr['part1'] == 0.5
+    assert collector.part_realloc_curr['part2'] == 0.3
+    assert collector.part_realloc_num['part1'] == 1
+    assert collector.part_realloc_num['part2'] == 1
+    assert collector.task_curr_stat['op1_0']['realloc'] == 0.5
+    assert collector.task_curr_stat['op2_0']['realloc_num'] == 1
     
     # 4. Record compute progress
     collector.record_compute_progress('op1_0', 5.0)
     collector.record_compute_progress('op2_0', 8.0)
-    assert collector.task_compute_curr['op1_0'] == 5.0
+    assert collector.task_curr_stat['op1_0']['compute'] == 5.0
+    assert collector.task_curr_stat['op2_0']['compute'] == 8.0
     
     # 5. Record task finish and check propagation
     collector.record_task_finish(mock_graph, 'op1_0', 25.0)
     assert 'op1_0' not in collector.task_at # should be cleared
-    assert collector.task_realloc_curr['op2_0'] == 0.5 + 0.3 # propagated + original
+    assert collector.task_pred_stat['op2_0']['op1_0']['realloc'] == 0.5
     
     collector.record_task_finish(mock_graph, 'op2_0', 35.0)
-    assert collector.task_realloc_curr['sink1_0'] > 0
+    assert collector.task_pred_stat['sink1_0']['op2_0']['realloc'] == 0.8
+    assert collector.task_pred_stat['sink1_0']['op2_0']['compute'] == 13.0
     
     # 6. Record E2E finish
     collector.record_e2e_finish(mock_graph, 'sink1_0', 50.0)
@@ -173,16 +179,15 @@ def test_motiv_exp_specific_stats(collector: StatisticsCollector, mock_graph: Mo
     collector.record_realloc_num('p1', ['op1_0'])  # Add this missing call
     collector.record_task_finish(mock_graph, 'op1_0', 50) # op1 propagates to op2
     
-    # Record E2E finish with proper task start time and compute time
-    collector.record_task_start('sink1_0', 0)  # Start time for E2E calculation
-    collector.record_compute_progress('sink1_0', 30)  # Add compute time for sink task
-    collector.record_realloc('p1', 10, ['sink1_0'])  # Add realloc overhead for sink task
-    collector.record_realloc_num('p1', ['sink1_0'])  # Add realloc number for sink task
-    collector.record_e2e_finish(mock_graph, 'sink1_0', 100) # e2e latency = 100-0=100
+    # Advance the predecessor chain so op1's path statistics reach sink1.
+    collector.record_task_start('op2_0', 50)
+    collector.record_task_finish(mock_graph, 'op2_0', 80)
+    collector.record_e2e_finish(mock_graph, 'sink1_0', 100) # relative finish = 100-50=50
     
     collector.forward_hyperperiod(T_hp=1.0)
 
     # Test Case 1 stats
+    collector.set_task_cnt(collector.task_cnt or 4)  # B28 适配：显式 task_cnt 避免除零
     case1_stats = collector.get_motiv_case1_stats()
     assert np.isclose(case1_stats['idle_mean_ratio'], 10/100)
     assert np.isclose(case1_stats['miss_mean_ratio'], 5/100)
@@ -190,24 +195,32 @@ def test_motiv_exp_specific_stats(collector: StatisticsCollector, mock_graph: Mo
     # Test Case 2 stats
     case2_stats = collector.get_motiv_case2_stats()
     breakdown = case2_stats['latency_breakdown']['overall']
-    # Constraint is ddl-offset = 300-50 = 250
+    # Constraint is ddl-offset = 300-50 = 250.
     assert np.isclose(breakdown['exec_ratio'], 30/250)
     assert np.isclose(breakdown['realloc_ratio'], 10/250)
+    assert np.isclose(breakdown['wait_ratio'], 10/250)
     
     # Test Case 3 stats (binned)
     collector.set_motiv3_mode('binned')
-    collector.binning_warmup_period = 1 # to finalize bins quickly
-    collector.forward_hyperperiod() # a second period to finalize bins
+    collector.motiv3_en = True
+    collector.binning_warmup_period = 2
+    collector.num_r2_bins = 2
+    for load, latency in ((10, 5), (20, 8)):
+        collector.record_period_load_arrival(load)
+        collector._record_period_e2e_candidate(latency)
+        collector.forward_hyperperiod()
     case3_stats = collector.get_motiv_case3_stats(percentile=0.99)
     assert case3_stats['mode'] == 'binned' and 'spearman_rho' in case3_stats
     
+    assert sum(item['sample_count'] for item in case3_stats['binned_summary']) == 2
     # Test Case 3 stats (raw)
     collector.set_motiv3_mode('raw')
-    collector.hp_total_load_curr = 100
-    collector.hp_worst_e2e_curr = 10
+    collector.record_period_load_arrival(100)
+    collector._record_period_e2e_candidate(10)
     collector.forward_hyperperiod()
     case3_raw_stats = collector.get_motiv_case3_stats()
-    assert case3_raw_stats['mode'] == 'raw' and case3_raw_stats['raw_data_count'] == 1
+    assert case3_raw_stats['mode'] == 'raw'
+    assert case3_raw_stats['raw_data'] == [(100.0, 10.0)]
     
     print("✓ Motiv-Exp specific stats test passed.")
 
@@ -233,8 +246,10 @@ def test_summary_generation(collector: StatisticsCollector):
     assert dist_summary['overall_idle_time']['total_processed_count'] == 1
     
     # 4. Test other summary types
+    collector.set_task_cnt(collector.task_cnt or 4)  # B28 适配：显式 task_cnt 避免除零
     breakdown = collector.get_latency_breakdown_avg_ratio()
     assert isinstance(breakdown, dict)
+    collector.set_task_cnt(collector.task_cnt or 4)  # B28 适配：显式 task_cnt 避免除零
     util_ratios = collector.get_utilization_avg_ratio()
     assert np.isclose(util_ratios['idle_mean_ratio'], 0.1)
     
@@ -245,6 +260,7 @@ def test_formatted_output(collector: StatisticsCollector):
     """Test the formatted string output for each Motiv case."""
     print("\n--- Testing Formatted Output ---")
     
+    collector.set_task_cnt(collector.task_cnt or 4)  # B28 适配：显式 task_cnt 避免除零
     case1_output = collector.format_motiv_case1_output()
     case2_output = collector.format_motiv_case2_output()
     case3_output = collector.format_motiv_case3_output()
@@ -289,6 +305,7 @@ def test_edge_cases(collector: StatisticsCollector):
     
     # 1. Test empty data handling
     empty_collector = StatisticsCollector()
+    empty_collector.set_task_cnt(1)  # B28 适配：独立实例需自身设置 task_cnt
     empty_stats = empty_collector.get_motiv_case1_stats()
     assert empty_stats['idle_mean_ratio'] == 0.0, "Should be 0 for empty collector"
     
@@ -300,7 +317,7 @@ def test_edge_cases(collector: StatisticsCollector):
     empty_collector.record_period_load_arrival(-10.0)
     assert empty_collector.hp_total_load_curr == 0.0
     empty_collector.record_compute_progress('task1', -5.0)
-    assert empty_collector.task_compute_curr['task1'] == 0.0
+    assert 'task1' not in empty_collector.task_curr_stat
     
     print("✓ Edge cases test passed.")
 

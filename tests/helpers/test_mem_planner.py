@@ -11,6 +11,7 @@ from sched.scheduling_table import SchedulingTableInt
 from task.task_agent import ProcessInt
 from sched.scheduler_agent import Scheduler
 from sched.monitor_agent import Monitor
+from sched.global_sched_alloc import default_binpack_cfg
 from model.message.msg_dispatcher import MsgDispatcher
 from model.message.data_pipe import DataPipe
 

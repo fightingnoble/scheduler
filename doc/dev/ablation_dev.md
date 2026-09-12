@@ -79,7 +79,7 @@ quantile    A(exp=10)   B(exp=20)   B/A
 采用**方案 A（备份恢复）**：
 
 ```python
-# approach_setup.py
+# approach/approach_setup.py
 bin_list_backup = copy.deepcopy(bin_list)  # 备份
 try:
     perform_bin_packing(...)  # 尝试 repack
@@ -121,7 +121,7 @@ else:
 
 **返回值**：5-tuple `(bin_list, max_core_num, glb_p_list, hyper_p, repack_success)`
 
-### 3. `approach_setup.py` — 简化调用
+### 3. `approach/approach_setup.py` — 简化调用
 
 **修改前**（25 行）：准备备份 + 传递参数
 **修改后**（15 行）：直接调用，无需准备备份
@@ -243,7 +243,7 @@ Ultrathink:
 
 ### 诊断方法
 
-在 `sim_main.py:perform_bin_packing` 和 `approach_setup.py:setup_benchmark` 中添加 `sys.stderr.write` 诊断输出（绕过 `redirect_stdout` 日志重定向），跟踪 repack 的触发、执行和结果。
+在 `sim_main.py:perform_bin_packing` 和 `approach/approach_setup.py:setup_benchmark` 中添加 `sys.stderr.write` 诊断输出（绕过 `redirect_stdout` 日志重定向），跟踪 repack 的触发、执行和结果。
 
 ### 测试命令
 
@@ -293,7 +293,7 @@ python main_approach.py \
 
 | 文件 | 行号 | 诊断内容 |
 |------|------|----------|
-| `approach_setup.py` | L127-133 | `[SETUP_BENCHMARK] Repack triggered!`（stderr） |
+| `approach/approach_setup.py` | L127-133 | `[SETUP_BENCHMARK] Repack triggered!`（stderr） |
 | `sim_main.py` | L508-517 | `[REPACK DIAGNOSTIC] Starting repack`（stderr） |
 | `sim_main.py` | L554-563 | `[REPACK DIAGNOSTIC] Incomplete placement`（stdout → log） |
 | `sim_main.py` | L565-571 | `[REPACK DIAGNOSTIC] SUCCESS`（stdout → log） |
@@ -339,7 +339,7 @@ python main_approach.py \
 | `sched/slack_estim.py:393-427` | 新增 `_fixcore_slack_estim` 函数 |
 | `sched/slack_estim.py:432-448` | `deduce_cfg2` 增加 `fix_core_map` 和 `scale_factor` 参数 |
 | `task/task_cfg.py:1011-1079` | `gen_workloads` 透传参数，返回 5 个值 |
-| `approach_setup.py:137-149` | 提取 `fix_core_map`，计算 `scale_factor` |
+| `approach/approach_setup.py:137-149` | 提取 `fix_core_map`，计算 `scale_factor` |
 
 **数据流**：
 ```

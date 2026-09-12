@@ -1,8 +1,8 @@
 {
- "last_event": "E0124",
+ "last_event": "E0128",
  "next_writer": "codex",
- "tail_sha256": "cbdd96d3964dba90d3b5e70921aeb9a2415bbcc72f7462c64499ea4933f70c1b",
- "lines": 131,
- "history_sha256": "988006d5e4eda719cc36f406c192afb8948f2f7dc9f1979dacd33fb1c31ad129",
- "active_count": 5
+ "tail_sha256": "0bda774758e4572b9f536f6ce684a0740ba4270380dc36b155f1afd876238c71",
+ "lines": 127,
+ "history_sha256": "a3d2861d115bd092341e39216ba7e5d5fa65b2eb1a61a3bcfa349ca9247fa794",
+ "active_count": 4
 }

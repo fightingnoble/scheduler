@@ -85,8 +85,8 @@ def create_test_args(policy: str, ratioA: float, ratioB: float, num_bins: int):
 
 def run_repack_test(policy: str, ratioA: float, ratioB: float, num_bins: int):
     """Run a single repack test and return diagnostic info."""
-    from approach_setup import setup_benchmark
-    from approach_Eq import set_time_unit
+    from approach.approach_setup import setup_benchmark
+    from approach.approach_Eq import set_time_unit
 
     # Set time unit and normalization factor
     time_unit, time_norm_factor = set_time_unit(1e-6, False)

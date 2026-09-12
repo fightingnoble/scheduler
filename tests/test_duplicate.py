@@ -8,7 +8,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from approach_def import MyGraph
+from approach.approach_def import MyGraph
 
 def test_duplicate_for_hyperperiod():
     """测试超周期复制功能"""
@@ -28,9 +28,9 @@ def test_duplicate_for_hyperperiod():
     sinks = ['sink1', 'sink2']
     
     task_attr = {
-        'op1': {'exp_comp_t': 10.0, 'ert': 50.0, 'ddl': 100.0, 'var_factor': [0, 1]},
-        'op2': {'exp_comp_t': 15.0, 'ert': 60.0, 'ddl': 120.0, 'var_factor': [0, 1]},
-        'op3': {'exp_comp_t': 20.0, 'ert': 70.0, 'ddl': 140.0, 'var_factor': [0, 1]}
+        'op1': {'exp_comp_t': 10.0, 'exp_io_t': 0.0, 'ert': 50.0, 'ddl': 100.0, 'var_factor': [0, 1]},  # B28 适配：补当前必需键
+        'op2': {'exp_comp_t': 15.0, 'exp_io_t': 0.0, 'ert': 60.0, 'ddl': 120.0, 'var_factor': [0, 1]},
+        'op3': {'exp_comp_t': 20.0, 'exp_io_t': 0.0, 'ert': 70.0, 'ddl': 140.0, 'var_factor': [0, 1]}
     }
     
     src_attr = {

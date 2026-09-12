@@ -1,166 +1,86 @@
-"""Import/state/serialization contracts for the approach package migration."""
+#!/usr/bin/env python3
+"""package-only 契约测试（REQ-027/B28 重写）。
 
-import base64
+B28 依用户指令退役七个根 approach_*.py 兼容壳：
+- 旧根模块导入必须失败（退役断言）
+- 包导入身份稳定；公共符号可用
+- 包路径 pickle 往返 identity；根模块名从 sys.modules 消失
+"""
 import importlib
-import json
-import os
-from pathlib import Path
 import pickle
-import runpy
 import subprocess
 import sys
-from types import SimpleNamespace
+from pathlib import Path
 
-import pytest
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+MODULES = ["approach_Eq", "approach_def", "approach_sched",
+           "approach_initiator", "approach_collector", "approach_sim", "approach_setup"]
 
 
-ROOT = Path(__file__).resolve().parent.parent
-REPORT = json.loads(
-    (ROOT / "cleanup/reports/b11-approach-package-compat.json").read_text(
-        encoding="utf-8"
+def _pkg(mod):
+    return importlib.import_module("approach." + mod)
+
+
+def test_package_import_identity():
+    for mod in MODULES:
+        assert _pkg(mod) is _pkg(mod)
+
+
+def test_public_symbols_available():
+    from approach.approach_def import Acc_p, Sen_p, MyGraph, GlobalEvent_t
+    from approach.approach_sched import PartitionConfig
+    from approach.approach_sim import run_simulation
+    from approach.approach_setup import setup_benchmark
+    from approach.approach_collector import StatisticsCollector
+    from approach.approach_Eq import set_time_unit, trasfer_realloc_as_task
+    from approach.approach_initiator import instantiate_processors, get_partition_info
+    assert callable(setup_benchmark) and callable(run_simulation)
+
+
+def test_root_shells_retired():
+    """七个根模块名在干净子进程中必须不再可导入。"""
+    for module in MODULES:
+        assert not (REPO_ROOT / f"{module}.py").exists()
+
+    code = (
+        "import importlib.util\n"
+        f"modules = {MODULES!r}\n"
+        "found = [name for name in modules if importlib.util.find_spec(name) is not None]\n"
+        "if found:\n"
+        "    raise SystemExit('ROOT_STILL_IMPORTABLE:' + ','.join(found))\n"
     )
-)
-MODULES = tuple(path[:-3] for path in REPORT["source_sha256"])
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                       cwd=str(REPO_ROOT))
+    assert r.returncode == 0, r.stdout + r.stderr
 
 
-def run_isolated(code, tmp_path, *args):
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(ROOT) + os.pathsep + env.get("PYTHONPATH", "")
-    env["MPLBACKEND"] = "Agg"
-    env["PYTHONDONTWRITEBYTECODE"] = "1"
-    result = subprocess.run(
-        [sys.executable, "-c", code, *args],
-        cwd=tmp_path, env=env, text=True, capture_output=True, timeout=60,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
+def test_package_init_lazy():
+    """__init__ 零主动导入——须在干净子进程验证（同进程导入子模块会 setattr 到父包）。"""
+    code = "import approach; print([n for n in vars(approach) if not n.startswith('_')])"
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                       cwd=str(REPO_ROOT))
+    assert r.returncode == 0 and r.stdout.strip() == "[]", r.stdout + r.stderr
 
 
-def test_package_import_does_not_load_submodules(tmp_path):
-    run_isolated(
-        "import importlib.util, sys\n"
-        "assert importlib.util.find_spec('approach') is not None, "
-        "'approach package is missing'\n"
-        "import approach\n"
-        "assert not any(n.startswith('approach.') for n in sys.modules)\n",
-        tmp_path,
-    )
+def test_pickle_roundtrip_package_path():
+    from approach.approach_Eq import set_time_unit
+    from approach.approach_def import Acc_p
+    assert pickle.loads(pickle.dumps(set_time_unit)) is set_time_unit
+    assert pickle.loads(pickle.dumps(Acc_p)) is Acc_p
 
 
-@pytest.mark.parametrize("first_module", MODULES)
-@pytest.mark.parametrize("package_first", [False, True])
-def test_import_orders_share_modules_and_symbols(tmp_path, first_module, package_first):
-    run_isolated(
-        "import importlib, inspect, json, sys\n"
-        "names = json.loads(sys.argv[1])\n"
-        "first = sys.argv[2]\n"
-        "prefixes = ('approach.', '') if sys.argv[3] == 'True' else ('', 'approach.')\n"
-        "for name in [first] + [n for n in names if n != first]:\n"
-        "    a, b = [importlib.import_module(p + name) for p in prefixes]\n"
-        "    assert a is b, name\n"
-        "    for symbol, value in vars(a).items():\n"
-        "        if inspect.isclass(value) or inspect.isfunction(value):\n"
-        "            assert getattr(b, symbol) is value, (name, symbol)\n",
-        tmp_path, json.dumps(MODULES), first_module, str(package_first),
-    )
+def test_no_root_alias_in_sysmodules_after_pkg_import():
+    _pkg("approach_sim")
+    for m in MODULES:
+        assert m not in sys.modules, "根模块名 %s 不应被注册" % m
 
 
-@pytest.mark.parametrize("variable,setter", [
-    ("VERBOSE_OUTPUT", "set_verbose_output"),
-    ("REALLOC_DISABLED", "set_realloc_disabled"),
-    ("MISS_DISABLED", "set_miss_disabled"),
-    ("DROP_DISABLED", "set_drop_disabled"),
-])
-def test_control_setters_and_direct_writes_share_state(monkeypatch, variable, setter):
-    root = importlib.import_module("approach_def")
-    package = importlib.import_module("approach.approach_def")
-    monkeypatch.setattr(root, variable, False)
-    getattr(root, setter)(True)
-    assert getattr(package, variable) is True
-    setattr(package, variable, False)
-    assert getattr(root, variable) is False
-    getattr(package, setter)(True)
-    assert getattr(root, variable) is True
-
-
-def test_time_unit_setter_and_writes_share_state(monkeypatch):
-    root = importlib.import_module("approach_Eq")
-    package = importlib.import_module("approach.approach_Eq")
-    monkeypatch.setattr(root, "time_unit", 1)
-    assert root.set_time_unit(1e-6, False) == (1e-6, 1)
-    assert package.time_unit == 1e-6
-    package.time_unit = 0.25
-    assert root.time_unit == 0.25
-    assert package.set_time_unit(1e-6, True) == (1, 1e-6)
-    assert root.time_unit == 1
-
-
-def test_root_monkeypatch_reaches_real_setup_pipeline(monkeypatch, tmp_path):
-    root = importlib.import_module("approach_setup")
-    package = importlib.import_module("approach.approach_setup")
-    args = SimpleNamespace(
-        exec_t_comp_ratioA=0.7, exec_t_comp_ratioB=-1, num_cores=None
-    )
-    path_params = tuple(object() for _ in range(9))
-    context = SimpleNamespace(
-        graph_fn=str(tmp_path / "graph.json"),
-        get_log_path=lambda: str(tmp_path / "pipeline.log"),
-    )
-    workload = (1.0, {}, object(), [], {})
-    calls = []
-
-    class BoundaryReached(Exception):
-        pass
-
-    def recording_init(*init_args):
-        calls.append(init_args)
-        raise BoundaryReached
-
-    # Isolate setup inputs; execute the real setup and pipeline up to the boundary.
-    monkeypatch.setattr(root, "preprocess_args", lambda args: None)
-    monkeypatch.setattr(root, "build_paths_and_ctx", lambda args: (path_params, context))
-    monkeypatch.setattr(root, "build_workload_and_criticality", lambda *a, **kw: workload)
-    monkeypatch.setattr(root, "export_json_graph_utils", lambda *a: None)
-    monkeypatch.setattr(root, "init_sched_components", recording_init)
-    with pytest.raises(BoundaryReached):
-        package.setup_benchmark(args, 1)
-    assert len(calls) == 1
-    assert calls[0][:5] == (args, path_params, context, workload, None)
-    assert calls[0][5] == []
-    assert package.init_sched_components is recording_init
-
-
-@pytest.mark.parametrize("fixture", REPORT["legacy_pickles"],
-                         ids=lambda item: item["module"] + "." + item["symbol"])
-def test_pre_move_pickle_loads_and_new_pickle_roundtrips(fixture):
-    payload = base64.b64decode(fixture["base64"])
-    expected = getattr(
-        importlib.import_module("approach." + fixture["module"]), fixture["symbol"]
-    )
-    restored = pickle.loads(payload)
-    if fixture["kind"] == "reference":
-        assert restored is expected
-        assert pickle.loads(pickle.dumps(restored, protocol=4)) is expected
-    else:
-        assert type(restored) is expected
-        roundtrip = pickle.loads(pickle.dumps(restored, protocol=4))
-        assert type(roundtrip) is expected
-        for name, value in fixture["state"].items():
-            assert json.loads(json.dumps(getattr(restored, name))) == value
-            assert getattr(roundtrip, name) == getattr(restored, name)
-    assert expected.__module__ == "approach." + fixture["module"]
-
-
-@pytest.mark.parametrize("name", ["approach_sim", "approach_collector"])
-def test_script_entry_forwards_without_aliasing_main(monkeypatch, name):
-    calls = []
-    original_main = sys.modules["__main__"]
-
-    def recording_run_module(module, *, run_name, alter_sys):
-        calls.append((module, run_name, alter_sys))
-        assert Path(sys.modules["__main__"].__file__).resolve() == ROOT / (name + ".py")
-        return {}
-
-    monkeypatch.setattr(runpy, "run_module", recording_run_module)
-    runpy.run_path(str(ROOT / (name + ".py")), run_name="__main__")
-    assert calls == [("approach." + name, "__main__", True)]
-    assert sys.modules["__main__"] is original_main
+def test_entrypoints_help():
+    for entry in (["main_approach.py"], ["-m", "scripts.motiv_exp_runner"],
+                  ["-m", "scripts.abla_exp_runner"]):
+        r = subprocess.run([sys.executable, *entry, "--help"], capture_output=True,
+                           text=True, cwd=str(REPO_ROOT))
+        assert r.returncode == 0, entry

@@ -152,13 +152,24 @@ def cmd_check():
         ("E%04d" % last["num"]) if last else "-",
         last["next_writer"] if last else "-",
         tail_sha(open(DIALOGUE, encoding='utf-8').read())[:16], (hs or "-")[:16]))
+    if last is None:
+        last = last_from_history()
+        if last:
+            print("note: 活动区为空，交接状态由 HISTORY 末事件 E%04d 推导（next_writer=%s）" % (last["num"], last["next_writer"]))
     sys.exit(1 if errs else 0)
+
+def last_from_history():
+    """活动区为空时，从 HISTORY 可守卫段末事件推导交接状态（E0124 归档后恢复场景）。"""
+    if not os.path.exists(HISTORY):
+        return None
+    hev = [e for e in parse(open(HISTORY, encoding="utf-8").read()) if e["num"] >= GUARDED_START]
+    return hev[-1] if hev else None
 
 def cmd_pre():
     st = load_state()
     text = open(DIALOGUE, encoding="utf-8").read()
     root_events = parse(text)
-    last = root_events[-1] if root_events else None
+    last = root_events[-1] if root_events else last_from_history()
     blocking = find_blocking_journals()
     if blocking:
         print("ERR 存在阻断态事务 journal（%s）——先恢复或裁决" % blocking[0]); sys.exit(2)
@@ -182,7 +193,9 @@ def cmd_post():
         for e in errs: print("ERR", e)
         sys.exit(1)
     text = open(DIALOGUE, encoding="utf-8").read()
-    last = root_events[-1]
+    last = root_events[-1] if root_events else last_from_history()
+    if last is None:
+        print("ERR post 失败：活动区与 HISTORY 可守卫段均为空，无交接状态可建"); sys.exit(1)
     payload = json.dumps({"last_event": "E%04d" % last["num"], "next_writer": last["next_writer"],
                           "tail_sha256": tail_sha(text), "lines": len(text.splitlines()),
                           "history_sha256": history_sha(), "active_count": len(root_events)}, indent=1)

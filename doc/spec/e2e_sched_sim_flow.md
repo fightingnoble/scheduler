@@ -38,10 +38,10 @@ main_approach.py 旨在实现，端到端的调度和仿真流程：
 代码结构重要说明：
 
 现在的代码由两大块组成：
-sim_main.py 和 approach_sim.py相关的两个大块。
+sim_main.py 和 approach/approach_sim.py相关的两个大块。
 
   - 之前 sim_main.py 同时支持配置生成和仿真，test_case 用于选择模式
-  - 后来添加了 approach_sim.py（event-driven 仿真后端），用来替代sim_main.py，流程中的仿真部分。
+  - 后来添加了 approach/approach_sim.py（event-driven 仿真后端），用来替代sim_main.py，流程中的仿真部分。
   - 两者的流程结合在，main_approach.py 中。
   - 因为原有sim_main.py 相关的代码专注于配置生成，所以 test_case 在main_approach.py 中固定为 'bin_pack_new'
   - 配置生成过程中，具体使用哪一种调度行为由 num_bins, exec_t_comp_ratioA, exec_t_comp_ratioB 参数组合决定。
@@ -50,7 +50,7 @@ sim_main.py 和 approach_sim.py相关的两个大块。
 ## 2. 流程架构
 
 ```
-setup_benchmark (approach_setup.py)
+setup_benchmark (approach/approach_setup.py)
     │
     ├── [Phase 1] run_benchmark_setup_pipeline(need_repack=False)
     │       │   args.quantile = ratioA
@@ -236,7 +236,7 @@ def apply_forced_num_cores(bin_list, estimated_num_cores, target):
 
 **说明**: 修改 `bin_list` 中每个 bin 的 `num_resources`，使总和等于 `target`
 
-### 6.3 run_benchmark_setup_pipeline (approach_setup.py)
+### 6.3 run_benchmark_setup_pipeline (approach/approach_setup.py)
 
 **职责**: 编排 benchmark 设置流程
 

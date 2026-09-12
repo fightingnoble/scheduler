@@ -1,18 +1,21 @@
+from pathlib import Path
 import sys
-sys.path.insert(0, '/home/zhangchg/git_repo/scheduler')
 
-from approach_initiator import instantiate_processors, instantiate_mygraph_from_json
-from approach_sched import PartitionConfig
-from approach_sim import run_simulation
-from approach_Eq import set_time_unit, trasfer_realloc_as_task
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
+
+from approach.approach_initiator import instantiate_processors, instantiate_mygraph_from_json
+from approach.approach_sched import PartitionConfig
+from approach.approach_sim import run_simulation
+from approach.approach_Eq import set_time_unit, trasfer_realloc_as_task
 from global_var import BW_DRAM, GLB_BUFFER_SIZE_PER_CORE, FLOPS_PER_CORE
-from approach_def import set_verbose_output
+from approach.approach_def import set_verbose_output
 
 set_verbose_output(False)
 time_unit, time_norm_factor = set_time_unit(1e-6, False)
 
 # 加载图
-graph_json_pth = './cache/coalescing_scan/n_bins_max/x1_0.1s_rda-99.00%(S)_ignore/graph_x1_0.1s.json'
+graph_json_pth = REPO_ROOT / 'cache/coalescing_scan/n_bins_max/x1_0.1s_rda-99.00%(S)_ignore/graph_x1_0.1s.json'
 G, pid2name = instantiate_mygraph_from_json(graph_json_pth, time_norm_factor=time_norm_factor)
 
 # 配置
@@ -30,7 +33,7 @@ partition_cfg = PartitionConfig(
 )
 
 # 创建事件
-from approach_Eq import elim_nume_error
+from approach.approach_Eq import elim_nume_error
 event_t = set()
 for node in [n_ for n_ in G.logical_graph.nodes if G.logical_graph.nodes[n_]['type'] == 'src']:
     t = elim_nume_error(G.logical_graph.nodes[node]['offset'])

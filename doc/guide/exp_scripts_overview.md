@@ -437,7 +437,7 @@ scripts/xxx_exp_runner.py
 ### 6.2 统计收集调用链
 
 ```
-StatisticsCollector (approach_collector.py)
+StatisticsCollector (approach/approach_collector.py)
     │
     ├── get_motiv_case1_stats()     # Case 1 指标
     ├── get_motiv_case2_stats()     # Case 2 指标 (利用率+延迟分解)

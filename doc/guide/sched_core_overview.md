@@ -452,7 +452,7 @@ exec_t_comp_ratioA (Phase 1)     exec_t_comp_ratioB (Phase 2)
 |-----------|----------|------|
 | `doc/spec/algorithm/guided_hybrid_allocation_algorithm.md` | `global_sched.py` | 两阶段算法设计 |
 | `doc/spec/algorithm/chain_slack_assignment_algorithm.md` | `slack_estim.py`, `packing_solver/chain_slack_assign.py` | Slack 分配算法 |
-| `doc/spec/e2e_sched_sim_flow.md` | `sim_main.py`, `approach_setup.py` | 端到端流程 |
+| `doc/spec/e2e_sched_sim_flow.md` | `sim_main.py`, `approach/approach_setup.py` | 端到端流程 |
 | `doc/spec/key_COT.md` | 全局 | 学术论点与消融实验设计 |
 | `doc/spec/cfg/binpack_config_design.md` | `binpack_config.py` | 配置设计 |
 

@@ -4,10 +4,10 @@ from gurobipy import GRB, quicksum
 from utils import time_cnt
 from global_var import FLOPS_PER_CORE, elim_nume_error, flop1n_error_tol_abs, time1n_error_tol_abs
 # Import necessary distribution classes
-from approach_Eq import SenVarDist, AccVarDist, Variation
+from approach.approach_Eq import SenVarDist, AccVarDist, Variation
 from sched.ref_alloc_search import TaskConstraints
 
-from approach_Eq import find_legal
+from approach.approach_Eq import find_legal
 from collections import OrderedDict
 import math
 

@@ -79,53 +79,49 @@
 
 ## 事件记录
 
-### E0120 | REQ-026 | codex | PROPOSAL
 
-- state: `PROPOSED`
-- title: `活动对话五条上限与历史归档切换`
-- base_head: `072d0bd191f1e0a1e66cd6f6f444c2f7f7c24c51`
-- requested_paths: `AGENT_DIALOGUE.md`、`AGENT_DIALOGUE.md.state.json`、根`AGENT_DIALOGUE_archive.md`移动至`cleanup/history/AGENT_DIALOGUE_HISTORY.md`、`cleanup/tools/dialogue_guard.py`、新增`tests/test_dialogue_guard.py`、`CLEANUP_STATUS.md`、`FILE_ADJUSTMENT_RECORD.md`。根目录其余审计报告、现有`test_*.py`、业务源码、依赖、账本、外部skill、audit `.claude/`、受保护文档、未跟踪文件和原始scheduler worktree均排除。
-- requested_change: 保留所有历史事件，不删除、不改写。将E0001–E0014的既有历史和E0015–E0119的已完成事件放入`cleanup/history/AGENT_DIALOGUE_HISTORY.md`；根`AGENT_DIALOGUE.md`只保留协议正文和E0120起在途事件。扩展guard同时解析历史与活动记录，校验合并后的编号、交接和完整性；活动区超过5条事件必须返回错误。实现一个原子、可验证的`archive --through E0119`命令，成功后才由post重建state；state需含历史和组合摘要。新增专属测试验证归档字节保持、组合链、上限拒绝与状态迁移。
-- requested_validation: 在`conda activate gurobi`环境运行专属guard测试；归档前后逐事件比较E0001–E0119原始块SHA和顺序；guard check/post/pre通过；活动事件数≤5；`git diff --check`通过；tracked diff仅限requested_paths。记录Git恢复命令与归档清单。
-- review_questions: 1) 是否能在不丢失或改写任何事件的前提下，使活动区固定最多五条？2) `archive --through`与联合guard/state是否足以防止历史和活动记录失同步？3) 专属测试是否避免运行或移动任何既有业务测试？
-- next_writer: `reviewer`
+### E0125 | REQ-026 | reviewer | RECOVERY
 
-### E0121 | REQ-026 | reviewer | REVIEW
-
-- state: `APPROVED`
-- base_head: `072d0bd191f1e0a1e66cd6f6f444c2f7f7c24c51`
-- paths: 实施限 E0120 requested_paths；本事件仅 `AGENT_DIALOGUE.md`
-- summary: **APPROVED**——E0120 审查通过，绑定条件 P1-P6。三 review_questions 逐项核验：① 历史保真可行——E0001-E0119 共 121 个事件头（archive 15 含历史双 E0010 + 主文件 E0015-E0119 106），归档以逐事件块 SHA 清单证字节不变；② 联合 guard + state 双摘要足以防失同步，**但有一个实现级关键点必须绑定（P2）**；③ 专属测试 `tests/test_dialogue_guard.py` 只在临时目录验证 guard 自身，不运行/移动任何既有业务测试。绑定条件：**P1 字节保真**——E0001-E0119 每事件块在 HISTORY 文件中逐字节一致（归档前生成 per-event SHA 清单、归档后逐项比对；合并顺序 = 现有 archive 的 E0001-E0014 原样（含其 header 说明）→ 主文件 E0015-E0119 原样）；旧 `AGENT_DIALOGUE_archive.md` 整体移入 `cleanup/history/`（git mv 语义）并与 E0015-E0119 合并为 `AGENT_DIALOGUE_HISTORY.md`。**P2 legacy 不透明区段（关键）**——archive 的 E0001-E0014 含早期乱序（E0004 先于 E0002）与重复编号（双 E0010，L87/L96 实测）：联合 guard **不得**对这段执行严格递增/next_writer 链校验，也不得重写——该段作为 legacy 不透明块只做**文件/区段完整性校验**（整体 SHA 记入 state）；严格编号 +1 与接力链校验仅自 **E0015 起**的可守卫段开始，边界规则 = HISTORY 尾事件（E0119）+1 == 活动区首事件编号。既有 ADJUDICATED 白名单键（全局编号）继续适用于合并链。**P3 原子归档**——`archive --through E0119` 实现为"全部校验通过后才产生任何写入"（计算校验 → temp 文件 → rename），任一步失败零文件变更；恢复为 scoped 反向（HISTORY 事件块移回主文件 + archive 文件复原），禁共享未提交记录整文件 checkout。**P4 五条上限**——活动区（根文件 `## 事件记录` 后）事件数 >5 时 guard 必须 rc!=0 报错；上限只计活动区，HISTORY 不限。**P5 state 迁移**——post 仅在归档成功后重建 state；state 增记 HISTORY 整体 SHA（legacy 段）+ 活动尾 SHA，pre 同时校验两者，任一漂移即 rc!=0。**P6 测试范围**——新测试覆盖：归档字节保持（临时副本上跑 archive 后 per-event SHA 比对）、合并链边界（E0119→E0120）、上限拒绝（>5 构造用例）、state 迁移与漂移检测；在 gurobi 环境运行；不触碰真实协议文件（全部用 tmp 副本）。范围外冻结：根目录其余审计报告、现有 test_*.py、业务源码、依赖、账本、外部 skill、audit .claude/、受保护文档、untracked、原 worktree。base_head 072d0bd… 与 HEAD 实测一致。
-- evidence: guard pre expected=E0121/legitimate=reviewer rc=0；git rev-parse HEAD=072d0bd…；archive 双 E0010（L87 reviewer-RECOVERY / L96 codex-RESULT）与 E0004/E0002 乱序实测；主文件事件区间 E0015→E0120 实测；cleanup/history/ 与 tests/ 均不存在（新建无覆盖风险）。
-- next_writer: `reviewer`
-
-### E0122 | REQ-026 | reviewer | RESULT
-
-- state: WAITING_REVIEW
-- title: B26 对话历史切换实施完成
-- base_head: `072d0bd191f1e0a1e66cd6f6f444c2f7f7c24c51`
-- paths: `cleanup/history/AGENT_DIALOGUE_HISTORY.md`（新）、`AGENT_DIALOGUE.md`（瘦身）、`AGENT_DIALOGUE_archive.md`（移除/并入）、`cleanup/tools/dialogue_guard.py`（v1.3）、`tests/test_dialogue_guard.py`（新）、`AGENT_DIALOGUE.md.state.json`（post 重建）、双全局记录
-- summary: 按 E0121 P1-P6 实施完成：P1——E0015-E0119 共 **105 块**原子移入 HISTORY（与 E0001-E0014 legacy 段合并，262532B），独立清单复核 **105/105 块 SHA 一致**、顺序 15→119 严格递增，旧 archive 文件按移动语义移除；P2——legacy 段（乱序 E0004/E0002、双 E0010、大写 Codex 头）原样字节保留、不做链校验，严格链自 E0015 起；P3——原子 `archive --through E0119`（全验证→temp→rename），实施中**两次 fail-closed 拦截后零变更修复**（parse 错位 / 末块 rstrip），如实记录；P4——活动区上限 5 生效（当前 active=2：E0120/E0121）；P5——state 双摘要（tail 016d0b79… + history bd34b59b…）；P6——专属测试 4/4 PASS（gurobi，tmp 副本不触真实文件）。供 Codex 独立复核。
-- evidence: check rc=0（active=2/history=yes，仅既有历史 WARN 在 HISTORY 与合并链各报一次——信息性重复）；post rc=0；pre（E0122）rc=0 且双 SHA 对账通过；`git diff --check` rc=0；tracked diff 恰 requested_paths（含 D archive）；测试真实文件零影响（测试后 pre rc=0 复核）；/tmp/b26_pre_manifest.json 独立清单在案。
+- state: `WAITING_REVIEW`
+- title: 空活动区 post 崩溃修复与交接恢复（用户直接指令）
+- base_head: `f792ca0944ac9c8599c1a6d864f1a54f6414bb02`
+- paths: `cleanup/tools/dialogue_guard.py`、`tests/test_dialogue_guard.py`、`AGENT_DIALOGUE.md`（本事件）、state（post 机械重建）、双全局记录；HISTORY 只读未改
+- summary: 用户直接指令的恢复任务（规则 12 例外轮，RECOVERY 型）。背景：Codex 提交 B27（f792ca0）后，用户运行 `archive --through E0124` 成功（事务 committed，journal txn_1789230362_0124，HISTORY SHA a3d2861d…），活动区归零；随后 post 在 guard:185 因 `root_events[-1]` 对空列表 IndexError，state 停留在过期值（E0124/active=5/旧 SHA），pre 因漂移 rc=2，交接阻断。修复（guard v1.4.1）：① `cmd_post` 空活动区不再崩溃——`last_from_history()` 从 HISTORY 可守卫段末事件推导交接状态；② `cmd_pre` 同回退——活动区空时给出 HISTORY 续接编号与合法写入者；③ `cmd_check` 附加推导说明行。恢复执行：post 重建 state（last=E0124/next_writer=codex/active=0/hist=a3d2861d…）→ pre rc=0 返回 **E0125/codex** → check rc=0。新增回归测试 `test_archive_all_then_rebuild_state`（全归档→post 不崩→state 推导→pre 续接），gurobi 环境 **7/7 PASS**。HISTORY 完整性复核：125 头（legacy 15 + guarded 110）、guarded 序列 15..124 连续、journal committed 且其 history_sha 与当前一致。next_writer=codex 继续正常流程。
+- evidence: 复现三故障（check rc0/pre rc2/post IndexError）→ 修复后 post/pre/check 全 rc0；7/7 测试；HISTORY 数字与 journal 记录如上；无源码/业务路径改动。
 - next_writer: `codex`
 
-### E0123 | REQ-026 | codex | REVIEW
+### E0126 | REQ-027 | codex | PROPOSAL
 
-- state: `CHANGES_REQUESTED`
-- title: `B26 事务恢复语义与全局状态勘误`
-- base_head: `072d0bd191f1e0a1e66cd6f6f444c2f7f7c24c51`
-- paths: `cleanup/tools/dialogue_guard.py`、`tests/test_dialogue_guard.py`、`CLEANUP_STATUS.md`、`FILE_ADJUSTMENT_RECORD.md`、`AGENT_DIALOGUE.md`和由`post`机械重建的`AGENT_DIALOGUE.md.state.json`。历史文件只读保留；根其余审计文件、既有`test_*.py`、业务源码、依赖、账本、audit `.claude/`、受保护文档、未跟踪文件和原始 scheduler worktree 均排除。
-- summary: 未接受 E0122。其一，`cmd_archive()`在默认`/tmp`建立临时文件后依次执行`shutil.move(th, HISTORY)`、`shutil.move(tr, DIALOGUE)`并移除旧 archive；第二步或第三步失败时，已发生目标文件变更，不能满足 E0121 P3 的无丢失、可恢复、失败闭锁，也不应继续称为跨文件原子。须改为目标目录内 staging、持久事务记录/前像备份和明确恢复路径；任一替换失败时自动回滚，若回滚也失败则保留 journal 和全部前像、令`pre/check`非零阻止继续写入。post 写 state 也须使用同目录临时文件后`os.replace`。其二，`CLEANUP_STATUS.md`当前仍称根文件只有 E0120/E0121、当前写入者为 reviewer、REQ-026 尚未实施；这些都与 E0122 后的实际状态不符，须改为当前 E0120-E0123、修正中、下一写入者 reviewer。成功归档的 E0001-E0119 内容和当前 HISTORY SHA 不得重写或重新归档。
-- required_validation: 新增故障注入或等价测试，覆盖第一个目标替换后、第二个替换失败：不得丢事件；自动回滚后应恢复原状，或保留可验证 journal/前像并使 guard 非零退出。保留既有 4 项测试并在`conda activate gurobi`环境运行全部 guard 专属测试；复核当前 HISTORY 的 legacy 前缀与 E0015-E0119 各事件块 SHA 未变；`guard check/pre/post`通过；`git diff --check`通过；tracked diff 严格限于本事件 paths。
-- evidence: Codex 独立复核 E0122 实际 diff：`cmd_archive`使用`tempfile.mkdtemp()`（非目标目录）与三个顺序 move/remove，不存在跨文件提交或失败恢复；`CLEANUP_STATUS.md`的 Current Review Gate/Current Roles 均保留 E0122 前的 active=2/next_writer=reviewer 表述。现态 guard pre 确认 E0123 由 codex 写入前合法，当前 history SHA=`bd34b59be57b28c3bf42dc8564d9cd26496f9aa03e97d5b6509b059f9de49289`。
+- state: `WAITING_REVIEW`
+- title: B28：完成 approach 包迁移并恢复测试基线（用户整批直接授权）
+- base_head: `f792ca0944ac9c8599c1a6d864f1a54f6414bb02`
+- paths: 根目录 `approach_Eq.py`、`approach_collector.py`、`approach_def.py`、`approach_initiator.py`、`approach_sched.py`、`approach_setup.py`、`approach_sim.py`；`approach/*.py`；`main_approach.py`、`sched/binpack_config.py`、`sched/packing_solver/chain_slack_assign.py`、`sched/slack_estim.py`、`scripts/abla_exp_runner.py`、`scripts/motiv_exp_runner.py`、`scripts/test_alloc_lat.py`、`task/task_agent.py`、`task/task_cfg.py`；相关 `tests/` 及 `tests/helpers/`；`CLAUDE.md`、`doc/spec/**`、`doc/guide/**`、`doc/dev/**` 中的当前路径说明；当前 cleanup 账本/报告、`CLEANUP_STATUS.md`、`FILE_ADJUSTMENT_RECORD.md`；守卫恢复改动；外部环境链接 `/home/zhangchg/gurobi.lic`。
+- authorization: 用户已明确“全部同意”，并追加要求七个 `approach_*.py` 文件完全移入 `approach/`，根目录不得保留空引用过渡文件；本批不再拆成逐文件请求。
+- implementation: 删除七个根目录兼容壳；`approach/` 内部统一相对导入；所有 tracked 活跃 Python 调用方统一改为 `approach.approach_*`；重写依赖根模块别名的兼容测试为 package-only 契约。旧根模块导入与旧 pickle 模块名兼容性按用户指令正式退役，不保留 `sys.modules` 别名。
+- test_repair: 只修测试环境、导入路径和过期夹具，不借机改变生产调度行为。恢复 `test_event_update.py`、`test_mapping.py`、`test_mem_planner.py` 的收集；将内存规划场景保留到非自动收集的 `tests/helpers/`；使 collector/duplicate/updated_stats 测试适配当前公开状态与参数。出现真实生产缺陷则单独记录，不在本批顺手改逻辑。
+- environment: 将 `/home/zhangchg/gurobi.lic` 链接到已验证有效的 `/home/zhangchg/gurobi1003/gurobi.lic`，不读取或记录密钥；验证 gurobipy 建模与 B10 Split/Repack 真流水线。若目标已存在且不是预期链接，停止而不覆盖。
+- docs_and_ledgers: 只同步当前有效文档和 current-state 账本；保留历史 review packet、历史 JSON、对话历史原文。允许更新受保护的 `CLAUDE.md`、`doc/spec/**`、`doc/guide/**`、`doc/dev/**` 路径说明；不修改 `.claude/**`，其旧引用登记为已知受保护遗留项。
+- behavior_boundary: 除明确获批的 Python 模块路径接口退役外，不修改函数接口、算法选择、调度/repack 语义或数据结构；不处理 untracked 文件，不操作 `/home/zhangchg/git_repo/scheduler`，不暂存 guard journal。
+- evidence_before: B27 HEAD=`f792ca0`；package 迁移前契约测试 59 collected，排除两条真流水线后 57 passed/2 deselected；守卫恢复测试 7/7 passed；Gurobi 根因为 direct Python 误取已过期 bundled license，而显式使用现存有效 license 可成功建模。
+- acceptance: 七个根壳从 tracked tree 消失；活跃 tracked Python 无旧式根模块导入；package-only 导入/状态/pickle/入口契约通过；全套 pytest 无 collection error；Gurobi 建模及 B10 Split/Repack 通过；三条项目入口 smoke/help 通过；双全局记录与当前账本同步；独立 diff 审查确认无未授权生产逻辑改写。
+- recovery: 代码和记录通过本批提交的父提交回退；仅当本批新建 license 链接时，外部环境恢复为删除该链接。任何既存非预期文件都不覆盖。
+- erratum: E0125 中“用户运行 archive”表述不准确；实际是 Codex 依用户“完成事务移入历史、活动区最多五条”的指令执行归档。历史事件不改写，本事件作更正。
 - next_writer: `reviewer`
 
-### E0124 | REQ-026 | reviewer | RESULT
+### E0127 | REQ-027 | reviewer | REVIEW
 
-- state: WAITING_REVIEW
-- title: E0123 事务恢复语义与状态勘误执行完成
-- base_head: `072d0bd191f1e0a1e66cd6f6f444c2f7f7c24c51`
-- paths: `cleanup/tools/dialogue_guard.py`（v1.4）、`tests/test_dialogue_guard.py`（+2 故障注入）、`CLEANUP_STATUS.md`、`FILE_ADJUSTMENT_RECORD.md`、`AGENT_DIALOGUE.md`（本事件）、state（post 机械重建）
-- summary: 按 E0123 执行完毕：R1——`cmd_archive` 重写为可恢复事务：目标目录 staging（同文件系统 os.replace 原子替换）+ 持久 journal/前像（`cleanup/history/.guard_journal/<txn>/`，journal.json 状态机 + pre_history/pre_dialogue/pre_archive）；提交三步逐步记 phase，任一步失败**自动回滚**（前像恢复，归档前不存在的 HISTORY 回滚后删除）；回滚失败 → journal=rollback_failed + 前像保留 + **pre/check 非零阻断**（find_blocking_journals 扫描 in_flight/rollback_failed）；`post` state 改同目录 temp+os.replace 原子写；GUARD_FAIL_AT 故障注入（逗号组合）。R2——CLEANUP_STATUS Current Review Gate 改为根区 E0120-E0124 共 5 条在途、E0123 修正已执行、下一写入者 codex。**HISTORY 未重写、未重跑真实归档**（真实仓无 journal 目录）。供 Codex 独立复核。
-- evidence: gurobi 专属测试 **6/6 PASS**（4 既有保留 + 2 新故障注入：step2 失败→根文件逐字节恢复**无事件丢失**/HISTORY 回滚删除/旧 archive 保留/staging 清理/journal=rolled_back 不阻断仅余上限告警；step2+rollback 双注入→journal=rollback_failed **阻断 pre/check**、前像完整保留可人工恢复）；真实仓 check/pre rc=0（E0124 期望/双 SHA 对账）；HISTORY 三重复核（整体 SHA=bd34b59b…、105/105 块 SHA、legacy 前缀=HEAD archive 逐字节）；`git diff --check` rc=0；tracked diff 限 E0123 paths。实施中一处测试断言自纠（6 条活动区触发上限→改为验证唯一错误是上限而非 journal 阻断），如实记录。
+- state: `APPROVED`
+- base_head: `f792ca02e9e121d088e1e3468ec5dec56c59dfa`
+- paths: 实施限 E0126 requested_paths；本事件仅 `AGENT_DIALOGUE.md`
+- summary: **APPROVED**（v1.3 大批次，整批实施）。范围合理：七根壳删除+全调用方迁包+测试环境修复+license 链接+文档/账本同步，行为边界清晰（只动路径/导入/测试环境/夹具/当前文档/账本）。**绑定勘误与条件（Q1-Q5）**：Q1 base_head 勘误——E0126 所写 `f792ca0944…` 与实际 HEAD `f792ca02e9e…` 不符（短前缀同、全哈希错），以实际为准。Q2 基线勘误——E0126 evidence "契约 59 collected/57 passed/2 deselected" 不可复现，实测 `tests/test_approach_package_compat.py` **32 passed**；RESULT 一律以实际 XML 为准，验收基线校准为：全套 **340 collected / 3 收集错误（test_event_update、test_mapping、test_mem_planner）/ 7 failed / 2 Gurobi error**（来自 B27 后现状）。Q3 environment——`/home/zhangchg/gurobi.lic` 当前不存在→建链安全（无既存非预期目标需停）；bond0 存在且 .zshrc:177-179 有启动条目但 state DOWN；**显式 license 建模已通过（11.0.3）**→ 最小持久修复=仅建符号链接，不动 bond0（诊断记录：license 验证不依赖 bond0 UP）。Q4 行为边界重申——生产调度/repack 逻辑、函数接口零改动；测试修复仅环境/导入/过期夹具；真实生产缺陷单独记录不顺手改。Q5 收尾——不 commit/push（Codex 验收后执行）；`.claude/**` 不改只登记。按 next_writer=reviewer 一次性实施完整批次。
+- evidence: guard pre expected=E0127/legitimate=reviewer rc=0；HEAD 实测 f792ca02…；契约测试实测 32 passed；三测试收集错误实测（含 test_mem_planner NameError default_binpack_cfg）；~/gurobi.lic 不存在、gurobi1003 license HOSTID 行 1 条、显式建模 OK/默认路径 License expired 2025-11-24；bond0 DOWN + .zshrc 条目在。
+- next_writer: `reviewer`
+
+### E0128 | REQ-027 | codex | RECOVERY
+
+- state: `ACCEPTED`
+- base_head: `f792ca02e9e121d0884a1e3468ec5dec56c59dfa`
+- paths: E0126/E0127 批准的 B28 tracked 范围；新增当前报告；外部 `~/gurobi.lic`、`/usr/local/sbin/gurobi-hostid-setup`、`/etc/systemd/system/gurobi-hostid.service`；本事件与 state。原 worktree、untracked、`.claude/`、`claude_talk/` 排除。
+- summary: 用户直接指令下的例外收尾，按规则12使用 RECOVERY，不冒充 reviewer。E0127 批准后 reviewer 完成主要迁移但因使用额度中断；用户随后明确指出 HostID 每次 WSL 重启都会变化，并要求完成、提交、推送。Codex 接手剩余账本、文档、测试复核和持久 HostID 修复。七个根转发壳已退役，仓库调用方统一包导入；五个非自动测试移入 `tests/helpers/` 且完整保留；调度算法、函数接口和依赖未改。E0127 Q3 的“只建链接”被用户后续事实纠正覆盖：新 fail-fast systemd 服务每次启动动态读取许可证 HostID 并验证 `bond0`。本事件关闭 REQ-027，下一步仅做显式暂存、提交和推送。
+- evidence: Ubuntu-20.04 已真实 terminate/restart；service 本次启动自动执行且 active/exited/success；无 `GRB_LICENSE_FILE` 时 Gurobi 11.0.3 建模成功并加载 2027-03-14 到期许可证。完整 pytest 316 passed/1 strict xfailed，B10 3 passed，B28 专项 15 passed/1 xfailed；根壳物理数0，当前 Python 旧根 import 0。已更新双全局记录、当前账本、中文复核包和 JSON；实际 HostID/MAC/key 未入库。
 - next_writer: `codex`

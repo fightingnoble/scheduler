@@ -299,11 +299,11 @@ def forward_hyperperiod(self, T_hp: float = 1.0):
 
 | 组件 | 文件 | 关键位置 |
 |------|------|----------|
-| `StatisticsCollector` 类 | `approach_collector.py` | 类定义 |
+| `StatisticsCollector` 类 | `approach/approach_collector.py` | 类定义 |
 | `TDigestStreamingHistogram` | `ref_tdigest.py` | 分布存储 |
-| 仿真集成 | `approach_sim.py` | `update_run`, `update_ready` |
-| 主仿真循环 | `approach_sim.py` | `run_simulation` |
-| 动机实验绘图 | `approach_collector.py` | `plot_motiv_case1/2` |
+| 仿真集成 | `approach/approach_sim.py` | `update_run`, `update_ready` |
+| 主仿真循环 | `approach/approach_sim.py` | `run_simulation` |
+| 动机实验绘图 | `approach/approach_collector.py` | `plot_motiv_case1/2` |
 
 ---
 

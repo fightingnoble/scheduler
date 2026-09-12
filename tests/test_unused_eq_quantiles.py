@@ -48,14 +48,16 @@ def test_complete_original_function_bytes_are_preserved(fragment):
 
 
 @pytest.mark.parametrize("package_first", [False, True])
-def test_live_aliases_keep_exact_remaining_exports(tmp_path, package_first):
+def test_live_package_keeps_exact_remaining_exports(tmp_path, package_first):
     probe = """
 import importlib
 import json
 import sys
 import types
-names = ("approach.approach_Eq", "approach_Eq") if sys.argv[1] == "True" else ("approach_Eq", "approach.approach_Eq")
-a, b = [importlib.import_module(name) for name in names]
+if sys.argv[1] == "True":
+    import approach
+a = importlib.import_module("approach.approach_Eq")
+b = importlib.import_module("approach.approach_Eq")
 assert a is b
 assert "approach.approach_Eq_unused" not in sys.modules
 before = json.loads(sys.argv[2])

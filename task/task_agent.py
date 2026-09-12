@@ -18,8 +18,8 @@ from model.message.Context_message import ContextMsg
 from model.resource_agent import DDL_reservation, RT_reservation, dummy_reservation
 from model.event_gen.e2e_latency import jitter_gen_biside
 from model.performance import slack_comp
-from approach_Eq import AccVarDist, SenVarDist, Variation
-from approach_Eq import find_legal
+from approach.approach_Eq import AccVarDist, SenVarDist, Variation
+from approach.approach_Eq import find_legal
 from sched.ref_alloc_search import TaskConstraints
 
 # preemptable?/able to preempt others
