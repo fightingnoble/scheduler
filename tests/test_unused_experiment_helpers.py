@@ -12,7 +12,7 @@ import sys
 
 import pytest
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 REPORT_PATH = ROOT / "cleanup/reports/b23-unused-experiment-helpers.json"
 REPORT = json.loads(REPORT_PATH.read_text())
 TARGETS = REPORT["targets"]

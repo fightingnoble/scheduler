@@ -10,7 +10,7 @@ import sys
 import pytest
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 REPORT = ROOT / "cleanup/reports/b12-legacy-approach-archive.json"
 
 

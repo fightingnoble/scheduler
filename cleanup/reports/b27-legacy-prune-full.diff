@@ -1,0 +1,35 @@
+--- a/SKILL.md
++++ b/SKILL.md
+@@ -32 +32 @@
+-- `PHASE1_STATUS_FOR_NEXT_AGENT.md` 已由 `CLEANUP_STATUS.md` 接替，不再建立另一份全局状态真相。旧兼容指针不是新的状态入口。
++- `cleanup/history/phase1/PHASE1_STATUS_FOR_NEXT_AGENT.md` 是旧兼容指针；`CLEANUP_STATUS.md` 是唯一全局状态入口。
+@@ -75,2 +75,6 @@
+-4. **Batched, review-gated.** Large repos are split into per-directory batches;
+-   each batch is reviewed and approved before the next starts.
++4. **Progress-first, coarse-grained batches.** Group one coherent workflow,
++   dependency chain, or directory family into a single batch, even when it spans
++   many files. Review once at the batch boundary; do not open separate gates for
++   each file, path-only companion edit, test update, or bookkeeping detail. A
++   direct user authorization counts as approval; never manufacture a
++   self-approval event.
+@@ -126,3 +130,4 @@
+-- **Phase 2 — Batched separation.** Execute one approved batch at a time, in the
+-  audit worktree. Whole-file/whole-function delete or move only. After each
+-  batch, show the diff and ask for approval before the next batch.
++- **Phase 2 — Batched separation.** Execute one approved coherent workstream at
++  a time in the audit worktree. One batch may contain all related moves, path
++  fixes, tests, ledgers, and status updates. Review the combined diff only at
++  the batch boundary.
+@@ -176,3 +181,3 @@
+-6. **Batch the work** by top-level directory / module so each batch is
+-   independently reviewable and so workers never collide. Record ownership in
++6. **Batch the work** by coherent workflow or dependency chain; a batch may span
++   directories when the files serve one goal. Record non-overlapping ownership in
+    `cleanup/ownership.csv` (one owner per path; shared files are leader-only).
+@@ -191 +196 @@
+-Execute one approved batch at a time. For each batch:
++Execute one approved coherent batch at a time. For each batch:
+@@ -228 +233,2 @@
+-5. **Stop** and show the diff + test result. Get approval before the next batch.
++5. **Stop at the batch boundary** and show the combined diff + test result.
++   Do not pause between individual files or bookkeeping updates inside the batch.

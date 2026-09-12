@@ -14,7 +14,7 @@ import types
 
 import pytest
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 REPORT = json.loads((ROOT / "cleanup/reports/b19-unused-slack-graph-helpers-baseline.json").read_text())
 SPECS = REPORT["sources"]
 FUNCTIONS = [

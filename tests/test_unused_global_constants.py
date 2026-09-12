@@ -11,7 +11,7 @@ import sys
 import pytest
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 NAMES = (
     "overhead_pushpull_per_core", "overhead_of_enqueuing_op",
     "overhead_of_dequeuing_op", "clock_period", "SRAM_size_per_core",

@@ -15,7 +15,7 @@ import sys
 import pytest
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 REPORT_PATH = ROOT / "cleanup/reports/b17-task-cfg-legacy-graph-baseline.json"
 REPORT = json.loads(REPORT_PATH.read_text(encoding="utf-8"))
 ARCHIVE = ROOT / "task/task_cfg_old.py"

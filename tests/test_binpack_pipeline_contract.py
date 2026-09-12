@@ -14,7 +14,7 @@ import sys
 import pytest
 
 
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 BASELINE_PATH = REPO_ROOT / "cleanup/reports/b10-binpack-behavior-baseline.json"
 SIGNATURE_MARKER = "B10_SIGNATURE_JSON="
 SCENARIOS = {

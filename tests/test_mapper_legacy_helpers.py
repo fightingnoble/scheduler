@@ -85,7 +85,7 @@ import subprocess
 import sys
 import pytest
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 REPORT = json.loads((ROOT / "cleanup/reports/b24-mapper-legacy-helpers.json").read_text())
 BASELINE = REPORT["behavior_baseline"]["values"]
 assert hashlib.sha256(json.dumps(BASELINE, sort_keys=True, separators=(",", ":")).encode()).hexdigest() == "ba3301af2937a8f3a1c05ab7faf08bff98b13dde194681ac18e7bf4849e7cbdb"
@@ -139,7 +139,7 @@ def test_sort_behavior(case):
 
 def test_mutable_defaults_accumulate_in_fresh_processes():
     script = (
-        "from test_mapper_legacy_helpers import default_sequence, canonical, BASELINE\n"
+        "from tests.test_mapper_legacy_helpers import default_sequence, canonical, BASELINE\n"
         "from mapper.mem_planner_old import stat_overlapping_old\n"
         "assert canonical(default_sequence(stat_overlapping_old)) == BASELINE['defaults']\n"
     )
@@ -177,7 +177,7 @@ def test_remaining_source_bytes():
 def test_complete_interface_in_both_fresh_import_orders():
     check = """
 from typing import get_type_hints, get_args, Optional
-from test_mapper_legacy_helpers import BASELINE, TARGETS, signature, canonical
+from tests.test_mapper_legacy_helpers import BASELINE, TARGETS, signature, canonical
 assert sorted(n for n in vars(m) if not n.startswith('_')) == sorted(set(BASELINE['public_names']) - set(TARGETS))
 for name, module in [('stat_overlapping_old', old), ('scan_overlap_1d', unused), ('sort_fn_conflict_s_r', unused)]:
     assert canonical(signature(getattr(module, name))) == BASELINE['signatures'][name]

@@ -3164,3 +3164,32 @@ R2 状态勘误：Current Review Gate 改为 E0120-E0124 共 5 条在途、写�
 验证：gurobi 环境专属测试 6/6 PASS（4 既有 + 2 新故障注入：step2 失败→根文件逐字节恢复无事件丢失/HISTORY 回滚删除/旧 archive 保留/staging 清理/journal=rolled_back 不阻断；step2+rollback 双注入→journal=rollback_failed 阻断 pre/check、前像完整保留）。真实仓 check/pre rc=0；HISTORY 完整性三重复核（整体 SHA=bd34b59b…、E0015-E0119 块 SHA 105/105、legacy 前缀与 HEAD archive 逐字节一致）；真实仓无 journal 目录（未重跑归档）；git diff --check rc=0；tracked diff 限 E0123 paths。
 
 Recovery: guard/tests 为 tracked 修改，可 git 反向本条 diff；journal 目录为运行时产物（测试 tmp 内自清理）。
+
+## 2026-09-12 | B27 根目录审计材料与测试归类
+
+Action type: batch execution / path-only organization。
+
+用户直接授权先完成两项工作：整理根目录临时审计材料；把根目录测试集中到 `tests/`，除非确认过时，否则不删除。此批按一个完整目录整理批次执行，没有为每个文件另开请求。
+
+功能和行为：生产代码、算法、接口和依赖均未改动。27 个测试/诊断脚本全部保留；15 个仓库根路径声明和 2 个子进程 import 字符串随位置调整。没有修改测试断言。
+
+文件归类：
+
+- 28 份 `REVIEW_PACKET_*` 移至 `cleanup/reports/review-packets/`。
+- `PHASE1_STATUS_FOR_NEXT_AGENT.md` 移至 `cleanup/history/phase1/`；`CLEANUP_STATUS.md` 继续是唯一当前状态入口。
+- Gurobi 环境摘要移至 `cleanup/reports/environment/`，测试脚本摘要移至 `cleanup/reports/test-maintenance/`。
+- 25 个根目录 `test_*.py` 与 `simple_test_collector.py`、`debug_sink_constraint.py` 一并移至 `tests/`；文件名不变。
+- `cleanup/move-ledger.csv` 追加 5 条大批次移动记录；reachability 与 ownership 的 27 个测试路径全部改为 `tests/`。
+- `AGENT_DIALOGUE.md` 改为大批次边界协作。两份外部 `legacy-prune` skill 同步同一规则，并更新旧状态指针路径；精确补丁保存在 `cleanup/reports/b27-legacy-prune-{full,slim}.diff`。
+
+验证：
+
+- 迁移前收集：334 tests collected，3 个既有收集错误。迁移后：340 tests collected，同样 3 个错误；增加的 6 项是 dialogue guard 测试。
+- 受路径变化影响的测试：328 passed。
+- 两个独立脚本均从仓库外的临时工作目录运行，退出码都是 0，没有改写仓库内输出文件。
+- 完整可收集测试：331 passed、7 failed、2 errors。5 个 collector 失败、`test_duplicate` 和 `test_updated_stats` 的失败都发生在未改动的生产逻辑；两项 B10 real-pipeline 测试被 Gurobi `License expired 2025-11-24` 挡住。
+- 两份 skill 均通过 `quick_validate.py`。完整 skill SHA 从 `195a18f4...` 变为 `04dd9b51...`；精简 skill 从 `d06084db...` 变为 `da4c97fd...`。两份反向补丁 dry-run 均通过。
+
+范围外：没有触碰 `.claude/`、`claude_talk/`、`doc/spec/`、`doc/guide/`、`doc/dev/`、未跟踪文件或 `/home/zhangchg/git_repo/scheduler`。`CLAUDE.md` 中旧的根测试路径暂未改，因为它仍属受保护文档。
+
+Recovery：仓库内变更提交后使用 `git revert --no-edit $(git log --format=%H --grep='cleanup: organize audit files and tests' -1)`。外部完整 skill 用 `patch -R -p1 -d /mnt/c/Users/diyuf/.agents/skills/legacy-prune -i /home/zhangchg/git_repo/scheduler-audit-20260612/cleanup/reports/b27-legacy-prune-full.diff`；精简 skill 使用同命令并改为 D 盘目录和 `b27-legacy-prune-slim.diff`。

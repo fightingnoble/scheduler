@@ -18,7 +18,7 @@ import types
 
 import pytest
 
-ROOT = pathlib.Path(__file__).resolve().parent
+ROOT = pathlib.Path(__file__).resolve().parent.parent
 REPORT = json.loads((ROOT / "cleanup/reports/b20-unused-sim-cache-helpers-baseline.json").read_text())
 NAMES = [s["name"] for s in REPORT["slices"]]
 

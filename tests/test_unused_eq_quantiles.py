@@ -11,7 +11,7 @@ import sys
 import pytest
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 REPORT = json.loads(
     (ROOT / "cleanup/reports/b16-unused-eq-quantiles-baseline.json").read_text(
         encoding="utf-8"

@@ -1,0 +1,24 @@
+--- a/SKILL.md
++++ b/SKILL.md
+@@ -19 +19 @@
+-- `PHASE1_STATUS_FOR_NEXT_AGENT.md` 已由 `CLEANUP_STATUS.md` 接替，不再建立另一份全局状态真相。旧兼容指针不是新的状态入口。
++- `cleanup/history/phase1/PHASE1_STATUS_FOR_NEXT_AGENT.md` 是旧兼容指针；`CLEANUP_STATUS.md` 是唯一全局状态入口。
+@@ -62 +62 @@
+-## 三阶段（每阶段停下等人工批准）
++## 三阶段（按大批次边界批准）
+@@ -65 +65 @@
+-2. **Phase 2 — 分批执行**：一次一批，每批只做批准的 decision ID。每批更新 ledger + `FILE_ADJUSTMENT_RECORD.md`、跑最小 smoke test、产出 `REVIEW_PACKET_BATCH_<id>.md`，停下。
++2. **Phase 2 — 分批执行**：一次完成一个已批准的完整工作流或模块链。相关文件移动、必要路径适配、测试、ledger 和全局记录放在同一批，整批完成后再停下审查。
+@@ -68 +68,8 @@
+-工程大 → **分批审查是强制的**。不要合并多批、不要跳过审查门。**没有 autopilot 模式**——每个阶段都停下等批准，高风险动作（merge/cache/dependency/shared-file）一律暂停。
++工程大，分批审查仍是强制的，但审查单位是完整的大批次，不是单个文件或一条状态记录。没有 autopilot 模式；合并、cache、依赖调整、删除、行为或接口变化、受保护路径仍须暂停裁决。
++
++### 协作粒度：推进优先
++
++- 一个批次可以跨多个文件或相邻目录，只要它们服务同一目标，并能用同一组测试和恢复命令验收。
++- reviewer 在批次开始时审范围，实施整批后给一次 RESULT；Codex 在批次边界统一复核。批内无行为影响的路径配套、测试位置和账本更新不另开请求。
++- 用户直接明确授权的具体批次视为已批准，不得再制造“自己批准自己”的协议事件。
++- 只有明显扩域、数据丢失风险或行为契约变化才中断当前批次并交给用户裁决。
+@@ -113 +120 @@
+-- 旧文件 `PHASE1_STATUS_FOR_NEXT_AGENT.md` 已降级为指向 `CLEANUP_STATUS.md` 的兼容指针；**所有全局状态读写只用 `CLEANUP_STATUS.md`**。
++- 旧兼容指针已移至 `cleanup/history/phase1/PHASE1_STATUS_FOR_NEXT_AGENT.md`；**所有全局状态读写只用 `CLEANUP_STATUS.md`**。

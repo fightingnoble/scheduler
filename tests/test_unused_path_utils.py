@@ -14,7 +14,7 @@ from types import SimpleNamespace
 import pytest
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 NAMES = ("get_log_path_str", "_normalize_path", "check_paths_equal")
 PATH_CASES = {
     "none": (None, None),

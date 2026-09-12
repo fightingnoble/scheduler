@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 REPORT = json.loads(
     (ROOT / "cleanup/reports/b18-unused-e2e-event-generators-baseline.json")
     .read_text(encoding="utf-8")

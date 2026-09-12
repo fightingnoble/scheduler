@@ -1,18 +1,18 @@
 # Cleanup status
 
-Last updated: 2026-09-12 (REQ-026 B26 历史切换已实施但 E0123 要求修正：跨文件归档恢复语义与当前状态记录；未接受、未提交)
+Last updated: 2026-09-12 (B27 根目录审计材料与测试归类已执行并验证；本文件所在提交即本批回退点)
 
-This is the canonical global status file for the scheduler cleanup work. It supersedes `PHASE1_STATUS_FOR_NEXT_AGENT.md` as the main entry point for future agents.
+This is the canonical global status file for the scheduler cleanup work. It supersedes `cleanup/history/phase1/PHASE1_STATUS_FOR_NEXT_AGENT.md` as the main entry point for future agents.
 
 Use this file to understand the current cleanup state, approved decisions, executed batches, protected areas, and next actions. Use `FILE_ADJUSTMENT_RECORD.md` for the global action/change history.
 
-## Current Review Gate (authoritative, 2026-09-12)
+## Current Execution State (authoritative, 2026-09-12)
 
-- REQ-024已由用户授权恢复并提交为e758540058faa4f30773b43e6f1fe244543bfeab；E0108保留为一次性历史同步例外，不授权业务改动。
-- REQ-025已由E0119接受：两份legacy-prune规则副本已同步，规则只覆盖暂时不用的通用工具、全局参数和数学助手，不扩大为所有未用符号的默认处置。
-- REQ-026 / B26-DIALOGUE-HISTORY-CUTOVER：E0121 APPROVED（P1-P6）→ reviewer 已完成 E0122 实施结果，E0015-E0119 的 105 个事件块已移入 `cleanup/history/AGENT_DIALOGUE_HISTORY.md`，当前 HISTORY SHA 为 `bd34b59be57b28c3bf42dc8564d9cd26496f9aa03e97d5b6509b059f9de49289`；但 Codex 在 E0123 发现 `archive --through` 的跨文件失败恢复不足，故本批**修正中，尚未接受或提交**。禁止重写既有 HISTORY 或重新归档已成功移动的事件。
-- 当前活动区为 E0120-E0124 共 5 条，E0123 的两项修正（guard v1.4 事务恢复 + state 原子写 + 故障注入测试 6/6）已执行完毕，**E0124 RESULT 待 Codex 复核**，下一合法写入者为 codex。HISTORY 未重写、真实归档未重跑（真实仓无 journal 目录）。根目录其余审计报告归档和根级测试迁入`tests/`尚未提案或执行；业务源码、既有测试、依赖、账本、audit的.claude/、受保护文档、四份外部skill/policy文本和原始scheduler worktree保持不变。
-- 下方较早的“当前”段落保留作历史证据；与本节冲突时，以本节和协议末尾事件为准。
+- B26 对话历史切换已作为独立检查点提交：`093763e`。活动记录保持 5 条，历史位于 `cleanup/history/AGENT_DIALOGUE_HISTORY.md`；守卫专项测试 6 项通过。
+- B27 根目录归类由用户直接授权并已执行：28 份 `REVIEW_PACKET_*` 移入 `cleanup/reports/review-packets/`，3 份旧阶段/环境摘要移入 `cleanup/history/` 或 `cleanup/reports/`，27 个根目录测试/诊断脚本完整移入 `tests/`。没有删除测试或审核材料。
+- 测试收集迁移前为 334 项、3 个既有错误；迁移后为 340 项、同样 3 个既有错误。路径迁移专项 328 项全过；完整可收集测试为 331 通过、7 失败、2 个 Gurobi 环境错误。7 个失败均来自未改动的旧测试/生产行为，2 个错误是许可证报 `expired 2025-11-24`。
+- 本批没有修改生产逻辑、函数接口、依赖、受保护目录或原始 `/home/zhangchg/git_repo/scheduler` worktree；只改测试自身的仓库根路径和当前账本/状态路径。
+- 协作粒度改为按完整工作流或模块链的大批次推进：一次提案、一次实施、一次批次边界审查；不再为每个文件或无行为影响的小细节消耗独立对话。规则已写入 `AGENT_DIALOGUE.md` 和两份 `legacy-prune` skill；下方较早的“当前”段落只作历史证据。
 
 ## Goal Gate (2026-09-12)
 
@@ -26,7 +26,7 @@ Use this file to understand the current cleanup state, approved decisions, execu
 
 | 项目 | 当前结论 | 核验依据 |
 | --- | --- | --- |
-| 行为基线 | 已验收并提交 | B10/E0025；test_binpack_pipeline_contract.py及Split/fixcore-Repack基线在库 |
+| 行为基线 | 已验收并提交 | B10/E0025；tests/test_binpack_pipeline_contract.py及Split/fixcore-Repack基线在库 |
 | 初始化上下文封装 | 已实施 | sim_main.py:577的init_sched_components；approach/approach_setup.py:36调用；B10转发契约保护 |
 | 收窄perform_bin_packing | 未实施，REQ-003取消 | 函数仍在sim_main.py:381；不能把取消写成完成 |
 | Repack拆分 | 延期保留 | E0029 DEFER_KEEP_AS_IS；scratch问题不在本轮修复 |
@@ -205,7 +205,7 @@ B17 已关闭记录（以下不是当前在途请求）：
 - Request: `REQ-015` / `B17-TASK-CFG-LEGACY-GRAPH` — **CLOSED, ACCEPTED (E0064)**。REQ-008~014 已验收关闭；REQ-003 取消、REQ-005/006/007 裁决不变。
 - State: `ACCEPTED`（验收明细存档于 E0064）— I1-I6 经 reviewer 独立复测逐项满足：I1 numstat 0/206、剩余 SHA=6194c815…f14b、**剩余 task_cfg == HEAD 删两片段的字节级重建（True）**、归档两片段连续块各恰 1 次；I2 公共名 119→118 恰失 creat_jobTask_graph、18 新测试 RED→GREEN、11 组基线逐字段；I3 九套合跑 junitxml 132=127+5、FAILED 名单逐项一致、3 入口 rc=0、B13/B14 探针通过（收益不回退）、requirement+保护区零 diff、B11-B16 锚点原样；**I3 补充（E0064 后全量补核）：non_b17_source_sha256 全部 159 条已逐一 sha256 遍历——OK=159/MISMATCH=0/MISSING=0（此前 E0064 正文为 5 锚点抽查，全量补核按 codex 请求完成，结论不变）**；I4 借用者/old_num_hp 更正已落实；I6 csv.reader 双前缀保留（18839/69612）、新行 2×14/2×10、8 历史异常不修。恢复补丁解码+SHA 一致+reverse --check rc=0 未执行。七批（B11-B17）均未提交、未推送（commit 待用户指令）。
 - 原批准明细（存档）：拟将 task/task_cfg.py L24-82（59行注释旧绘图）+ L551-697（147行 creat_jobTask_graph 含 return 后历史说明）共 206 行原字节迁入同目录 task_cfg_old.py；现用 vis_task_static_timeline/creat_physical_graph/load_taskint/redist_ert_dll/plot_workflow_g 与 imports 全保留。**E0062 更正**：load_taskint/redist_ert_dll 的借用者确为 `old/allocator_agent.py`（L561/563 import + L577/580 调用，sed 直读核实）——E0061 (a) 的"零借用"表述作废，保留裁定不变且依据更充分；old_num_hp 实位于 approach_initiator.py:20（REVIEW 不混入）。**工具教训（binding）**：本环境 grep=ugrep 7.8.4，带 `--include` 的递归查询返回假阴性；B13-B16 已用 python os.walk 全量（318 文件）补验 import 级引用全为 0（B15 的 3 条为子串误报），各批结论维持；零引用核查权威口径 = git ls-files 过滤工作树不存在条目（B12 已删根文件 appoach_plot6.py/approach_util33.py 为 index 幽灵条目，须剔除）+ B11-B18 已批准新目标 = **164 份源码/脚本**；318 文件 os.walk 含无关 untracked，降为保守旁证不作验收范围）——已按权威口径复核 B13-B16：命中恰在各批归档定义文件与配套测试内，活区与非本批归档零引用，各批结论维持；禁用带 --include 的递归 grep 作为唯一依据。RESULT 验收 = I1 纯删除 206 行+剩余 SHA=6194c815…f14b / I2 RED→GREEN+11 组基线+完整集合 119→118 恰失一名 / I3 八套合跑 114=109+5 名单不变、159 份非 B17 SHA 不变 / I4 退休边界+两处精确化固化 / I5 异常即暂停 / I6 csv.reader 账本（前缀 18839/69612 保留、8 历史坏行不修）。恢复：仅反向 206 行+移除归档/测试，补丁 reverse --check，禁整文件 checkout。
-- Scope: task/task_cfg.py的59行旧绘图注释与147行完整creat_jobTask_graph已原样迁入同目录task_cfg_old.py，共206行。现用图生成、绘图函数、imports、旧allocator借用函数和保护区全保留；old_num_hp仅REVIEW，不入本批。新test_old_task_cfg.py覆盖18项，原函数注解/defaults与历史异常保持。
+- Scope: task/task_cfg.py的59行旧绘图注释与147行完整creat_jobTask_graph已原样迁入同目录task_cfg_old.py，共206行。现用图生成、绘图函数、imports、旧allocator借用函数和保护区全保留；old_num_hp仅REVIEW，不入本批。新tests/test_old_task_cfg.py覆盖18项，原函数注解/defaults与历史异常保持。
 - Evidence: 新18项全过，联合132=127passed+5相同collector失败（25.35s），0error/skip；3help均rc0，B13/B14行为探针通过。完整公共名119→118恰失旧函数，11组原图/PDF/异常与原注解一致。源精确0增/206删，剩余SHA6194c815...f14b；归档SHA06a38533...0356。159非本批SHA不变，146Python AST可解析，保护区/依赖零diff。日志/tmp/scheduler-b17-regression-_sfebunx。
 - Ledger/recovery: move追加2行14列、reachable追加2行10列，18839/69612原字节前缀完整保留；当前move={14:29,15:3,16:4,17:1}仅8历史异常，reachable={10:259}。JSON validation.recovery持久化压缩限定补丁及提取/检查/恢复命令；解码SHA核对及reverse --check通过，未实际回退。
 - Next action: REQ-015已在E0064验收关闭，无在途请求。继续沿task_cfg的任务模型/队列、slack_estim、load_cfg依赖只读审查，新的源码动作另提案；旧取消/暂缓项不重开。B11-B17均未提交推送，提交仍等用户指令。
@@ -259,13 +259,13 @@ Current committed checkpoint after B10 acceptance and the REQ-005 verdict:
 - Commit: `a1d933b` (`test: checkpoint binpack baseline and review protocol`), 8 reviewed files; worktree clean immediately after commit.
 
 - B8 source change: `approach_setup.py` step 4-6 now uses `sim_main.py::init_sched_components(...)` to create the shared global_sched component context and run `perform_bin_packing` through a small pack handle.
-- B8 status docs: `REVIEW_PACKET_BATCH_B8-INIT-SCHED-COMPONENTS.md`, `CLEANUP_STATUS.md`, `FILE_ADJUSTMENT_RECORD.md`, and the Gurobi troubleshooting row in `CLAUDE.md`.
+- B8 status docs: `cleanup/reports/review-packets/REVIEW_PACKET_BATCH_B8-INIT-SCHED-COMPONENTS.md`, `CLEANUP_STATUS.md`, `FILE_ADJUSTMENT_RECORD.md`, and the Gurobi troubleshooting row in `CLAUDE.md`.
 - B8 validation: import probe + 3 help commands PASS; motiv case1 (`--num_hp 3 --case1_ratios 0.7`) full run rc=0 after fixing WSL Gurobi HostID via bond0.
 - Validation artifacts from `motiv_exp_results_b8verify/` were removed before commit.
 
 B10 result:
 
-- Added `test_binpack_pipeline_contract.py`: one fast B8 closure/21-argument forwarding contract and two real pipeline characterization cases.
+- Added `tests/test_binpack_pipeline_contract.py`: one fast B8 closure/21-argument forwarding contract and two real pipeline characterization cases.
 - Added `cleanup/reports/b10-binpack-behavior-baseline.json`: Split and fixcore-Repack golden hashes, environment/config metadata, packing-call traces, and three readable timing samples per scenario.
 - All 53 packed PIDs contribute `name`, `ert`, and `ddl` to the canonical signature. Split and Repack each matched across two independent worker processes and separate temporary directories.
 - Gurobi preflight created a real model with 11.0.3 and the license at `/home/zhangchg/gurobi1003/gurobi.lic` (expires 2027-03-14).
@@ -371,7 +371,7 @@ Result:
 
 Report files:
 
-- `REVIEW_PACKET_BATCH_B1-REVIEW-TRIAGE-PREFLIGHT.md`
+- `cleanup/reports/review-packets/REVIEW_PACKET_BATCH_B1-REVIEW-TRIAGE-PREFLIGHT.md`
 - `cleanup/reports/batch-B1-REVIEW-TRIAGE-preflight.md`
 - `cleanup/reports/b1-review-triage-actions.csv`
 
@@ -463,7 +463,7 @@ Deferred (not done this batch):
 
 语义约定已写入 `cleanup-policy.md`（slim + repo）。删除空目录：model/message/old、unused/(根)、scripts/old、packing_solver/old。回归门 PASS。改动未 commit。
 
-pre_alloc_new.py 深度分析完成（内部调用图 + spec 覆盖核对）。Packet: `REVIEW_PACKET_BATCH_B3-BINPACK-DEAD-MOVE.md`，11 个决策：
+pre_alloc_new.py 深度分析完成（内部调用图 + spec 覆盖核对）。Packet: `cleanup/reports/review-packets/REVIEW_PACKET_BATCH_B3-BINPACK-DEAD-MOVE.md`，11 个决策：
 
 | 组 | 决策 | 对象 | 风险 |
 |----|------|------|------|
@@ -501,7 +501,7 @@ Do not treat `scheduler_agent.py` / `monitor_agent.py` as REMOVABLE at file leve
 
 Added B2 reports:
 
-- `REVIEW_PACKET_BATCH_B2-RUNTIME-TEST-INVENTORY.md`
+- `cleanup/reports/review-packets/REVIEW_PACKET_BATCH_B2-RUNTIME-TEST-INVENTORY.md`
 - `cleanup/reports/batch-B2-RUNTIME-TEST-INVENTORY.md`
 - `cleanup/reports/b2-runtime-test-inventory.csv`
 
@@ -509,7 +509,7 @@ Additional B2 findings:
 
 - Current runtime path remains `main_approach.py -> approach_setup.py -> sim_main.py::perform_bin_packing() -> approach_initiator.py -> approach_sim.py::run_simulation() -> approach_collector.py`.
 - `scripts/test_alloc_lat.py` is blocked for direct execution because it hardcodes `/home/zhangchg/git_repo/scheduler` into `sys.path`, which would bypass the audit worktree.
-- `test_event_update.py` and `test_mapping.py` need unresolved import triage for `approach_plot` before execution.
+- `tests/test_event_update.py` and `tests/test_mapping.py` need unresolved import triage for `approach_plot` before execution.
 - No test deletion is authorized.
 
 Validation:
@@ -525,14 +525,14 @@ Validation:
 ### 2026-06-15 status-file role cleanup
 
 - Created `CLEANUP_STATUS.md` as the canonical global status file.
-- Downgraded `PHASE1_STATUS_FOR_NEXT_AGENT.md` to a compatibility pointer.
+- Moved the compatibility pointer to `cleanup/history/phase1/PHASE1_STATUS_FOR_NEXT_AGENT.md`.
 - Clarified that `FILE_ADJUSTMENT_RECORD.md` records the global action/change history.
 
 ### 2026-06-15 mandatory update rule
 
 - Added the rule that every future action must update both `CLEANUP_STATUS.md` and `FILE_ADJUSTMENT_RECORD.md`.
 - This applies to executions, preflights, environment checks, and status-only maintenance.
-- Confirmed `PHASE1_STATUS_FOR_NEXT_AGENT.md` remains only a compatibility pointer to `CLEANUP_STATUS.md`.
+- Confirmed `cleanup/history/phase1/PHASE1_STATUS_FOR_NEXT_AGENT.md` remains only a compatibility pointer to `CLEANUP_STATUS.md`.
 
 ### 2026-06-16 commit B0 + Phase 1 artifacts to audit branch
 
@@ -626,5 +626,5 @@ Do not start cleanup execution from old `P1-REMOVE-*` or `P1-CACHE-*` decisions.
 - `AGENT_DIALOGUE.md`: append-oriented Codex/reviewer handoff log and review gate.
 - `CLEANUP_STATUS.md`: current global status and next-action entry point.
 - `FILE_ADJUSTMENT_RECORD.md`: chronological global action/change history; include recovery commands for actual file changes.
-- `REVIEW_PACKET_BATCH_*.md`: per-batch review details.
+- `cleanup/reports/review-packets/REVIEW_PACKET_BATCH_*.md`: per-batch review details.
 - `cleanup/reports/*`: machine-readable or supporting audit reports.

@@ -15,7 +15,7 @@ from queue import Queue
 
 import pytest
 
-ROOT = pathlib.Path(__file__).resolve().parent
+ROOT = pathlib.Path(__file__).resolve().parent.parent
 REPORT_PATH = ROOT / "cleanup/reports/b21-unused-message-helpers-baseline.json"
 REPORT = json.loads(REPORT_PATH.read_text())
 LIVE = "model.message.msg_dispatcher"

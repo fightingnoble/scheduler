@@ -14,7 +14,7 @@ from types import SimpleNamespace
 import pytest
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 REPORT = json.loads(
     (ROOT / "cleanup/reports/b11-approach-package-compat.json").read_text(
         encoding="utf-8"

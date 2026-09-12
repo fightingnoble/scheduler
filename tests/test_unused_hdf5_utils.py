@@ -13,7 +13,7 @@ import sys
 import pytest
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 
 
 @pytest.fixture(scope="module")
